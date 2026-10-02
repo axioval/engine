@@ -771,6 +771,156 @@ fn a_mesh_comparison_sees_a_moved_opening_inside_unchanged_bounds() {
     assert_eq!(output.status.code(), Some(2), "{}", stderr(&output));
 }
 
+/// Round columns 0.2 m in radius and 3 m high, one per `(GlobalId, x)`,
+/// standing at `x` along the x axis. `first` offsets every entity number.
+fn round_columns(first: u32, columns: &[(&str, f64)]) -> String {
+    let mut data = String::new();
+    for (index, (column, x)) in columns.iter().enumerate() {
+        let base = first + 10 * u32::try_from(index).unwrap();
+        let [point, frame, placement, profile, solid, shape, definition] =
+            [0, 1, 2, 3, 4, 5, 6].map(|offset| base + offset);
+        let _ = write!(
+            data,
+            "#{point}=IFCCARTESIANPOINT(({x:.4},0.,0.));\n\
+             #{frame}=IFCAXIS2PLACEMENT3D(#{point},$,$);\n\
+             #{placement}=IFCLOCALPLACEMENT($,#{frame});\n\
+             #{profile}=IFCCIRCLEPROFILEDEF(.AREA.,$,$,0.2);\n\
+             #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#2,#4,3.);\n\
+             #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{solid}));\n\
+             #{definition}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
+             #{object}=IFCCOLUMN('{column}',$,$,$,$,#{placement},#{definition},$,$);\n",
+            object = base + 7,
+        );
+    }
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #7=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #8=IFCUNITASSIGNMENT((#7));\n\
+         #9=IFCPROJECT('0000000000000000000009',$,'P',$,$,$,$,(#5),#8);\n\
+         {data}ENDSEC;\nEND-ISO-10303-21;\n"
+    )
+}
+
+const MOVED_COLUMN: &str = "1ColumnMovedMillimetre";
+const SAME_COLUMN: &str = "1ColumnReExported00001";
+
+/// A round column's mesh is a tessellation, so its surface distance is
+/// certified only between the two revisions' exact boundaries: a column
+/// moved by a millimetre has changed against a half-millimetre tolerance, a
+/// re-exported one is unchanged, and without the boundaries both are
+/// left open.
+#[test]
+fn a_mesh_comparison_measures_curved_bodies_between_exact_boundaries() {
+    let case = Case::new("mesh-boundaries");
+    let before = case.write(
+        "r1/model.ifc",
+        &round_columns(100, &[(MOVED_COLUMN, 0.0), (SAME_COLUMN, 5.0)]),
+    );
+    let after = case.write(
+        "r2/model.ifc",
+        &round_columns(500, &[(SAME_COLUMN, 5.0), (MOVED_COLUMN, 0.001)]),
+    );
+    let run = |extra: &[&str]| {
+        let saved = case.path("comparison.json");
+        let mut args = vec![
+            "--geometry",
+            "--geometry-mode",
+            "mesh",
+            "--length-tolerance",
+            "0.0005",
+            "--report",
+            saved.to_str().unwrap(),
+        ];
+        args.extend_from_slice(extra);
+        let output = case.compare(&before, &after, &args);
+        let result: Value =
+            serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
+        (output, result)
+    };
+
+    let (output, result) = run(&[]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(result["geometry"]["tessellated"], 4, "{result:#}");
+    assert_eq!(result["geometry"]["exact_boundaries"], 4, "{result:#}");
+    let comparison = &result["comparison"];
+    let moved = object(comparison, MOVED_COLUMN);
+    assert_eq!(moved["state"], "changed", "{moved:#}");
+    // Its placement moved too; the geometry is measured between boundaries.
+    let change = moved["changes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|change| change["facet"] == "geometry")
+        .unwrap_or_else(|| panic!("a geometry change: {moved:#}"));
+    assert_eq!(change["measure"], "boundary", "{moved:#}");
+    let (lower, upper) = (
+        change["lower"].as_f64().unwrap(),
+        change["upper"].as_f64().unwrap(),
+    );
+    assert!(
+        lower > 0.0005 && lower <= 0.001 && upper >= 0.001,
+        "{moved:#}"
+    );
+    assert!(
+        comparison["objects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|object| object["identity"] != SAME_COLUMN),
+        "{comparison:#}"
+    );
+    let geometry = result["report"]["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|finding| finding["rule_id"] == "compare.geometry")
+        .unwrap_or_else(|| panic!("a geometry finding: {result:#}"));
+    let evidence = geometry["evidence"].as_array().unwrap();
+    for prefix in ["comparison:witness:boundary:", "comparison:exact-boundary:"] {
+        assert!(
+            evidence
+                .iter()
+                .any(|entry| entry["locator"].as_str().unwrap().starts_with(prefix)),
+            "{prefix}: {evidence:#?}"
+        );
+    }
+
+    // Meshes alone certify nothing about either column's geometry; the
+    // moved one's placement still changed.
+    let (output, result) = run(&["--no-exact-boundaries"]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        result["geometry"].get("exact_boundaries"),
+        None,
+        "{result:#}"
+    );
+    assert_eq!(
+        findings(&result),
+        vec![("compare.placement".into(), "#517".into())]
+    );
+    let comparison = &result["comparison"];
+    for (column, state) in [(MOVED_COLUMN, "changed"), (SAME_COLUMN, "incomplete")] {
+        let open = object(comparison, column);
+        assert_eq!(open["state"], state, "{open:#}");
+        assert_eq!(open["unresolved"][0]["facet"], "geometry", "{open:#}");
+        assert!(
+            open["unresolved"][0]["detail"]
+                .as_str()
+                .unwrap()
+                .contains("is a tessellation"),
+            "{open:#}"
+        );
+    }
+
+    // The option belongs to `--geometry`.
+    let output = case.compare(&before, &after, &["--no-exact-boundaries"]);
+    assert_eq!(output.status.code(), Some(2), "{}", stderr(&output));
+}
+
 #[test]
 fn every_property_set_is_listed_and_compared_on_request() {
     let case = Case::new("revisions-property-sets");

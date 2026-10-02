@@ -106,9 +106,9 @@ use axiolid_brep::ExactBRep;
 use axiolid_core::{Aabb, Point3, Ray3, Tolerance};
 use axiolid_inspect::{enclosed_volume, intersection_volume};
 use axiolid_measure::{
-    DistanceBounds, PlanOverlap, WindingMesh, boundary_distance, closest_point_on_triangle,
-    closest_points_on_segments, closest_points_on_triangles, plan_boundary_clearance,
-    plan_boundary_distance, plan_overlap,
+    DistanceBounds, PlanOverlap, WindingMesh, boundary_distance, boundary_hausdorff_distance,
+    closest_point_on_triangle, closest_points_on_segments, closest_points_on_triangles,
+    plan_boundary_clearance, plan_boundary_distance, plan_overlap,
 };
 use axiolid_mesh::{TriMesh, audit_mesh};
 use axiolid_ray_mesh::intersect_triangle;
@@ -121,7 +121,9 @@ use axioval_engine::{
     ProximityProjection, ProximityRequest, ProximityService, RegionDistanceEvidence,
     RegionDistanceRequest, VerticalDirection, VerticalSurfaces, VolumeInterval,
 };
-use axioval_engine::{BodySurface, SurfaceDistanceEvidence, SurfaceDistanceRequest};
+use axioval_engine::{
+    BodySurface, ExactBoundaryHandle, SurfaceDistanceEvidence, SurfaceDistanceRequest,
+};
 use axioval_ir::{Evidence, ObjectId};
 
 use crate::geometry::{AxiolidGeometry, Triangle, triangles};
@@ -215,6 +217,58 @@ impl AxiolidProximityService {
                 subject,
                 counterpart,
             }))
+    }
+
+    /// The certified Hausdorff distance between the subject's exact boundary
+    /// and the counterpart's, when both have one this kernel reads.
+    ///
+    /// `None` leaves the mesh distance: a side without a boundary, a
+    /// boundary of another backend, a kernel refusal or an ill-formed
+    /// interval. The interval may come back wider than the request's
+    /// accuracy where the kernel's refinement budget ran out (a rotated or
+    /// unmatched pair closes only at first order); it is sound either way,
+    /// and judging its width is the caller's.
+    fn boundary_surface_distance(
+        &self,
+        request: &SurfaceDistanceRequest,
+    ) -> Result<Option<SurfaceDistanceEvidence>, ProximityError> {
+        let Some((subject, counterpart)) = self.geometry.exact_boundary(request.subject()).zip(
+            request
+                .counterpart()
+                .exact_boundary()
+                .and_then(ExactBoundaryHandle::downcast_ref::<ExactBRep>),
+        ) else {
+            return Ok(None);
+        };
+        let Ok(measured) = boundary_hausdorff_distance(
+            subject,
+            counterpart,
+            request.accuracy_metres(),
+            Tolerance::METRE,
+        ) else {
+            return Ok(None);
+        };
+        let (Some(forward), Some(backward)) = (
+            certified_directed(&measured.forward),
+            certified_directed(&measured.backward),
+        ) else {
+            return Ok(None);
+        };
+        SurfaceDistanceEvidence::try_from_boundaries(
+            request.clone(),
+            forward,
+            backward,
+            Evidence {
+                source: request.subject().source.clone(),
+                locator: format!(
+                    "axiolid:boundary-hausdorff:{}:{}",
+                    request.subject(),
+                    request.counterpart().object()
+                ),
+                exact: true,
+            },
+        )
+        .map(Some)
     }
 
     /// Measures the pair in the request's projection.
@@ -1521,6 +1575,30 @@ fn directed(
     )
 }
 
+/// One side of the kernel's certified boundary Hausdorff distance as
+/// evidence, its ends widened by a bound on the rounding of the evaluated
+/// boundary points, as [`certified`] widens a boundary distance. `None`
+/// when the kernel's interval is not well-formed.
+fn certified_directed(
+    bounds: &axiolid_measure::HausdorffBounds,
+) -> Option<axioval_engine::DirectedDistance> {
+    if !bounds.lower.is_finite() || !bounds.upper.is_finite() || bounds.lower > bounds.upper {
+        return None;
+    }
+    let magnitude = [bounds.point_from, bounds.point_to]
+        .iter()
+        .flat_map(Point3::to_array)
+        .fold(bounds.upper, |largest, value| largest.max(value.abs()));
+    let margin = rounding(magnitude);
+    let point = |point: Point3| [point.x, point.y, point.z];
+    axioval_engine::DirectedDistance::try_new(
+        LengthInterval::try_new((bounds.lower - margin).max(0.0), bounds.upper + margin).ok()?,
+        point(bounds.point_from),
+        point(bounds.point_to),
+    )
+    .ok()
+}
+
 impl ProximityService for AxiolidProximityService {
     fn bounds(&self, object: &ObjectId) -> Result<ObjectBounds, ProximityError> {
         let body = self.body(object)?;
@@ -1550,18 +1628,31 @@ impl ProximityService for AxiolidProximityService {
             triangles,
             self.geometry.fidelity(object)?,
         )
+        .map(
+            |surface| match self.geometry.shared_exact_boundary(object) {
+                Some(boundary) => surface.with_exact_boundary(ExactBoundaryHandle::new(boundary)),
+                None => surface,
+            },
+        )
     }
 
-    /// The kernel's certified two-sided Hausdorff distance
-    /// (`hausdorff_distance`), between exact surfaces only: a tessellation
-    /// bounds its true surface's distance from the mesh one way only, so
-    /// either side tessellated refuses rather than widen an uncertified
-    /// interval.
+    /// The kernel's certified two-sided Hausdorff distance, between exact
+    /// surfaces only. Where the subject and the counterpart both have an
+    /// exact boundary, between the boundaries (`boundary_hausdorff_distance`,
+    /// [`axioval_engine::SurfaceBasis::ExactBoundary`]) whatever the meshes'
+    /// fidelity; otherwise, or where the kernel refuses the boundaries, between the
+    /// meshes (`hausdorff_distance`). A tessellation bounds its true
+    /// surface's distance from the mesh one way only, so a mesh distance
+    /// with either side tessellated refuses rather than widen an
+    /// uncertified interval.
     fn measure_surface_distance(
         &self,
         request: &SurfaceDistanceRequest,
     ) -> Result<SurfaceDistanceEvidence, ProximityError> {
         let subject = self.body(request.subject())?;
+        if let Some(measured) = self.boundary_surface_distance(request)? {
+            return Ok(measured);
+        }
         if !self.geometry.fidelity(request.subject())?.is_exact()
             || !request.counterpart().fidelity().is_exact()
         {

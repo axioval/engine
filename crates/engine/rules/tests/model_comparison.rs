@@ -11,11 +11,11 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use axioval_engine::{
-    BodySurface, Bounds3, CapabilityEvaluation, DirectedDistance, GeometryFidelity,
-    IntersectionVolume, LengthInterval, ObjectBounds, ProximityError, ProximityEvidence,
-    ProximityRequest, ProximityService, ProximityServiceHandle, RelationshipKind,
-    SourceDisciplines, SourceMetadata, SourceMetadataIndex, SurfaceDistanceEvidence,
-    SurfaceDistanceRequest, VolumeInterval,
+    BodySurface, Bounds3, CapabilityEvaluation, DirectedDistance, ExactBoundaryHandle,
+    GeometryFidelity, IntersectionVolume, LengthInterval, ObjectBounds, ProximityError,
+    ProximityEvidence, ProximityRequest, ProximityService, ProximityServiceHandle,
+    RelationshipKind, SourceDisciplines, SourceMetadata, SourceMetadataIndex,
+    SurfaceDistanceEvidence, SurfaceDistanceRequest, VolumeInterval,
 };
 use axioval_ir::contract::SourceField;
 use axioval_ir::contract::{ParameterValue, Selector, TableRow};
@@ -985,7 +985,10 @@ impl ProximityService for Walls {
 
 /// `model-comparison` of `W1` in both revisions, matched by its number,
 /// with `parameters` and `walls` as the geometry service.
-fn compare_walls(walls: Walls, parameters: Vec<(&str, ParameterValue)>) -> CapabilityEvaluation {
+fn compare_walls(
+    walls: impl ProximityService + 'static,
+    parameters: Vec<(&str, ParameterValue)>,
+) -> CapabilityEvaluation {
     let model = Model::default()
         .object_in("base", "#1", "wall")
         .object_in("revised", "#9", "wall")
@@ -1109,6 +1112,163 @@ fn a_tessellated_wall_is_not_evaluated() {
             "{evaluation:?}"
         );
     }
+}
+
+/// [`Walls`] with an exact boundary for the sides `boundaries` names: where
+/// both have one, the distance is measured between the boundaries, as a
+/// backend does whatever its meshes' fidelity.
+struct BoundedWalls {
+    walls: Walls,
+    boundaries: (bool, bool),
+}
+
+impl ProximityService for BoundedWalls {
+    fn bounds(&self, object: &ObjectId) -> Result<ObjectBounds, ProximityError> {
+        self.walls.bounds(object)
+    }
+
+    fn measure_proximity(&self, _: &ProximityRequest) -> Result<ProximityEvidence, ProximityError> {
+        Err(ProximityError::Unavailable)
+    }
+
+    fn body_surface(&self, object: &ObjectId) -> Result<BodySurface, ProximityError> {
+        let surface = self.walls.body_surface(object)?;
+        let bounded = if object == &in_base("#1") {
+            self.boundaries.0
+        } else {
+            self.boundaries.1
+        };
+        Ok(if bounded {
+            surface.with_exact_boundary(ExactBoundaryHandle::new(Arc::new(object.clone())))
+        } else {
+            surface
+        })
+    }
+
+    fn measure_surface_distance(
+        &self,
+        request: &SurfaceDistanceRequest,
+    ) -> Result<SurfaceDistanceEvidence, ProximityError> {
+        if !(self.boundaries.0 && request.counterpart().exact_boundary().is_some()) {
+            return self.walls.measure_surface_distance(request);
+        }
+        let (lower, upper) = self.walls.distance;
+        let directed = |lower: f64, upper: f64| {
+            DirectedDistance::try_new(
+                LengthInterval::try_new(lower, upper).unwrap(),
+                [0.0, 0.0, 1.5],
+                [0.001, 0.0, 1.5],
+            )
+        };
+        SurfaceDistanceEvidence::try_from_boundaries(
+            request.clone(),
+            directed(lower, upper)?,
+            directed(0.0, upper)?,
+            Evidence::exact(document("base"), "boundaries"),
+        )
+    }
+}
+
+/// Two revisions of a tessellated wall, each with its exact boundary, the
+/// distance between the boundaries stated.
+fn bounded(distance: (f64, f64), boundaries: (bool, bool)) -> BoundedWalls {
+    BoundedWalls {
+        walls: Walls {
+            distance,
+            exact: (false, false),
+        },
+        boundaries,
+    }
+}
+
+#[test]
+fn identical_exact_boundaries_are_unchanged_however_tessellated() {
+    let evaluation = compare_walls(bounded((0.0, 0.0), (true, true)), by_mesh(0.0005));
+    assert!(found(&evaluation).is_empty(), "{evaluation:?}");
+    assert!(unevaluated(&evaluation).is_empty(), "{evaluation:?}");
+}
+
+/// A millimetre's move against a half-millimetre tolerance: the
+/// tessellated meshes decide nothing, the exact boundaries the change.
+#[test]
+fn a_millimetre_move_is_a_change_only_between_exact_boundaries() {
+    let moved = (0.000_99, 0.001_01);
+    let evaluation = compare_walls(bounded(moved, (true, true)), by_mesh(0.0005));
+    assert_eq!(
+        found(&evaluation),
+        vec![(
+            "#9".to_owned(),
+            "geometry changed: geometry boundary differs by 0.0010 m to 0.0010 m \
+             (tolerance 0.0005 m)"
+                .to_owned()
+        )]
+    );
+    let evidence = &evaluation.findings()[0].evidence;
+    let locators: Vec<(&str, bool)> = evidence
+        .iter()
+        .map(|entry| (entry.locator.as_str(), entry.exact))
+        .collect();
+    assert!(
+        locators.contains(&(
+            "comparison:witness:boundary:base(0.0000,0.0000,1.5000)->revised(0.0010,0.0000,1.5000)",
+            false
+        )),
+        "{locators:?}"
+    );
+    for side in [in_base("#1"), in_revised("#9")] {
+        let cited = evidence
+            .iter()
+            .find(|entry| entry.locator == format!("comparison:exact-boundary:{side}"))
+            .unwrap_or_else(|| panic!("{side} cited: {locators:?}"));
+        assert!(cited.exact);
+        assert_eq!(cited.source, side.source);
+    }
+    assert!(unevaluated(&evaluation).is_empty(), "{evaluation:?}");
+
+    // One side's boundary certifies nothing: the tessellations stay open.
+    for boundaries in [(true, false), (false, true), (false, false)] {
+        let evaluation = compare_walls(bounded(moved, boundaries), by_mesh(0.0005));
+        assert!(found(&evaluation).is_empty(), "{evaluation:?}");
+        let outcomes = evaluation.not_evaluated_outcomes();
+        assert_eq!(outcomes.len(), 1, "{evaluation:?}");
+        assert!(
+            outcomes[0].message().contains("is a tessellation"),
+            "{evaluation:?}"
+        );
+    }
+}
+
+/// The kernel stops a moved prism's distance at its refinement budget: a
+/// millimetre's move comes back as about 1.0 mm to 1.59 mm, far wider than
+/// asked. It is sound however wide, so lying wholly above a half-millimetre
+/// tolerance it is a change.
+#[test]
+fn a_wide_boundary_distance_above_the_tolerance_is_a_change() {
+    let evaluation = compare_walls(bounded((0.001, 0.001_59), (true, true)), by_mesh(0.0005));
+    assert_eq!(
+        found(&evaluation),
+        vec![(
+            "#9".to_owned(),
+            "geometry changed: geometry boundary differs by 0.0010 m to 0.0016 m \
+             (tolerance 0.0005 m)"
+                .to_owned()
+        )]
+    );
+    assert!(unevaluated(&evaluation).is_empty(), "{evaluation:?}");
+}
+
+/// A boundary distance straddling the tolerance is undetermined, never
+/// rounded either way.
+#[test]
+fn a_boundary_distance_straddling_the_tolerance_is_not_evaluated() {
+    let evaluation = compare_walls(bounded((0.0002, 0.0006), (true, true)), by_mesh(0.0005));
+    assert!(found(&evaluation).is_empty(), "{evaluation:?}");
+    let outcomes = evaluation.not_evaluated_outcomes();
+    assert_eq!(outcomes.len(), 1, "{evaluation:?}");
+    assert!(
+        outcomes[0].message().ends_with(": undetermined"),
+        "{evaluation:?}"
+    );
 }
 
 #[test]

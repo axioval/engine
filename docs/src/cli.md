@@ -197,8 +197,10 @@ distance to a micrometre. On the buildingSMART example models a check takes
 under 0.05 s either way. On a 29 MB model with 56 curved bodies, 135
 bodies get boundaries (50 when only vertical extrusions were built), and a
 column-to-wall distance rule took 920 s against 886 s meshing only
-(unoptimised build on a loaded machine; meshing the model dominates). `--no-exact-boundaries` meshes only, for a quick first
-pass. `axioval compare` never builds them.
+(unoptimised build on a loaded machine; meshing the model dominates).
+`--no-exact-boundaries` meshes only, for a quick first pass. `axioval compare`
+builds them only with `--geometry-mode mesh`, where the surface distance reads
+them (and `--no-exact-boundaries` turns that off too).
 
 Each model's file name is stated as its source's `fileName` metadata, beside the application and project the IFC adapter reads, for `source` selectors (see
 [Source selectors](./capabilities.md#source-selectors)).
@@ -578,7 +580,7 @@ TLS library); without it they are refused.
 ```bash
 axioval compare --base r1/model.ifc --revised r2/model.ifc \
   [--property SET.NAME ...] [--property-set SET ...] [--all-property-sets] \
-  [--geometry] [--timestamps] \
+  [--geometry [--geometry-mode bounds|mesh] [--no-exact-boundaries]] [--timestamps] \
   [--length-tolerance METRES] [--angle-tolerance DEGREES] \
   [--report result.json] [--summary [--top N]] [--bcf changes.bcfzip] [--xlsx report.xlsx] \
   [--html report.html [--html-template template.html] [--html-title TEXT]] \
@@ -615,9 +617,15 @@ Compared facets:
   each object's measured bounds are compared; with `--geometry-mode mesh`
   instead the certified distance between the two surfaces in world
   coordinates, which also sees a reshaping inside unchanged bounds (an
-  opening moved along its wall). A tessellated body is not certified, so
-  its geometry is not compared in that mode. `--geometry-mode` without
-  `--geometry` is a usage error (status 2).
+  opening moved along its wall). In that mode both revisions also get
+  their exact boundaries, as `check --geometry` builds them, and a body
+  with one in both revisions is measured between the boundaries (measure
+  `boundary`), so a moved round column is compared too; like every
+  measure, a distance straddling the length tolerance is not evaluated. A
+  tessellated body without them is not certified, so its geometry is not
+  compared in that mode. `--no-exact-boundaries` meshes only.
+  `--geometry-mode` or `--no-exact-boundaries` without `--geometry` is a
+  usage error (status 2).
 
 A length differs when it exceeds `--length-tolerance` (default 0.005 m) and an
 angle when it exceeds `--angle-tolerance` (default 0.01°). The length default
@@ -676,8 +684,9 @@ The result also has a `comparison` field with the structured comparison:
 measure undetermined), in identity order; unchanged identities are only
 counted. Each change carries its `facet` and a `detail`; a measured change
 also its `measure`, the interval `lower`–`upper` it lies in, the `tolerance`
-and the `unit` (`m`, `rad`, or empty for the map scale); a `mesh` change or
-undetermined measure also its `witness`: `from`, a point of the `side`
+and the `unit` (`m`, `rad`, or empty for the map scale); a `mesh` or
+`boundary` change or undetermined measure also its `witness`: `from`, a
+point of the `side`
 revision's body that far from the other body, and `to`, its nearest point
 found there, in world metres. With `--geometry-mode mesh` the comparison
 states `"geometry_mode": "mesh"`. `unresolved` and

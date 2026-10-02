@@ -154,7 +154,7 @@ finite and non-negative. Each spatial facet is opt-in with its own tolerance:
 |---|---|---|---|
 | `with_placement` | `placement` | `ObjectFrameServiceHandle` | `origin`: distance between frame origins; `orientation`: rotation between axis triples |
 | `with_geometry` | `geometry` | `ProximityServiceHandle` | `bounds`: largest shift of any face of the axis-aligned bounds |
-| `with_mesh_geometry` | `geometry` | `ProximityServiceHandle` | `mesh`: certified two-sided Hausdorff distance between the two surfaces |
+| `with_mesh_geometry` | `geometry` | `ProximityServiceHandle` | `mesh`: certified two-sided Hausdorff distance between the two surfaces; `boundary`: the same between the two exact boundaries, where both bodies have one |
 | `with_coordinate_systems` | `coordinate-system` | `CoordinateSystemServiceHandle` | `world-origin`, `world-orientation`, `true-north`, `map-offset`, `map-rotation`, `map-scale` |
 
 A session without the service a requested facet needs leaves that facet
@@ -236,9 +236,37 @@ witness is also the measurement's `witness` (`Witness`).
 
 Only exact surfaces are certified. A tessellation bounds how far its true
 surface lies from the mesh, not how far the mesh lies from the true surface,
-so a body on either side registered as a tessellation leaves the `geometry`
-facet unresolved (`mesh` not compared), never unchanged. Bodiless and
-unmeasured bodies are judged as in the bounds mode.
+so a body on either side registered as a tessellation, without an exact
+boundary on both sides, leaves the `geometry` facet unresolved (`mesh` not
+compared), never unchanged. Bodiless and unmeasured bodies are judged as in
+the bounds mode.
+
+#### Exact boundaries
+
+Where both revisions of a body have an exact boundary registered beside
+their meshes (`BodySurface::exact_boundary`, an `ExactBoundaryHandle` the
+engine never reads), the base session's service measures between the two
+boundaries instead of the meshes, whatever the meshes' fidelity, so a round
+column or any other curved body is compared too. The evidence says so
+(`SurfaceDistanceEvidence::basis`, `SurfaceBasis::ExactBoundary`) and the
+distance is judged as measure `boundary`: `geometry changed: geometry
+boundary differs by …`, with the witness as
+`comparison:witness:boundary:…` and both boundaries cited as exact
+evidence, `comparison:exact-boundary:<object>` on each side's source. A
+service that cannot read the counterpart's boundary, or whose kernel
+refuses the pair, measures the meshes as above.
+
+A distance between exact boundaries is always sound, but it may come back
+wider than asked: two boundaries the kernel cannot match face to face (a
+turned copy, or a moved one whose faces are trimmed in world coordinates)
+close only at first order, and the kernel stops at its refinement budget.
+Since the interval is sound however wide, it is judged like every measure:
+changed when all of it lies above the tolerance, unchanged when none of it
+does, otherwise undetermined and not evaluated; its width never decides. An
+identical re-export matches face to face and is zero apart up to rounding.
+For example, a round column moved by 1 mm is measured between about 1.0 mm
+and 1.6 mm: changed against a 0.5 mm tolerance, undetermined against
+1.2 mm, and with meshes alone not compared at all.
 
 ### Coordinate systems
 
@@ -352,5 +380,9 @@ those of the [report](#reports) under the rule's id.
 ## Open
 
 - **Tessellated mesh difference.** The mesh mode certifies exact surfaces
-  only; a curved body's surface distance needs a certified distance between
-  exact boundaries, so its geometry stays unresolved in that mode.
+  only: a curved body without an exact boundary on both sides (an ellipse,
+  a revolution, a sweep, a boolean) stays unresolved in that mode.
+- **Slow boundary distances.** Boundaries the kernel cannot match face to
+  face close only at first order, so a move close to the tolerance may
+  come back straddling it (not evaluated) after the kernel's whole
+  refinement budget, which takes seconds per pair.

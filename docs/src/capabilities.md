@@ -1995,8 +1995,10 @@ mapped through the matching: a door moved to another storey is a
 match is undecided, is not evaluated, never a change. Geometry is compared
 by bounds, or with `geometry: mesh` by the certified distance between the
 two surfaces within `tolerance_metres`, which finds an opening moved inside
-unchanged bounds and reports where as witness evidence; a distance
-straddling the tolerance, or a tessellated body, is not evaluated. A
+unchanged bounds and reports where as witness evidence; between the exact
+boundaries where both bodies have one, so curved bodies are compared too.
+A distance straddling the tolerance, or a tessellated body without
+boundaries, is not evaluated. A
 definition bound to `model-comparison` must declare `compare_relationships`,
 `geometry` and `tolerance_metres` as optional. See [The comparison as a
 rule](./comparison.md#the-comparison-as-a-rule), [Relationship

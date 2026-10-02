@@ -775,7 +775,43 @@ impl BodyVolume {
     }
 }
 
-/// One object's measured surface: a triangle mesh in world metres.
+/// An exact boundary a backend registered for an object, handed out beside
+/// its surface ([`BodySurface::exact_boundary`]) so a service of another
+/// session can measure its own exact boundary against it.
+///
+/// Opaque to the engine, which never names a geometry kernel's types: only
+/// a backend that knows the boundary's type reads it
+/// ([`Self::downcast_ref`]); any other measures the mesh or refuses. Two
+/// handles are equal when they share one boundary.
+#[derive(Clone)]
+pub struct ExactBoundaryHandle(Arc<dyn std::any::Any + Send + Sync>);
+
+impl ExactBoundaryHandle {
+    /// Wraps a backend's boundary.
+    pub fn new<T: std::any::Any + Send + Sync>(boundary: Arc<T>) -> Self {
+        Self(boundary)
+    }
+    /// The boundary, when it is a `T`.
+    #[must_use]
+    pub fn downcast_ref<T: std::any::Any>(&self) -> Option<&T> {
+        self.0.downcast_ref()
+    }
+}
+
+impl std::fmt::Debug for ExactBoundaryHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ExactBoundaryHandle(..)")
+    }
+}
+
+impl PartialEq for ExactBoundaryHandle {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::addr_eq(Arc::as_ptr(&self.0), Arc::as_ptr(&other.0))
+    }
+}
+
+/// One object's measured surface: a triangle mesh in world metres, and the
+/// object's exact boundary where its backend registered one.
 ///
 /// What [`ProximityService::body_surface`] hands out so another service,
 /// possibly of another session, can measure its own body against it
@@ -787,6 +823,7 @@ pub struct BodySurface {
     positions: Vec<[f64; 3]>,
     triangles: Vec<[u32; 3]>,
     fidelity: GeometryFidelity,
+    exact_boundary: Option<ExactBoundaryHandle>,
 }
 
 impl BodySurface {
@@ -815,7 +852,20 @@ impl BodySurface {
             positions,
             triangles,
             fidelity,
+            exact_boundary: None,
         })
+    }
+    /// The surface with the object's exact boundary, in the same world
+    /// coordinates: the mesh may be a tessellation of it, the boundary is
+    /// the body itself.
+    #[must_use]
+    pub fn with_exact_boundary(mut self, boundary: ExactBoundaryHandle) -> Self {
+        self.exact_boundary = Some(boundary);
+        self
+    }
+    /// The object's exact boundary, when its backend registered one.
+    pub fn exact_boundary(&self) -> Option<&ExactBoundaryHandle> {
+        self.exact_boundary.as_ref()
     }
     /// The object the surface bounds.
     pub fn object(&self) -> &ObjectId {
@@ -926,35 +976,77 @@ pub enum SurfaceDirection {
     FromCounterpart,
 }
 
+/// What a [`SurfaceDistanceEvidence`] was measured between.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SurfaceBasis {
+    /// The two exact meshes.
+    Mesh,
+    /// The two exact boundaries ([`BodySurface::exact_boundary`]), whatever
+    /// the meshes' fidelity.
+    ExactBoundary,
+}
+
 /// The certified Hausdorff distance between a subject's surface and a
 /// counterpart surface.
 ///
-/// Only exact surfaces are measured. A tessellation bounds how far its true
+/// Only exact surfaces are measured: two exact meshes, or two exact
+/// boundaries ([`SurfaceBasis`]). A tessellation bounds how far its true
 /// surface may lie from the mesh, not how far the mesh may lie from the true
-/// surface, so no distance between tessellations is certified: evidence for
-/// a tessellated counterpart, or evidence that is not exact, is refused.
+/// surface, so no distance between tessellations is certified: mesh
+/// evidence for a tessellated counterpart, boundary evidence for a
+/// counterpart without an exact boundary, and evidence that is not exact
+/// are refused.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SurfaceDistanceEvidence {
     request: SurfaceDistanceRequest,
     forward: DirectedDistance,
     backward: DirectedDistance,
     evidence: Evidence,
+    basis: SurfaceBasis,
 }
 
 impl SurfaceDistanceEvidence {
-    /// `forward` runs from the subject to the counterpart, `backward` the
-    /// other way. Refuses a tessellated counterpart and evidence that is
-    /// not exact or has no reviewable locator.
+    /// Measured between the two meshes: `forward` runs from the subject to
+    /// the counterpart, `backward` the other way. Refuses a tessellated
+    /// counterpart and evidence that is not exact or has no reviewable
+    /// locator.
     pub fn try_new(
         request: SurfaceDistanceRequest,
         forward: DirectedDistance,
         backward: DirectedDistance,
         evidence: Evidence,
     ) -> Result<Self, ProximityError> {
-        if !evidence.exact
-            || !request.counterpart().fidelity().is_exact()
-            || evidence.locator.trim().is_empty()
-        {
+        Self::measured(SurfaceBasis::Mesh, request, (forward, backward), evidence)
+    }
+    /// Measured between the two exact boundaries, as [`Self::try_new`]
+    /// otherwise. Refuses a counterpart without an exact boundary and
+    /// evidence that is not exact or has no reviewable locator; the meshes'
+    /// fidelity does not enter.
+    pub fn try_from_boundaries(
+        request: SurfaceDistanceRequest,
+        forward: DirectedDistance,
+        backward: DirectedDistance,
+        evidence: Evidence,
+    ) -> Result<Self, ProximityError> {
+        Self::measured(
+            SurfaceBasis::ExactBoundary,
+            request,
+            (forward, backward),
+            evidence,
+        )
+    }
+    fn measured(
+        basis: SurfaceBasis,
+        request: SurfaceDistanceRequest,
+        (forward, backward): (DirectedDistance, DirectedDistance),
+        evidence: Evidence,
+    ) -> Result<Self, ProximityError> {
+        let counterpart = request.counterpart();
+        let certified = match basis {
+            SurfaceBasis::Mesh => counterpart.fidelity().is_exact(),
+            SurfaceBasis::ExactBoundary => counterpart.exact_boundary().is_some(),
+        };
+        if !evidence.exact || !certified || evidence.locator.trim().is_empty() {
             return Err(ProximityError::EvidenceFidelityMismatch);
         }
         Ok(Self {
@@ -962,10 +1054,15 @@ impl SurfaceDistanceEvidence {
             forward,
             backward,
             evidence,
+            basis,
         })
     }
     pub fn request(&self) -> &SurfaceDistanceRequest {
         &self.request
+    }
+    /// What the distance was measured between.
+    pub fn basis(&self) -> SurfaceBasis {
+        self.basis
     }
     /// How far the subject strays from the counterpart.
     pub fn forward(&self) -> DirectedDistance {
@@ -1631,8 +1728,10 @@ pub trait ProximityService: Send + Sync + 'static {
 
     /// The certified Hausdorff distance between the subject's surface and
     /// the request's counterpart surface, which may come from another
-    /// session. Only exact surfaces are measured: a service refuses a
-    /// tessellated subject or counterpart rather than widen a distance it
+    /// session. Only exact surfaces are measured: where the subject and the
+    /// counterpart both have an exact boundary a service may measure between
+    /// the boundaries ([`SurfaceBasis::ExactBoundary`]); otherwise it refuses
+    /// a tessellated subject or counterpart rather than widen a distance it
     /// cannot certify.
     ///
     /// The default refuses with [`ProximityError::Unavailable`], so a
@@ -1932,6 +2031,66 @@ mod tests {
         assert_eq!(
             handle.measure_surface_distance(&other),
             Err(ProximityError::InvalidMeasurement)
+        );
+    }
+
+    /// Two exact boundaries certify a distance whatever their meshes'
+    /// fidelity; a counterpart without one certifies nothing.
+    #[test]
+    fn a_surface_distance_between_exact_boundaries_needs_the_counterparts() {
+        let tessellated = GeometryFidelity::tessellated(0.001).unwrap();
+        let boundary = ExactBoundaryHandle::new(Arc::new(7_u32));
+        assert_eq!(boundary.downcast_ref::<u32>(), Some(&7));
+        assert_eq!(boundary.downcast_ref::<f64>(), None);
+        assert_eq!(boundary, boundary.clone());
+        assert_ne!(boundary, ExactBoundaryHandle::new(Arc::new(7_u32)));
+
+        let bare = Arc::new(triangle("revised", tessellated));
+        let bounded = Arc::new(triangle("revised", tessellated).with_exact_boundary(boundary));
+        assert!(bare.exact_boundary().is_none());
+        assert!(bounded.exact_boundary().is_some());
+        let request = |surface: &Arc<BodySurface>| {
+            SurfaceDistanceRequest::try_new(id("base"), surface.clone(), 0.001).unwrap()
+        };
+        assert_eq!(
+            SurfaceDistanceEvidence::try_from_boundaries(
+                request(&bare),
+                directed(0.1, 0.2),
+                directed(0.0, 0.1),
+                exact()
+            ),
+            Err(ProximityError::EvidenceFidelityMismatch)
+        );
+        assert_eq!(
+            SurfaceDistanceEvidence::try_from_boundaries(
+                request(&bounded),
+                directed(0.1, 0.2),
+                directed(0.0, 0.1),
+                approximate()
+            ),
+            Err(ProximityError::EvidenceFidelityMismatch)
+        );
+        // The mesh basis still refuses the tessellation.
+        assert_eq!(
+            SurfaceDistanceEvidence::try_new(
+                request(&bounded),
+                directed(0.1, 0.2),
+                directed(0.0, 0.1),
+                exact()
+            ),
+            Err(ProximityError::EvidenceFidelityMismatch)
+        );
+        let measured = SurfaceDistanceEvidence::try_from_boundaries(
+            request(&bounded),
+            directed(0.1, 0.2),
+            directed(0.0, 0.1),
+            exact(),
+        )
+        .unwrap();
+        assert_eq!(measured.basis(), SurfaceBasis::ExactBoundary);
+        assert_eq!(
+            measured.distance(),
+            LengthInterval::try_new(0.1, 0.2).unwrap()
         );
     }
 

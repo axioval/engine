@@ -8,8 +8,8 @@ use axioval_engine::{
     ClassificationServiceHandle, CoordinateFrame, CoordinateSystemServiceHandle, MetricDirection,
     ObjectFrameError, ObjectFrameServiceHandle, PropertyResolutionServiceHandle, ProximityError,
     ProximityServiceHandle, RelationshipEdgesRequest, RelationshipKind,
-    RelationshipSelectionServiceHandle, SourceCoordinateSystem, SurfaceDirection,
-    SurfaceDistanceRequest,
+    RelationshipSelectionServiceHandle, SourceCoordinateSystem, SurfaceBasis, SurfaceDirection,
+    SurfaceDistanceEvidence, SurfaceDistanceRequest,
 };
 use axioval_ir::{DateTime, Object, ObjectId, Property, PropertyValue, SourceId};
 
@@ -665,8 +665,11 @@ impl Pair<'_, '_> {
     /// The certified two-sided Hausdorff distance between the two surfaces,
     /// in world coordinates: the revised body's surface, handed out by its
     /// session, measured against the base body by the base session's
-    /// service. Only exact bodies are measured; a tessellation leaves the
-    /// facet unresolved, never unchanged.
+    /// service. Where both bodies have an exact boundary the service
+    /// measures between the boundaries ([`Measure::Boundary`]), whatever the
+    /// meshes' fidelity; otherwise only exact meshes are measured
+    /// ([`Measure::Mesh`]), and a tessellation leaves the facet unresolved,
+    /// never unchanged.
     fn mesh(
         &mut self,
         base: &Object,
@@ -676,7 +679,7 @@ impl Pair<'_, '_> {
     ) {
         let facet = Facet::Geometry;
         match (
-            base_bodies.bounds(&base.id),
+            base_bodies.body_surface(&base.id),
             revised_bodies.body_surface(&revised.id),
         ) {
             (Err(ProximityError::NoBody), Err(ProximityError::NoBody)) => {}
@@ -687,16 +690,19 @@ impl Pair<'_, '_> {
                 self.outcome.stated(facet, "body", "none", "present");
             }
             (Ok(before), Ok(after)) => {
+                let boundaries =
+                    before.exact_boundary().is_some() && after.exact_boundary().is_some();
                 for (side, exact) in [
                     (Side::Base, before.fidelity().is_exact()),
                     (Side::Revised, after.fidelity().is_exact()),
                 ] {
-                    if !exact {
+                    if !exact && !boundaries {
                         self.unresolved(
                             facet,
                             "mesh",
                             format!(
-                                "the {} body is a tessellation, so its surface distance cannot be certified",
+                                "the {} body is a tessellation without an exact boundary on \
+                                 both sides, so its surface distance cannot be certified",
                                 side.name()
                             ),
                         );
@@ -711,24 +717,7 @@ impl Pair<'_, '_> {
                 )
                 .and_then(|request| base_bodies.measure_surface_distance(&request));
                 match measured {
-                    Ok(measured) => {
-                        let distance = measured.distance();
-                        let (direction, directed) = measured.witness();
-                        let witness = Witness {
-                            side: match direction {
-                                SurfaceDirection::FromSubject => Side::Base,
-                                SurfaceDirection::FromCounterpart => Side::Revised,
-                            },
-                            from: directed.from(),
-                            to: directed.to(),
-                        };
-                        self.outcome.witnessed(
-                            Measure::Mesh,
-                            (distance.lower_metres(), distance.upper_metres()),
-                            length,
-                            Some(witness),
-                        );
-                    }
+                    Ok(measured) => self.surface_distance(&measured, length),
                     Err(error) => self.unresolved(facet, "mesh", error.to_string()),
                 }
             }
@@ -736,6 +725,34 @@ impl Pair<'_, '_> {
                 self.unresolved(facet, "", error.to_string());
             }
         }
+    }
+
+    /// Judges a certified surface distance against the tolerance, as the
+    /// measure its basis names.
+    ///
+    /// A distance between exact boundaries may come back wider than asked
+    /// where the kernel's refinement ran out (an unmatched pair closes only
+    /// at first order). It is sound however wide, so it is judged like every
+    /// measure: decided when it lies wholly on one side of the tolerance,
+    /// undetermined when it straddles it, never decided by its width.
+    fn surface_distance(&mut self, measured: &SurfaceDistanceEvidence, length: f64) {
+        let distance = measured.distance();
+        let (lower, upper) = (distance.lower_metres(), distance.upper_metres());
+        let measure = match measured.basis() {
+            SurfaceBasis::Mesh => Measure::Mesh,
+            SurfaceBasis::ExactBoundary => Measure::Boundary,
+        };
+        let (direction, directed) = measured.witness();
+        let witness = Witness {
+            side: match direction {
+                SurfaceDirection::FromSubject => Side::Base,
+                SurfaceDirection::FromCounterpart => Side::Revised,
+            },
+            from: directed.from(),
+            to: directed.to(),
+        };
+        self.outcome
+            .witnessed(measure, (lower, upper), length, Some(witness));
     }
 
     /// Measured bounds: the largest shift of any bound, widened by both

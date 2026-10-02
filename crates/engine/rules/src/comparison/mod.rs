@@ -21,7 +21,9 @@
 //! - **geometry** compares measured bodies ([`ProximityServiceHandle`]):
 //!   by default the largest shift of any face of the axis-aligned bounds,
 //!   or, in [`GeometryMode::Mesh`], the certified Hausdorff distance between
-//!   the two surfaces in world coordinates, with its witness points;
+//!   the two surfaces in world coordinates, with its witness points: between
+//!   the exact boundaries where both bodies have one, otherwise between the
+//!   exact meshes;
 //! - **coordinate systems** compare each pair of sources
 //!   ([`CoordinateSystemServiceHandle`]): world frame, true north and map
 //!   conversion.
@@ -255,9 +257,13 @@ pub enum GeometryMode {
     #[default]
     Bounds,
     /// The certified two-sided Hausdorff distance between the two surfaces
-    /// in world coordinates ([`Measure::Mesh`]), with the witness points it
-    /// is realised at. Sees a reshaping inside unchanged bounds, such as a
-    /// moved opening; refuses tessellated bodies, which it cannot certify.
+    /// in world coordinates, with the witness points it is realised at.
+    /// Sees a reshaping inside unchanged bounds, such as a moved opening.
+    /// Where both bodies have an exact boundary it is measured between the
+    /// boundaries ([`Measure::Boundary`]), tessellated meshes or not;
+    /// otherwise between
+    /// the meshes ([`Measure::Mesh`]), refusing tessellated bodies, which it
+    /// cannot certify.
     Mesh,
 }
 
@@ -547,6 +553,8 @@ pub enum Measure {
     Bounds,
     /// Two-sided Hausdorff distance between the surfaces, in metres.
     Mesh,
+    /// Two-sided Hausdorff distance between the exact boundaries, in metres.
+    Boundary,
     /// Distance between world-frame origins, in metres.
     WorldOrigin,
     /// Rotation between world-frame axes, in radians.
@@ -567,7 +575,7 @@ impl Measure {
     pub fn facet(self) -> Facet {
         match self {
             Self::Origin | Self::Orientation => Facet::Placement,
-            Self::Bounds | Self::Mesh => Facet::Geometry,
+            Self::Bounds | Self::Mesh | Self::Boundary => Facet::Geometry,
             Self::WorldOrigin
             | Self::WorldOrientation
             | Self::TrueNorth
@@ -585,6 +593,7 @@ impl Measure {
             Self::Orientation => "orientation",
             Self::Bounds => "bounds",
             Self::Mesh => "mesh",
+            Self::Boundary => "boundary",
             Self::WorldOrigin => "world-origin",
             Self::WorldOrientation => "world-orientation",
             Self::TrueNorth => "true-north",
@@ -617,7 +626,12 @@ impl Measure {
     fn is_length(self) -> bool {
         matches!(
             self,
-            Self::Origin | Self::Bounds | Self::Mesh | Self::WorldOrigin | Self::MapOffset
+            Self::Origin
+                | Self::Bounds
+                | Self::Mesh
+                | Self::Boundary
+                | Self::WorldOrigin
+                | Self::MapOffset
         )
     }
 
@@ -647,7 +661,7 @@ pub struct Measurement {
     /// The tolerance it was compared with, in the measure's unit.
     pub tolerance: f64,
     /// Where the difference is realised, for a measure that says
-    /// ([`Measure::Mesh`]).
+    /// ([`Measure::Mesh`], [`Measure::Boundary`]).
     pub witness: Option<Witness>,
 }
 
@@ -1325,7 +1339,8 @@ impl Projection<'_> {
                         (&revised.source, matcher, identity),
                     );
                     // Where a measured difference is realised, as evidence
-                    // on the finding just made.
+                    // on the finding just made; a distance between exact
+                    // boundaries also cites both boundaries, exactly.
                     let witnesses = differences
                         .iter()
                         .filter_map(|difference| match difference {
@@ -1342,8 +1357,28 @@ impl Projection<'_> {
                             }
                             _ => None,
                         });
+                    let boundaries = differences
+                        .iter()
+                        .any(|difference| {
+                            matches!(
+                                difference,
+                                Difference::Measured(Measurement {
+                                    measure: Measure::Boundary,
+                                    ..
+                                })
+                            ) && facet == Facet::Geometry
+                        })
+                        .then(|| {
+                            [base, revised].map(|object| Evidence {
+                                source: object.source.clone(),
+                                locator: format!("comparison:exact-boundary:{object}"),
+                                exact: true,
+                            })
+                        })
+                        .into_iter()
+                        .flatten();
                     if let Some(finding) = self.findings.last_mut() {
-                        finding.evidence.extend(witnesses);
+                        finding.evidence.extend(witnesses.chain(boundaries));
                     }
                 }
                 self.gaps(&Scope::Object(revised.clone()), unresolved, undetermined);

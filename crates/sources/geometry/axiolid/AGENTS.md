@@ -327,6 +327,19 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   refuses (`EvidenceFidelityMismatch`): a chord deviation bounds the true
   surface from the mesh one way only, so never widen it into a surface
   distance. `tests/surface_distance.rs` measures two sessions' walls.
+  `body_surface` also hands out the object's registered exact boundary
+  (`ExactBoundaryHandle` over the shared `Arc<ExactBRep>`), and where the
+  subject has one and the counterpart's downcasts to `ExactBRep`,
+  `measure_surface_distance` measures between the boundaries first
+  (`boundary_hausdorff_distance`, axiolid-measure 0.3.6, `Tolerance::METRE`,
+  each side widened by `certified_directed`'s rounding bound,
+  `try_from_boundaries`), whatever the meshes' fidelity; a kernel refusal
+  or ill-formed interval falls back to the mesh path, never to a guess.
+  Unmatched boundaries (a turned copy, or a moved prism, whose faces are
+  trimmed in world coordinates) close only at first order and run the
+  kernel's whole budget (about a minute per moved pair in a debug build);
+  never narrow the interval here. `tests/boundary_surface_distance.rs`
+  measures two sessions' round columns.
   A tessellated pair whose objects both have an exact boundary
   (`AxiolidGeometry::with_exact_boundary`) also gets the kernel's certified
   `boundary_distance` (axiolid-measure 0.3.4, `exact` feature) to

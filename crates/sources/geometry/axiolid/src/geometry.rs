@@ -161,7 +161,9 @@ impl AxiolidGeometry {
     /// measurements (`plan_boundary_distance`, `plan_boundary_clearance`,
     /// `plan_overlap`) the horizontal distance, plan overlap and the
     /// footprint relation of vertical distances, where the chord deviation
-    /// would leave them wide or open. The host asserts that boundary and
+    /// would leave them wide or open. The surface distance between two
+    /// revisions is measured between their boundaries where both have one
+    /// (`boundary_hausdorff_distance`). The host asserts that boundary and
     /// mesh describe one body; a pair whose certified answer contradicts the
     /// mesh's widened one refuses.
     #[must_use]
@@ -174,6 +176,12 @@ impl AxiolidGeometry {
     #[must_use]
     pub fn exact_boundary(&self, object: &ObjectId) -> Option<&ExactBRep> {
         self.boundaries.get(object).map(Arc::as_ref)
+    }
+
+    /// The exact boundary registered for an object, shared, to hand out
+    /// beside its surface.
+    pub(crate) fn shared_exact_boundary(&self, object: &ObjectId) -> Option<Arc<ExactBRep>> {
+        self.boundaries.get(object).cloned()
     }
 
     /// How faithfully an object's mesh represents it.

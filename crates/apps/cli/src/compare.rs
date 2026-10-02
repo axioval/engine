@@ -32,6 +32,7 @@ use crate::{Outcome, OutputArgs, emit, geometry, integrity};
 const RULE: &str = "compare";
 
 #[derive(Args)]
+#[allow(clippy::struct_excessive_bools)] // Each is one independent flag.
 pub struct CompareArgs {
     /// The earlier revision: an IFC2X3, IFC4 or IFC4X3 STEP file, or an
     /// ifcZIP archive holding one.
@@ -62,6 +63,8 @@ pub struct CompareArgs {
     /// How `--geometry` compares bodies: `bounds`, the largest shift of any
     /// face of the bounds, or `mesh`, the certified distance between the
     /// two surfaces, which also sees a reshaping inside unchanged bounds.
+    /// Where both revisions of a body have an exact boundary, `mesh`
+    /// measures between the boundaries, curved bodies included.
     #[arg(
         long,
         value_name = "MODE",
@@ -70,6 +73,14 @@ pub struct CompareArgs {
         requires = "geometry"
     )]
     geometry_mode: String,
+    /// With `--geometry-mode mesh`, mesh only: build no exact boundaries.
+    /// By default a body whose construction is exact (a vertically placed
+    /// extrusion of a rectangle, circle, section or line-and-arc profile)
+    /// also gets its exact boundary, so a curved body's surface distance is
+    /// certified between the boundaries instead of left open by its
+    /// tessellation.
+    #[arg(long, requires = "geometry")]
+    no_exact_boundaries: bool,
     /// Largest length difference that counts as unchanged, in metres.
     #[arg(long, default_value_t = 0.005, value_name = "METRES")]
     length_tolerance: f64,
@@ -132,9 +143,9 @@ pub fn compare(mut args: CompareArgs) -> Result<Outcome, Box<dyn Error>> {
     records.extend(integrity(&revised)?);
 
     let (base, revised, meshed) = if args.geometry {
-        // A comparison measures each object against its own revision, never
-        // a pair of curved bodies, so exact boundaries would go unused.
-        let keep = geometry::Options::meshes(args.output.bcf_view.snapshots);
+        // Only the surface distance reads exact boundaries: bounds never do.
+        let keep = geometry::Options::meshes(args.output.bcf_view.snapshots)
+            .with_exact_boundaries(args.geometry_mode == "mesh" && !args.no_exact_boundaries);
         let (base, before) = geometry::attach(base, &base_bytes, keep)
             .map_err(|error| format!("geometry of {}: {error}", args.base.display()))?;
         let (revised, after) = geometry::attach(revised, &revised_bytes, keep)
@@ -152,7 +163,7 @@ pub fn compare(mut args: CompareArgs) -> Result<Outcome, Box<dyn Error>> {
             exact: before.exact + after.exact,
             tessellated: before.tessellated + after.tessellated,
             no_body: before.no_body + after.no_body,
-            exact_boundaries: 0,
+            exact_boundaries: before.exact_boundaries + after.exact_boundaries,
             unmeasured,
         };
         (base, revised, Some((record, bodies)))

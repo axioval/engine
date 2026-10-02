@@ -12,6 +12,27 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Geometry comparison between exact boundaries.** (Refs #163) The mesh
+  mode of model comparison (`geometry: mesh`, `axioval compare
+  --geometry-mode mesh`) now measures a body between the two revisions'
+  exact boundaries where both have one, with axiolid-measure's certified
+  `boundary_hausdorff_distance`, whatever the meshes' fidelity: a round
+  column, whose tessellated mesh was never compared, is now unchanged when
+  re-exported and changed when moved beyond the tolerance. Such a distance
+  is the new measure `boundary`, its finding citing both boundaries as
+  exact evidence (`comparison:exact-boundary:<object>`) beside the witness
+  (`comparison:witness:boundary:…`). Boundaries the kernel cannot match
+  face to face may come back wider than asked; the interval is sound and
+  judged as every measure is (changed above the tolerance, unchanged
+  within it, not evaluated when it straddles it), never by its width. Bodies
+  without a boundary on both sides are measured on their meshes as before.
+  The proximity contract gains `ExactBoundaryHandle` (an opaque boundary a
+  `BodySurface` may carry, `with_exact_boundary`), `SurfaceBasis` and
+  `SurfaceDistanceEvidence::try_from_boundaries`/`basis`; the Axiolid
+  adapter hands out registered boundaries with each surface. `axioval
+  compare --geometry-mode mesh` now builds exact boundaries as `check
+  --geometry` does; `--no-exact-boundaries` meshes only.
+  **Breaking:** `Measure` gains the variant `Boundary`.
 - **Exact boundaries for IFC bodies.** (Closes #195) `axioval check
   --geometry` now also builds the exact boundary of every body whose
   construction is exact and registers it beside the mesh, so distances

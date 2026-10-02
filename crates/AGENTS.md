@@ -51,6 +51,8 @@ an adapter at runtime; agreeing on an alias scheme is pinned by a test instead.
 - `bcf-snapshot` (`axioval-bcf-snapshot`) — illustrative PNG snapshots of
   BCF viewpoints from meshes, through the sink's `SnapshotRenderer`; no
   source or kernel types.
+- `xlsx` (`axioval-xlsx`) — spreadsheet workbooks of findings,
+  not-evaluated outcomes and report tables, through `rust_xlsxwriter`.
 
 ## packages/
 
@@ -81,7 +83,7 @@ gate with no exemption. See `codecs/AGENTS.md`.
 
 - `axioval` — feature-gated facade. One feature per source adapter or sink,
   named for the format or library it adapts (`ifc`, `axiolid`, `icdd`, `bcf`,
-  `bcf-api`, `bcf-snapshot`).
+  `bcf-api`, `bcf-snapshot`, `xlsx`).
 - `cli` (`axioval-cli`) — command-line frontend.
 
 ## Adding a source adapter or sink

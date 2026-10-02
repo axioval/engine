@@ -23,7 +23,7 @@ axioval check --model building.ifc[:DISCIPLINE] [--model other.ifc[:DISCIPLINE] 
    | --ids rules.ids [--ids-filter selector.json]) \
   [--geometry] [--locate storeys|containers|geometry] [--rule-status] [--report result.json] \
   [--decisions decisions.json | --decisions-from reviewed.bcfzip] \
-  [--summary [--top N]] [--bcf issues.bcfzip] \
+  [--summary [--top N]] [--bcf issues.bcfzip] [--xlsx report.xlsx] \
   [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z] [--bcf-version 2.1|3.0] \
   [--bcf-subject-color HEX] [--bcf-related-color HEX] [--bcf-no-color] \
   [--bcf-isolate] [--bcf-section-box] [--bcf-snapshots]
@@ -248,6 +248,17 @@ for byte the same.
 every viewpoint, so it needs `--geometry` and bounds for every selected
 object; otherwise the run fails with status 1 and nothing is written.
 
+`--xlsx` also writes a spreadsheet workbook (see
+[Spreadsheets](./sinks.md#spreadsheets)): a `Findings` sheet listing every
+finding and then every not-evaluated outcome, and one sheet per report
+table, such as each [takeoff](./capabilities.md#information-takeoff). A
+table's numbers are numeric cells in the unit its header names
+(`sum_footprint lower [m²]`), an interval is its two bounds, and an
+`exactness` column beside each number says `exact`, `bounded` or `not
+evaluated`; an unknown value is a shaded blank. The workbook is created at
+`SOURCE_DATE_EPOCH` when set, else now, so with it set the same inputs write
+byte-identical workbooks.
+
 `--locate` locates every finding and not-evaluated outcome by storey and
 space (see [Locations](./refinement.md#locations)): `storeys` climbs
 `IfcRelContainedInSpatialStructure` and `IfcRelAggregates` to
@@ -470,7 +481,7 @@ axioval compare --base r1/model.ifc --revised r2/model.ifc \
   [--property SET.NAME ...] [--property-set SET ...] [--all-property-sets] \
   [--geometry] [--timestamps] \
   [--length-tolerance METRES] [--angle-tolerance DEGREES] \
-  [--report result.json] [--summary [--top N]] [--bcf changes.bcfzip] \
+  [--report result.json] [--summary [--top N]] [--bcf changes.bcfzip] [--xlsx report.xlsx] \
   [--bcf-author NAME] [--bcf-date 2026-09-26T10:00:00Z] [--bcf-version 2.1|3.0] \
   [--bcf-subject-color HEX] [--bcf-related-color HEX] [--bcf-no-color] \
   [--bcf-isolate] [--bcf-section-box] [--bcf-snapshots]

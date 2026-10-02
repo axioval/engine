@@ -1,6 +1,7 @@
 # Report sinks
 
-A sink turns a finished `Report` into a format other tools read. Sinks depend
+A sink turns a finished `Report` into a format other tools read: BCF
+issue archives, [spreadsheets](#spreadsheets). Sinks depend
 on `axioval-ir` alone: they see findings, not-evaluated outcomes and the
 project the report was computed over, never the engine or a source adapter.
 
@@ -345,3 +346,48 @@ compiled for the check.
 ## Not written
 
 Header files, lines, bitmaps and view setup hints.
+
+## Spreadsheets
+
+`axioval-xlsx` writes a report as an Office Open XML workbook (`.xlsx`)
+through `rust_xlsxwriter`, pure Rust.
+
+```rust,ignore
+let options = axioval_xlsx::Options {
+    external_id_scheme: Some("ifc-globalid".to_owned()),
+    ..axioval_xlsx::Options::new(1_790_416_800) // created, Unix seconds
+};
+std::fs::write("report.xlsx", axioval_xlsx::export(&report, project, &options)?)?;
+```
+
+**Sheets.** `Findings` (`FINDINGS_SHEET`) comes first: one row per finding,
+then one per not-evaluated outcome, in report order, each stating its
+`outcome` (`finding` or `not evaluated`), so the workbook never reads as
+"everything else passed". Its columns are the finding id, rule, severity
+or reason, scope, the object's kind and (with `external_id_scheme`) its
+alias, categories, message, related objects, storeys, spaces, and the
+decision with its author, date, assignee, due date, priority, labels and
+whether the finding changed since. One sheet per [report
+table](./ir.md#tables) follows, in report order: named for the table, or
+for its rule and name when several tables share a name, made a valid and
+unique sheet name (`sheet_names`).
+
+**Table cells.** A table sheet's first row names the rule and the table,
+the second is the header, frozen and filtered. The scope, the kind and
+alias of its object and the group columns come first, then every column:
+
+| Value | Text column | Number or quantity column: `<id> lower [unit]`, `<id> upper [unit]` | `<id> exactness` |
+|---|---|---|---|
+| exact | the text | the value twice, as numeric cells | `exact` |
+| interval | | its two bounds, never collapsed into one number | `bounded` |
+| unknown | a shaded blank | two shaded blanks | `not evaluated` |
+
+The unit is the quantity's coherent SI unit or a number column's own unit
+(`EUR`). An unknown text value is a shaded blank cell, never an empty
+string, so a value stated as empty is told apart from one not evaluated.
+
+**Deterministic.** The caller supplies the creation time; nothing reads
+the clock and the archive's entries carry a fixed date, so identical input
+writes identical bytes for a given build. Excel's limits are kept, not
+worked around: a sheet over a million rows or a text over 32 767
+characters refuses the export (`ExportError::Write`) rather than truncate.

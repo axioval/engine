@@ -25,6 +25,7 @@ EXPECTED = {
     "axioval-ifc",
     "axioval-ir",
     "axioval-rules",
+    "axioval-xlsx",
 }
 
 

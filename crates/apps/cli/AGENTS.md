@@ -60,4 +60,9 @@ CLI output and exit codes are public automation contracts. Parse packages fail c
   and are never written. `tests/check.rs` includes the API crate's
   in-process server by path; never call a real server. HTTPS only with the
   `tls` feature.
+- `--xlsx` (shared by `check` and `compare` through `OutputArgs`) writes
+  `axioval-xlsx`'s workbook with the GlobalId scheme as the external
+  identity column, created at `SOURCE_DATE_EPOCH` or now
+  (`epoch_seconds`). It is built with every other output before anything
+  is written; `tests/check.rs` reads two takeoff sheets back.
 - `check --rule-status` records `Report::rules`; the summary lists them bounded by `--top` (rules that did not pass first) and never changes the exit status.

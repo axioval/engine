@@ -13146,6 +13146,84 @@ fn a_quantity_takeoff_is_listed_by_group_and_exported_as_csv() {
     );
 }
 
+/// The text of `name` in the zip archive `bytes`.
+fn zip_entry(bytes: &[u8], name: &str) -> String {
+    use std::io::Read as _;
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+    let mut text = String::new();
+    archive
+        .by_name(name)
+        .unwrap()
+        .read_to_string(&mut text)
+        .unwrap();
+    text
+}
+
+/// Two takeoffs of the walls per storey, one with their footprints, written
+/// as a workbook: a findings sheet and one sheet per table, whose counts
+/// and areas are numeric cells.
+#[test]
+fn two_takeoff_tables_are_written_as_a_workbook_of_three_sheets() {
+    let case = Case::new("takeoff-xlsx");
+    let definitions = takeoff_definitions(&case);
+    let ruleset = takeoff_ruleset(&case);
+    let mut packages: Value =
+        serde_json::from_str(&std::fs::read_to_string(&ruleset).unwrap()).unwrap();
+    let mut count = packages["root"]["rules"][0].clone();
+    count["id"] = json!("wall-count");
+    for parameter in ["measure_1", "measure_1_name"] {
+        count["parameters"]
+            .as_object_mut()
+            .unwrap()
+            .remove(parameter);
+    }
+    packages["root"]["rules"]
+        .as_array_mut()
+        .unwrap()
+        .push(count);
+    let ruleset = case.write("ruleset.json", &packages.to_string());
+    let model = case.write("model.ifc", &storeys_with_facades());
+    let workbook = case.path("report.xlsx");
+    let run = || {
+        Command::new(env!("CARGO_BIN_EXE_axioval"))
+            .arg("check")
+            .arg("--model")
+            .arg(&model)
+            .arg("--definitions")
+            .arg(&definitions)
+            .arg("--ruleset")
+            .arg(&ruleset)
+            .args(["--geometry", "--report"])
+            .arg(case.path("result.json"))
+            .arg("--xlsx")
+            .arg(&workbook)
+            .env("SOURCE_DATE_EPOCH", "1790416800")
+            .output()
+            .unwrap()
+    };
+    let output = run();
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    let bytes = std::fs::read(&workbook).unwrap();
+    let names = zip_entry(&bytes, "xl/workbook.xml");
+    assert_eq!(names.matches("<sheet ").count(), 3, "{names}");
+    for name in ["Findings", "wall-count takeoff", "wall-takeoff takeoff"] {
+        assert!(names.contains(&format!("name=\"{name}\"")), "{names}");
+    }
+    let strings = zip_entry(&bytes, "xl/sharedStrings.xml");
+    assert!(strings.contains("sum_footprint lower [m²]"), "{strings}");
+    // Row 3 is storey EG: scope, kind, GlobalId, storey, then the count's
+    // bounds as numbers and the footprint's.
+    let takeoff = zip_entry(&bytes, "xl/worksheets/sheet3.xml");
+    assert!(takeoff.contains("<c r=\"E3\"><v>1</v></c>"), "{takeoff}");
+    assert!(takeoff.contains("<c r=\"H3\"><v>"), "{takeoff}");
+    assert!(takeoff.contains("<c r=\"I3\"><v>"), "{takeoff}");
+    let count = zip_entry(&bytes, "xl/worksheets/sheet2.xml");
+    assert!(count.contains("<c r=\"E3\"><v>1</v></c>"), "{count}");
+    // Created at SOURCE_DATE_EPOCH: a second run writes the same bytes.
+    assert_eq!(run().status.code(), Some(0));
+    assert_eq!(std::fs::read(&workbook).unwrap(), bytes);
+}
+
 /// The `takeoff` table of the rule under test.
 fn takeoff_table(result: &Value) -> &Value {
     result["report"]["tables"]

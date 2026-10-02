@@ -6,6 +6,18 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Spreadsheet output for findings and takeoff tables.** (Closes #177)
+  The new sink `axioval-xlsx` (facade feature `xlsx`) writes a report as
+  an `.xlsx` workbook through `rust_xlsxwriter`: a `Findings` sheet with
+  every finding and then every not-evaluated outcome, and one sheet per
+  report table. A table's numbers are numeric cells in the unit its
+  header names, an interval is written as its two bounds and never
+  collapsed, and each number's exactness (`exact`, `bounded`, `not
+  evaluated`) is written beside it; an unknown value is a shaded blank.
+  The caller supplies the creation time, so identical input writes
+  identical bytes. `axioval check` and `compare` write it with
+  `--xlsx FILE`, created at `SOURCE_DATE_EPOCH` when set.
+
 - **Geometry differences by certified surface distance.** (Closes #163)
   `model-comparison` gains `geometry` (`bounds` or `mesh`) and
   `tolerance_metres`: with `geometry: mesh` each matched pair is compared by

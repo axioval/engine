@@ -1,0 +1,24 @@
+[package]
+name = "axioval-xlsx"
+description = "Spreadsheet (xlsx) workbooks of findings and report tables from Axioval validation reports"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+readme.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+# An output sink reads the report contract only: never the engine, never a
+# source adapter. `rust_xlsxwriter` (MIT OR Apache-2.0, pure Rust) writes the
+# workbook through the deflate backend of `zip` the workspace already builds.
+[dependencies]
+axioval-ir.workspace = true
+rust_xlsxwriter = { version = "0.99.1", default-features = false }
+thiserror.workspace = true
+
+[dev-dependencies]
+zip = { workspace = true, features = ["deflate"] }
+
+[lints]
+workspace = true

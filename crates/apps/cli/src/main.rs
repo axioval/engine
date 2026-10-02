@@ -42,6 +42,7 @@ use axioval::{
         Discipline, FindingId, ObjectId, Project, Report, RuleSetPackage, SourceId,
         contract::SourceField,
     },
+    xlsx,
 };
 use clap::{Args, Parser, Subcommand};
 use digest::{CheckOutput, Filter, IntegrityRecord, Section};
@@ -299,6 +300,13 @@ struct OutputArgs {
     /// How BCF viewpoints show the involved objects.
     #[command(flatten)]
     bcf_view: BcfViewArgs,
+    /// Also write the findings, not-evaluated outcomes and report tables as
+    /// a spreadsheet workbook (xlsx): a `Findings` sheet and one sheet per
+    /// table, numbers as numeric cells with their units in the header, an
+    /// interval as its two bounds, and each value's exactness beside it.
+    /// Created at `SOURCE_DATE_EPOCH` when set, else now.
+    #[arg(long, value_name = "FILE")]
+    xlsx: Option<PathBuf>,
     /// Print a bounded summary to stdout instead of the full JSON. Save the
     /// full result with `--report` to dig in with `axioval report`.
     #[arg(long)]
@@ -866,6 +874,21 @@ pub(crate) fn emit(
         }
         None => None,
     };
+    let workbook = match &args.xlsx {
+        Some(path) => {
+            let created = i64::try_from(epoch_seconds()?)?;
+            let options = xlsx::Options {
+                external_id_scheme: Some(bcf::IFC_GLOBAL_ID_SCHEME.to_owned()),
+                ..xlsx::Options::new(created)
+            };
+            Some((
+                path,
+                xlsx::export(&output.report, project, &options)
+                    .map_err(|error| format!("{}: {error}", path.display()))?,
+            ))
+        }
+        None => None,
+    };
     let summary = args.summary.then(|| {
         let saved = args
             .report
@@ -883,6 +906,9 @@ pub(crate) fn emit(
         None => {}
     }
     if let Some((path, bytes, _, _)) = &archive {
+        write(path, bytes)?;
+    }
+    if let Some((path, bytes)) = &workbook {
         write(path, bytes)?;
     }
     let unanchored: Vec<_> = archive

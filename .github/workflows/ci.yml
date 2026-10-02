@@ -2,15 +2,21 @@ name: CI
 
 on:
   push:
+    # Not on tags: a release tag points at a commit main's push run already
+    # judged, and Pages and Release accept that run's verdict.
     branches: [main]
-    # A release tag gets its own run, so the Pages workflow always finds a
-    # CI verdict for the tagged commit instead of re-running the gate.
-    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
+
+# A newer push to a pull request supersedes its running check. Runs on main
+# are never cancelled: Pages and Release need a finished verdict on the very
+# commit they publish.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always

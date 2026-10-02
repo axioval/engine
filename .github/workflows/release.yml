@@ -30,6 +30,9 @@ jobs:
   verify:
     name: Verify release packages
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read # read CI's verdict on the released commit
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master 2026-08-31
@@ -39,11 +42,28 @@ jobs:
         run: |
           python3 scripts/test_publish_workspace.py
           python3 scripts/publish-workspace.py
-      - name: Verify publishable workspace archives
-        # Structure only: the forbidden-term denylist is private, so this job
-        # cannot scan for it. The publish job does, inside the environment
-        # that holds the denylist, before anything is uploaded.
-        run: ./scripts/package.sh --structure-only
+      - name: Require CI to have passed on this commit
+        # CI's push run on main already built and checked these archives
+        # (its Package job); the publish job then scans them for forbidden
+        # terms before anything is uploaded. A pull_request run tests a merge
+        # with its base, not the commit, so only push runs count.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for _ in $(seq 1 120); do
+            runs="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&event=push" \
+              --jq '.workflow_runs[] | "\(.id) \(.status) \(.conclusion)"')"
+            if grep -q ' completed success$' <<<"$runs"; then
+              echo "CI passed on $GITHUB_SHA:"; echo "$runs"; exit 0
+            fi
+            if [ -n "$runs" ] && ! grep -qv ' completed ' <<<"$runs"; then
+              echo "::error::CI did not pass on $GITHUB_SHA; re-run it, then re-run this workflow"
+              echo "$runs"; exit 1
+            fi
+            echo "waiting for CI on $GITHUB_SHA: ${runs:-no run yet}"
+            sleep 30
+          done
+          echo "::error::no finished CI run on $GITHUB_SHA after 60 minutes"; exit 1
 
   publish:
     name: Publish to crates.io

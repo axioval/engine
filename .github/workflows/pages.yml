@@ -46,9 +46,8 @@ jobs:
           tar -xzf mdbook.tar.gz -C "$HOME/.local/bin"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Require CI to have passed on this commit
-        # The full gate already runs in CI on this exact commit (on the push
-        # to main and again on the release tag); running it here a second
-        # time proved nothing new. Wait for a push-event run of ci.yml on
+        # The full gate already ran in CI on this exact commit when it was
+        # pushed to main; running it here a second time proves nothing new. Wait for a push-event run of ci.yml on
         # this commit and require its verdict; a pull_request run tests a
         # merge with its base, not the commit, so it does not count.
         # Re-running a failed CI run and then this workflow picks up the new

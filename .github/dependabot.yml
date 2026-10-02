@@ -1,10 +1,18 @@
 version: 2
 updates:
+  # One grouped pull request per ecosystem and week: each separate update
+  # cost a CI run on its pull request and another on main after merging.
   - package-ecosystem: cargo
     directory: /
     schedule:
       interval: weekly
+    groups:
+      cargo:
+        patterns: ["*"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    groups:
+      github-actions:
+        patterns: ["*"]

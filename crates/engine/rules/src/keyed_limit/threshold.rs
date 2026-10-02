@@ -16,6 +16,7 @@ use axioval_engine::{
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Finding, Object, ObjectId};
 
+use super::defaults::{DoorDefaults, Item};
 use super::{difference, judge_as_displayed, thickness};
 use crate::counts::Population;
 use crate::level_spacing::{extent, extents};
@@ -28,6 +29,8 @@ pub(crate) struct ThresholdStep<'a> {
     floor: Traversal,
     threshold: Option<PropertyRef<'a>>,
     ramps: Option<(&'a Selector, f64)>,
+    /// The door type's default threshold, for a door that states none.
+    defaults: Option<DoorDefaults<'a>>,
 }
 
 /// Whether something holds: surely, possibly, or surely not.
@@ -64,6 +67,7 @@ impl<'a> ThresholdStep<'a> {
     pub(crate) fn parse(
         parameters: &Parameters<'a>,
         floor: Traversal,
+        defaults: Option<DoorDefaults<'a>>,
     ) -> Result<Self, Unavailable> {
         let threshold = parameters.property("threshold_thickness")?;
         let ramps = match (
@@ -82,6 +86,7 @@ impl<'a> ThresholdStep<'a> {
             floor,
             threshold,
             ramps,
+            defaults,
         })
     }
 
@@ -106,7 +111,18 @@ impl<'a> ThresholdStep<'a> {
             None => Threshold::None,
             Some(property) => match thickness(context, subject, property, &mut evidence)? {
                 Some(value) => Threshold::Stated(value),
-                None => Threshold::Unknown(property.to_string()),
+                None => match &self.defaults {
+                    Some(defaults) => {
+                        match defaults.lookup(context, subject, Item::ThresholdHeight)? {
+                            Some(used) => {
+                                evidence.extend(used.evidence);
+                                Threshold::Default(used.value, used.words)
+                            }
+                            None => Threshold::Unknown(property.to_string()),
+                        }
+                    }
+                    None => Threshold::Unknown(property.to_string()),
+                },
             },
         };
         let everything: Vec<&Object> = context.project.objects().collect();
@@ -397,6 +413,9 @@ enum Threshold {
     /// The rule declares none: the door's bottom is its threshold.
     None,
     Stated(f64),
+    /// Declared, the door states none, and its type gives this default,
+    /// worded as a message names it.
+    Default(f64, String),
     /// Declared, and the door does not state it: at least zero.
     Unknown(String),
 }
@@ -429,6 +448,11 @@ fn step(
             difference(lower, -value).0,
             difference(upper, -value).1,
             format!(" with its {} m threshold", shown(*value, *value)),
+        ),
+        Threshold::Default(value, words) => (
+            difference(lower, -value).0,
+            difference(upper, -value).1,
+            format!(" with {words}"),
         ),
         Threshold::Unknown(property) => (
             lower,

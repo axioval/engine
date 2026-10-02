@@ -173,6 +173,28 @@ All notable changes are documented here. This project follows Semantic Versionin
   (`boolean`), `clear_width_property` and `overall_width`
   (`propertyReference`), `clear_width_from_leaves` (`string`) and
   `width_deduction` (`quantity`).
+- **Default door dimensions per door type.** (Refs #150) `keyed-limit`
+  gains `door_type_defaults`, a table of defaults per door type: a row
+  applies by the operation type the door's leaves state (`operation`, a
+  text pattern) and an `applies_to` selector, the first matching row being
+  the door's type, and gives a `width_deduction`, a `height_deduction`, a
+  `threshold_height` and a `glazing_ratio`. A default is used only where
+  the door states no value: `clear-width` takes the overall width less the
+  type's deduction (before the rule's `width_deduction`), `clear-height`
+  a head lining or threshold the door does not state, `threshold-step` a
+  threshold it does not state, and the new quantity `glazing-ratio` (a
+  stated fraction such as `Pset_DoorCommon.GlazingAreaFraction`) the
+  type's ratio. Every finding names the defaults it used and cites each by
+  an inexact `axioval:default.door-type` evidence entry; a stated value
+  that cannot be read is never replaced, and an undecided type row leaves
+  the door not evaluated. `overall_width` now needs `width_deduction`,
+  `door_type_defaults` or both. IFC records no glazing per panel, so a
+  leaf's own glazing ratio is not derived.
+  **Breaking:** definitions bound to `keyed-limit` must declare the
+  optional table parameter `door_type_defaults` with the columns
+  `operation` (`textPattern`), `applies_to` (`selector`),
+  `width_deduction`, `height_deduction`, `threshold_height` (`quantity`)
+  and `glazing_ratio` (`number`).
 - **Door and window limits per pair of space types.** (Closes #149)
   `keyed-limit` gains `pair_key`, naming a key read as the unordered pair
   of the space types on either face of the object along

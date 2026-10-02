@@ -492,6 +492,7 @@ fn without_geometry_nothing_is_judged() {
 /// A package binds the capability's limit table: its declared columns must
 /// be the capability's, and every row must fit them.
 #[test]
+#[allow(clippy::too_many_lines)] // the whole declared signature
 fn a_package_binds_the_limit_table() {
     use axioval_engine::{CapabilityRegistry, EngineError, compile};
     use axioval_ir::{DefinitionPackage, RuleSetPackage};
@@ -536,6 +537,16 @@ fn a_package_binds_the_limit_table() {
     parameters.insert("ramp_reach".into(), parameter("quantity", false));
     parameters.insert("member_selector".into(), parameter("selector", false));
     parameters.insert("pair_key".into(), parameter("string", false));
+    let mut defaults = parameter("table", false);
+    defaults["columns"] = json!([
+        column("operation", "textPattern"),
+        column("applies_to", "selector"),
+        column("width_deduction", "quantity"),
+        column("height_deduction", "quantity"),
+        column("threshold_height", "quantity"),
+        column("glazing_ratio", "number"),
+    ]);
+    parameters.insert("door_type_defaults".into(), defaults);
     for (name, kind) in [
         ("relationship", "string"),
         ("direction", "string"),
@@ -1691,4 +1702,363 @@ fn member_areas_need_a_member_selector_and_nothing_else_takes_one() {
             [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
         );
     }
+}
+
+/// A selector picking doors whose `OperationType` is `operation`.
+fn operated_as(operation: &str) -> ParameterValue {
+    common::selector(axioval_ir::contract::Selector::property(
+        Some("Attributes".into()),
+        "OperationType",
+        axioval_ir::contract::ComparisonOperator::Equals,
+        Some(string(operation)),
+    ))
+}
+
+/// One row of `door_type_defaults`, its cells as given.
+fn defaults_row(cells: &[(&str, ParameterValue)]) -> TableRow {
+    let mut row = TableRow::new();
+    for (column, value) in cells {
+        row.insert((*column).into(), value.clone());
+    }
+    row
+}
+
+/// Double-swing doors need 1.2 m clear, single-swing doors 0.9 m; the
+/// overall width less a deduction where no clear width is stated.
+fn typed_widths(defaults: Vec<TableRow>) -> Vec<(&'static str, ParameterValue)> {
+    vec![
+        (
+            "limits",
+            table(vec![
+                row([Some("DOUBLE_SWING_*"), None, None], Some(1.2), None),
+                row([Some("SINGLE_SWING_*"), None, None], Some(0.9), None),
+            ]),
+        ),
+        ("quantity", string("clear-width")),
+        ("quantity_property", property(Some("Pset"), "ClearWidth")),
+        ("key_1", property(Some("Attributes"), "OperationType")),
+        (
+            "overall_width",
+            property(Some("Attributes"), "OverallWidth"),
+        ),
+        ("width_deduction", metres(0.05)),
+        ("door_type_defaults", table(defaults)),
+    ]
+}
+
+/// The evidence entry recording the first default finding `index` used.
+fn default_entry(evaluation: &CapabilityEvaluation, index: usize) -> Evidence {
+    evaluation.findings()[index]
+        .evidence
+        .iter()
+        .find(|evidence| evidence.locator.starts_with("axioval:default.door-type:"))
+        .cloned()
+        .unwrap()
+}
+
+/// A double-swing door without a stated clear width is judged by its overall
+/// width less its type's deduction; a type row without one falls back to the
+/// rule's deduction, a stated width wins and an unreadable one is never
+/// replaced by a default.
+#[test]
+fn a_door_without_a_stated_clear_width_takes_its_types_deduction() {
+    let model = doors(&[
+        // 1.35 m less the type's 0.2 m: 1.15 m, short of 1.2 m.
+        ("d1", "DOUBLE_SWING_LEFT", Some(1.35), None),
+        // 1.45 m less 0.2 m: 1.25 m.
+        ("d2", "DOUBLE_SWING_LEFT", Some(1.45), None),
+        // The single-swing row gives no width deduction: 0.9 m less the
+        // rule's 0.05 m is 0.85 m.
+        ("d3", "SINGLE_SWING_LEFT", Some(0.9), None),
+        // A stated clear width wins over every default.
+        ("d4", "DOUBLE_SWING_LEFT", Some(1.0), Some(length(1.3))),
+        // A stated width that is no length is not replaced by a default.
+        (
+            "d5",
+            "DOUBLE_SWING_LEFT",
+            Some(1.45),
+            Some(PropertyValue::String("wide".into())),
+        ),
+    ]);
+    let defaults = vec![
+        defaults_row(&[
+            ("applies_to", operated_as("DOUBLE_SWING_LEFT")),
+            ("width_deduction", metres(0.2)),
+        ]),
+        defaults_row(&[
+            ("applies_to", operated_as("SINGLE_SWING_LEFT")),
+            ("threshold_height", metres(0.02)),
+        ]),
+    ];
+    let evaluation = clear(model, typed_widths(defaults));
+    assert_eq!(
+        findings(&evaluation),
+        [
+            (
+                "d1".into(),
+                "clear width (Attributes.OverallWidth 1.35 m less the door type's default width \
+                 deduction 0.2 m (door_type_defaults row 0), an approximation) is 1.15 m; \
+                 required at least 1.2 m (limit row 0: Attributes.OperationType \
+                 `DOUBLE_SWING_LEFT`)"
+                    .into()
+            ),
+            (
+                "d3".into(),
+                "clear width (Attributes.OverallWidth 0.9 m less the rule's deduction 0.05 m, \
+                 an approximation) is 0.85 m; required at least 0.9 m (limit row 1: \
+                 Attributes.OperationType `SINGLE_SWING_LEFT`)"
+                    .into()
+            ),
+        ]
+    );
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("d5".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+    // The default is cited as a rule parameter, never as a measurement.
+    let used = default_entry(&evaluation, 0);
+    assert!(
+        used.locator.ends_with("d1:row=0;width_deduction=0.2"),
+        "{}",
+        used.locator
+    );
+    assert!(!used.exact);
+    assert!(evaluation.findings()[0].evidence.iter().any(|evidence| {
+        evidence
+            .locator
+            .ends_with("d1:step=overall-width-less-type-deduction;deduction=0.2")
+            && !evidence.exact
+    }));
+    assert!(
+        !evaluation.findings()[1]
+            .evidence
+            .iter()
+            .any(|evidence| evidence.locator.starts_with("axioval:default.door-type:"))
+    );
+}
+
+/// A row keyed on the operation the door's leaves state applies to doors
+/// whose leaves say so; a door whose operation cannot be read has no
+/// decidable type and is not evaluated, never given a later row's default.
+#[test]
+fn a_type_row_keyed_on_the_operation_needs_the_doors_leaves() {
+    use common::doors::Doors;
+    let model = doors(&[
+        ("d1", "DOUBLE_SWING_LEFT", Some(1.35), None),
+        ("d2", "DOUBLE_SWING_LEFT", Some(1.35), None),
+    ]);
+    let frames = Doors::default()
+        .operated("d1", "DOUBLE_SWING_LEFT", 1.35)
+        .unknown(
+            "d2",
+            axioval_engine::DoorLeavesError::NotStated("no panels".into()),
+        )
+        .handle();
+    let defaults = vec![
+        defaults_row(&[
+            ("operation", string("DOUBLE_SWING_*")),
+            ("width_deduction", metres(0.2)),
+        ]),
+        defaults_row(&[("width_deduction", metres(0.01))]),
+    ];
+    let evaluation = model.evaluate_with(
+        &KeyedLimit,
+        &rule(ID, kind("door"), typed_widths(defaults)),
+        |services| {
+            services.register(frames).unwrap();
+        },
+    );
+    assert_eq!(flagged(&evaluation), ["d1"]);
+    assert!(
+        evaluation.findings()[0]
+            .evidence
+            .iter()
+            .any(|evidence| evidence.locator == "leaves:d1"),
+        "the operation is cited"
+    );
+    assert_eq!(
+        unevaluated(&evaluation),
+        [("d2".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+    let message = evaluation.not_evaluated_outcomes()[0].message();
+    assert!(
+        message.contains("its type's default cannot be decided"),
+        "{message}"
+    );
+}
+
+/// A door that states no head lining or threshold takes its type's
+/// defaults in its clear height; a stated one wins.
+#[test]
+fn a_clear_height_takes_the_types_default_lining_and_threshold() {
+    let model = tall_doors(&[
+        // 2.1 m less the defaults 0.05 m and 0.02 m: 2.03 m.
+        ("d1", 2.1, None, None, None),
+        // 2.2 m less the stated 0.05 m and the default 0.02 m: 2.13 m.
+        ("d2", 2.2, Some(0.05), None, None),
+        // 2.1 m less the stated 0.01 m and 0.01 m: 2.08 m.
+        ("d3", 2.1, Some(0.01), Some(0.01), None),
+    ]);
+    let mut parameters = height_keys(false);
+    parameters.push((
+        "door_type_defaults",
+        table(vec![defaults_row(&[
+            ("applies_to", common::selector(kind("door"))),
+            ("height_deduction", metres(0.05)),
+            ("threshold_height", metres(0.02)),
+        ])]),
+    ));
+    let evaluation = model.evaluate(&KeyedLimit, &rule(ID, kind("door"), parameters));
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "d1".into(),
+            "clear height (Attributes.OverallHeight 2.1 m less the door type's default height \
+             deduction 0.05 m (door_type_defaults row 0) less the door type's default threshold \
+             0.02 m (door_type_defaults row 0)) is 2.03 m; required at least 2.05 m (limit row \
+             0: Attributes.OperationType `SINGLE_SWING_LEFT`)"
+                .into()
+        )]
+    );
+    assert!(unevaluated(&evaluation).is_empty());
+    let cited = evaluation.findings()[0]
+        .evidence
+        .iter()
+        .filter(|evidence| evidence.locator.starts_with("axioval:default.door-type:"))
+        .count();
+    assert_eq!(cited, 2);
+}
+
+/// A door with no stated threshold takes its type's default in the
+/// threshold step; a stated one wins.
+#[test]
+fn a_threshold_step_takes_the_types_default_threshold() {
+    let model = stepped(&[("d1", &["k"]), ("d2", &["k"])], &[]).value(
+        "d2",
+        "Lining",
+        "ThresholdThickness",
+        length(0.01),
+    );
+    let bottoms = Bottoms::default()
+        .with("k", 0.0, 0.0)
+        .with("d1", 0.0, 0.0)
+        .with("d2", 0.0, 0.0);
+    let mut parameters = step_keys(false);
+    parameters.push((
+        "threshold_thickness",
+        property(Some("Lining"), "ThresholdThickness"),
+    ));
+    parameters.push((
+        "door_type_defaults",
+        table(vec![defaults_row(&[("threshold_height", metres(0.03))])]),
+    ));
+    let evaluation = step(model, bottoms, Ramps::default(), parameters);
+    assert_eq!(flagged(&evaluation), ["d1"]);
+    assert!(unevaluated(&evaluation).is_empty());
+    let message = &findings(&evaluation)[0].1;
+    assert!(
+        message.contains(
+            "to the door's bottom with the door type's default threshold 0.03 m \
+             (door_type_defaults row 0) is 0.03 m; required at most 0.02 m"
+        ),
+        "{message}"
+    );
+    assert!(!default_entry(&evaluation, 0).exact);
+}
+
+/// A glazing ratio is stated, else its type's default; a stated value that
+/// is no ratio, or a door whose type gives none, is not evaluated.
+#[test]
+fn a_glazing_ratio_is_stated_or_its_types_default() {
+    let mut model = Model::default()
+        .value(
+            "d1",
+            "Pset",
+            "GlazingAreaFraction",
+            PropertyValue::Decimal(0.2),
+        )
+        .text("d3", "Pset", "GlazingAreaFraction", "half");
+    for (door, operation) in [
+        ("d1", "SINGLE_SWING_LEFT"),
+        ("d2", "SINGLE_SWING_LEFT"),
+        ("d3", "SINGLE_SWING_LEFT"),
+        ("d4", "REVOLVING"),
+    ] {
+        model = model
+            .object(door, "door")
+            .text(door, "Attributes", "OperationType", operation);
+    }
+    let parameters = vec![
+        (
+            "limits",
+            table(vec![row([Some("*"), None, None], Some(0.3), None)]),
+        ),
+        ("quantity", string("glazing-ratio")),
+        (
+            "quantity_property",
+            property(Some("Pset"), "GlazingAreaFraction"),
+        ),
+        ("key_1", property(Some("Attributes"), "OperationType")),
+        (
+            "door_type_defaults",
+            table(vec![defaults_row(&[
+                ("applies_to", operated_as("SINGLE_SWING_LEFT")),
+                ("glazing_ratio", number(0.5)),
+            ])]),
+        ),
+    ];
+    let evaluation = clear(model, parameters);
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "d1".into(),
+            "glazing ratio (Pset.GlazingAreaFraction) is 0.2; required at least 0.3 (limit row \
+             0: Attributes.OperationType `SINGLE_SWING_LEFT`)"
+                .into()
+        )]
+    );
+    assert_eq!(
+        unevaluated(&evaluation),
+        [
+            ("d3".to_owned(), NotEvaluatedReason::IncompleteEvidence),
+            ("d4".to_owned(), NotEvaluatedReason::IncompleteEvidence),
+        ]
+    );
+}
+
+#[test]
+fn door_type_defaults_are_checked() {
+    let model = || doors(&[("d1", "SINGLE_SWING_LEFT", Some(1.0), None)]);
+    let invalid = |parameters: Vec<(&'static str, ParameterValue)>| {
+        let evaluation = clear(model(), parameters);
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+    };
+    // Defaults apply to door quantities only.
+    let mut plan_area = fire_keys(fire_limits());
+    plan_area.push(("door_type_defaults", table(Vec::new())));
+    invalid(plan_area);
+    // A ratio above one, and a deduction that is not a length.
+    invalid(typed_widths(vec![defaults_row(&[(
+        "glazing_ratio",
+        number(1.5),
+    )])]));
+    invalid(typed_widths(vec![defaults_row(&[(
+        "width_deduction",
+        ParameterValue::Quantity {
+            value: 1.0,
+            unit: "m2".into(),
+        },
+    )])]));
+    // The overall width needs a deduction: the rule's or the door type's.
+    let mut bare = typed_widths(Vec::new());
+    bare.retain(|(name, _)| !matches!(*name, "width_deduction" | "door_type_defaults"));
+    invalid(bare);
+    let mut typed_only = typed_widths(vec![defaults_row(&[("width_deduction", metres(0.1))])]);
+    typed_only.retain(|(name, _)| *name != "width_deduction");
+    let evaluation = clear(model(), typed_only);
+    assert!(unevaluated(&evaluation).is_empty());
+    assert!(findings(&evaluation).is_empty());
 }

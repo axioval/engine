@@ -140,6 +140,24 @@ impl Doors {
         self
     }
 
+    /// `local` is a door operated as `operation`, with one hinged leaf as
+    /// wide as the door and no lining stated.
+    pub fn operated(mut self, local: &str, operation: &str, overall: f64) -> Self {
+        let door = id(local);
+        let leaf = hinged([0.0; 3], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], overall, false);
+        let answer = DoorLeaves::try_new(
+            door.clone(),
+            operation,
+            overall,
+            None,
+            vec![leaf],
+            Evidence::exact(source(), format!("leaves:{local}")),
+        )
+        .unwrap();
+        self.leaves.insert(door, Ok(answer));
+        self
+    }
+
     /// `local` is a door whose leaves cannot be read.
     pub fn unknown(mut self, local: &str, error: DoorLeavesError) -> Self {
         self.leaves.insert(id(local), Err(error));

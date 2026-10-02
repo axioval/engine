@@ -7377,6 +7377,71 @@ fn with_geometry_door_clear_widths_thresholds_and_spacing_are_checked() {
     );
 }
 
+/// A door type's default width deduction replaces the rule's for the doors
+/// its row picks, and the finding names it.
+#[test]
+fn with_geometry_a_door_types_default_deduction_is_named_in_the_finding() {
+    let case = Case::new("geometry-door-type-defaults");
+    let (definitions, ruleset) = door_packages(&case);
+    let mut packaged: Value =
+        serde_json::from_str(&std::fs::read_to_string(&ruleset).unwrap()).unwrap();
+    packaged["root"]["rules"][0]["parameters"]["door_type_defaults"] = json!({
+    "type": "table", "value": [
+        {"applies_to": {"type": "selector", "value": {
+            "kind": "property", "propertySet": "axioval:attributes",
+            "property": "axioval:example.ifc.OperationType", "operator": "equals",
+            "value": {"type": "string", "value": "SINGLE_SWING_RIGHT"}}},
+         "width_deduction": {"type": "quantity", "value": 0.05, "unit": "m"}},
+    ]});
+    let ruleset = case.write("ruleset.json", &packaged.to_string());
+    let model = case.write("model.ifc", &doors_in_a_wall());
+    let saved = case.path("result.json");
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .arg("check")
+        .arg("--model")
+        .arg(model)
+        .arg("--definitions")
+        .arg(definitions)
+        .arg("--ruleset")
+        .arg(ruleset)
+        .args(["--geometry", "--report", saved.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
+    let finding = result["report"]["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|finding| {
+            finding["rule_id"] == "door-clear-width" && finding["object_id"]["local_id"] == "#29"
+        })
+        .unwrap_or_else(|| panic!("{result:#}"));
+    // #29 is 0.9 m less its type's 0.05 m: 0.85 m; #19 keeps the rule's
+    // 0.1 m and meets 0.9 m.
+    assert_eq!(
+        finding["message"],
+        "clear width (axioval:attributes.axioval:example.ifc.OverallWidth 0.9 m less the door \
+         type's default width deduction 0.05 m (door_type_defaults row 0), an approximation) is \
+         0.85 m; required at least 0.9 m (limit row 0: \
+         axioval:attributes.axioval:example.ifc.OperationType `SINGLE_SWING_RIGHT`)",
+        "{result:#}"
+    );
+    assert!(
+        finding["evidence"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|evidence| {
+                evidence["locator"]
+                    .as_str()
+                    .is_some_and(|locator| locator.starts_with("axioval:default.door-type:"))
+                    && evidence["exact"] == false
+            }),
+        "{result:#}"
+    );
+}
+
 #[test]
 fn with_geometry_a_forbidden_connection_and_a_missing_exit_are_found() {
     let case = Case::new("geometry-space-connection");

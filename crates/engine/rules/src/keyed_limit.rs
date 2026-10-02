@@ -1,6 +1,7 @@
 //! Limits looked up in a keyed table: the applicable row is chosen by key
 //! values read from the object or from objects related to it.
 
+mod defaults;
 mod threshold;
 
 use axioval_engine::{
@@ -12,6 +13,7 @@ use axioval_engine::{
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId, PropertyValue, QuantityDimension};
 
+use self::defaults::{DoorDefaults, Item};
 use crate::counts::{Population, relation_text};
 use crate::door_swing;
 use crate::level_spacing::{extent, extents};
@@ -99,6 +101,8 @@ enum Quantity<'a> {
     /// A door's clear height: stated, or its overall height less its head
     /// lining and threshold.
     ClearHeight(ClearHeight<'a>),
+    /// A door's glazed share of its leaf: stated, or its type's default.
+    GlazingRatio(GlazingRatio<'a>),
     /// The step from each floor `floor_path` reaches (or a ramp's top near
     /// the door) to the door's bottom and threshold.
     ThresholdStep(threshold::ThresholdStep<'a>),
@@ -139,25 +143,33 @@ struct ClearWidth<'a> {
     /// Whether, and how, to derive it next from the door's leaves and
     /// lining.
     leaves: Option<LeafMode>,
-    /// The overall width and the deduction from it, in metres.
-    derived: Option<(PropertyRef<'a>, f64)>,
+    /// The overall width and the rule's deduction from it, in metres;
+    /// without one, the door type's deduction alone.
+    derived: Option<(PropertyRef<'a>, Option<f64>)>,
+    /// The defaults per door type, whose width deduction comes before the
+    /// rule's.
+    defaults: Option<DoorDefaults<'a>>,
 }
 
 impl<'a> ClearWidth<'a> {
-    /// The declared steps: at least one, the overall width and its
-    /// deduction only together.
+    /// The declared steps: at least one, the overall width only with a
+    /// deduction (the rule's, the door type's, or both) and the rule's
+    /// deduction only with the overall width.
     fn declared(
         stated: Option<PropertyRef<'a>>,
         leaves: Option<LeafMode>,
         overall: Option<PropertyRef<'a>>,
         deduction: Option<f64>,
+        defaults: Option<DoorDefaults<'a>>,
     ) -> Result<Self, Unavailable> {
         let derived = match (overall, deduction) {
-            (Some(overall), Some(deduction)) => Some((overall, deduction)),
+            (Some(overall), deduction) if deduction.is_some() || defaults.is_some() => {
+                Some((overall, deduction))
+            }
             (None, None) => None,
             _ => {
                 return Err(invalid(
-                    "`overall_width` and `width_deduction` are declared together",
+                    "`overall_width` is declared with `width_deduction` or                      `door_type_defaults`, and `width_deduction` with `overall_width`",
                 ));
             }
         };
@@ -171,6 +183,7 @@ impl<'a> ClearWidth<'a> {
             stated,
             leaves,
             derived,
+            defaults,
         })
     }
 
@@ -219,6 +232,33 @@ impl<'a> ClearWidth<'a> {
                 format!("{stated}{overall} are absent, so no clear width can be derived"),
             ));
         };
+        let typed = match &self.defaults {
+            Some(defaults) => defaults.lookup(context, object, Item::WidthDeduction)?,
+            None => None,
+        };
+        let (deduction, words, step) = match (typed, deduction) {
+            (Some(used), _) => {
+                evidence.extend(used.evidence);
+                (
+                    used.value,
+                    used.words,
+                    format!("overall-width-less-type-deduction;deduction={}", used.value),
+                )
+            }
+            (None, Some(deduction)) => (
+                deduction,
+                format!("the rule's deduction {} m", shown(deduction, deduction)),
+                format!("overall-width-less-deduction;deduction={deduction}"),
+            ),
+            (None, None) => {
+                return Err((
+                    NotEvaluatedReason::IncompleteEvidence,
+                    format!(
+                        "the clear width is not stated, the door's type gives no width                          deduction and the rule states none, so {overall} cannot be reduced                          to a clear width"
+                    ),
+                ));
+            }
+        };
         let (lower, upper) = difference(width, deduction);
         if upper <= 0.0 {
             return Err((
@@ -230,19 +270,14 @@ impl<'a> ClearWidth<'a> {
                 ),
             ));
         }
-        evidence.push(Self::record(
-            &object.id,
-            &format!("overall-width-less-deduction;deduction={deduction}"),
-            false,
-        ));
+        evidence.push(Self::record(&object.id, &step, false));
         Ok(Measured {
             lower,
             upper,
             unit: " m".into(),
             what: format!(
-                "clear width ({overall} {} m less the rule's deduction {} m, an approximation)",
+                "clear width ({overall} {} m less {words}, an approximation)",
                 shown(width, width),
-                shown(deduction, deduction)
             ),
             evidence,
         })
@@ -347,7 +382,8 @@ impl<'a> DoorClearWidth<'a> {
         if stated.is_none() && leaves.is_none() && overall.is_none() && deduction.is_none() {
             return Ok(None);
         }
-        ClearWidth::declared(stated, leaves, overall, deduction).map(|steps| Some(Self(steps)))
+        ClearWidth::declared(stated, leaves, overall, deduction, None)
+            .map(|steps| Some(Self(steps)))
     }
 
     /// Judges the clear width of `door` against `minimum`, read as the
@@ -485,13 +521,16 @@ fn widest_leaf(leaves: &DoorLeaves) -> Option<FromLeaves> {
 
 /// A door's clear height: the length `quantity_property` states, else the
 /// length `overall_height` states less the head lining and the threshold
-/// the door states. A declared thickness the door does not state is
-/// unknown, never zero: the clear height is then bounded only from above.
+/// the door states. A declared thickness the door does not state is its
+/// type's default (`height_deduction` for the lining, `threshold_height`)
+/// where `door_type_defaults` gives one, else unknown, never zero: the
+/// clear height is then bounded only from above.
 struct ClearHeight<'a> {
     stated: Option<PropertyRef<'a>>,
     overall: Option<PropertyRef<'a>>,
     lining: Option<PropertyRef<'a>>,
     threshold: Option<PropertyRef<'a>>,
+    defaults: Option<DoorDefaults<'a>>,
 }
 
 impl ClearHeight<'_> {
@@ -530,12 +569,28 @@ impl ClearHeight<'_> {
         let (mut lower, mut upper) = (height, height);
         let mut words = vec![format!("{overall} {} m", shown(height, height))];
         let mut unknown = false;
-        for (declared, noun) in [(self.lining, "lining"), (self.threshold, "threshold")] {
+        for (declared, noun, item) in [
+            (self.lining, "lining", Item::HeightDeduction),
+            (self.threshold, "threshold", Item::ThresholdHeight),
+        ] {
             let Some(property) = declared else { continue };
-            if let Some(value) = thickness(context, object, property, &mut evidence)? {
+            let typed = match thickness(context, object, property, &mut evidence)? {
+                Some(value) => {
+                    words.push(format!("less the {noun} {} m", shown(value, value)));
+                    Some(value)
+                }
+                None => match &self.defaults {
+                    Some(defaults) => defaults.lookup(context, object, item)?.map(|used| {
+                        evidence.extend(used.evidence);
+                        words.push(format!("less {}", used.words));
+                        used.value
+                    }),
+                    None => None,
+                },
+            };
+            if let Some(value) = typed {
                 lower = difference(lower, value).0;
                 upper = difference(upper, value).1;
-                words.push(format!("less the {noun} {} m", shown(value, value)));
             } else {
                 unknown = true;
                 words.push(format!("less a {noun} {property} does not state"));
@@ -562,6 +617,71 @@ impl ClearHeight<'_> {
     }
 }
 
+/// A door's glazed share of its leaf: the fraction `quantity_property`
+/// states, else its type's `glazing_ratio` default. Only an exact absence
+/// (absent or null) takes the default.
+struct GlazingRatio<'a> {
+    stated: Option<PropertyRef<'a>>,
+    defaults: Option<DoorDefaults<'a>>,
+}
+
+impl GlazingRatio<'_> {
+    fn measure(&self, context: &RuleContext<'_>, object: &Object) -> Result<Measured, Unavailable> {
+        let mut evidence = Vec::new();
+        if let Some(stated) = self.stated {
+            let resolved = resolve(context, object, stated)?;
+            evidence.extend(resolved.evidence());
+            let ratio = match resolved.value() {
+                None | Some(PropertyValue::Null) => None,
+                Some(PropertyValue::Decimal(value)) if (0.0..=1.0).contains(value) => Some(*value),
+                Some(PropertyValue::Integer(value @ (0 | 1))) => exact_f64(*value),
+                other => {
+                    return Err((
+                        NotEvaluatedReason::IncompleteEvidence,
+                        format!(
+                            "{} {stated} is {}, not a ratio between 0 and 1",
+                            object.id,
+                            display(other)
+                        ),
+                    ));
+                }
+            };
+            if let Some(ratio) = ratio {
+                return Ok(Measured {
+                    lower: ratio,
+                    upper: ratio,
+                    unit: String::new(),
+                    what: format!("glazing ratio ({stated})"),
+                    evidence,
+                });
+            }
+        }
+        let typed = match &self.defaults {
+            Some(defaults) => defaults.lookup(context, object, Item::GlazingRatio)?,
+            None => None,
+        };
+        let Some(used) = typed else {
+            return Err((
+                NotEvaluatedReason::IncompleteEvidence,
+                match self.stated {
+                    Some(stated) => format!(
+                        "{stated} is absent and the door's type gives no default glazing ratio"
+                    ),
+                    None => "the door's type gives no default glazing ratio".into(),
+                },
+            ));
+        };
+        evidence.extend(used.evidence);
+        Ok(Measured {
+            lower: used.value,
+            upper: used.value,
+            unit: String::new(),
+            what: format!("glazing ratio ({})", used.words),
+            evidence,
+        })
+    }
+}
+
 /// A door's clear height as the `clear-height` quantity measures it: its
 /// bounds, how it was read, and the evidence. Shared with `escape-route`.
 pub(crate) fn door_clear_height<'a>(
@@ -577,6 +697,7 @@ pub(crate) fn door_clear_height<'a>(
         overall,
         lining,
         threshold,
+        defaults: None,
     }
     .measure(context, object)?;
     Ok((
@@ -682,7 +803,18 @@ impl Key {
 /// `threshold-step` is the step from each floor `floor_path` reaches to the
 /// door's bottom and stated threshold, measured from geometry; with
 /// `ramp_selector` a ramp within `ramp_reach` over a space is that side's
-/// floor, at its top.
+/// floor, at its top. `glazing-ratio` is the fraction `quantity_property`
+/// states, between 0 and 1.
+///
+/// `door_type_defaults` gives defaults per door type, used only where the
+/// door states no value: a row applies by the operation type the door's
+/// leaves state (`operation`) and a selector (`applies_to`), the first
+/// matching row being the door's type, and gives a `width_deduction` (in
+/// place of the rule's), a `height_deduction` (for an unstated head
+/// lining), a `threshold_height` (for an unstated threshold) and a
+/// `glazing_ratio`. Each default used is named in the message and cited by
+/// an inexact `axioval:default.door-type` evidence entry; an undecided type
+/// row leaves the door not evaluated.
 ///
 /// A sill height is judged per reached floor, each against the one row the
 /// keys select: a window too high above any one of its spaces' floors is a
@@ -733,6 +865,10 @@ impl RuleCapability for KeyedLimit {
             ParameterDescriptor::optional("case_sensitive", ParameterType::Boolean),
             ParameterDescriptor::optional("member_selector", ParameterType::Selector),
             ParameterDescriptor::optional("pair_key", ParameterType::String),
+            ParameterDescriptor::optional(
+                "door_type_defaults",
+                ParameterType::Table(defaults::COLUMNS),
+            ),
         ];
         parameters.extend(traversal_parameters());
         for (index, (key, path)) in KEY_COLUMNS.iter().zip(KEY_PATHS).enumerate() {
@@ -881,7 +1017,16 @@ fn pair_key(
 const APPLIES: &[(&str, &[&str])] = &[
     (
         "quantity_property",
-        &["property", "clear-width", "clear-height"],
+        &["property", "clear-width", "clear-height", "glazing-ratio"],
+    ),
+    (
+        "door_type_defaults",
+        &[
+            "clear-width",
+            "clear-height",
+            "threshold-step",
+            "glazing-ratio",
+        ],
     ),
     ("floor_path", &["sill-height", "threshold-step"]),
     ("overall_width", &["clear-width"]),
@@ -912,6 +1057,7 @@ fn quantity<'a>(parameters: &Parameters<'a>) -> Result<Quantity<'a>, Unavailable
             | "clear-width"
             | "clear-height"
             | "threshold-step"
+            | "glazing-ratio"
     ) {
         return Err(invalid(format!("quantity `{named}` is unsupported")));
     }
@@ -929,6 +1075,8 @@ fn quantity<'a>(parameters: &Parameters<'a>) -> Result<Quantity<'a>, Unavailable
     }
     let property = parameters.property("quantity_property")?;
     let floor = parameters.strings("floor_path")?;
+    let case_sensitive = parameters.boolean("case_sensitive")?.unwrap_or(true);
+    let defaults = DoorDefaults::parse(parameters, case_sensitive)?;
     Ok(match named {
         "plan-area" => Quantity::PlanArea,
         "member-plan-area" => Quantity::MemberPlanArea {
@@ -948,6 +1096,7 @@ fn quantity<'a>(parameters: &Parameters<'a>) -> Result<Quantity<'a>, Unavailable
             LeafMode::parse(parameters.string("clear_width_from_leaves")?)?,
             parameters.property("overall_width")?,
             length(parameters, "width_deduction")?,
+            defaults,
         )?),
         "clear-height" => {
             let overall = parameters.property("overall_height")?;
@@ -969,6 +1118,19 @@ fn quantity<'a>(parameters: &Parameters<'a>) -> Result<Quantity<'a>, Unavailable
                 overall,
                 lining,
                 threshold,
+                defaults,
+            })
+        }
+        "glazing-ratio" => {
+            if property.is_none() && defaults.is_none() {
+                return Err(invalid(
+                    "`quantity` `glazing-ratio` needs `quantity_property`, `door_type_defaults` \
+                     or both",
+                ));
+            }
+            Quantity::GlazingRatio(GlazingRatio {
+                stated: property,
+                defaults,
             })
         }
         _ => Quantity::ThresholdStep(threshold::ThresholdStep::parse(
@@ -976,6 +1138,7 @@ fn quantity<'a>(parameters: &Parameters<'a>) -> Result<Quantity<'a>, Unavailable
             Traversal::path(
                 floor.ok_or_else(|| invalid("`quantity` `threshold-step` needs `floor_path`"))?,
             )?,
+            defaults,
         )?),
     })
 }
@@ -1282,6 +1445,7 @@ fn measure(
         Quantity::MemberPlanArea { .. } => Err(invalid("member areas are summed per anchor")),
         Quantity::ClearWidth(clear) => clear.measure(context, object),
         Quantity::ClearHeight(clear) => clear.measure(context, object),
+        Quantity::GlazingRatio(glazing) => glazing.measure(context, object),
         Quantity::PlanArea => {
             let area = footprint(context, &object.id)?;
             Ok(Measured {
@@ -1474,7 +1638,10 @@ fn check(
     let (measured, members, undecided) = measuring.measure(context, subject)?;
     only_an_excess(&measured, undecided, limit, index)?;
     let unit = &measured.unit;
-    let verdict = if matches!(quantity, Quantity::ClearWidth(_) | Quantity::ClearHeight(_)) {
+    let verdict = if matches!(
+        quantity,
+        Quantity::ClearWidth(_) | Quantity::ClearHeight(_) | Quantity::GlazingRatio(_)
+    ) {
         judge_as_displayed(measured.lower, measured.upper, limit.minimum, limit.maximum)
     } else {
         judge(measured.lower, measured.upper, limit.minimum, limit.maximum)

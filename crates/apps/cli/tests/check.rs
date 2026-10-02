@@ -12798,6 +12798,47 @@ fn storey_rule_with(
     files: &[(&str, &str)],
     relations: Value,
 ) -> Value {
+    let (output, result) = storey_run(
+        name,
+        (capability, applies_to, parameters),
+        files,
+        relations,
+        &[],
+    );
+    let result = result.unwrap_or_else(|| panic!("{}", stderr(&output)));
+    assert_eq!(
+        output.status.code(),
+        Some(
+            if !result["report"]["findings"]
+                .as_array()
+                .is_none_or(Vec::is_empty)
+            {
+                3
+            } else if !result["report"]["not_evaluated"]
+                .as_array()
+                .is_none_or(Vec::is_empty)
+            {
+                4
+            } else {
+                0
+            }
+        ),
+        "{}",
+        stderr(&output)
+    );
+    result
+}
+
+/// Runs [`storey_rule_with`]'s check with `extra` arguments, `{dir}`
+/// standing for the case's directory, and returns its output and the
+/// result it saved, if any.
+fn storey_run(
+    name: &str,
+    (capability, applies_to, parameters): (&str, &str, Value),
+    files: &[(&str, &str)],
+    relations: Value,
+    extra: &[&str],
+) -> (Output, Option<Value>) {
     let case = Case::new(name);
     for (file, contents) in files {
         case.write(file, contents);
@@ -12839,31 +12880,18 @@ fn storey_rule_with(
         .arg("--ruleset")
         .arg(ruleset)
         .args(["--geometry", "--report", saved.to_str().unwrap()])
+        .args(extra.iter().map(|arg| {
+            arg.replace(
+                "{dir}",
+                case.path("").to_str().unwrap().trim_end_matches('/'),
+            )
+        }))
         .output()
         .unwrap();
-    let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap())
-        .unwrap_or_else(|_| panic!("{}", stderr(&output)));
-    assert_eq!(
-        output.status.code(),
-        Some(
-            if !result["report"]["findings"]
-                .as_array()
-                .is_none_or(Vec::is_empty)
-            {
-                3
-            } else if !result["report"]["not_evaluated"]
-                .as_array()
-                .is_none_or(Vec::is_empty)
-            {
-                4
-            } else {
-                0
-            }
-        ),
-        "{}",
-        stderr(&output)
-    );
-    result
+    let result = std::fs::read_to_string(&saved)
+        .ok()
+        .map(|text| serde_json::from_str(&text).unwrap());
+    (output, result)
 }
 
 fn name_attribute() -> Value {
@@ -13005,6 +13033,152 @@ fn a_relation_listed_in_a_csv_file_is_followed_and_an_unknown_object_reported() 
         open.iter()
             .any(|outcome| outcome["message"].as_str().unwrap().contains("#999")),
         "{result:#}"
+    );
+}
+
+/// The storeys holding their spaces, as
+/// [`a_relation_listed_in_a_csv_file_is_followed_and_an_unknown_object_reported`]
+/// checks it, with the pairs `holds` supplied at check time by `extra`.
+fn supplied_holds(name: &str, files: &[(&str, &str)], extra: &[&str]) -> (Output, Option<Value>) {
+    let row = |anchor: &str| {
+        json!({"anchor": {"type": "string", "value": anchor},
+               "count": {"type": "integer", "value": 1}})
+    };
+    storey_run(
+        name,
+        (
+            "table-allocation",
+            "IfcSpace",
+            json!({
+                "rows": {"type": "table", "value": [row("EG"), row("OG")]},
+                "anchor_key": name_attribute(),
+                "anchor_selector": {"type": "selector", "value": entity("IfcBuildingStorey")},
+                "relationship": {"type": "string", "value": "axioval:derived.relation;id=holds"},
+            }),
+        ),
+        files,
+        json!({"holds": {
+            "id": "holds",
+            "name": {"default": "holds", "translations": {}},
+            "from": entity("IfcBuildingStorey"),
+            "to": entity("IfcSpace"),
+            "by": {"kind": "supplied", "columns": [
+                {"id": "from", "header": "storey", "kind": "string"},
+                {"id": "to", "header": "space", "kind": "string"},
+            ]},
+        }}),
+        extra,
+    )
+}
+
+#[test]
+fn a_relation_supplied_beside_the_model_is_followed_and_its_file_recorded() {
+    use sha2::Digest as _;
+    let pairs = "storey,space\n\
+                 ifc-step:model.ifc/#101,ifc-step:model.ifc/#49\n\
+                 ifc-step:model.ifc/#102,ifc-step:model.ifc/#999\n";
+    let digest =
+        sha2::Sha256::digest(pairs.as_bytes())
+            .iter()
+            .fold(String::new(), |mut hex, byte| {
+                let _ = write!(hex, "{byte:02x}");
+                hex
+            });
+    let (output, result) = supplied_holds(
+        "relation-supplied",
+        &[("holds.csv", pairs)],
+        &["--relations", "holds={dir}/holds.csv"],
+    );
+    let result = result.unwrap_or_else(|| panic!("{}", stderr(&output)));
+    // As the same pairs listed in the package: the ground storey holds its
+    // space, the upper storey's pair names no object and is reported.
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    assert!(
+        result["integrity"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|record| record["code"] == "relation-object-unknown"
+                && record["message"]
+                    .as_str()
+                    .unwrap()
+                    .contains("`ifc-step:model.ifc/#999` is no object of the model")),
+        "{result:#}"
+    );
+    assert!(
+        !finding_messages(&result)
+            .iter()
+            .any(|(subject, _)| subject == "#101"),
+        "{result:#}"
+    );
+    let open = result["report"]["not_evaluated"].as_array().unwrap();
+    assert!(
+        open.iter()
+            .any(|outcome| outcome["message"].as_str().unwrap().contains("#999")),
+        "{result:#}"
+    );
+    assert_eq!(
+        result["relation_files"],
+        json!([{"relation": "holds", "file": "holds.csv", "sha256": digest, "pairs": 2}]),
+        "{result:#}"
+    );
+}
+
+#[test]
+fn a_supplied_relation_given_no_file_leaves_its_rules_not_evaluated() {
+    let (output, result) = supplied_holds("relation-unsupplied", &[], &[]);
+    let result = result.unwrap_or_else(|| panic!("{}", stderr(&output)));
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    assert_eq!(result["report"]["findings"], json!([]), "{result:#}");
+    let open = result["report"]["not_evaluated"].as_array().unwrap();
+    assert!(!open.is_empty(), "{result:#}");
+    assert!(
+        open.iter().any(|outcome| outcome["message"]
+            .as_str()
+            .unwrap()
+            .contains("none were supplied")),
+        "{result:#}"
+    );
+    assert!(
+        result["integrity"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|record| record["code"] == "relation-pairs-not-supplied"),
+        "{result:#}"
+    );
+    assert!(result.get("relation_files").is_none(), "{result:#}");
+}
+
+#[test]
+fn a_relation_file_for_an_undeclared_relation_or_of_other_columns_fails_before_checking() {
+    let pairs = "storey,space\nifc-step:model.ifc/#101,ifc-step:model.ifc/#49\n";
+    let (output, result) = supplied_holds(
+        "relation-undeclared",
+        &[("feeds.csv", pairs)],
+        &["--relations", "feeds={dir}/feeds.csv"],
+    );
+    assert_eq!(output.status.code(), Some(1), "{}", stderr(&output));
+    assert!(result.is_none());
+    assert!(
+        stderr(&output).contains("no ruleset declares the relation `feeds`"),
+        "{}",
+        stderr(&output)
+    );
+    let (output, result) = supplied_holds(
+        "relation-wrong-columns",
+        &[(
+            "holds.csv",
+            "from,to\nifc-step:model.ifc/#101,ifc-step:model.ifc/#49\n",
+        )],
+        &["--relations", "holds={dir}/holds.csv"],
+    );
+    assert_eq!(output.status.code(), Some(1), "{}", stderr(&output));
+    assert!(result.is_none());
+    assert!(
+        stderr(&output).contains("the header names column `from`, which is not declared"),
+        "{}",
+        stderr(&output)
     );
 }
 

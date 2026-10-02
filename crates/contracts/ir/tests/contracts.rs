@@ -995,6 +995,24 @@ fn relations_round_trip_and_are_omitted_when_empty() {
         serde_json::from_str::<RelationDefinition>(&listed.replace("pairs\",", "links\","))
             .is_err()
     );
+    let supplied = r#"{"id":"serves","name":{"default":"Serves","translations":{}},"from":{"kind":"all"},"to":{"kind":"all"},"by":{"kind":"supplied","columns":[{"id":"from","header":"Pump","kind":"string"},{"id":"to","header":"Room","kind":"string"}],"scheme":"guid"}}"#;
+    let relation: RelationDefinition = serde_json::from_str(supplied).unwrap();
+    assert!(matches!(
+        &relation.by,
+        RelationKey::Supplied { columns: Some(columns), .. } if columns[1].header() == "Room"
+    ));
+    assert_eq!(serde_json::to_string(&relation).unwrap(), supplied);
+    let bare = r#"{"id":"serves","name":{"default":"Serves","translations":{}},"from":{"kind":"all"},"to":{"kind":"all"},"by":{"kind":"supplied"}}"#;
+    let relation: RelationDefinition = serde_json::from_str(bare).unwrap();
+    assert_eq!(serde_json::to_string(&relation).unwrap(), bare);
+    // A package never lists supplied pairs itself.
+    assert!(
+        serde_json::from_str::<RelationDefinition>(&bare.replace(
+            r#""supplied""#,
+            r#""supplied","pairs":{"type":"table","value":[]}"#
+        ))
+        .is_err()
+    );
     let ruleset: serde_json::Value = serde_json::from_str(include_str!(
         "../../../../fixtures/schema-v0.1.0/ruleset.json"
     ))

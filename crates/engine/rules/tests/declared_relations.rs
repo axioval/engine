@@ -4,7 +4,10 @@
 
 mod common;
 
-use axioval_engine::{CapabilityRegistry, EngineError, compile, unknown_relation_objects};
+use axioval_engine::{
+    CapabilityRegistry, EngineError, ExecutionPlan, SuppliedPairs, compile,
+    unknown_relation_objects,
+};
 use axioval_ir::{PropertyValue, Report, RuleSetPackage, Scope};
 use axioval_rules::register_builtins;
 use common::runtime::{definitions, entity, rule, ruleset, run, session};
@@ -256,4 +259,147 @@ fn malformed_relations_are_refused() {
         "selector": entity("room"),
     });
     assert!(refused(looping).contains("declared relation"));
+}
+
+/// `serves`, from pumps to rooms, its pairs supplied at check time under
+/// the headers `Pump` and `Room`.
+fn supplied() -> Value {
+    serves(json!({ "kind": "supplied", "columns": [
+        { "id": "from", "header": "Pump", "kind": "string" },
+        { "id": "to", "header": "Room", "kind": "string" },
+    ] }))
+}
+
+/// The plan checking `set`, with `csv` supplied as the pairs of `serves`
+/// when given.
+fn supplied_plan(set: &RuleSetPackage, csv: Option<&str>) -> ExecutionPlan {
+    let registry = registry();
+    let definitions = definitions(
+        &registry,
+        &[COMPARISON, COUNT],
+        &["pump", "room"],
+        &["Capacity", "Requirement", "Zone"],
+        &["Pset"],
+    );
+    let mut plan = compile(&registry, &[definitions], set).unwrap();
+    if let Some(csv) = csv {
+        let definition = plan.relations()[0].clone();
+        let pairs = SuppliedPairs::read(&definition, csv.as_bytes(), "serves.csv", None).unwrap();
+        plan.supply_relation("serves", pairs).unwrap();
+    }
+    plan
+}
+
+fn check_plan(plan: ExecutionPlan) -> Report {
+    run(registry(), plan, &session(plant()), |runtime| runtime).unwrap()
+}
+
+#[test]
+fn pairs_supplied_at_check_time_compare_as_listed_pairs_do() {
+    let set = related(vec![capacity()], supplied());
+    let csv = "Pump,Room\n\
+               test:model/p1,test:model/r1\n\
+               test:model/p2,test:model/r1\n\
+               test:model/p2,test:model/r2\n";
+    let plan = supplied_plan(&set, Some(csv));
+    let digest = plan.supplied_pairs("serves").unwrap().sha256().to_owned();
+    let report = check_plan(plan);
+    let listed = check(
+        &related(
+            vec![capacity()],
+            listed(&[("p1", "r1"), ("p2", "r1"), ("p2", "r2")]),
+        ),
+        plant(),
+    )
+    .unwrap();
+    assert_eq!(flagged(&report), flagged(&listed), "{report:#?}");
+    assert_eq!(flagged(&report), ["p2", "p2"], "{report:#?}");
+    assert!(open(&report).is_empty(), "{report:#?}");
+    // Each pair cites the digest of the file it was read from.
+    let cited = format!("pairs;sha256={digest}#row=3");
+    assert!(
+        report.findings().iter().any(|finding| finding
+            .evidence
+            .iter()
+            .any(|item| item.locator.contains(&cited))),
+        "{report:#?}"
+    );
+}
+
+#[test]
+fn a_supplied_relation_without_pairs_leaves_every_rule_walking_it_not_evaluated() {
+    let set = related(vec![capacity()], supplied());
+    let report = check_plan(supplied_plan(&set, None));
+    assert!(flagged(&report).is_empty(), "{report:#?}");
+    let open = open(&report);
+    assert_eq!(
+        open.iter()
+            .map(|(scope, _)| scope.clone())
+            .collect::<Vec<_>>(),
+        [Scope::Object(id("p1")), Scope::Object(id("p2"))],
+        "{open:#?}"
+    );
+    assert!(
+        open.iter()
+            .all(|(_, message)| message.contains("none were supplied")),
+        "{open:#?}"
+    );
+}
+
+#[test]
+fn a_supplied_pair_naming_an_unknown_object_is_reported_as_a_listed_one_is() {
+    let set = related(vec![capacity()], supplied());
+    let csv = "Pump,Room\ntest:model/p1,test:model/r1\ntest:model/p2,test:model/r9\n";
+    let plan = supplied_plan(&set, Some(csv));
+    let project = session(plant()).project().clone();
+    let unknown = unknown_relation_objects(&plan, &project);
+    assert_eq!(unknown.len(), 1);
+    assert_eq!(
+        (unknown[0].relation.as_str(), unknown[0].row, unknown[0].end),
+        ("serves", 2, "to")
+    );
+    let report = check_plan(plan);
+    assert!(flagged(&report).is_empty(), "{report:#?}");
+    let open = open(&report);
+    assert_eq!(open.len(), 1, "{open:#?}");
+    assert_eq!(open[0].0, Scope::Object(id("p2")));
+    assert!(
+        open[0]
+            .1
+            .contains("`test:model/r9` is no object of the model"),
+        "{open:#?}"
+    );
+}
+
+#[test]
+fn pairs_are_supplied_only_once_and_only_to_a_supplied_relation() {
+    let refused = |plan: &mut ExecutionPlan, id: &str, rows: Value| {
+        let rows = serde_json::from_value(rows).unwrap();
+        match plan.supply_relation(id, SuppliedPairs::new("pairs.csv", "00", rows)) {
+            Err(EngineError::InvalidRelation { detail, .. }) => detail,
+            other => panic!("expected an invalid relation, got {other:?}"),
+        }
+    };
+    let pair = json!([{ "from": { "type": "string", "value": "test:model/p1" },
+                        "to": { "type": "string", "value": "test:model/r1" } }]);
+    let mut plan = supplied_plan(&related(vec![capacity()], supplied()), None);
+    assert!(refused(&mut plan, "feeds", pair.clone()).contains("no ruleset declares it"));
+    let blank = json!([{ "from": { "type": "string", "value": " " },
+                         "to": { "type": "string", "value": "test:model/r1" } }]);
+    assert!(refused(&mut plan, "serves", blank).contains("blank"));
+    let rows = serde_json::from_value(pair.clone()).unwrap();
+    plan.supply_relation("serves", SuppliedPairs::new("pairs.csv", "00", rows))
+        .unwrap();
+    assert!(refused(&mut plan, "serves", pair.clone()).contains("supplied twice"));
+    let mut listing = supplied_plan(&related(vec![capacity()], listed(&[])), None);
+    assert!(refused(&mut listing, "serves", pair).contains("states its pairs itself"));
+    // Malformed columns are refused when the ruleset is compiled.
+    let mut wrong = supplied();
+    wrong["serves"]["by"]["columns"][1]["id"] = json!("room");
+    match check(&related(vec![capacity()], wrong), plant()) {
+        Err(EngineError::InvalidRelation { detail, .. }) => {
+            assert!(detail.contains("neither `from` nor `to`"), "{detail}");
+        }
+        other => panic!("expected an invalid relation, got {other:?}"),
+    }
 }

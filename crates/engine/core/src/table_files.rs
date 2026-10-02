@@ -179,12 +179,7 @@ fn load_value(
     };
     check_path(path).map_err(refuse)?;
     let bytes = files.read(path).map_err(refuse)?;
-    let digest = Sha256::digest(&bytes)
-        .iter()
-        .fold(String::with_capacity(64), |mut hex, byte| {
-            let _ = write!(hex, "{byte:02x}");
-            hex
-        });
+    let digest = sha256_hex(&bytes);
     if *sha256 != digest {
         return Err(refuse(format!(
             "the file's SHA-256 is {digest}, not the declared {sha256}"
@@ -192,6 +187,16 @@ fn load_value(
     }
     *rows = Some(read_table_file(&bytes, path, sheet.as_deref(), columns).map_err(refuse)?);
     Ok(())
+}
+
+/// The lowercase hex SHA-256 of `bytes`.
+pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
+    Sha256::digest(bytes)
+        .iter()
+        .fold(String::with_capacity(64), |mut hex, byte| {
+            let _ = write!(hex, "{byte:02x}");
+            hex
+        })
 }
 
 /// A relative, `/`-separated path without empty, `.` or `..` segments.
@@ -289,7 +294,7 @@ pub fn read_table_file(
 
 /// Ids and headers distinct, no selector column, a unit exactly for every
 /// quantity column.
-fn check_columns(columns: &[TableFileColumn]) -> Result<(), String> {
+pub(crate) fn check_columns(columns: &[TableFileColumn]) -> Result<(), String> {
     if columns.is_empty() {
         return Err("no columns are declared".into());
     }

@@ -79,4 +79,14 @@ CLI output and exit codes are public automation contracts. Parse packages fail c
   integrity record `relation-object-unknown` (warning, locator
   `axioval:derived.relation;id=<id>:pairs#row=<n>`); it never changes the
   exit status, the rules it leaves undecided do.
+- `check --relations RELATION=FILE[#SHEET]` (`relation_arg`,
+  `supply_relations`) reads each file with `SuppliedPairs::read` and
+  supplies it to the plan right after compiling, before any model is read:
+  an undeclared or non-supplied relation, a second file, an unreadable,
+  oversized or refused file fails with status 1 and writes nothing. Each
+  file is recorded in the additive `relation_files` field
+  (`digest::RelationFileRecord`: relation, file name, SHA-256, pair count),
+  and a supplied relation given no file is the integrity warning
+  `relation-pairs-not-supplied`; its rules are not evaluated, never run
+  over an empty relation.
 - `check --rule-status` records `Report::rules`; the summary lists them bounded by `--top` (rules that did not pass first) and never changes the exit status.

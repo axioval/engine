@@ -147,7 +147,8 @@ pub enum EngineError {
     InvalidGrouping { grouping: String, detail: String },
     /// A relation the ruleset declares is malformed, reads a rule's
     /// outcome or a declared relation, lists pairs that are not text,
-    /// is declared twice with different definitions, or the host
+    /// is declared twice with different definitions, is supplied pairs it
+    /// does not take or rows that are not text pairs, or the host
     /// registered no outcome refiner to select its objects.
     #[error("relation `{relation}`: {detail}")]
     InvalidRelation { relation: String, detail: String },
@@ -612,6 +613,8 @@ pub struct ExecutionPlan {
     /// Relations to derive after the groupings, before any rule runs, their
     /// listed pairs inline.
     relations: Vec<schema::RelationDefinition>,
+    /// The pairs the host supplied for its supplied relations, by id.
+    supplied: BTreeMap<String, SuppliedPairs>,
 }
 impl ExecutionPlan {
     /// Rules in execution order: every rule after the rules its gates and
@@ -642,6 +645,42 @@ impl ExecutionPlan {
     /// The relations the plan derives, by id, their listed pairs inline.
     pub fn relations(&self) -> &[schema::RelationDefinition] {
         &self.relations
+    }
+    /// The pairs the host supplied for the supplied relation `id`, if any.
+    pub fn supplied_pairs(&self, id: &str) -> Option<&SuppliedPairs> {
+        self.supplied.get(id)
+    }
+    /// Supplies the pairs of the relation `id`, declared `by: supplied`,
+    /// for this run. A supplied relation the host supplies no pairs for
+    /// relates nothing surely: every rule walking it is not evaluated.
+    ///
+    /// # Errors
+    ///
+    /// [`EngineError::InvalidRelation`] when no ruleset declares `id`, its
+    /// ruleset states its pairs itself, its pairs were already supplied, or
+    /// a row is not exactly a non-blank text `from` and `to`.
+    pub fn supply_relation(&mut self, id: &str, pairs: SuppliedPairs) -> Result<(), EngineError> {
+        let invalid = |detail: String| EngineError::InvalidRelation {
+            relation: id.to_owned(),
+            detail,
+        };
+        let Some(definition) = self.relations.iter().find(|known| known.id == id) else {
+            return Err(invalid(
+                "no ruleset declares it, so its pairs cannot be supplied".into(),
+            ));
+        };
+        if !matches!(definition.by, schema::RelationKey::Supplied { .. }) {
+            return Err(invalid(
+                "its ruleset states its pairs itself, so they cannot be supplied".into(),
+            ));
+        }
+        if self.supplied.contains_key(id) {
+            return Err(invalid("its pairs are supplied twice".into()));
+        }
+        compiler::check_pair_rows(pairs.rows())
+            .map_err(|detail| invalid(format!("the pairs of `{}`: {detail}", pairs.origin())))?;
+        self.supplied.insert(id.to_owned(), pairs);
+        Ok(())
     }
     /// The whole-rule gates of `rule`: each parent rule and the condition
     /// on its outcome. Empty for an ungated rule.
@@ -818,8 +857,8 @@ pub use refinement::{
     report_severity,
 };
 pub use relations::{
-    DeclaredRelations, RELATION_RELATIONSHIP_PREFIX, Relation, UnknownRelationObject,
-    unknown_relation_objects,
+    DeclaredRelations, RELATION_RELATIONSHIP_PREFIX, Relation, SuppliedPairs,
+    UnknownRelationObject, unknown_relation_objects,
 };
 pub use relationships::{
     AbsentEndPolicy, CompleteRelationshipEdges, CompleteRelationshipSelection,
@@ -1170,7 +1209,11 @@ impl Runtime {
             refiner.map(AsRef::as_ref),
             project,
             &mut services,
-            (&plan.classifications, &plan.groupings, &plan.relations),
+            (
+                &plan.classifications,
+                &plan.groupings,
+                (&plan.relations, &plan.supplied),
+            ),
         );
         // What every completed rule reported, for the rules that read it.
         let mut outcomes = RuleOutcomes::default();
@@ -1271,6 +1314,12 @@ fn named_resources(
         .collect()
 }
 
+/// The plan's relations and the pairs the host supplied, by relation id.
+type RelationInputs<'a> = (
+    &'a [schema::RelationDefinition],
+    &'a BTreeMap<String, SuppliedPairs>,
+);
+
 /// Installs the run's derived properties over the host's resolver: the
 /// classes of the plan's classifications, then its groups, derived after
 /// the classes their members and keys may read and installed beside the
@@ -1282,7 +1331,7 @@ fn derive_before_rules(
     (classifications, groupings, relations): (
         &[schema::ClassificationDefinition],
         &[schema::GroupingDefinition],
-        &[schema::RelationDefinition],
+        RelationInputs<'_>,
     ),
 ) {
     let host = services.get::<PropertyResolutionServiceHandle>().cloned();
@@ -1307,7 +1356,7 @@ fn derive_before_rules(
         derived::install(services, host.as_ref(), classes, groups, project);
     }
     // Relations read classes and groups, never one another.
-    if let Some(refiner) = refiner.filter(|_| !relations.is_empty()) {
+    if let Some(refiner) = refiner.filter(|_| !relations.0.is_empty()) {
         let relations = Arc::new(relations::derive_all(refiner, project, services, relations));
         relations::install(services, &relations);
     }

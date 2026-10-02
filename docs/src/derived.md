@@ -281,7 +281,7 @@ the rooms it serves), a `related` selector, takeoff `related` columns and
 categories. An object is never related to itself, and `follow_chain` (or a
 `+` step) follows the relation transitively.
 
-`by` pairs objects in one of two ways:
+`by` pairs objects in one of three ways:
 
 - `pairs`: a `table` or `tableFile` value (see
   [Tables from data files](./capabilities.md#tables-from-data-files)) with
@@ -291,6 +291,35 @@ categories. An object is never related to itself, and `follow_chain` (or a
   `ifc-step:model.ifc/#4711`); with `scheme` by the external id the object
   carries in that scheme (such as `ifc-globalid`). A blank cell or a cell
   of another kind is refused when the package is bound.
+- `supplied`: pairs the host supplies at check time, beside the model,
+  so the rule package stays the same for every project. The rows name
+  objects as `pairs` rows do (with the optional `scheme` alike) and are
+  read from a CSV file or one sheet of an xlsx workbook, by the table file
+  rules (header row, blank rows skipped, every header declared). The
+  optional `columns` declare the text columns `from` and `to` and their
+  headers as a `tableFile`'s do; omitted, the headers are `from` and `to`.
+  The package states no pairs and no digest itself:
+
+  ```json
+  "by": {"kind": "supplied", "scheme": "ifc-globalid", "columns": [
+    {"id": "from", "header": "pump", "kind": "string"},
+    {"id": "to", "header": "room", "kind": "string"}
+  ]}
+  ```
+
+  A host reads a file with `SuppliedPairs::read` (or builds rows it read
+  itself with `SuppliedPairs::new`) and hands them to
+  `ExecutionPlan::supply_relation` before the run; `axioval check` does
+  this for each `--relations <id>=<file>` (see [the CLI](./cli.md)). Every
+  pair's evidence cites the SHA-256 of the file it was read from
+  (`axioval:derived.relation;id=<id>:pairs;sha256=<digest>#row=<n>:…`), so
+  a run is reproducible. Supplying pairs to a relation no ruleset
+  declares, to one that states its own pairs, twice, or rows that are not
+  non-blank text `from` and `to` cells is refused
+  (`EngineError::InvalidRelation`). A supplied relation given no pairs is
+  never an empty relation: every object's partners are undecided, so
+  every rule walking it is not evaluated with the reason. Supplied pairs
+  naming unknown objects behave exactly as listed ones (below).
 - `property`: equal values. A from-object relates to every to-object whose
   `to` property states the value of its `from` property, read as a grouping
   key is (text as stated, an integer, a boolean or a number), across
@@ -313,7 +342,9 @@ refuses (`EngineError::InvalidRelation`) a relation declared under another
 key than its id, an id that is blank or holds `:`, `;`, `|`, `/` or
 whitespace, selectors reading a rule's outcome or walking a declared
 relation, undeclared property concepts, pairs that are not a table of
-non-blank text `from` and `to` cells, a blank `scheme`, a relation two
+non-blank text `from` and `to` cells, supplied `columns` other than the
+text columns `from` and `to` with distinct headers, a blank `scheme`, a
+relation two
 rulesets compiled together declare differently, and any relation when the
 host registered no outcome refiner. The listing of every edge
 (`RelationshipSelectionService::edges`) is refused for declared relations,

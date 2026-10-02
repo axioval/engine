@@ -29,6 +29,7 @@ axioval check --model building.ifc[:DISCIPLINE] [--model other.ifc[:DISCIPLINE] 
   [--discipline-map FIELD:PATTERN=DISCIPLINE ...] \
   (--definitions definitions.json --ruleset ruleset.json [--ruleset other.json ...] \
    | --ids rules.ids [--ids-filter selector.json]) \
+  [--relations RELATION=FILE[#SHEET] ...] \
   [--geometry] [--locate storeys|containers|geometry] [--rule-status] [--report result.json] \
   [--decisions decisions.json | --decisions-from reviewed.bcfzip] \
   [--summary [--top N]] [--bcf issues.bcfzip] [--xlsx report.xlsx] \
@@ -87,6 +88,36 @@ The other specifications run as usual. The result's additive `ids` field
 names the document and lists every specification in order with its number,
 name, the rules it ran as, and its gaps. A check with a specification that did
 not run never exits 0: with no finding it exits 4.
+
+### Relations supplied beside the model
+
+A ruleset may declare a relation whose pairs are project data, `by:
+supplied` (see [Declared relations](./derived.md#declared-relations)), so
+one rule package serves every project. `--relations serves=pairs.csv`
+supplies its pairs for this check: a CSV file, or one sheet of an xlsx
+workbook (`--relations serves=pairs.xlsx#Pumps`), read by the columns the
+relation declares, as a [table file](./capabilities.md#tables-from-data-files)
+is. Repeat it for several relations. The relation id ends at the first `=`;
+`#SHEET` is read only after a path ending in `.xlsx`.
+
+Before any model is read, the check fails with status 1, writing nothing,
+when a file names a relation no ruleset declares, one whose ruleset states
+its own pairs, or one already given a file, or when the file cannot be read,
+is larger than 10 MB, or its header or rows are refused (an undeclared or
+missing column, a blank or non-text cell). A supplied relation given no file
+relates nothing surely: every rule walking it is not evaluated, and
+`integrity` lists it as the warning `relation-pairs-not-supplied`. A pair
+naming an object the model does not hold is reported as
+`relation-object-unknown`, as a listed pair is.
+
+The result's additive `relation_files` records each file supplied, so the
+run can be reproduced; every pair's evidence cites the same digest:
+
+```json
+"relation_files": [
+  { "relation": "serves", "file": "pairs.csv", "sha256": "9f2c…", "pairs": 42 }
+]
+```
 
 ### Several rulesets
 
@@ -212,10 +243,12 @@ The JSON result goes to stdout, or to `--report`:
 `report` is the engine's `Report`; when rules measured values it also has
 `tables` (see [Tables](./ir.md#tables)). `integrity` lists irregularities of the model
 itself (see [Independent adapters](./adapters.md)); they are not rule findings.
-It also lists, as `relation-object-unknown` warnings, every listed pair of a
-ruleset's [declared relations](./derived.md#declared-relations) naming an
-object the model does not hold, or several; the rules following that pair
-are not evaluated, and the exit status follows from them.
+It also lists, as `relation-object-unknown` warnings, every listed or
+supplied pair of a ruleset's
+[declared relations](./derived.md#declared-relations) naming an object the
+model does not hold, or several, and as `relation-pairs-not-supplied`
+warnings every supplied relation given no `--relations` file; the rules
+following them are not evaluated, and the exit status follows from them.
 `objects` maps every object the report names to its kind and, when it has one,
 its GlobalId, so a reader can tell what `#4711` is without the model. A
 resource object a rule selected by its class (an `IFCMATERIAL`; see

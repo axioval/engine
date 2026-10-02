@@ -1,5 +1,7 @@
 #![allow(missing_docs)]
-use super::{Citation, LocalizedText, PackageMetadata, ParameterValue, Selector, Source};
+use super::{
+    Citation, LocalizedText, PackageMetadata, ParameterValue, Selector, Source, TableFileColumn,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -298,6 +300,20 @@ pub enum RelationKey {
     /// such as an IFC `GlobalId`.
     Pairs {
         pairs: ParameterValue,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scheme: Option<String>,
+    },
+    /// Supplied pairs: the host supplies them at check time, beside the
+    /// model, as a CSV file or one sheet of an xlsx workbook whose rows
+    /// name objects as listed pairs do (`scheme` alike), so one rule
+    /// package serves every project. `columns` declares the `from` and
+    /// `to` text columns and their headers as a `tableFile` does; omitted,
+    /// the headers are `from` and `to`. A relation whose pairs were not
+    /// supplied relates nothing surely: every rule walking it is not
+    /// evaluated.
+    Supplied {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        columns: Option<Vec<TableFileColumn>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         scheme: Option<String>,
     },

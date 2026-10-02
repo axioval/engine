@@ -9,7 +9,7 @@ use axioval_ir::contract::{
     ClassTree, ClassificationDefinition, ClassificationProperty, ColumnKind, GateCondition,
     GroupingDefinition, GroupingKey, ParameterKind, ParameterValue, RelationDefinition,
     RelationKey, RuleApplicability, RuleDefinition, RuleFolder, RuleGate, RuleInstance, Selector,
-    TableColumnDefinition, TableRow,
+    TableColumnDefinition, TableFileColumn, TableRow,
 };
 use axioval_ir::{DefinitionPackage, RuleId, RuleSetPackage};
 
@@ -130,6 +130,7 @@ pub fn compile(
         classifications,
         groupings,
         relations,
+        supplied: BTreeMap::new(),
     })
 }
 
@@ -214,10 +215,78 @@ fn relations(
                 }
                 *pairs = relation_pairs(pairs).map_err(invalid)?;
             }
+            RelationKey::Supplied { columns, scheme } => {
+                if scheme
+                    .as_ref()
+                    .is_some_and(|scheme| scheme.trim().is_empty())
+                {
+                    return Err(invalid("its external id scheme is blank".into()));
+                }
+                // Stated in full, so rulesets declaring it alike merge.
+                *columns = Some(supplied_columns(columns.as_deref()).map_err(invalid)?);
+            }
         }
         checked.push(definition);
     }
     Ok(checked)
+}
+
+/// The columns a supplied relation's pairs are read by: `columns` when
+/// declared (exactly the text columns `from` and `to`, each once, headers
+/// distinct and not empty), else the headers `from` and `to`.
+pub(crate) fn supplied_columns(
+    columns: Option<&[TableFileColumn]>,
+) -> Result<Vec<TableFileColumn>, String> {
+    let Some(columns) = columns else {
+        return Ok(["from", "to"]
+            .map(|id| TableFileColumn {
+                id: id.into(),
+                header: None,
+                kind: ColumnKind::String,
+                unit: None,
+            })
+            .into());
+    };
+    for column in columns {
+        if !matches!(column.id.as_str(), "from" | "to") {
+            return Err(format!(
+                "its supplied column `{}` is neither `from` nor `to`",
+                column.id
+            ));
+        }
+        if column.kind != ColumnKind::String {
+            return Err(format!(
+                "its supplied column `{}` is declared {}, not string",
+                column.id,
+                column.kind.as_str()
+            ));
+        }
+    }
+    crate::table_files::check_columns(columns)
+        .map_err(|detail| format!("its supplied columns: {detail}"))?;
+    if let Some(missing) = ["from", "to"]
+        .into_iter()
+        .find(|id| !columns.iter().any(|column| column.id == *id))
+    {
+        return Err(format!("its supplied columns declare no `{missing}`"));
+    }
+    Ok(columns.to_vec())
+}
+
+/// Every row of a relation's pairs holds exactly a non-blank text `from`
+/// and `to` cell.
+pub(crate) fn check_pair_rows(rows: &[TableRow]) -> Result<(), String> {
+    for (index, row) in rows.iter().enumerate() {
+        validate_row(RELATION_PAIR_COLUMNS, row)
+            .map_err(|detail| format!("pairs row {}: {detail}", index + 1))?;
+        if row
+            .values()
+            .any(|cell| matches!(cell, ParameterValue::String { value } if value.trim().is_empty()))
+        {
+            return Err(format!("pairs row {} names a blank object", index + 1));
+        }
+    }
+    Ok(())
 }
 
 /// The columns of a relation's `pairs` table.
@@ -249,16 +318,7 @@ fn relation_pairs(pairs: &ParameterValue) -> Result<ParameterValue, String> {
     let ParameterValue::Table { value: rows } = &pairs else {
         return Err("its pairs must be a table or a table file".into());
     };
-    for (index, row) in rows.iter().enumerate() {
-        validate_row(RELATION_PAIR_COLUMNS, row)
-            .map_err(|detail| format!("pairs row {}: {detail}", index + 1))?;
-        if row
-            .values()
-            .any(|cell| matches!(cell, ParameterValue::String { value } if value.trim().is_empty()))
-        {
-            return Err(format!("pairs row {} names a blank object", index + 1));
-        }
-    }
+    check_pair_rows(rows)?;
     Ok(pairs)
 }
 
@@ -857,6 +917,7 @@ pub fn compile_rulesets(
         classifications,
         groupings,
         relations,
+        supplied: BTreeMap::new(),
     })
 }
 

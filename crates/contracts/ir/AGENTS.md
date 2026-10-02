@@ -34,9 +34,11 @@ Keep this crate serializable and deterministic. It must not depend on a source f
   The MCS ruleset and selector schemas must mirror them.
 - `RuleSetPackage::relations` (`RelationDefinition`: `from` and `to`
   selectors and a `RelationKey`, `property` with a `RelationProperty` per
-  end or `pairs`, a table value of text `from`/`to` cells with an optional
-  external id `scheme`) is omitted when empty, so rulesets serialize as
-  before. The MCS ruleset schema must mirror it.
+  end, `pairs`, a table value of text `from`/`to` cells with an optional
+  external id `scheme`, or `supplied`, pairs the host supplies at check
+  time with optional `TableFileColumn`s and `scheme`, never listed in the
+  package) is omitted when empty, so rulesets serialize as before. The
+  MCS ruleset schema must mirror it.
 - `ParameterValue::TableFile` names a table parameter's rows in a package
   data file (`path`, optional xlsx `sheet`, `sha256`, declared
   `TableFileColumn`s with optional `header` and a quantity's `unit`). Its

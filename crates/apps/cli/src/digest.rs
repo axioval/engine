@@ -61,6 +61,23 @@ pub struct CheckOutput {
     /// current finding, in archive order. Absent otherwise.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unmatched_topics: Vec<UnmatchedTopicRecord>,
+    /// The pairs `check --relations` supplied to each supplied relation,
+    /// in argument order, so the run can be reproduced. Absent otherwise.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relation_files: Vec<RelationFileRecord>,
+}
+
+/// One file of pairs supplied to a relation at check time.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RelationFileRecord {
+    /// The relation's id.
+    pub relation: String,
+    /// The file's name, with `#SHEET` for a workbook.
+    pub file: String,
+    /// The lowercase hex SHA-256 of the file's bytes.
+    pub sha256: String,
+    /// How many pairs it lists.
+    pub pairs: usize,
 }
 
 /// A BCF topic that decided no current finding, and why.
@@ -368,6 +385,7 @@ impl CheckOutput {
             sources: Vec::new(),
             ids: None,
             unmatched_topics: Vec::new(),
+            relation_files: Vec::new(),
         }
     }
 
@@ -389,6 +407,13 @@ impl CheckOutput {
     #[must_use]
     pub fn with_sources(mut self, sources: Vec<SourceInfo>) -> Self {
         self.sources = sources;
+        self
+    }
+
+    /// The same result recording the files of pairs supplied to relations.
+    #[must_use]
+    pub fn with_relation_files(mut self, files: Vec<RelationFileRecord>) -> Self {
+        self.relation_files = files;
         self
     }
 

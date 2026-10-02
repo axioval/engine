@@ -32,9 +32,10 @@ mod server;
 use axioval::{
     bcf, bcf_snapshot,
     engine::{
-        DisciplineMap, DisciplineOrigin, DisciplineRule, EvidenceSession, IntegritySeverity,
-        LocationMethod, LocationPolicy, QUALIFIED_RULE_SEPARATOR, Runtime,
-        SourceIntegrityServiceHandle, SourceMetadata, UnmappedReason, compile_rulesets,
+        DisciplineMap, DisciplineOrigin, DisciplineRule, EvidenceSession, ExecutionPlan,
+        IntegritySeverity, LocationMethod, LocationPolicy, QUALIFIED_RULE_SEPARATOR, Runtime,
+        SourceIntegrityServiceHandle, SourceMetadata, SuppliedPairs, UnmappedReason,
+        compile_rulesets,
     },
     html, ifc,
     ir::{
@@ -154,6 +155,16 @@ struct CheckArgs {
     /// storey). The result records it.
     #[arg(long, value_name = "FILE", requires = "ids")]
     ids_filter: Option<PathBuf>,
+    /// Supply the pairs of a relation the rulesets declare `by: supplied`
+    /// (project data kept beside the model, not in the rule package): a
+    /// CSV file, or one sheet of an xlsx workbook (`FILE.xlsx#SHEET`),
+    /// read by the columns the relation declares. Repeat for several
+    /// relations. A file for a relation no ruleset declares as supplied,
+    /// or one that cannot be read, stops the check before anything runs; a
+    /// supplied relation given no file leaves every rule walking it not
+    /// evaluated. The result records each file's SHA-256.
+    #[arg(long = "relations", value_name = "RELATION=FILE[#SHEET]", value_parser = relation_arg)]
+    relations: Vec<RelationArg>,
     /// Mesh the model's bodies so geometric rules can run. Off by default:
     /// meshing costs time and purely semantic rulesets do not need it.
     #[arg(long)]
@@ -457,6 +468,41 @@ struct ReportArgs {
     /// With `--csv`: the table's name, such as `takeoff`.
     #[arg(long, requires = "csv")]
     table: Option<String>,
+}
+
+/// One `--relations` argument: a supplied relation's id and the file
+/// holding its pairs, with the workbook sheet to read.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct RelationArg {
+    relation: String,
+    path: PathBuf,
+    sheet: Option<String>,
+}
+
+/// Parses `RELATION=FILE`, `RELATION=FILE.xlsx#SHEET`.
+///
+/// The relation id ends at the first `=`. A `#` names a sheet only after a
+/// path ending in `.xlsx`, so a CSV path may hold one.
+fn relation_arg(value: &str) -> Result<RelationArg, String> {
+    let Some((relation, file)) = value.split_once('=') else {
+        return Err("expected RELATION=FILE".into());
+    };
+    if relation.is_empty() || file.is_empty() {
+        return Err("expected RELATION=FILE, both non-empty".into());
+    }
+    let (path, sheet) = match file.rsplit_once('#') {
+        Some((path, sheet))
+            if path.to_ascii_lowercase().ends_with(".xlsx") && !sheet.is_empty() =>
+        {
+            (path, Some(sheet.to_owned()))
+        }
+        _ => (file, None),
+    };
+    Ok(RelationArg {
+        relation: relation.to_owned(),
+        path: PathBuf::from(path),
+        sheet,
+    })
 }
 
 /// One `--model` argument: a file and the discipline declared for it.
@@ -770,7 +816,8 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
         None => packages(&args.definitions, &args.rulesets)?,
     };
     let registry = axioval::default_registry()?;
-    let plan = compile_rulesets(&registry, &definitions, &rulesets)?;
+    let mut plan = compile_rulesets(&registry, &definitions, &rulesets)?;
+    let relation_files = supply_relations(&mut plan, &args.relations)?;
     if args.locate == Locate::Geometry && !args.geometry {
         return Err("`--locate geometry` needs `--geometry` to derive spaces from bodies".into());
     }
@@ -804,6 +851,7 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
         runtime = runtime.with_rule_summaries();
     }
     let unknown_pairs = axioval::engine::unknown_relation_objects(&plan, session.project());
+    let unsupplied = unsupplied_relations(&plan);
     let mut result = runtime.run_session(&session, plan)?;
     // Keyed as the BCF sink keys its topics, so a decision recorded against
     // either is the same.
@@ -820,6 +868,7 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     }
     let mut integrity = integrity(&session)?;
     integrity.extend(relation_records(unknown_pairs));
+    integrity.extend(unsupplied);
 
     let bodies = meshed
         .as_mut()
@@ -836,6 +885,7 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
     });
     let mut output = CheckOutput::new(result, integrity, geometry, session.project())
         .with_sources(source_infos(&session))
+        .with_relation_files(relation_files)
         .with_unmatched_topics(unmatched);
     let complete = translated.as_ref().is_none_or(ids::Translated::is_complete);
     if let Some(translated) = translated {
@@ -856,6 +906,91 @@ fn check(mut args: CheckArgs) -> Result<Outcome, Box<dyn Error>> {
         Outcome::Passed if !complete => Outcome::Incomplete,
         outcome => outcome,
     })
+}
+
+/// Reads each `--relations` file by its relation's declared columns and
+/// supplies its pairs to `plan`, before anything runs.
+///
+/// # Errors
+///
+/// A relation no ruleset declares, one that states its own pairs, a
+/// relation given two files, and a file that cannot be read, is too large,
+/// or whose columns or rows are refused.
+fn supply_relations(
+    plan: &mut ExecutionPlan,
+    args: &[RelationArg],
+) -> Result<Vec<digest::RelationFileRecord>, Box<dyn Error>> {
+    let mut records = Vec::new();
+    for arg in args {
+        let shown = arg.path.display();
+        let refuse = |detail: String| format!("--relations {}={shown}: {detail}", arg.relation);
+        let definition = plan
+            .relations()
+            .iter()
+            .find(|known| known.id == arg.relation)
+            .cloned()
+            .ok_or_else(|| {
+                refuse(format!(
+                    "no ruleset declares the relation `{}`",
+                    arg.relation
+                ))
+            })?;
+        let size = fs::metadata(&arg.path)
+            .map_err(|error| refuse(error.to_string()))?
+            .len();
+        if size > axioval::engine::TABLE_FILE_LIMIT_BYTES {
+            return Err(refuse(format!(
+                "the file is larger than {} bytes",
+                axioval::engine::TABLE_FILE_LIMIT_BYTES
+            ))
+            .into());
+        }
+        let bytes = fs::read(&arg.path).map_err(|error| refuse(error.to_string()))?;
+        let name = arg
+            .path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| refuse("the file name is not UTF-8".into()))?;
+        let pairs =
+            SuppliedPairs::read(&definition, &bytes, name, arg.sheet.as_deref()).map_err(refuse)?;
+        records.push(digest::RelationFileRecord {
+            relation: arg.relation.clone(),
+            file: pairs.origin().to_owned(),
+            sha256: pairs.sha256().to_owned(),
+            pairs: pairs.rows().len(),
+        });
+        plan.supply_relation(&arg.relation, pairs)
+            .map_err(|error| refuse(error.to_string()))?;
+    }
+    Ok(records)
+}
+
+/// Every supplied relation given no file, as an integrity warning: the
+/// rules walking it are not evaluated.
+fn unsupplied_relations(plan: &ExecutionPlan) -> Vec<IntegrityRecord> {
+    plan.relations()
+        .iter()
+        .filter(|relation| {
+            matches!(
+                relation.by,
+                axioval::ir::contract::RelationKey::Supplied { .. }
+            ) && plan.supplied_pairs(&relation.id).is_none()
+        })
+        .map(|relation| IntegrityRecord {
+            code: "relation-pairs-not-supplied".into(),
+            severity: "warning".into(),
+            message: format!(
+                "relation `{}` takes its pairs at check time, and none were supplied \
+                 (`--relations {}=FILE`); every rule walking it is not evaluated",
+                relation.id, relation.id
+            ),
+            locator: format!(
+                "{}{}:pairs",
+                axioval::engine::RELATION_RELATIONSHIP_PREFIX,
+                relation.id
+            ),
+        })
+        .collect()
 }
 
 /// Every end of a declared relation's listed pair naming no single object,
@@ -1382,9 +1517,33 @@ fn main() -> ExitCode {
 
 #[cfg(test)]
 mod tests {
-    use super::{ModelArg, model_arg, utc};
+    use super::{ModelArg, RelationArg, model_arg, relation_arg, utc};
     use axioval::ir::Discipline;
     use std::path::PathBuf;
+
+    #[test]
+    fn a_relations_argument_names_a_relation_a_file_and_a_workbook_sheet() {
+        let parsed = |relation: &str, path: &str, sheet: Option<&str>| RelationArg {
+            relation: relation.into(),
+            path: PathBuf::from(path),
+            sheet: sheet.map(Into::into),
+        };
+        assert_eq!(
+            relation_arg("serves=dir/pairs.csv"),
+            Ok(parsed("serves", "dir/pairs.csv", None))
+        );
+        assert_eq!(
+            relation_arg("serves=p.xlsx#Pumps"),
+            Ok(parsed("serves", "p.xlsx", Some("Pumps")))
+        );
+        assert_eq!(
+            relation_arg("serves=a#b.csv"),
+            Ok(parsed("serves", "a#b.csv", None))
+        );
+        assert!(relation_arg("serves").is_err());
+        assert!(relation_arg("=p.csv").is_err());
+        assert!(relation_arg("serves=").is_err());
+    }
 
     fn parsed(path: &str, discipline: Option<&str>) -> ModelArg {
         ModelArg {

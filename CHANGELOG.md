@@ -46,6 +46,21 @@ All notable changes are documented here. This project follows Semantic Versionin
   (`LandingClearWidthRequest`, `LandingClearWidthEvidence`,
   `LandingClearWidth`), answered by the Axiolid adapter. **Breaking:** the
   capability's signature gains two optional parameters.
+- **Relation pairs supplied beside the model.** (Closes #181)
+  A relation `by: {kind: "supplied"}` (optional `columns` naming the
+  `from`/`to` headers, optional `scheme`) takes its pairs from the host at
+  check time, so one rule package serves every project:
+  `SuppliedPairs::read` reads them from a CSV file or an xlsx sheet with
+  the table-file reader and `ExecutionPlan::supply_relation` hands them to
+  the run; `axioval check --relations <id>=<file.csv|file.xlsx#sheet>`
+  (repeatable) does both and records each file's SHA-256 in the result's
+  `relation_files`, every pair's evidence citing it. A file for an
+  undeclared relation, or one that cannot be read or has other columns,
+  fails before checking; a supplied relation given no file is never an
+  empty relation: every rule walking it is not evaluated and `check`
+  warns `relation-pairs-not-supplied`. Unknown objects are reported as
+  for listed pairs.
+  **Breaking:** `RelationKey` gains the variant `Supplied`.
 - **User-defined relations between objects.** (Refs #181)
   A ruleset's `relations` declare relations the model does not state,
   such as the pumps serving each room: `from` and `to` selectors and

@@ -13,11 +13,16 @@
 //! naming an object the model does not hold, or one its end's selector
 //! does not select, leaves the other end's partners undecided (both ends'
 //! when neither is known), and [`unknown_relation_objects`] lists it.
+//!
+//! A relation `by: supplied` takes its pairs from the host at check time
+//! ([`SuppliedPairs`], [`ExecutionPlan::supply_relation`]), so one rule
+//! package serves every project. Without them nothing is related surely:
+//! every object's partners are undecided, never none.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use axioval_ir::contract::{ParameterValue, RelationDefinition, RelationKey};
+use axioval_ir::contract::{ParameterValue, RelationDefinition, RelationKey, TableRow};
 use axioval_ir::{Evidence, Object, ObjectId, Project};
 
 use crate::derived_relationships::DERIVED_RELATIONSHIP_PREFIX;
@@ -144,6 +149,82 @@ impl DeclaredRelations {
     }
 }
 
+/// The pairs of a supplied relation (`by: supplied`), as the host read
+/// them at check time: their origin, the SHA-256 of the file they were
+/// read from, and one row of non-blank text `from` and `to` cells each.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SuppliedPairs {
+    origin: String,
+    sha256: String,
+    rows: Vec<TableRow>,
+}
+
+impl SuppliedPairs {
+    /// Pairs the host already read: `origin` names where they came from
+    /// (such as a file name), `sha256` is the lowercase hex SHA-256 of the
+    /// bytes they were read from, recorded in every pair's evidence.
+    #[must_use]
+    pub fn new(origin: impl Into<String>, sha256: impl Into<String>, rows: Vec<TableRow>) -> Self {
+        Self {
+            origin: origin.into(),
+            sha256: sha256.into(),
+            rows,
+        }
+    }
+
+    /// Reads the pairs of the supplied relation `definition` from `bytes`,
+    /// the file `name` (a `.csv` file, or the sheet `sheet` of an `.xlsx`
+    /// workbook), by the columns it declares, exactly as a table file is
+    /// read ([`read_table_file`](crate::read_table_file)).
+    ///
+    /// # Errors
+    ///
+    /// The relation is not supplied, or why the file or its columns were
+    /// refused.
+    pub fn read(
+        definition: &RelationDefinition,
+        bytes: &[u8],
+        name: &str,
+        sheet: Option<&str>,
+    ) -> Result<Self, String> {
+        let RelationKey::Supplied { columns, .. } = &definition.by else {
+            return Err(format!(
+                "relation `{}` states its own pairs; none are supplied",
+                definition.id
+            ));
+        };
+        let columns = crate::compiler::supplied_columns(columns.as_deref())?;
+        let rows = crate::table_files::read_table_file(bytes, name, sheet, &columns)?;
+        let origin = match sheet {
+            Some(sheet) => format!("{name}#{sheet}"),
+            None => name.to_owned(),
+        };
+        Ok(Self::new(
+            origin,
+            crate::table_files::sha256_hex(bytes),
+            rows,
+        ))
+    }
+
+    /// Where the pairs came from.
+    #[must_use]
+    pub fn origin(&self) -> &str {
+        &self.origin
+    }
+
+    /// The SHA-256 of the bytes the pairs were read from.
+    #[must_use]
+    pub fn sha256(&self) -> &str {
+        &self.sha256
+    }
+
+    /// The pairs, one row each.
+    #[must_use]
+    pub fn rows(&self) -> &[TableRow] {
+        &self.rows
+    }
+}
+
 /// One listed pair's end naming no single object of the project.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct UnknownRelationObject {
@@ -159,8 +240,8 @@ pub struct UnknownRelationObject {
     pub detail: String,
 }
 
-/// Every end of a listed pair of `plan`'s relations that names no object
-/// of `project`, or several, in relation and row order.
+/// Every end of a listed or supplied pair of `plan`'s relations that names
+/// no object of `project`, or several, in relation and row order.
 #[must_use]
 pub fn unknown_relation_objects(
     plan: &ExecutionPlan,
@@ -168,11 +249,16 @@ pub fn unknown_relation_objects(
 ) -> Vec<UnknownRelationObject> {
     let mut unknown = Vec::new();
     for definition in plan.relations() {
-        let RelationKey::Pairs { pairs, scheme } = &definition.by else {
-            continue;
+        let (rows, scheme) = match &definition.by {
+            RelationKey::Pairs { pairs, scheme } => (table_rows(pairs), scheme),
+            RelationKey::Supplied { scheme, .. } => match plan.supplied_pairs(&definition.id) {
+                Some(supplied) => (supplied.rows(), scheme),
+                None => continue,
+            },
+            RelationKey::Property { .. } => continue,
         };
         let index = identities(project, scheme.as_deref());
-        for (row, from, to) in listed(pairs) {
+        for (row, from, to) in listed(rows) {
             for (end, identity) in [("from", from), ("to", to)] {
                 if let Err(detail) = resolve(&index, &identity, scheme.as_deref()) {
                     unknown.push(UnknownRelationObject {
@@ -189,11 +275,16 @@ pub fn unknown_relation_objects(
     unknown
 }
 
-/// The listed pairs of a compiled `pairs` table: one-based row, from, to.
-fn listed(pairs: &ParameterValue) -> Vec<(usize, String, String)> {
-    let ParameterValue::Table { value: rows } = pairs else {
-        return Vec::new();
-    };
+/// The rows of a compiled `pairs` table.
+fn table_rows(pairs: &ParameterValue) -> &[TableRow] {
+    match pairs {
+        ParameterValue::Table { value: rows } => rows,
+        _ => &[],
+    }
+}
+
+/// The pairs of `rows`: one-based row, from, to.
+fn listed(rows: &[TableRow]) -> Vec<(usize, String, String)> {
     rows.iter()
         .enumerate()
         .filter_map(|(index, row)| {
@@ -242,11 +333,12 @@ fn resolve(
 }
 
 /// Derives the relation `definition` over every object of the context's
-/// project.
+/// project, a supplied relation from `supplied`.
 pub(crate) fn derive(
     refiner: &dyn OutcomeRefiner,
     context: &RuleContext<'_>,
     definition: &RelationDefinition,
+    supplied: Option<&SuppliedPairs>,
 ) -> Relation {
     match &definition.by {
         RelationKey::Property { from, to } => {
@@ -319,23 +411,59 @@ pub(crate) fn derive(
             }
             relation
         }
-        RelationKey::Pairs { pairs, scheme } => {
-            derive_pairs(refiner, context, definition, pairs, scheme.as_deref())
+        RelationKey::Pairs { pairs, scheme } => derive_pairs(
+            refiner,
+            context,
+            definition,
+            (table_rows(pairs), "pairs"),
+            scheme.as_deref(),
+        ),
+        RelationKey::Supplied { scheme, .. } => {
+            if let Some(supplied) = supplied {
+                derive_pairs(
+                    refiner,
+                    context,
+                    definition,
+                    (
+                        supplied.rows(),
+                        &format!("pairs;sha256={}", supplied.sha256()),
+                    ),
+                    scheme.as_deref(),
+                )
+            } else {
+                unsupplied(definition)
+            }
         }
     }
 }
 
+/// A supplied relation given no pairs: no pair is known, so none is ruled
+/// out, and every walk is undecided.
+fn unsupplied(definition: &RelationDefinition) -> Relation {
+    let why = format!(
+        "relation `{}` takes its pairs from the host at check time, and none were supplied",
+        definition.id
+    );
+    Relation {
+        all_forward: Some(why.clone()),
+        all_backward: Some(why),
+        ..Relation::default()
+    }
+}
+
+/// Derives a relation from its listed or supplied `rows`, citing each
+/// pair at `<identity>:<stem>#row=<row>`.
 fn derive_pairs(
     refiner: &dyn OutcomeRefiner,
     context: &RuleContext<'_>,
     definition: &RelationDefinition,
-    pairs: &ParameterValue,
+    (rows, stem): (&[TableRow], &str),
     scheme: Option<&str>,
 ) -> Relation {
     let mut relation = Relation::default();
     let index = identities(context.project, scheme);
     let id = &definition.id;
-    for (row, from, to) in listed(pairs) {
+    for (row, from, to) in listed(rows) {
         // Each end: the object it names, if one, and why it fails, if so.
         let end = |identity: &str, selector, role: &str| -> (Option<ObjectId>, Option<String>) {
             match resolve(&index, identity, scheme) {
@@ -364,7 +492,7 @@ fn derive_pairs(
                 let evidence = vec![Evidence::exact(
                     from_id.source.clone(),
                     format!(
-                        "{RELATION_RELATIONSHIP_PREFIX}{id}:pairs#row={row}:{from_id}->{to_id}"
+                        "{RELATION_RELATIONSHIP_PREFIX}{id}:{stem}#row={row}:{from_id}->{to_id}"
                     ),
                 )];
                 relation.relate(from_id, to_id, evidence);
@@ -395,18 +523,22 @@ fn derive_pairs(
     relation
 }
 
-/// Derives every relation of a run, in order, over `project`.
+/// Derives every relation of a run, in order, over `project`, the
+/// supplied ones from `supplied`, by relation id.
 pub(crate) fn derive_all(
     refiner: &dyn OutcomeRefiner,
     project: &Project,
     services: &ServiceRegistry,
-    definitions: &[RelationDefinition],
+    (definitions, supplied): (&[RelationDefinition], &BTreeMap<String, SuppliedPairs>),
 ) -> DeclaredRelations {
     let context = RuleContext { project, services };
     definitions
         .iter()
         .fold(DeclaredRelations::default(), |relations, definition| {
-            relations.with_relation(definition.id.clone(), derive(refiner, &context, definition))
+            relations.with_relation(
+                definition.id.clone(),
+                derive(refiner, &context, definition, supplied.get(&definition.id)),
+            )
         })
 }
 
@@ -584,6 +716,83 @@ mod tests {
         assert!(relation.targets(&id("p2")).is_ok());
         relation.all_backward = Some("unknown".into());
         assert!(relation.sources(&id("r2")).is_err());
+    }
+
+    fn supplied(by: &serde_json::Value) -> RelationDefinition {
+        serde_json::from_value(serde_json::json!({
+            "id": "serves",
+            "name": { "default": "Serves", "translations": {} },
+            "from": { "kind": "all" },
+            "to": { "kind": "all" },
+            "by": by,
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn supplied_pairs_are_read_by_their_declared_headers_and_digested() {
+        let definition = supplied(&serde_json::json!({ "kind": "supplied", "columns": [
+            { "id": "from", "header": "Pump", "kind": "string" },
+            { "id": "to", "header": "Room", "kind": "string" },
+        ] }));
+        let csv = b"Room,Pump\nR1,P1\n\nR2,P2\n";
+        let pairs = SuppliedPairs::read(&definition, csv, "serves.csv", None).unwrap();
+        assert_eq!(pairs.origin(), "serves.csv");
+        assert_eq!(pairs.sha256(), crate::table_files::sha256_hex(csv));
+        assert_eq!(
+            listed(pairs.rows()),
+            [
+                (1, "P1".to_owned(), "R1".to_owned()),
+                (2, "P2".to_owned(), "R2".to_owned())
+            ]
+        );
+        // Other headers, and a relation listing its own pairs, are refused.
+        assert!(
+            SuppliedPairs::read(&definition, b"from,to\nP1,R1\n", "serves.csv", None)
+                .unwrap_err()
+                .contains("not declared")
+        );
+        let listed_relation = supplied(&serde_json::json!({
+            "kind": "pairs", "pairs": { "type": "table", "value": [] },
+        }));
+        assert!(
+            SuppliedPairs::read(&listed_relation, csv, "serves.csv", None)
+                .unwrap_err()
+                .contains("states its own pairs")
+        );
+        // Without declared columns the headers are `from` and `to`.
+        let bare = supplied(&serde_json::json!({ "kind": "supplied" }));
+        let pairs = SuppliedPairs::read(&bare, b"to,from\nR1,P1\n", "s.csv", None).unwrap();
+        assert_eq!(
+            listed(pairs.rows()),
+            [(1, "P1".to_owned(), "R1".to_owned())]
+        );
+    }
+
+    #[test]
+    fn supplied_columns_name_exactly_from_and_to_as_text() {
+        use crate::compiler::supplied_columns;
+        let column = |id: &str, kind: &str| -> axioval_ir::contract::TableFileColumn {
+            serde_json::from_value(serde_json::json!({ "id": id, "kind": kind })).unwrap()
+        };
+        assert!(
+            supplied_columns(Some(&[column("from", "string"), column("to", "string")])).is_ok()
+        );
+        assert!(
+            supplied_columns(Some(&[column("from", "string")]))
+                .unwrap_err()
+                .contains("no `to`")
+        );
+        assert!(
+            supplied_columns(Some(&[column("from", "string"), column("to", "integer")]))
+                .unwrap_err()
+                .contains("not string")
+        );
+        assert!(
+            supplied_columns(Some(&[column("from", "string"), column("room", "string")]))
+                .unwrap_err()
+                .contains("neither")
+        );
     }
 
     #[test]

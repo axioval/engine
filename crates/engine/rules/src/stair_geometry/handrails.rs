@@ -54,6 +54,9 @@ pub(super) struct HandrailCheck<'a> {
     /// Whether the handrail along each side must continue across the
     /// landings between a stair's flights.
     pub(super) continuous: bool,
+    /// With `check_continuous_handrails`, the largest gap allowed along
+    /// each side across the landings between a ramp's runs.
+    pub(super) ramp_continuity: Option<f64>,
 }
 
 impl HandrailCheck<'_> {
@@ -81,6 +84,14 @@ pub(super) fn descriptors() -> Vec<ParameterDescriptor> {
         ParameterDescriptor::optional("handrail_gap_maximum", ParameterType::Quantity),
         ParameterDescriptor::optional("handrail_sides", ParameterType::String),
         ParameterDescriptor::optional("handrail_both_sides_above_width", ParameterType::Quantity),
+    ]
+}
+
+/// The ramp's handrail continuity across its intermediate landings.
+pub(super) fn ramp_descriptors() -> Vec<ParameterDescriptor> {
+    vec![
+        ParameterDescriptor::optional("check_continuous_handrails", ParameterType::Boolean),
+        ParameterDescriptor::optional("handrail_continuity_tolerance", ParameterType::Quantity),
     ]
 }
 
@@ -136,11 +147,13 @@ pub(super) fn parse<'a>(
     let continuous = parameters
         .boolean("handrail_continuous_across_landings")?
         .unwrap_or(false);
+    let ramp_continuity = ramp_continuity(parameters, gap)?;
     let declared = height != (None, None)
         || extension != (None, None)
         || gap.is_some()
         || sides.is_some()
-        || continuous;
+        || continuous
+        || ramp_continuity.is_some();
     match (rails, reach, above, declared) {
         (Some(rails), Some(reach), Some(above), true) => Ok(Some(HandrailCheck {
             rails,
@@ -152,6 +165,7 @@ pub(super) fn parse<'a>(
             gap,
             sides,
             continuous,
+            ramp_continuity,
         })),
         (None, None, None, false) => Ok(None),
         (_, _, _, true) => Err(invalid(
@@ -161,6 +175,26 @@ pub(super) fn parse<'a>(
         (_, _, _, false) => Err(invalid(
             "`handrail_objects` or a handrail reach is declared without a handrail check",
         )),
+    }
+}
+
+/// The gap `check_continuous_handrails` allows across a ramp's landings:
+/// `handrail_continuity_tolerance`, else `handrail_gap_maximum`,
+/// else none.
+fn ramp_continuity(
+    parameters: &Parameters<'_>,
+    gap: Option<f64>,
+) -> Result<Option<f64>, Unavailable> {
+    let check = parameters
+        .boolean("check_continuous_handrails")?
+        .unwrap_or(false);
+    let tolerance = length(parameters, "handrail_continuity_tolerance")?;
+    match (check, tolerance) {
+        (false, Some(_)) => Err(invalid(
+            "`handrail_continuity_tolerance` needs `check_continuous_handrails`",
+        )),
+        (false, None) => Ok(None),
+        (true, tolerance) => Ok(Some(tolerance.or(gap).unwrap_or(0.0))),
     }
 }
 

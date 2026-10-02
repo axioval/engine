@@ -15,6 +15,7 @@ use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
 mod clear_width;
+mod continuity;
 mod handrails;
 mod ramp_ends;
 mod tactile;
@@ -24,8 +25,8 @@ use axioval_engine::{
     CapabilityEvaluation, ClearanceBelowRequest, ColumnKind, CompiledRule, Deviation,
     ElevationInterval, FreeSpaceServiceHandle, HeadroomRequest, Landing, LandingEvidence,
     LandingRequest, MeasuredInterval, NotEvaluatedReason, ParameterDescriptor, ParameterType,
-    RiserClosure, RuleCapability, RuleContext, SlopedRun, TableColumn, Tread, TreadFlight,
-    TreadFlightRequest, WalkingEnd, WalkingStretch, WalkingSurfaceError,
+    ProximityServiceHandle, RiserClosure, RuleCapability, RuleContext, SlopedRun, TableColumn,
+    Tread, TreadFlight, TreadFlightRequest, WalkingEnd, WalkingStretch, WalkingSurfaceError,
     WalkingSurfaceServiceHandle,
 };
 use axioval_ir::contract::Selector;
@@ -1835,6 +1836,7 @@ impl RuleCapability for RampGeometryCheck {
             ParameterDescriptor::optional("end_landing_depth_minimum", ParameterType::Quantity),
             ParameterDescriptor::optional("end_landing_width_minimum", ParameterType::Quantity),
         ]);
+        parameters.extend(handrails::ramp_descriptors());
         parameters
     }
 
@@ -1857,8 +1859,9 @@ impl RuleCapability for RampGeometryCheck {
         let (selected, mut evaluation) = select_objects(context, &rule.selector);
         let selections = Selections::select(context, config.headroom.as_ref(), &config.walking);
         let free = context.services.get::<FreeSpaceServiceHandle>();
+        let proximity = context.services.get::<ProximityServiceHandle>();
         for object in selected {
-            let checks = ramp(stairs, free, &config, &selections, object);
+            let checks = ramp((stairs, free, proximity), &config, &selections, object);
             match checks {
                 Ok(checks) => report(&mut evaluation, rule, &object.id, checks),
                 Err((reason, message)) => {
@@ -1872,9 +1875,16 @@ impl RuleCapability for RampGeometryCheck {
 
 type Checks = Vec<(Check, Vec<Evidence>, Vec<ObjectId>)>;
 
+/// The services a ramp's checks ask: walking surfaces, free space and
+/// proximity.
+type Services<'s> = (
+    &'s WalkingSurfaceServiceHandle,
+    Option<&'s FreeSpaceServiceHandle>,
+    Option<&'s ProximityServiceHandle>,
+);
+
 fn ramp(
-    stairs: &WalkingSurfaceServiceHandle,
-    free: Option<&FreeSpaceServiceHandle>,
+    (stairs, free, proximity): Services<'_>,
     config: &RampConfig<'_>,
     selections: &Selections,
     object: &Object,
@@ -1964,7 +1974,7 @@ fn ramp(
         checks.push((check, cited, related));
     }
     for (check, mut cited, related) in
-        rails_and_ends(stairs, free, config, selections, object, runs)
+        rails_and_ends((stairs, free, proximity), config, selections, object, runs)
     {
         cited.insert(0, evidence.clone());
         checks.push((check, cited, related));
@@ -2010,8 +2020,7 @@ impl LandingDoors<'_, '_> {
 
 /// The handrails along each run of a ramp and the free space at its ends.
 fn rails_and_ends(
-    stairs: &WalkingSurfaceServiceHandle,
-    free: Option<&FreeSpaceServiceHandle>,
+    (stairs, free, proximity): Services<'_>,
     config: &RampConfig<'_>,
     selections: &Selections,
     object: &Object,
@@ -2030,6 +2039,15 @@ fn rails_and_ends(
                 risers: None,
             };
             checks.extend(handrails::handrails(stairs, check, rails, &along));
+        }
+        if let Some(gap) = check.ramp_continuity {
+            checks.extend(continuity::across_runs(
+                (stairs, proximity),
+                check,
+                rails,
+                &object.id,
+                (runs, gap),
+            ));
         }
     }
     if let (Some(check), Some(obstacles)) = (&config.walking.clear, &selections.clear) {

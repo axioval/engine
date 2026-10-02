@@ -6688,6 +6688,107 @@ fn with_geometry_a_ramp_without_a_stair_nearby_is_found() {
 /// corners by index, rises to its height, and a wall falls from each cell
 /// to a lower neighbour or the outside, split at every height meeting its
 /// ends.
+/// A rail's side profile 0.05 m deep under the top line `top`.
+fn rail_under(top: &[[f64; 2]]) -> Vec<[f64; 2]> {
+    let mut points: Vec<[f64; 2]> = top.iter().map(|[x, z]| [*x, z - 0.05]).collect();
+    points.extend(top.iter().rev().copied());
+    points
+}
+
+/// Ramp flight #108 (1.2 m wide, y -1.2 to 0) of two runs, x 1 to 4 and
+/// 5.5 to 8.5, each rising 0.25 m, with a level landing between them, and
+/// rails #208 and #308 beside its left side 0.9 m above its surface, the
+/// first along the first run and the second along the second, stopping
+/// 0.4 m short of each other on the landing.
+fn a_ramp_with_rails_in_pieces() -> String {
+    let ramp = "IFCRAMPFLIGHT('GID',$,$,$,$,PL,REP,$,$)";
+    let rail = "IFCRAILING('GID',$,$,$,$,PL,REP,$,.HANDRAIL.)";
+    let profile = [
+        [0.0, 0.0],
+        [9.5, 0.0],
+        [9.5, 0.6],
+        [8.5, 0.6],
+        [5.5, 0.35],
+        [4.0, 0.35],
+        [1.0, 0.1],
+        [0.0, 0.1],
+    ];
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+         #7=IFCUNITASSIGNMENT((#6));\n\
+         #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+         #9=IFCDIRECTION((0.,-1.,0.));\n\
+         #10=IFCDIRECTION((1.,0.,0.));\n\
+         {}{}{}\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        profiled(100, [0.0, 0.0, 0.0], &profile, ramp),
+        swept(
+            200,
+            [0.0, 0.05, 0.0],
+            &rail_under(&[[0.7, 1.0], [1.0, 1.0], [4.0, 1.25], [4.55, 1.25]]),
+            0.05,
+            rail
+        ),
+        swept(
+            300,
+            [0.0, 0.05, 0.0],
+            &rail_under(&[[4.95, 1.25], [5.5, 1.25], [8.5, 1.5], [8.8, 1.5]]),
+            0.05,
+            rail
+        ),
+    )
+}
+
+#[test]
+fn with_geometry_ramp_rails_stopping_short_on_a_landing_are_found() {
+    let case = Case::new("geometry-ramp-rail-continuity");
+    let run = |tolerance: f64| {
+        case.geometry_rule(
+            &a_ramp_with_rails_in_pieces(),
+            &[("ramp", "IfcRampFlight"), ("rail", "IfcRailing")],
+            "axioval:capability.ramp-geometry",
+            &registry_signature("axioval:capability.ramp-geometry"),
+            entity("ramp"),
+            json!({
+                "handrail_objects": {"type": "selector", "value": entity("rail")},
+                "handrail_reach_across": {"type": "quantity", "value": 0.2, "unit": "m"},
+                "handrail_reach_above": {"type": "quantity", "value": 1.5, "unit": "m"},
+                "check_continuous_handrails": {"type": "boolean", "value": true},
+                "handrail_continuity_tolerance": {"type": "quantity", "value": tolerance, "unit": "m"},
+            }),
+        )
+    };
+    let (output, result) = run(0.1);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = finding_messages(&result);
+    assert_eq!(
+        findings,
+        [(
+            "#108".to_owned(),
+            "the handrail along the left side stops at the landing between run 1 of 2 and run 2 \
+             of 2: ifc-step:model.ifc/#208 and ifc-step:model.ifc/#308 are not joined by \
+             selected rails within 0.1 m of each other"
+                .to_owned()
+        )],
+        "{result:#}"
+    );
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+    // Allowing half a metre, they continue.
+    let (output, result) = run(0.5);
+    assert_eq!(output.status.code(), Some(0), "{result:#}");
+}
+
 fn stepped(points: &[[f64; 2]], cells: &[(Vec<usize>, f64)]) -> (Vec<[f64; 3]>, Vec<[usize; 3]>) {
     let mut heights: Vec<Vec<f64>> = vec![vec![0.0]; points.len()];
     for (corners, height) in cells {

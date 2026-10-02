@@ -6,6 +6,17 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Ramp handrail continuity across intermediate landings.** (Closes #153)
+  `ramp-geometry` gains `check_continuous_handrails` and
+  `handrail_continuity_tolerance` (defaulting to
+  `handrail_gap_maximum`, else none): across each landing between
+  consecutive runs, the last rail piece along a side of the lower run and
+  the first along the same side of the upper one must be joined by
+  selected rails each within the tolerance of the next, measured in space
+  by the proximity service, as a stair's handrail across its landings
+  (the stair's judgement, now shared). Rails stopping 0.4 m short of each
+  other fail a 0.1 m tolerance; a gap straddling it is not evaluated.
+  **Breaking:** the capability's signature gains two optional parameters.
 - **Stair landing clear width and the least clear width of a stair.** (Closes #155)
   `stair-geometry` gains `landing_clear_width_minimum`: the landing
   at each end of a flight (in whole-stair mode, each landing between

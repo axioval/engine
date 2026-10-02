@@ -15,14 +15,15 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, Deviation, ElevationInterval, HandrailEvidence,
-    LandingRequest, ParameterDescriptor, ParameterType, ProximityRequest, ProximityServiceHandle,
-    RailSide, RuleContext, TreadFlight, WalkingEnd, WalkingStretch,
+    CapabilityEvaluation, CompiledRule, Deviation, ElevationInterval, LandingRequest,
+    ParameterDescriptor, ParameterType, ProximityServiceHandle, RailSide, RuleContext, TreadFlight,
+    WalkingEnd, WalkingStretch,
 };
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId};
 
 use super::clear_width::{self, Width};
+use super::continuity::{Continuity, Side, Tri};
 use super::handrails::{self, HandrailCheck};
 use super::ramp_ends;
 use super::{
@@ -37,7 +38,7 @@ use crate::support::{Parameters, Traversal, Unavailable, invalid};
 /// Flights meet at a landing when the level one arrives at and the next
 /// starts from lie within this of each other: the rounding of modelled
 /// elevations, never a step.
-const MEETING: f64 = 1e-3;
+pub(super) const MEETING: f64 = 1e-3;
 
 /// The whole-stair mode's declaration.
 pub(super) struct StairMode<'a> {
@@ -117,14 +118,6 @@ pub(super) fn parse<'a>(
         maximum_total_rise,
         break_doors,
     }))
-}
-
-/// Whether something holds: surely, possibly, or surely not.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum Tri {
-    No,
-    Maybe,
-    Sure,
 }
 
 /// Checks every selected stair and, once each, the flights it reaches.
@@ -397,7 +390,14 @@ impl Whole<'_, '_, '_> {
                 RailSide::Left => "left",
                 RailSide::Right => "right",
             };
-            let judged = self.side(check, (&below, &above), side, (rails, *undecided), &named);
+            let continuity = Continuity {
+                proximity: self.context.services.get::<ProximityServiceHandle>(),
+                rails,
+                undecided: *undecided,
+                gap: check.gap(),
+                noun: "flight",
+            };
+            let judged = continuity.side((&below, &above), side, &named);
             let (verdict, message, mut cited, mut objects) = match judged {
                 Side::Nothing => continue,
                 Side::Joined => (Tri::No, String::new(), vec![], vec![]),
@@ -425,135 +425,6 @@ impl Whole<'_, '_, '_> {
             });
         }
         checks
-    }
-
-    /// Whether the handrail along one side continues across a landing.
-    fn side(
-        &self,
-        check: &HandrailCheck<'_>,
-        (below, above): (&HandrailEvidence, &HandrailEvidence),
-        side: RailSide,
-        (rails, undecided): (&[ObjectId], bool),
-        named: &str,
-    ) -> Side {
-        let last = match below.side_rail(side) {
-            Ok(pieces) => pieces.last().map(|(rail, _)| (*rail).clone()),
-            Err(_) => {
-                return Side::Broken(
-                    Tri::Maybe,
-                    format!("cannot be put in order below {named}"),
-                    vec![],
-                    vec![],
-                );
-            }
-        };
-        let first = match above.side_rail(side) {
-            Ok(pieces) => pieces.first().map(|(rail, _)| (*rail).clone()),
-            Err(_) => {
-                return Side::Broken(
-                    Tri::Maybe,
-                    format!("cannot be put in order above {named}"),
-                    vec![],
-                    vec![],
-                );
-            }
-        };
-        let sure = if undecided { Tri::Maybe } else { Tri::Sure };
-        match (last, first) {
-            (None, None) => Side::Nothing,
-            (Some(rail), None) | (None, Some(rail)) => Side::Broken(
-                sure,
-                format!("runs along one flight only and stops at {named} ({rail})"),
-                vec![],
-                vec![rail],
-            ),
-            (Some(from), Some(to)) => {
-                let gap = check.gap();
-                let (joined, cited) = self.joined(rails, &from, &to, gap);
-                match (joined, undecided) {
-                    (Tri::Sure, _) => Side::Joined,
-                    (Tri::No, false) => Side::Broken(
-                        Tri::Sure,
-                        format!(
-                            "stops at {named}: {from} and {to} are not joined by selected rails \
-                             within {} of each other",
-                            metres(gap)
-                        ),
-                        cited,
-                        vec![from, to],
-                    ),
-                    _ => Side::Broken(
-                        Tri::Maybe,
-                        format!(
-                            "may stop at {named}: whether {from} and {to} are joined by rails \
-                             within {} of each other is not decided",
-                            metres(gap)
-                        ),
-                        cited,
-                        vec![from, to],
-                    ),
-                }
-            }
-        }
-    }
-
-    /// Whether a chain of selected rails, each within `gap` of the next,
-    /// joins `from` to `to`: surely through measured touching pairs, surely
-    /// not when no pair that may touch leads there.
-    fn joined(
-        &self,
-        rails: &[ObjectId],
-        from: &ObjectId,
-        to: &ObjectId,
-        gap: f64,
-    ) -> (Tri, Vec<Evidence>) {
-        if from == to {
-            return (Tri::Sure, vec![]);
-        }
-        let proximity = self.context.services.get::<ProximityServiceHandle>();
-        let mut nodes: Vec<ObjectId> = rails.to_vec();
-        for end in [from, to] {
-            if !nodes.contains(end) {
-                nodes.push(end.clone());
-            }
-        }
-        let mut edges: BTreeMap<(usize, usize), Tri> = BTreeMap::new();
-        let mut cited = Vec::new();
-        let mut edge = |a: usize, b: usize, cited: &mut Vec<Evidence>| -> Tri {
-            let key = (a.min(b), a.max(b));
-            if let Some(known) = edges.get(&key) {
-                return *known;
-            }
-            let found = touching(proximity, &nodes[key.0], &nodes[key.1], gap, cited);
-            edges.insert(key, found);
-            found
-        };
-        let reach = |least: Tri, edge: &mut dyn FnMut(usize, usize) -> Tri| -> bool {
-            let start = nodes.iter().position(|node| node == from).unwrap_or(0);
-            let goal = nodes.iter().position(|node| node == to).unwrap_or(0);
-            let mut seen = vec![false; nodes.len()];
-            let mut stack = vec![start];
-            seen[start] = true;
-            while let Some(at) = stack.pop() {
-                if at == goal {
-                    return true;
-                }
-                for (next, visited) in seen.iter_mut().enumerate() {
-                    if !*visited && edge(at, next) >= least {
-                        *visited = true;
-                        stack.push(next);
-                    }
-                }
-            }
-            false
-        };
-        let mut sure_edge = |a: usize, b: usize| edge(a, b, &mut cited);
-        if reach(Tri::Sure, &mut sure_edge) {
-            return (Tri::Sure, cited);
-        }
-        let mut any_edge = |a: usize, b: usize| edge(a, b, &mut cited);
-        let possible = reach(Tri::Maybe, &mut any_edge);
-        (if possible { Tri::Maybe } else { Tri::No }, cited)
     }
 
     /// Whether a selected break door stands at the landing `lower` arrives
@@ -627,53 +498,6 @@ impl Whole<'_, '_, '_> {
                 evidence,
             ),
         }
-    }
-}
-
-/// Where the handrail along one side stands across a landing.
-enum Side {
-    /// Neither flight has a rail along it.
-    Nothing,
-    /// Its pieces are joined across the landing.
-    Joined,
-    /// It surely or possibly stops there: why, with the evidence and the
-    /// rails involved.
-    Broken(Tri, String, Vec<Evidence>, Vec<ObjectId>),
-}
-
-/// Whether two rails lie within `gap` of each other in space.
-fn touching(
-    proximity: Option<&ProximityServiceHandle>,
-    a: &ObjectId,
-    b: &ObjectId,
-    gap: f64,
-    cited: &mut Vec<Evidence>,
-) -> Tri {
-    let Some(proximity) = proximity else {
-        return Tri::Maybe;
-    };
-    let margin = gap + slack(gap);
-    if let (Ok(first), Ok(second)) = (proximity.bounds(a), proximity.bounds(b))
-        && first.enclosing().gap(&second.enclosing()) > margin
-    {
-        return Tri::No;
-    }
-    let Ok(request) = ProximityRequest::try_new(a.clone(), b.clone()) else {
-        return Tri::Maybe;
-    };
-    match proximity.measure_distance(&request) {
-        Ok(measured) => {
-            let (lower, upper) = measured.interval_metres();
-            if upper <= margin {
-                cited.push(measured.evidence().clone());
-                Tri::Sure
-            } else if lower > margin {
-                Tri::No
-            } else {
-                Tri::Maybe
-            }
-        }
-        Err(_) => Tri::Maybe,
     }
 }
 

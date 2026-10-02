@@ -3357,3 +3357,181 @@ fn a_stairs_least_clear_width_includes_its_intermediate_landing() {
     );
     assert!(evaluation.findings()[0].related.contains(&id("lower")));
 }
+
+fn check_ramps_near(
+    stairs: Stairs,
+    proximity: impl ProximityService,
+    parameters: Vec<(&str, ParameterValue)>,
+) -> CapabilityEvaluation {
+    model().evaluate_with(
+        &RampGeometryCheck,
+        &rule(RAMP, kind("ramp"), parameters),
+        |services| {
+            services
+                .register(WalkingSurfaceServiceHandle::new(Arc::new(stairs)))
+                .unwrap();
+            services
+                .register(ProximityServiceHandle::new(Arc::new(proximity)))
+                .unwrap();
+        },
+    )
+}
+
+/// Ramp `gentle`'s two runs (x 0 to 6 and 7.5 to 13.5, a landing between)
+/// with rail `lower_piece` along the left of the first and `upper_piece`
+/// along the left of the second.
+fn ramp_in_pieces() -> Stairs {
+    stairs()
+        .rail(
+            "gentle",
+            WalkingStretch::Run(0),
+            "lower_piece",
+            rail((1.55, 1.6), (-0.3, 6.3), (0.9, 0.9), LEVEL),
+        )
+        .rail(
+            "gentle",
+            WalkingStretch::Run(1),
+            "upper_piece",
+            rail((1.55, 1.6), (7.2, 13.8), (0.9, 0.9), LEVEL),
+        )
+}
+
+fn continuity_parameters(tolerance: f64) -> Vec<(&'static str, ParameterValue)> {
+    handrail_parameters(vec![
+        ("check_continuous_handrails", boolean(true)),
+        ("handrail_continuity_tolerance", metres(tolerance)),
+    ])
+}
+
+/// Distances in space from an interval per pair, measured on a
+/// tessellation; nothing has a box.
+#[derive(Default)]
+struct Measured(BTreeMap<(String, String), (f64, f64)>);
+
+impl ProximityService for Measured {
+    fn bounds(&self, _: &ObjectId) -> Result<ObjectBounds, ProximityError> {
+        Err(ProximityError::Unavailable)
+    }
+
+    fn measure_proximity(&self, _: &ProximityRequest) -> Result<ProximityEvidence, ProximityError> {
+        Err(ProximityError::Unavailable)
+    }
+
+    fn measure_distance(
+        &self,
+        request: &ProximityRequest,
+    ) -> Result<ProjectedDistanceEvidence, ProximityError> {
+        let (a, b) = (
+            request.subject().local_id.clone(),
+            request.counterpart().local_id.clone(),
+        );
+        let (lower, upper) = self
+            .0
+            .get(&(a.clone(), b.clone()))
+            .or_else(|| self.0.get(&(b.clone(), a.clone())))
+            .copied()
+            .unwrap_or((5.0, 5.0));
+        ProjectedDistanceEvidence::try_new(
+            request.clone(),
+            lower,
+            upper,
+            GeometryFidelity::tessellated(0.01)?,
+            Evidence {
+                source: source(),
+                locator: format!("distance:{a}:{b}"),
+                exact: false,
+            },
+        )
+    }
+}
+
+/// Rails stopping 0.4 m short of each other on a ramp's landing are a
+/// finding with a 0.1 m tolerance; joined rails pass; a gap straddling the
+/// tolerance is not evaluated.
+#[test]
+fn a_ramps_rails_must_continue_across_its_landings() {
+    let evaluation = check_ramps_near(
+        ramp_in_pieces(),
+        Rails::default().apart("lower_piece", "upper_piece", 0.4),
+        continuity_parameters(0.1),
+    );
+    let (lower, upper) = (id("lower_piece"), id("upper_piece"));
+    assert_eq!(
+        findings(&evaluation),
+        [(
+            "gentle".into(),
+            format!(
+                "the handrail along the left side stops at the landing between run 1 of 2 and \
+                 run 2 of 2: {lower} and {upper} are not joined by selected rails within 0.1 m \
+                 of each other"
+            )
+        )]
+    );
+    assert_eq!(evaluation.findings()[0].related, [lower, upper]);
+    assert!(
+        unevaluated(&evaluation)
+            .iter()
+            .all(|(object, _)| object != "gentle"),
+        "{:?}",
+        evaluation.not_evaluated_outcomes()
+    );
+    // Within the tolerance, or joined by a rail along the landing, they
+    // continue.
+    for rails in [
+        Rails::default().apart("lower_piece", "upper_piece", 0.05),
+        Rails::default()
+            .apart("lower_piece", "ramp_rail", 0.0)
+            .apart("ramp_rail", "upper_piece", 0.0),
+    ] {
+        let evaluation = check_ramps_near(ramp_in_pieces(), rails, continuity_parameters(0.1));
+        assert!(
+            findings(&evaluation).is_empty(),
+            "{:?}",
+            findings(&evaluation)
+        );
+        assert!(
+            unevaluated(&evaluation)
+                .iter()
+                .all(|(object, _)| object != "gentle"),
+            "{:?}",
+            evaluation.not_evaluated_outcomes()
+        );
+    }
+    // A tessellated gap between 0.05 and 0.2 m straddles 0.1 m.
+    let mut straddling = Measured::default();
+    straddling
+        .0
+        .insert(("lower_piece".into(), "upper_piece".into()), (0.05, 0.2));
+    let evaluation = check_ramps_near(ramp_in_pieces(), straddling, continuity_parameters(0.1));
+    assert!(
+        findings(&evaluation).is_empty(),
+        "{:?}",
+        findings(&evaluation)
+    );
+    let open: Vec<&str> = evaluation
+        .not_evaluated_outcomes()
+        .iter()
+        .filter(|outcome| outcome.object_id() == Some(&id("gentle")))
+        .map(axioval_engine::CapabilityNotEvaluated::message)
+        .collect();
+    assert_eq!(open.len(), 1, "{open:?}");
+    assert!(
+        open[0].starts_with("the handrail along the left side may stop at the landing between"),
+        "{open:?}"
+    );
+    // The tolerance needs the check, and the check the handrail parameters.
+    for parameters in [
+        handrail_parameters(vec![
+            ("handrail_height_minimum", metres(0.8)),
+            ("handrail_continuity_tolerance", metres(0.1)),
+        ]),
+        vec![("check_continuous_handrails", boolean(true))],
+        continuity_parameters(-0.1),
+    ] {
+        let evaluation = check_ramps_near(ramp_in_pieces(), Rails::default(), parameters);
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+    }
+}

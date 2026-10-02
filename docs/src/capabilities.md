@@ -1611,11 +1611,15 @@ Consecutive flights are the stair's flights in the order of their bases, each ar
 | `landings_required` | `boolean` | A selected slab or landing (or the ramp's own level face) meets both ends of every run. |
 | `minimum_headroom_below`, `headroom_below_spaces` | | As for stairs, under the ramp. |
 | `handrail_objects`, `handrail_reach_across`, `handrail_reach_above`, `handrail_height_minimum`, `handrail_height_maximum`, `handrail_extension_minimum`, `handrail_extension_maximum`, `handrail_gap_maximum`, `handrail_sides`, `handrail_both_sides_above_width` | | As for stairs, along every run: the height above the run's surface and the extension beyond its lower and upper end. A run has no riser, so `handrail_extension_from` `riser` is refused. |
+| `check_continuous_handrails` | `boolean` | The handrail along each side continues across every landing between consecutive runs; needs the handrail parameters. |
+| `handrail_continuity_tolerance` | `quantity` | The largest gap allowed along a side across such a landing; without it `handrail_gap_maximum`, else none. Needs `check_continuous_handrails`. |
 | `clear_width_minimum`, `clear_width_obstacles`, `clear_width_band_from`, `clear_width_band_to` | | As for stairs, every run above its surface. |
 | `end_landing_depth_minimum`, `end_landing_width_minimum` | `quantity` | The landing at the ramp's two ends, before its lowest run and beyond its highest, against these instead of `landing_depth_minimum` and `landing_width_minimum`, which keep judging the landings between runs. |
 | `end_space_depth`, `end_space_width`, `end_space_height` | `quantity` | A free space this deep (along the run), wide and high in front of the lowest run's lower end and beyond the highest run's upper end, centred on the run across it; declared together with `end_space_obstacles`. |
 | `end_space_obstacles` | `selector` | The objects that must not reach into the free space at either end. |
 | `landing_doors`, `landing_door_height`, `landing_door_swing` | | As for stairs, at both ends of every run. |
+
+**Handrail continuity on a ramp.** With `check_continuous_handrails`, across each landing between consecutive runs (the upper end of one meeting the lower end of the next within a millimetre; runs that do not meet leave it not evaluated), the last piece along a side of the lower run and the first piece along the same side of the upper one must be joined by a chain of `handrail_objects` rails, each within the tolerance of the next as the proximity service measures them in space, exactly as a stair's handrail across its landings: `the handrail along the left side stops at the landing between run 1 of 2 and run 2 of 2: … and … are not joined by selected rails within 0.1 m of each other`, relating both rails. A distance known only as an interval straddling the tolerance (a tessellated rail within its chord deviation), an unordered side, an undecided rail and a missing proximity service leave the side not evaluated, never a finding.
 
 A ramp limited to 1:12 and 0.76 m of rise per run, or allowed 1:10 over runs of at most 2 m:
 

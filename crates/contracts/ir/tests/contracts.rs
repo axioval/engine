@@ -980,3 +980,19 @@ fn groupings_round_trip_by_property_and_by_classification() {
         .is_err()
     );
 }
+
+#[test]
+fn a_table_file_reference_keeps_its_wire_form_and_never_carries_rows() {
+    use axioval_ir::contract::ParameterValue;
+    let wire = r#"{"type":"tableFile","path":"tables/rooms.csv","sheet":"Rooms","sha256":"00","columns":[{"id":"key_1","header":"type","kind":"textPattern"},{"id":"area","kind":"quantity","unit":"m2"}]}"#;
+    let mut value: ParameterValue = serde_json::from_str(wire).unwrap();
+    let ParameterValue::TableFile(file) = &mut value else {
+        panic!("a table file");
+    };
+    assert_eq!(file.columns[0].header(), "type");
+    assert_eq!(file.columns[1].header(), "area");
+    file.rows = Some(Vec::new());
+    assert_eq!(serde_json::to_string(&value).unwrap(), wire);
+    let with_rows = wire.replace(r#""sha256""#, r#""rows":[],"sha256""#);
+    assert!(serde_json::from_str::<ParameterValue>(&with_rows).is_err());
+}

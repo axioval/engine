@@ -59,9 +59,9 @@ pub(crate) fn export_command(id: &str, args: &ExportArgs) -> Result<bool, Box<dy
     let definitions = args
         .definitions
         .iter()
-        .map(|path| crate::load(path))
+        .map(|path| crate::load_definitions(path))
         .collect::<Result<Vec<DefinitionPackage>, _>>()?;
-    let ruleset: RuleSetPackage = crate::load(&args.ruleset)?;
+    let ruleset: RuleSetPackage = crate::load_ruleset(&args.ruleset)?;
     let outcome = profile.export(&definitions, &ruleset);
     let shown = args.ruleset.display();
     for loss in &outcome.losses {

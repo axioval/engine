@@ -32,6 +32,12 @@ Keep this crate serializable and deterministic. It must not depend on a source f
   `Selector::DerivedGroup` are omitted when empty / absent so rulesets
   serialize as before; `GROUP_SET` is a derived set (`is_derived_set`).
   The MCS ruleset and selector schemas must mirror them.
+- `ParameterValue::TableFile` names a table parameter's rows in a package
+  data file (`path`, optional xlsx `sheet`, `sha256`, declared
+  `TableFileColumn`s with optional `header` and a quantity's `unit`). Its
+  loaded `rows` are `#[serde(skip)]`: the wire form is the reference only,
+  so loading never changes how a package serializes. The MCS parameter
+  value schema must mirror the reference.
 - `ClassificationDefinition::classes` makes a classification hierarchical
   (ids, optional codes, localized names, optional parents); empty is
   omitted, so flat classifications serialize byte-identically. Keep tree

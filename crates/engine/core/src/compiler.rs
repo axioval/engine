@@ -798,6 +798,13 @@ fn bind_parameters(
         .iter()
         .map(|item| (item.name.as_str(), item))
         .collect();
+    for (name, value) in &mut parameters {
+        if let (Some(descriptor), ParameterValue::TableFile(_)) =
+            (known.get(name.as_str()), &*value)
+        {
+            *value = bind_table_file(&definition.capability, name, descriptor, value)?;
+        }
+    }
     for (name, value) in &parameters {
         let descriptor = known
             .get(name.as_str())
@@ -835,6 +842,71 @@ fn bind_parameters(
         }
     }
     Ok(parameters)
+}
+
+/// The rows of a loaded table file, bound as the same rows written inline.
+///
+/// Refused when the file was not loaded, the parameter is not a table, a
+/// declared column is not one of the table's or has another kind, or a
+/// required column of the table is not declared.
+fn bind_table_file(
+    capability: &str,
+    parameter: &str,
+    descriptor: &ParameterDescriptor,
+    value: &ParameterValue,
+) -> Result<ParameterValue, EngineError> {
+    let ParameterValue::TableFile(file) = value else {
+        return Ok(value.clone());
+    };
+    let axioval_ir::contract::TableFileReference {
+        path,
+        columns: declared,
+        rows,
+        ..
+    } = &**file;
+    let refuse = |detail: String| EngineError::InvalidTableFile {
+        capability: capability.into(),
+        parameter: parameter.into(),
+        path: path.clone(),
+        detail,
+    };
+    let ParameterType::Table(columns) = descriptor.parameter_type else {
+        return Err(EngineError::InvalidParameterType {
+            capability: capability.into(),
+            parameter: parameter.into(),
+        });
+    };
+    let Some(rows) = rows else {
+        return Err(refuse(
+            "the file was not loaded; load the package's table files before binding it".into(),
+        ));
+    };
+    for column in declared {
+        let trusted = columns
+            .iter()
+            .find(|trusted| trusted.id == column.id)
+            .ok_or_else(|| refuse(format!("`{}` is not a column of the table", column.id)))?;
+        if trusted.kind != column.kind {
+            return Err(refuse(format!(
+                "column `{}` is declared {} but the table's is {}",
+                column.id,
+                column.kind.as_str(),
+                trusted.kind.as_str()
+            )));
+        }
+    }
+    if let Some(missing) = columns
+        .iter()
+        .find(|trusted| trusted.required && !declared.iter().any(|column| column.id == trusted.id))
+    {
+        return Err(refuse(format!(
+            "the table's required column `{}` is not declared",
+            missing.id
+        )));
+    }
+    Ok(ParameterValue::Table {
+        value: rows.clone(),
+    })
 }
 
 /// The one selector a capability evaluates, or the group count when there is none.

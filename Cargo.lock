@@ -645,6 +645,7 @@ dependencies = [
  "openbim-ids",
  "serde",
  "serde_json",
+ "sha2",
  "zip",
 ]
 
@@ -654,12 +655,15 @@ version = "0.3.0"
 dependencies = [
  "axioval-ir",
  "indexmap",
+ "quick-xml",
  "regex",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror",
  "tracing",
  "uuid",
+ "zip",
 ]
 
 [[package]]

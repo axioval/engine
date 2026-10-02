@@ -50,6 +50,7 @@ serde_json.workspace = true
 # Writes the ifcXML form of a test model.
 ifc-xml.workspace = true
 openbim-bcf.workspace = true
+sha2.workspace = true
 zip = { workspace = true, features = ["deflate"] }
 
 [features]

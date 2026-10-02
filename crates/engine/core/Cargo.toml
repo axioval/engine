@@ -12,11 +12,16 @@ repository.workspace = true
 [dependencies]
 axioval-ir.workspace = true
 indexmap.workspace = true
+# Rule parameter tables from package data files: SHA-256 pins the bytes,
+# `zip` and `quick-xml` read an xlsx sheet (values only, never formulas).
+quick-xml.workspace = true
 regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+zip = { workspace = true, features = ["deflate"] }
 
 [dev-dependencies]
 uuid.workspace = true

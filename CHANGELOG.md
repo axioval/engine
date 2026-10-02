@@ -6,6 +6,21 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- **Rule parameter tables from data files in the package.** (Refs #180)
+  A `table` parameter may name a CSV file, or a named sheet of an xlsx
+  workbook, shipped in the package (`{"type": "tableFile", "path",
+  "sheet", "sha256", "columns"}`), its columns declared with their
+  headers, kinds and a quantity's unit. `load_table_files` and
+  `load_definition_table_files` read the files through `PackageFiles`
+  (`PackageDirectory`) and refuse an unsafe path, another SHA-256, a
+  missing or undeclared column and any cell not of its column's kind; a
+  formula cell is refused, never read from its cached value. The binder
+  checks the declared columns against the parameter's table and binds the
+  rows exactly as the same rows written inline. The CLI reads table files
+  beside each package file.
+  BREAKING CHANGE: `ParameterValue` gains `TableFile` and `EngineError`
+  `InvalidTableFile`.
+
 - **HTML reports of a check run, from templates.** (Refs #178)
   The new sink `axioval-html` (facade feature `html`) renders a report as
   one self-contained HTML file: a cover with the overall status, the

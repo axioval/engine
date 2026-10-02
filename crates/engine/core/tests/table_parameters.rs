@@ -412,3 +412,171 @@ fn only_a_table_declares_columns_and_a_table_has_no_allowed_values() {
             if detail == "only a table parameter declares columns, not `property`"
     ));
 }
+
+/// Package files held in memory, by path.
+struct Files(Vec<(&'static str, Vec<u8>)>);
+
+impl axioval_engine::PackageFiles for Files {
+    fn read(&self, path: &str) -> Result<Vec<u8>, String> {
+        self.0
+            .iter()
+            .find(|(name, _)| *name == path)
+            .map(|(_, bytes)| bytes.clone())
+            .ok_or_else(|| "no such file".into())
+    }
+}
+
+fn sha256(bytes: &[u8]) -> String {
+    use sha2::Digest as _;
+    use std::fmt::Write as _;
+    sha2::Sha256::digest(bytes)
+        .iter()
+        .fold(String::new(), |mut hex, byte| {
+            let _ = write!(hex, "{byte:02x}");
+            hex
+        })
+}
+
+const PROGRAMME: &str = "type,min_area,from\r\nOffice,12,2026-01-01\r\nOffice*,10,\r\n";
+
+/// A reference to `tables/rooms.csv` holding `text`, its columns `type`,
+/// `min_area` (in m2) and `from` filling `space_type`, `minimum_area` and
+/// `from`, with `edit` applied to the reference.
+fn file_reference(text: &str, edit: impl FnOnce(&mut Value)) -> Value {
+    let mut reference = json!({
+        "type": "tableFile",
+        "path": "tables/rooms.csv",
+        "sha256": sha256(text.as_bytes()),
+        "columns": [
+            {"id": "space_type", "header": "type", "kind": "textPattern"},
+            {"id": "minimum_area", "header": "min_area", "kind": "quantity", "unit": "m2"},
+            {"id": "from", "kind": "date"},
+        ],
+    });
+    edit(&mut reference);
+    reference
+}
+
+/// The ruleset binding `limits` to `reference`, its table files loaded from
+/// a package holding `text` at `tables/rooms.csv` when `load`.
+fn file_packages(
+    text: &str,
+    reference: Value,
+    load: bool,
+) -> Result<(DefinitionPackage, RuleSetPackage), axioval_engine::TableFileError> {
+    let (definitions, mut ruleset) = packages(&json!({}), Some(vec![]));
+    ruleset.root.rules[0]
+        .parameters
+        .insert("limits".into(), serde_json::from_value(reference).unwrap());
+    if load {
+        let files = Files(vec![("tables/rooms.csv", text.as_bytes().to_vec())]);
+        axioval_engine::load_table_files(&mut ruleset, &files)?;
+    }
+    Ok((definitions, ruleset))
+}
+
+fn bind_file(text: &str, reference: Value, load: bool) -> Result<Vec<CompiledRule>, EngineError> {
+    let (definitions, ruleset) = file_packages(text, reference, load).unwrap();
+    let registry = CapabilityRegistry::new().register(Limits).unwrap();
+    compile(&registry, &[definitions], &ruleset).map(|plan| plan.rules().to_vec())
+}
+
+#[test]
+fn a_table_file_binds_exactly_as_the_same_rows_written_inline() {
+    let from_file = bind_file(PROGRAMME, file_reference(PROGRAMME, |_| {}), true).unwrap();
+    let mut first = row("Office", 12.0);
+    first["from"] = json!({"type": "date", "value": "2026-01-01"});
+    let inline = bind(&json!({}), Some(vec![first, row("Office*", 10.0)])).unwrap();
+    assert_eq!(from_file[0].parameters, inline[0].parameters);
+    // A loaded reference keeps its wire form: its rows never serialize.
+    let reference = file_reference(PROGRAMME, |_| {});
+    let (_, ruleset) = file_packages(PROGRAMME, reference.clone(), true).unwrap();
+    assert_eq!(
+        serde_json::to_value(&ruleset.root.rules[0].parameters["limits"]).unwrap(),
+        reference
+    );
+}
+
+fn file_error(result: Result<Vec<CompiledRule>, EngineError>) -> String {
+    match result.unwrap_err() {
+        EngineError::InvalidTableFile {
+            parameter, detail, ..
+        } => {
+            assert_eq!(parameter, "limits");
+            detail
+        }
+        other => panic!("expected a table-file error, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_table_file_not_loaded_or_not_fitting_the_table_is_refused() {
+    assert!(
+        file_error(bind_file(
+            PROGRAMME,
+            file_reference(PROGRAMME, |_| {}),
+            false
+        ))
+        .contains("not loaded")
+    );
+    let text = "type,from\nOffice,2026-01-01\n";
+    assert_eq!(
+        file_error(bind_file(
+            text,
+            file_reference(text, |reference| {
+                reference["columns"].as_array_mut().unwrap().remove(1);
+            }),
+            true,
+        )),
+        "the table's required column `minimum_area` is not declared"
+    );
+    let text = "type,min_area,from\nOffice,12,2026-01-01\n";
+    assert_eq!(
+        file_error(bind_file(
+            text,
+            file_reference(text, |reference| {
+                reference["columns"][0]["kind"] = json!("string");
+            }),
+            true,
+        )),
+        "column `space_type` is declared string but the table's is textPattern"
+    );
+    assert_eq!(
+        file_error(bind_file(
+            text,
+            file_reference(text, |reference| {
+                reference["columns"][2] = json!({"id": "colour", "header": "from", "kind": "date"});
+            }),
+            true,
+        )),
+        "`colour` is not a column of the table"
+    );
+}
+
+#[test]
+fn a_missing_column_a_bad_cell_or_another_digest_is_refused_when_loaded() {
+    let load = |text: &str, reference: Value| {
+        file_packages(text, reference, true)
+            .unwrap_err()
+            .to_string()
+    };
+    let missing = "type,from\nOffice,2026-01-01\n";
+    assert!(
+        load(missing, file_reference(missing, |_| {}))
+            .ends_with("parameter `limits`: table file `tables/rooms.csv`: the declared column `min_area` is missing from the header"),
+    );
+    let words = "type,min_area,from\nOffice,large,\n";
+    assert!(
+        load(words, file_reference(words, |_| {}))
+            .ends_with("row 2 column `min_area`: `large` is not a number")
+    );
+    assert!(load(PROGRAMME, file_reference("another text", |_| {})).contains("not the declared"));
+    assert!(
+        load(
+            PROGRAMME,
+            file_reference(PROGRAMME, |reference| reference["path"] =
+                json!("../rooms.csv"))
+        )
+        .contains("relative to the package root")
+    );
+}

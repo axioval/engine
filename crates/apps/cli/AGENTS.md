@@ -70,4 +70,8 @@ CLI output and exit codes are public automation contracts. Parse packages fail c
   parsed by `OutputArgs::prepare` at the start of `check` and `compare`,
   so a missing or refused template fails (status 1) before any work.
   Never run anything from a template; never print a PDF here.
+- Packages are read only through `load_ruleset` and `load_definitions` in
+  `main.rs`, which load the table files they name from the directory
+  holding the package file; never parse a package with `load` alone, or a
+  `tableFile` parameter reaches the binder unloaded.
 - `check --rule-status` records `Report::rules`; the summary lists them bounded by `--top` (rules that did not pass first) and never changes the exit status.

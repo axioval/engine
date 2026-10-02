@@ -14,6 +14,14 @@ Binds a ruleset to its definition packages and the built-in capabilities
 without a model. Exits 0 when the ruleset compiles, 1 otherwise. Several
 `--ruleset`s are bound together as `check` binds them.
 
+Every command reading packages (`validate`, `check`, `export`) loads the
+table files a ruleset's rules or a definition package's defaults name
+(`tableFile` parameters, see
+[Tables from data files](capabilities.md#tables-from-data-files)) from the
+directory holding that package file. A file that is missing, outside that
+directory, of another digest or not fitting its declared columns fails the
+command (status 1) before any model is read.
+
 ## `axioval check`
 
 ```bash

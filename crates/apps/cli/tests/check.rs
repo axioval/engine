@@ -12505,7 +12505,21 @@ fn with_geometry_a_stated_side_area_is_divided_by_the_measured_face() {
 /// [`storeys_with_facades`], applied to `applies_to`, with the storey
 /// metric definitions and the `Name` attribute bound.
 fn storey_rule(name: &str, capability: &str, applies_to: &str, parameters: Value) -> Value {
+    storey_rule_with(name, capability, applies_to, parameters, &[])
+}
+
+/// [`storey_rule`] with `files` written beside the ruleset, by name.
+fn storey_rule_with(
+    name: &str,
+    capability: &str,
+    applies_to: &str,
+    parameters: Value,
+    files: &[(&str, &str)],
+) -> Value {
     let case = Case::new(name);
+    for (file, contents) in files {
+        case.write(file, contents);
+    }
     let text = |value: &str| json!({"default": value, "translations": {}});
     let mut definitions: Value =
         serde_json::from_str(&std::fs::read_to_string(storey_metric_definitions(&case)).unwrap())
@@ -12585,6 +12599,45 @@ fn table_allocation_rows_are_keyed_per_storey() {
         }),
     );
     // Each storey holds one space: the ground storey's row asks for two.
+    assert_eq!(
+        finding_messages(&result),
+        [(
+            "#101".to_owned(),
+            "row 1 (any object) in anchors like `EG` has 1 object(s); required exactly 2"
+                .to_owned()
+        )],
+        "{result:#}"
+    );
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+}
+
+#[test]
+fn table_allocation_rows_read_from_a_csv_file_beside_the_ruleset() {
+    use sha2::Digest as _;
+    let programme = "storey,spaces\r\nEG,2\r\nOG,1\r\n";
+    let digest =
+        sha2::Sha256::digest(programme.as_bytes())
+            .iter()
+            .fold(String::new(), |mut hex, byte| {
+                let _ = write!(hex, "{byte:02x}");
+                hex
+            });
+    let result = storey_rule_with(
+        "table-allocation-from-csv",
+        "table-allocation",
+        "IfcSpace",
+        json!({
+            "rows": {"type": "tableFile", "path": "programme.csv", "sha256": digest, "columns": [
+                {"id": "anchor", "header": "storey", "kind": "textPattern"},
+                {"id": "count", "header": "spaces", "kind": "integer"},
+            ]},
+            "anchor_key": name_attribute(),
+            "anchor_selector": {"type": "selector", "value": entity("IfcBuildingStorey")},
+            "relationship": {"type": "string", "value": "IfcRelAggregates"},
+        }),
+        &[("programme.csv", programme)],
+    );
+    // As `table_allocation_rows_are_keyed_per_storey` with the rows inline.
     assert_eq!(
         finding_messages(&result),
         [(

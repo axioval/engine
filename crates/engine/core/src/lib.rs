@@ -66,6 +66,15 @@ pub enum EngineError {
         row: usize,
         detail: String,
     },
+    /// A table-valued binding names a data file that was not loaded, or
+    /// whose declared columns do not fit the parameter's table.
+    #[error("capability `{capability}` parameter `{parameter}` table file `{path}`: {detail}")]
+    InvalidTableFile {
+        capability: String,
+        parameter: String,
+        path: String,
+        detail: String,
+    },
     /// A rule binds a parameter more than once.
     #[error("rule has duplicate parameter binding `{0}`")]
     DuplicateBinding(String),
@@ -674,6 +683,7 @@ mod side_distance;
 mod sight;
 mod source_metadata;
 mod space;
+mod table_files;
 mod topology;
 mod triangle_count;
 mod vertical_extent;
@@ -821,6 +831,10 @@ pub use space::{
     BoundaryGap, BoundaryRequest, Cap, CapCoverage, CapRequest, ClearHeightEvidence, Containment,
     OverlapRequest, SpaceError, SpaceOverlap, SpaceService, SpaceServiceHandle, SupportCounts,
     UnallocatedRegion,
+};
+pub use table_files::{
+    PackageDirectory, PackageFiles, TABLE_FILE_LIMIT_BYTES, TableFileError,
+    load_definition_table_files, load_table_files, read_table_file,
 };
 pub use topology::{
     CompleteTopologyEvidence, ConnectivityGraph, RouteOutcome, TopologyError, VerifiedConnection,

@@ -40,6 +40,25 @@ Capabilities in `axioval-rules` read rows through the shared parameter reader an
 
 Existing packages are unaffected: `columns` is omitted from serialized definitions that declare none.
 
+### Tables from data files
+
+Requirement tables such as room programmes and door schedules are often kept in spreadsheets. A `table` parameter may name such a file in the package instead of listing its rows, as a rule binding or a definition's default:
+
+```json
+{"type": "tableFile", "path": "tables/rooms.csv",
+ "sha256": "<lowercase hex SHA-256 of the file>",
+ "columns": [
+   {"id": "key_1", "header": "type", "kind": "textPattern"},
+   {"id": "area", "header": "min_area", "kind": "number"}
+ ]}
+```
+
+The file is a UTF-8 CSV file (RFC 4180: commas, optional double quotes with `""` for a quote, CRLF or LF; a leading byte order mark is dropped), or one sheet of an `.xlsx` workbook named by `sheet`. `path` is relative to the package root, `/`-separated, without empty, `.` or `..` segments, and must stay inside the package. `sha256` pins the file's exact bytes, so a package (and its `.mcs` inventory) stays deterministic: another file is refused. `columns` declares every column of the file: the table column `id` it fills, its `kind`, the file's `header` naming it (the `id` when omitted) and, for a `quantity` column, the `unit` every cell is stated in. A `selector` column cannot come from a file.
+
+A host loads every table file before binding (`axioval_engine::load_table_files` for a ruleset, `load_definition_table_files` for a definition package, from a `PackageFiles` such as `PackageDirectory`; the CLI reads them beside each package file). Loading fails closed with `TableFileError` on an unsafe path, an unreadable file, another digest, a header naming an undeclared column or a column twice, a declared column missing from the header, a row wider than the header, and any cell that is not of its column's kind: a `number` or `quantity` must be a finite decimal number, an `integer` a whole number, a `boolean` `true` or `false`, a `date` or `dateTime` an ISO 8601 literal. The first non-blank row is the header; blank rows are skipped and an empty cell leaves its column out of the row. A workbook cell is read as written: a string as its text, a number as its literal, a boolean as `true` or `false`; a formula or an error cell is refused rather than read from its cached result, and nothing in the file is ever executed.
+
+The binder then checks the declared columns against the parameter's table: a column that is not one of the table's, a column of another kind and a required column left undeclared fail compilation with `InvalidTableFile`, and so does a reference that was never loaded. The rows are then bound exactly as the same rows written inline, so a capability cannot tell them apart and every row check above applies; at run time a row that matches nothing still decides nothing, never a default.
+
 ## Built-ins
 
 `axioval-rules` contains reusable, vendor-neutral implementations. Vendor identity, proprietary format handling, localized vendor text and oracle-only ordering remain adapters in the legacy runtime.

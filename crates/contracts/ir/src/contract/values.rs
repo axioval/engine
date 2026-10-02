@@ -1,5 +1,5 @@
 #![allow(missing_docs)]
-use super::Selector;
+use super::{ColumnKind, Selector};
 use crate::{Date, DateTime};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -66,6 +66,62 @@ pub enum ParameterValue {
     Table {
         value: Vec<TableRow>,
     },
+    /// Rows of a `table` parameter read from a data file shipped in the
+    /// package: a CSV file, or one named sheet of an xlsx workbook.
+    ///
+    /// `path` is relative to the package root, `/`-separated, without `.`
+    /// or `..` segments; `sha256` is the lowercase hex SHA-256 of the
+    /// file's bytes, so the package pins the exact data it was reviewed
+    /// with. `columns` declares every column of the file: its header, the
+    /// table column it fills and that column's kind. The file is data,
+    /// never code: a host loads it before binding
+    /// (`axioval_engine::load_table_files`), the binder checks the declared
+    /// columns against the parameter's table and binds the rows exactly as
+    /// it binds the same rows written inline. A reference that was not
+    /// loaded is refused when the package is bound.
+    TableFile(Box<TableFileReference>),
+}
+
+/// The data file a [`ParameterValue::TableFile`] names, and its rows once
+/// loaded.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TableFileReference {
+    pub path: String,
+    /// The sheet of an xlsx workbook; a CSV file has none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sheet: Option<String>,
+    pub sha256: String,
+    pub columns: Vec<TableFileColumn>,
+    /// The rows read from the file, once loaded; never part of the
+    /// package's wire form.
+    #[serde(skip)]
+    pub rows: Option<Vec<TableRow>>,
+}
+
+/// One column of a [`ParameterValue::TableFile`]: the table column `id` it
+/// fills, its `kind` (which must be the parameter column's), the file's
+/// header naming it (`id` when omitted) and, for a `quantity` column, the
+/// unit every cell is stated in.
+///
+/// A `selector` column cannot be read from a file.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TableFileColumn {
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub header: Option<String>,
+    pub kind: ColumnKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
+}
+
+impl TableFileColumn {
+    /// The header naming the column in the file.
+    #[must_use]
+    pub fn header(&self) -> &str {
+        self.header.as_deref().unwrap_or(&self.id)
+    }
 }
 const fn yes() -> bool {
     true

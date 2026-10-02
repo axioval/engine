@@ -599,17 +599,43 @@ fn load<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, Box<dyn Error>
     Ok(serde_json::from_str(&text).map_err(|error| format!("{}: {error}", path.display()))?)
 }
 
+/// The package file at `path`'s root: the directory holding it.
+fn package_root(path: &Path) -> axioval::engine::PackageDirectory {
+    axioval::engine::PackageDirectory::new(match path.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent.to_path_buf(),
+        _ => PathBuf::from("."),
+    })
+}
+
+/// The definition package at `path`, with the table files its defaults
+/// name loaded from beside it.
+pub(crate) fn load_definitions(path: &Path) -> Result<DefinitionPackage, Box<dyn Error>> {
+    let mut package: DefinitionPackage = load(path)?;
+    axioval::engine::load_definition_table_files(&mut package, &package_root(path))
+        .map_err(|error| format!("{}: {error}", path.display()))?;
+    Ok(package)
+}
+
+/// The ruleset at `path`, with the table files its rules name loaded from
+/// beside it.
+pub(crate) fn load_ruleset(path: &Path) -> Result<RuleSetPackage, Box<dyn Error>> {
+    let mut ruleset: RuleSetPackage = load(path)?;
+    axioval::engine::load_table_files(&mut ruleset, &package_root(path))
+        .map_err(|error| format!("{}: {error}", path.display()))?;
+    Ok(ruleset)
+}
+
 fn packages(
     definitions: &[PathBuf],
     rulesets: &[PathBuf],
 ) -> Result<(Vec<DefinitionPackage>, Vec<RuleSetPackage>), Box<dyn Error>> {
     let definitions = definitions
         .iter()
-        .map(|path| load(path))
+        .map(|path| load_definitions(path))
         .collect::<Result<Vec<DefinitionPackage>, _>>()?;
     let rulesets = rulesets
         .iter()
-        .map(|path| load(path))
+        .map(|path| load_ruleset(path))
         .collect::<Result<Vec<RuleSetPackage>, _>>()?;
     Ok((definitions, rulesets))
 }

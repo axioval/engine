@@ -413,23 +413,16 @@ Depend only on what the registry publishes. The workspace pins `axiolid-*`
 `boundary_distance`, and the plan measurements `plan_boundary_distance`,
 `plan_boundary_clearance` and `plan_overlap`, with `axiolid-brep` 0.3.1 for
 the `ExactBRep` hosts register; tests build exact solids with
-`axiolid-construct` 0.3.5), `axiolid-overlay` 0.3.8 (`minimum_area_rectangle`, the
+`axiolid-construct` 0.3.5), `axiolid-overlay` 0.3.10 (`minimum_area_rectangle`, the
 Minkowski and dilation family, settled `union_soup` output, fast on mesh
-soups; bounded below 0.3.5, see below), `axiolid-route`
-0.3.5 (`distance_map`, `farthest_point`, weighted maps, `forced_walk`, and `skeleton` behind circulation
+soups, features within the caller's tolerance snapped before the exact
+arrangement), `axiolid-route`
+0.3.7 (`distance_map`, `farthest_point`, weighted maps, `forced_walk`, and `skeleton` behind circulation
 maps and corridor ends, with `axiolid-triangulate` 0.3.1) and
 `axiolid-inspect` 0.3.2 (volumes, `line_of_sight`, `detect_planes`). Check the
 registry source, not the kernel checkout, before relying on an API.
 
 ## Waiting on upstream
-
-- axiolid-overlay 0.3.5 to 0.3.9 (0.3.9 fixes axiolid/kernel#219) still
-  regress two results, so the workspace stays below 0.3.5: coverage
-  through a bodiless opening (`effective-coverage` with `access_path`)
-  reads zero, a false finding in the CLI test
-  `with_geometry_an_effect_continues_through_an_opening_into_the_next_room`;
-  and a costed region cut flush with a turned wall leaves a sliver along
-  it, loosening `tests/weighted_angled.rs` to a lower bound of 9.28 m.
 
 - axiolid/kernel#173: `overlay`/`Region` snap output to an integer grid, so
   plan areas here are off by ~1.5e-8 of the extent while reported exact.

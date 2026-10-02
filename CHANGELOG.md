@@ -4,6 +4,12 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+### Changed
+
+- Geometry moves to `axiolid-overlay` 0.3.10 and `axiolid-route` 0.3.7,
+  lifting the bound below overlay 0.3.5: coverage through an opening and
+  cost regions cut flush with a turned wall measure correctly again.
+
 ### Added
 
 - **Ramp rails that obstruct an adjoining accessible surface.** (Closes #154)

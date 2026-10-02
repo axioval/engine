@@ -62,13 +62,12 @@ axiolid-core = "0.3.0"
 axiolid-inspect = "0.3.2"
 axiolid-mesh = "0.3.0"
 axiolid-measure = "0.3.5"
-# Bounded below 0.3.5: 0.3.5 to 0.3.9 regress coverage through an opening
-# (a false finding in the CLI's effective-coverage test) and leave a sliver
-# along a turned wall when cutting cost regions. 0.3.9 fixes
-# axiolid/kernel#219 but not these. Do not update past it until fixed.
-axiolid-overlay = ">=0.3.3, <0.3.5"
+# 0.3.5 to 0.3.9 regressed coverage through an opening and cut cost regions
+# with a sliver along a turned wall (axiolid/kernel#219, #222); 0.3.10 fixes
+# both.
+axiolid-overlay = "0.3.10"
 axiolid-ray-mesh = "0.3.0"
-axiolid-route = "0.3.5"
+axiolid-route = "0.3.7"
 axiolid-spatial = "0.3.0"
 axiolid-contracts = "0.3.1"
 axiolid-curve = "0.3.0"

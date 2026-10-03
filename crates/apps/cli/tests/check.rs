@@ -1515,6 +1515,115 @@ fn with_geometry_a_clash_between_real_ifc_bodies_is_found() {
     );
 }
 
+/// Exporters often write a REAL without its decimal point (`1E-05`). The
+/// model is read, semantically and for geometry, with every such token
+/// reported as an integrity warning; nothing is skipped.
+#[test]
+fn a_real_without_a_decimal_point_is_read_and_reported_as_an_integrity_warning() {
+    let case = Case::new("real-without-point");
+    let model = case.write(
+        "model.ifc",
+        &crossing_walls().replace("1.E-05", "1E-05").replace(
+            "IFCEXTRUDEDAREASOLID(#12,#2,#4,3.)",
+            "IFCEXTRUDEDAREASOLID(#12,#2,#4,3E0)",
+        ),
+    );
+    let saved = case.path("result.json");
+    let (definitions, ruleset) = case.clash_packages();
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .arg("check")
+        .arg("--model")
+        .arg(model)
+        .arg("--definitions")
+        .arg(definitions)
+        .arg("--ruleset")
+        .arg(ruleset)
+        .args(["--geometry", "--report", saved.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+
+    let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
+    // The extrusion depth written as `3E0` is read as 3 m: the clash is
+    // found and both walls are measured exactly.
+    let findings = result["report"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert_eq!(result["geometry"]["exact"], 2, "{result:#}");
+
+    let integrity = result["integrity"].as_array().unwrap();
+    assert_eq!(integrity.len(), 2, "{result:#}");
+    for (issue, token) in integrity.iter().zip(["1E-05", "3E0"]) {
+        assert_eq!(issue["code"], axioval::ifc::REAL_WITHOUT_DECIMAL_POINT);
+        assert_eq!(issue["severity"], "warning");
+        let message = issue["message"].as_str().unwrap();
+        assert!(message.contains(&format!("`{token}`")), "{message}");
+    }
+    let stderr = stderr(&output);
+    assert!(
+        stderr.contains(axioval::ifc::REAL_WITHOUT_DECIMAL_POINT),
+        "{stderr}"
+    );
+}
+
+/// IFC4X3 geometry families are lowered or refused by name: a terrain
+/// written as an `IfcTriangulatedIrregularNetwork` is measured, and an
+/// `IfcSectionedSolidHorizontal`, which has no neutral sweep over stations
+/// along an alignment, is unmeasured with that reason, never dropped.
+#[test]
+fn with_geometry_ifc4x3_families_are_measured_or_unmeasured_by_name() {
+    let case = Case::new("geometry-ifc4x3");
+    let model = case.write(
+        "model.ifc",
+        &crossing_walls_with(
+            "#40=IFCCARTESIANPOINTLIST3D(((10.,10.,0.),(12.,10.,0.),(10.,12.,0.5)),$);\n\
+             #41=IFCTRIANGULATEDIRREGULARNETWORK(#40,$,.F.,((1,2,3)),$,(0));\n\
+             #42=IFCSHAPEREPRESENTATION(#5,'Body','Tessellation',(#41));\n\
+             #43=IFCPRODUCTDEFINITIONSHAPE($,$,(#42));\n\
+             #44=IFCGEOGRAPHICELEMENT('0000000000000000000044',$,$,$,$,#3,#43,$,.TERRAIN.);\n\
+             #50=IFCSECTIONEDSOLIDHORIZONTAL($,$,$);\n\
+             #51=IFCSHAPEREPRESENTATION(#5,'Body','AdvancedSweptSolid',(#50));\n\
+             #52=IFCPRODUCTDEFINITIONSHAPE($,$,(#51));\n\
+             #53=IFCBUILDINGELEMENTPROXY('0000000000000000000053',$,$,$,$,#3,#52,$,$);\n",
+        )
+        .replace("FILE_SCHEMA(('IFC4'))", "FILE_SCHEMA(('IFC4X3_ADD2'))"),
+    );
+    let saved = case.path("result.json");
+    let (definitions, ruleset) = case.clash_packages();
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .arg("check")
+        .arg("--model")
+        .arg(model)
+        .arg("--definitions")
+        .arg(definitions)
+        .arg("--ruleset")
+        .arg(ruleset)
+        .args(["--geometry", "--report", saved.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+
+    let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
+    let geometry = &result["geometry"];
+    // Both walls and the terrain are measured.
+    assert_eq!(geometry["exact"], 3, "{geometry:#}");
+    let unmeasured = geometry["unmeasured"].as_array().unwrap();
+    let reason = |local: &str| {
+        unmeasured
+            .iter()
+            .find(|entry| entry["object"]["local_id"] == local)
+            .and_then(|entry| entry["reason"].as_str())
+            .unwrap_or_else(|| panic!("{local} must be unmeasured: {geometry:#}"))
+    };
+    let sectioned = reason("#53");
+    assert!(
+        sectioned.contains("IFCSECTIONEDSOLIDHORIZONTAL")
+            && sectioned.contains("IfcAxis2PlacementLinear stations"),
+        "{sectioned}"
+    );
+    assert_eq!(reason("#30"), "no body representation");
+    assert_eq!(unmeasured.len(), 2, "{geometry:#}");
+}
+
 /// The crossing walls with `extra` entities added to the model.
 fn crossing_walls_with(extra: &str) -> String {
     crossing_walls().replace("ENDSEC;\nEND-ISO", &format!("{extra}ENDSEC;\nEND-ISO"))

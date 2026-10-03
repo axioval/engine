@@ -925,6 +925,16 @@ compiler refuses is unmeasured, and its space is not evaluated. Surfaces, face
 surfaces (`IfcFaceSurface`, `IfcAdvancedFace`) and face-based surface models
 are lowered through `ifc-geometry` (openbimrs/ifc#155).
 
+IFC4X3 geometry families are lowered by `ifc-geometry` (0.6.1) or refused by
+name: alignment curves, gradient curves, open cross profiles and
+`IfcTriangulatedIrregularNetwork` terrains are measured, while an
+`IfcSectionedSolidHorizontal`, an `IfcSectionedSurface`, an
+`IfcSegmentedReferenceCurve` and the distance-along-curve families leave
+their object unmeasured with the lowering's stated reason. The bridge reads
+the bytes with the session's own STEP reader (`read_ifc_step`), so a REAL
+written without its decimal point is measured too and reported once, as an
+integrity warning.
+
 The result's `geometry` field records the counts and every unmeasured object
 with its reason. The summary prints a `geometry:` line and groups unmeasured
 objects by reason; `axioval report result.json --section geometry` lists them.

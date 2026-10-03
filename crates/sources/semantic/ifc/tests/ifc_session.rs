@@ -1,10 +1,11 @@
 //! Production IFC evidence-session integration tests.
 
 use axioval_engine::{
-    PropertyRequest, PropertyResolution, PropertyResolutionError, PropertyResolutionServiceHandle,
-    RelationshipSelectionServiceHandle,
+    IntegritySeverity, PropertyRequest, PropertyResolution, PropertyResolutionError,
+    PropertyResolutionServiceHandle, RelationshipSelectionServiceHandle,
+    SourceIntegrityServiceHandle,
 };
-use axioval_ifc::{IfcSessionError, import_ifc_session};
+use axioval_ifc::{IfcSessionError, REAL_WITHOUT_DECIMAL_POINT, import_ifc_session, read_ifc_step};
 use axioval_ir::{ObjectId, PropertyValue, SourceId};
 
 const IFC: &[u8] = b"ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n#1=IFCWALL('g',$,$,$,$,$,$,$,$);\n#2=IFCPROPERTYSINGLEVALUE('Flag',$,ifcboolean(.T.),$);\n#3=IFCPROPERTYSINGLEVALUE('Big',$,IFCINTEGER(9007199254740993),$);\n#4=IFCPROPERTYSET('p',$,'Pset_Test',$,(#2,#3,#6,#7,#8,#10));\n#5=IFCRELDEFINESBYPROPERTIES('r',$,$,$,(#1),#4);\n#6=IFCPROPERTYSINGLEVALUE('Logical',$,IFCLOGICAL(.U.),$);\n#7=IFCPROPERTYSINGLEVALUE('Bits',$,IFCBINARY(\"0101\"),$);\n#8=IFCPROPERTYSINGLEVALUE('Length',$,IFCLENGTHMEASURE(1.),$);\n#9=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n#10=IFCPROPERTYSINGLEVALUE('UnitReal',$,IFCREAL(1.),#9);\nENDSEC;\nEND-ISO-10303-21;\n";
@@ -182,5 +183,77 @@ fn malformed_or_unsupported_input_cannot_create_an_exact_session() {
             matches!(error, IfcSessionError::UnsupportedSchema(_)),
             "{header}: {error:?}"
         );
+    }
+}
+
+/// Common exporters write a REAL without the decimal point ISO 10303-21
+/// requires (`1E-05`). Its meaning is not in doubt, so it is read as the real
+/// it spells, never skipped, and every such token is an integrity warning.
+#[test]
+fn a_real_without_a_decimal_point_is_read_and_reported() {
+    let text = String::from_utf8(IFC.to_vec()).unwrap();
+    let bytes = text
+        .replace("IFCLENGTHMEASURE(1.)", "IFCLENGTHMEASURE(1E-05)")
+        .replace("IFCREAL(1.),#9", "IFCREAL(-2E3),$");
+    let session = import_ifc_session("fixture.ifc", bytes.as_bytes()).unwrap();
+    let properties = session
+        .service::<PropertyResolutionServiceHandle>()
+        .unwrap();
+    let PropertyResolution::Present(real) = properties.resolve(&request("UnitReal")).unwrap()
+    else {
+        panic!("the real must be read");
+    };
+    assert_eq!(real.property().value, PropertyValue::Decimal(-2000.0));
+
+    let issues = session
+        .service::<SourceIntegrityServiceHandle>()
+        .unwrap()
+        .issues(&SourceId::new("ifc-step", "fixture.ifc").unwrap())
+        .unwrap()
+        .into_iter()
+        // The fixture's GlobalIds are not valid; that is another warning.
+        .filter(|issue| issue.code != axioval_ifc::INVALID_GLOBAL_ID)
+        .collect::<Vec<_>>();
+    assert_eq!(issues.len(), 2, "{issues:?}");
+    for (issue, token) in issues.iter().zip(["1E-05", "-2E3"]) {
+        assert_eq!(issue.code, REAL_WITHOUT_DECIMAL_POINT);
+        assert_eq!(issue.severity, IntegritySeverity::Warning);
+        assert!(
+            issue.message.contains(&format!("`{token}`")),
+            "{}",
+            issue.message
+        );
+        let start = bytes.find(token).unwrap();
+        assert!(
+            issue.evidence.locator.ends_with(&format!(
+                "real-without-point:{start}..{}",
+                start + token.len()
+            )),
+            "{}",
+            issue.evidence.locator
+        );
+    }
+    // The model handed to other readers is the one the session reads.
+    assert!(read_ifc_step(bytes.as_bytes()).unwrap().is_complete());
+}
+
+/// Only the missing decimal point is tolerated: a token that is no number,
+/// and any other malformed record, still refuses the whole file.
+#[test]
+fn a_record_malformed_otherwise_still_refuses_the_file() {
+    let text = String::from_utf8(IFC.to_vec()).unwrap();
+    for broken in [
+        text.replace("IFCLENGTHMEASURE(1.)", "IFCLENGTHMEASURE(1EE2)"),
+        text.replace("IFCLENGTHMEASURE(1.)", "IFCLENGTHMEASURE(1E)"),
+        text.replace(
+            "#9=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);",
+            "#9=IFCSIUNIT(*,.LENGTHUNIT.,$",
+        ),
+    ] {
+        let Err(error) = import_ifc_session("broken.ifc", broken.as_bytes()) else {
+            panic!("expected a refusal");
+        };
+        assert!(matches!(error, IfcSessionError::Parse(_)), "{error:?}");
+        assert!(read_ifc_step(broken.as_bytes()).is_err());
     }
 }

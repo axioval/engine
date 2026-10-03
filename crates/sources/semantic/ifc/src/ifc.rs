@@ -12,14 +12,13 @@ use axioval_ir::{
     Evidence, ExternalId, IrError, Object, ObjectId, Project, Property, PropertyTableRow,
     PropertyValue, SourceId, is_reserved_set,
 };
-use ifc_model::{Codec, EntityId, Model};
+use ifc_model::{EntityId, Model};
 use ifc_properties::{
     ExactLogical, ExactProperty, ExactPropertyEntry, ExactPropertyError, ExactPropertySetEntry,
     ExactResolution, ExactSource, ExactTableValue, ExactTypedValue, ExactValue,
     exact_material_properties_where, exact_material_property, exact_material_property_sets_where,
     exact_properties_where, exact_property, exact_property_sets_where,
 };
-use ifc_step::StepCodec;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
@@ -33,6 +32,7 @@ use crate::measure::si_value;
 use crate::relationships::IfcRelationshipService;
 use crate::release::Release;
 use crate::resources::{IfcResources, is_object};
+use crate::step::RealWithoutPoint;
 use crate::temporal;
 
 /// Production IFC import/session construction failure.
@@ -807,6 +807,10 @@ fn map_resolution_error(error: &ExactPropertyError) -> PropertyResolutionError {
 
 /// Parses strict IFC STEP bytes and binds an immutable exact-evidence session.
 ///
+/// A REAL written without its decimal point (`1E-05`) is read as the real it
+/// spells and reported as a [`crate::REAL_WITHOUT_DECIMAL_POINT`] integrity
+/// warning; every other malformed record refuses the file.
+///
 /// # Errors
 ///
 /// Returns [`IfcSessionError`] when identity, strict parsing, schema validation,
@@ -817,27 +821,23 @@ pub fn import_ifc_session(
 ) -> Result<EvidenceSession, IfcSessionError> {
     let source = SourceId::new("ifc-step", document.into())
         .map_err(|error| IfcSessionError::Identity(error.to_string()))?;
-    let model = StepCodec
-        .read_bytes(bytes)
-        .map_err(|error| IfcSessionError::Parse(error.to_string()))?;
-    if !model.diagnostics().is_empty() {
-        return Err(IfcSessionError::IncompleteModel {
-            diagnostics: model.diagnostics().len(),
-        });
-    }
+    let (model, reals) = crate::step::read(bytes)?;
     let schemas = model.header().schema.clone();
     let Some(release) = Release::from_header(&schemas) else {
         return Err(IfcSessionError::UnsupportedSchema(schemas));
     };
-    session(&source, release, model, bytes)
+    session(&source, release, model, reals, bytes)
 }
 
 /// Binds a parsed model of `release`, read from `bytes`, into a session over
 /// `source`: the one path every serialization of IFC takes after parsing.
+/// `reals` are the reals the read accepted without a decimal point, each
+/// reported as an integrity warning.
 pub(crate) fn session(
     source: &SourceId,
     release: Release,
     model: Model,
+    reals: Vec<RealWithoutPoint>,
     bytes: &[u8],
 ) -> Result<EvidenceSession, IfcSessionError> {
     let fingerprint: Arc<str> = Arc::from(format!("sha256:{:x}", Sha256::digest(bytes)));
@@ -893,6 +893,7 @@ pub(crate) fn session(
         release,
         model.clone(),
         global_ids,
+        reals.into(),
         snapshots.clone(),
     )));
     let classifications = ClassificationServiceHandle::new(Arc::new(

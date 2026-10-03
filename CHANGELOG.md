@@ -10,6 +10,18 @@ All notable changes are documented here. This project follows Semantic Versionin
   and IFC4X3 ADD2, into the same model and so the same report as its STEP
   form (`ifc-xml` 0.4's XSD reader). Its objects are numbered in document
   order. Closes #190.
+- A REAL written without the decimal point ISO 10303-21 requires (`1E-05`),
+  common in real exports, is read as the real it spells instead of
+  refusing the file, and each such token is reported as a
+  `step.real-without-decimal-point` integrity warning
+  (`REAL_WITHOUT_DECIMAL_POINT`). Every other malformed record still
+  refuses the file. `read_ifc_step` reads a STEP file into the model the
+  session reads; the CLI's geometry bridge uses it.
+- IFC4X3 geometry families (`ifc-geometry` 0.6.1): alignment and gradient
+  curves, open cross profiles and triangulated irregular networks are
+  measured; sectioned solids and surfaces, segmented reference curves and
+  distance-along-curve geometry leave their objects unmeasured with the
+  lowering's named reason.
 
 ### Changed
 
@@ -21,6 +33,10 @@ All notable changes are documented here. This project follows Semantic Versionin
   names. The adapter's own pre-scan and type check are gone, now that the
   codec refuses those documents itself, and so is the `ifc-validate`
   dependency.
+- The IFC crates move to `openbim-ifc` 0.11, `ifc-step` 0.5 (on
+  `openbim-step` 0.11), `ifc-spatial` 0.4, `ifc-xml` 0.4.1, `ifc-geometry`
+  0.6.1 and `ifc-schema` 0.3.1. The ifcXML tests now also round-trip a STEP
+  model through the XSD configuration `ifc-xml` writes.
 - The IFC adapter moves to the 0.3 line of the IFC crates: `openbim-ifc`
   0.10, `ifc-schema` 0.3, `ifc-model` 0.3, `ifc-step` 0.4, `ifc-geometry`
   0.6, `ifc-properties` 0.7, `ifc-validate` 0.5, `ifc-xml` 0.4,

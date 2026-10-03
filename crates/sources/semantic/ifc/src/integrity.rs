@@ -14,6 +14,7 @@ use std::sync::Arc;
 use crate::identity::{GlobalIdDefect, GlobalIds};
 use crate::relationships::{EdgeIndex, ends_of, read_instance};
 use crate::release::Release;
+use crate::step::RealWithoutPoint;
 use axioval_engine::{
     IntegrityError, IntegrityIssue, IntegritySeverity, SourceIntegrityService, SourceSnapshot,
 };
@@ -43,11 +44,19 @@ pub const INVALID_GLOBAL_ID: &str = "identity.invalid-global-id";
 /// None of the claimants carries the alias: picking one would let a consumer
 /// resolve the id to the wrong object.
 pub const DUPLICATE_GLOBAL_ID: &str = "identity.duplicate-global-id";
+/// Code for a REAL the file writes without the decimal point ISO 10303-21
+/// requires (`1E-05`).
+///
+/// The reader takes it as the real it spells, so the model is complete and
+/// every rule reads that value; the warning says the file does not conform,
+/// once per token, located by its byte offset.
+pub const REAL_WITHOUT_DECIMAL_POINT: &str = "step.real-without-decimal-point";
 
 pub(crate) struct IfcIntegrity {
     release: Release,
     model: Arc<Model>,
     global_ids: Arc<GlobalIds>,
+    reals: Arc<[RealWithoutPoint]>,
     snapshots: Arc<[SourceSnapshot]>,
 }
 
@@ -56,12 +65,14 @@ impl IfcIntegrity {
         release: Release,
         model: Arc<Model>,
         global_ids: Arc<GlobalIds>,
+        reals: Arc<[RealWithoutPoint]>,
         snapshots: Arc<[SourceSnapshot]>,
     ) -> Self {
         Self {
             release,
             model,
             global_ids,
+            reals,
             snapshots,
         }
     }
@@ -87,7 +98,22 @@ impl SourceIntegrityService for IfcIntegrity {
         let mut types: Vec<&str> = schema.subtypes("IfcRelationship");
         types.sort_unstable();
         types.dedup();
-        let mut issues = Vec::new();
+        let mut issues: Vec<IntegrityIssue> = self
+            .reals
+            .iter()
+            .map(|real| IntegrityIssue {
+                code: REAL_WITHOUT_DECIMAL_POINT.into(),
+                severity: IntegritySeverity::Warning,
+                message: format!(
+                    "bytes {}..{}: {}; it is read as the real it spells",
+                    real.bytes.start, real.bytes.end, real.detail
+                ),
+                evidence: locator(format!(
+                    "real-without-point:{}..{}",
+                    real.bytes.start, real.bytes.end
+                )),
+            })
+            .collect();
         for type_name in types {
             let instances = self.model.ids_of_type(type_name);
             if instances.is_empty() {

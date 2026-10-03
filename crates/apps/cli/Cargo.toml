@@ -35,7 +35,6 @@ axiolid-surface.workspace = true
 ifc-geometry = { workspace = true, features = ["compile-reference-backend"] }
 ifc-model.workspace = true
 ifc-spatial.workspace = true
-ifc-step.workspace = true
 # `check --ids` and `ids translate`: IDS documents read and translated
 # into rule packages in memory.
 axioval-ids.workspace = true
@@ -49,6 +48,8 @@ serde_json.workspace = true
 [dev-dependencies]
 # Write the ifcXML form of a test model with IFC4's attribute names.
 ifc-schema.workspace = true
+# Parse test models exactly as written, without the adapter's tolerance.
+ifc-step.workspace = true
 ifc-xml.workspace = true
 openbim-bcf.workspace = true
 sha2.workspace = true

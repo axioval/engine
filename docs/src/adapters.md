@@ -13,6 +13,16 @@ snapshot registered by the session; mismatched service composition is rejected.
 Parser diagnostics, unsupported schemas, malformed traversal, conflicts, and
 unsupported values fail closed.
 
+STEP is read strictly (`ifc-step` 0.5): a malformed record refuses the whole
+file. The one tolerance is a REAL written without the decimal point ISO
+10303-21 requires (`1E-05`, `-2E3`), which common exporters write and whose
+meaning is not in doubt. It is read as the real it spells, so no record is
+dropped, and every such token is reported as a
+`step.real-without-decimal-point` integrity warning located by its byte
+offsets. A token that is not a number (`1E`, `1EE2`) is still a parse error.
+`read_ifc_step` gives the model the session reads, for hosts (the CLI's
+geometry bridge) that read the bytes again.
+
 The session's objects are every `IfcObject` occurrence, every `IfcContext`
 (an IFC4 `IfcProject` or `IfcProjectLibrary`; in IFC2X3 `IfcProject` is an
 `IfcObject`) and every `IfcTypeObject` (`IfcWallType`, IFC2X3 `IfcDoorStyle`),
@@ -519,6 +529,8 @@ violations as warnings: an element contained by more than one spatial
 structure (`spatial.contained-twice`), and a zone grouping something other
 than zones, spaces and spatial zones (`zone.member-not-spatial`). Both come
 from `ifc-systems`; rules still see every containment the file states.
+A REAL the file writes without its decimal point is a
+`step.real-without-decimal-point` warning, once per token.
 
 ### GlobalId aliases
 

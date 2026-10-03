@@ -25,6 +25,7 @@ mod metadata;
 mod relationships;
 mod release;
 mod resources;
+mod step;
 mod styles;
 mod temporal;
 mod windows;
@@ -36,9 +37,10 @@ pub use identity::IFC_GLOBAL_ID;
 pub use ifc::{IfcSessionError, import_ifc_session};
 pub use integrity::{
     ABSENT_REQUIRED_END, CONTAINED_TWICE, DUPLICATE_GLOBAL_ID, INVALID_GLOBAL_ID,
-    MALFORMED_RELATIONSHIP, ZONE_MEMBER_NOT_SPATIAL,
+    MALFORMED_RELATIONSHIP, REAL_WITHOUT_DECIMAL_POINT, ZONE_MEMBER_NOT_SPATIAL,
 };
 pub use release::{IFC2X3_TYPE_SYSTEM, IFC4_TYPE_SYSTEM, IFC4X3_TYPE_SYSTEM};
+pub use step::read_ifc_step;
 pub use xml::{IFC_XML_EXTENSION, import_ifc_xml_session, is_ifc_xml, read_ifc_xml};
 
 use std::collections::BTreeSet;

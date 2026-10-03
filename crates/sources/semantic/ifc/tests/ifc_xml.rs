@@ -132,6 +132,14 @@ fn an_ifcxml_model_reads_into_the_same_ir_as_its_step_form() {
                 XmlProfile::Ifc4Add2Tc1,
             ),
         ),
+        // The buildingSMART XSD configuration, as `ifc-xml` writes it.
+        (
+            "XSD configuration",
+            XmlCodec::xsd(
+                Arc::new(ifc_schema::ifc4().clone()),
+                XmlProfile::Ifc4Add2Tc1,
+            ),
+        ),
     ] {
         let bytes = xml(&codec);
         assert!(is_ifc_xml(&bytes));

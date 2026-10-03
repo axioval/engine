@@ -84,10 +84,9 @@ use axioval::rules::{CoordinateTolerance, compare_coordinate_systems};
 use axioval::{bcf, bcf_snapshot};
 use ifc_geometry::lower::{LoweringSession, lower_connection_surface, lower_product_net};
 use ifc_geometry::{RepresentationPurpose, Transform};
-use ifc_model::{Codec, EntityId, Model};
+use ifc_model::{EntityId, Model};
 use ifc_spatial::relation::boundary::{ConnectionGeometryAnomaly, SpaceBoundary};
 use ifc_spatial::{SpatialAnomaly, SpatialKind, SpatialTree};
-use ifc_step::StepCodec;
 use std::sync::Arc;
 
 /// Linear tolerance handed to the mesh compiler. With no explicit chord
@@ -233,9 +232,7 @@ fn parse(
         let model = if axioval::ifc::is_ifc_xml(bytes) {
             axioval::ifc::read_ifc_xml(bytes).map_err(|error| error.to_string())
         } else {
-            StepCodec
-                .read_bytes(bytes)
-                .map_err(|error| error.to_string())
+            axioval::ifc::read_ifc_step(bytes).map_err(|error| error.to_string())
         }
         .map_err(|error| format!("{}: {error}", source.document))?;
         let units = ifc_geometry::units::resolve(&model);

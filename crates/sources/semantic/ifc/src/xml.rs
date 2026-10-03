@@ -265,5 +265,5 @@ pub fn import_ifc_xml_session(
     let source = SourceId::new("ifc-xml", document.into())
         .map_err(|error| IfcSessionError::Identity(error.to_string()))?;
     let (release, model) = read(bytes)?;
-    session(&source, release, model, bytes)
+    session(&source, release, model, Vec::new(), bytes)
 }

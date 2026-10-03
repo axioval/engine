@@ -35,7 +35,11 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   batch. An empty `BooleanReport` (#236) is the exact boolean of the
   operands as given: the body is exact. A non-empty one perturbs the
   `ExactBody` by the reported linear magnitude plus the angular one over
-  its extent; never register such a body as exact, never drop the
+  its extent, never less than its rounding; non-empty is the test, never
+  a magnitude above zero (axiolid/kernel#251: a decision at
+  `Tolerance::ZERO` can report zero), so `Decided::perturbed` carries
+  `!report.is_exact()` and `ExactBody::is_exact` reads that flag, not the
+  perturbation. Never register such a body as exact, never drop the
   perturbation from a certified distance (`certified` adds it), never
   certify a plan overlap or a surface distance on it. Either way the
   boolean merges constructed points within `2^-40` of its operands'

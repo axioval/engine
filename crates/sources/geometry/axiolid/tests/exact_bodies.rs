@@ -771,6 +771,52 @@ fn a_column_over_a_shafts_edge_overlaps_the_slab_in_plan() {
 }
 
 #[test]
+fn a_body_perturbed_by_zero_certifies_neither_plan_overlap_nor_surface_distance() {
+    // axiolid/kernel#251: a boolean at no tolerance may report a decision
+    // whose magnitudes are zero. Such a body is perturbed all the same: it
+    // shows no plan overlap and feeds no exact surface distance.
+    let mut builder = GeometryGraphBuilder::new();
+    let slab = slab_with_shaft(&mut builder);
+    let column = extrusion(
+        &mut builder,
+        circle(0.2),
+        2.7,
+        Transform3::from_translation(Vec3::new(0.3005, 0.0, 0.3)),
+    );
+    let graph = builder.finish(vec![slab, column]).unwrap();
+    let decided = agreeing(&graph, slab).into_body().with_perturbation(0.0);
+    assert!(!decided.is_exact());
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("slab"), mesh(&graph, slab))
+        .with_tessellated_mesh(id("column"), mesh(&graph, column), DEVIATION)
+        .with_exact_body(id("slab"), decided.clone())
+        .with_exact_body(id("column"), agreeing(&graph, column).into_body());
+    let request =
+        ProximityRequest::projected(id("column"), id("slab"), ProximityProjection::PlanOverlap)
+            .unwrap();
+    let overlap = AxiolidProximityService::new(geometry)
+        .measure_distance(&request)
+        .unwrap()
+        .interval_metres();
+    assert_eq!(overlap, (0.0, f64::INFINITY));
+
+    let revised = ObjectId::new(SourceId::new("cad", "revised").unwrap(), "slab").unwrap();
+    let session = |object: &ObjectId| {
+        AxiolidProximityService::new(
+            AxiolidGeometry::new()
+                .with_mesh(object.clone(), mesh(&graph, slab))
+                .with_exact_body(object.clone(), decided.clone()),
+        )
+    };
+    let (base, revision) = (session(&id("slab")), session(&revised));
+    let surface = revision.body_surface(&revised).unwrap();
+    let request =
+        SurfaceDistanceRequest::try_new(id("slab"), std::sync::Arc::new(surface), 1e-4).unwrap();
+    let measured = base.measure_surface_distance(&request).unwrap();
+    assert_eq!(measured.basis(), SurfaceBasis::Mesh);
+}
+
+#[test]
 fn a_union_with_a_half_space_is_refused_by_name() {
     let mut builder = GeometryGraphBuilder::new();
     let wall = extrusion(&mut builder, rectangle(6.0, 0.3), 3.0, Transform3::IDENTITY);

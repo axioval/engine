@@ -33,8 +33,11 @@
 //!   moved by at most the reported linear magnitude and turned by at most
 //!   the angular one, and the body is marked perturbed
 //!   ([`ExactBody::perturbation_metres`]) by the first plus the second
-//!   over its extent: every distance measured on it is widened by that
-//!   and never cited as exact. Either way the boolean merges constructed
+//!   over its extent, never less than its rounding allowance: every
+//!   distance measured on it is widened by that and never cited as exact.
+//!   Any report that is not empty marks the body perturbed, even one whose
+//!   magnitudes are zero (a decision at no tolerance may report none,
+//!   axiolid/kernel#251). Either way the boolean merges constructed
 //!   points closer than `2^-40` of its operands' largest coordinate
 //!   without a report, so the body carries that much per boolean as a
 //!   rounding allowance ([`ExactBody::rounding_metres`]), which widens its
@@ -95,6 +98,10 @@ const TOLERANCE: Tolerance = Tolerance::METRE;
 pub struct ExactBody {
     items: Vec<ExactBRep>,
     placement: Transform3,
+    /// Whether a boolean decided anything within its tolerance building
+    /// the body, whatever magnitude it reported for it (axiolid/kernel#251:
+    /// a decision at no tolerance may report zero).
+    perturbed: bool,
     perturbation: f64,
     rounding: f64,
 }
@@ -112,6 +119,7 @@ impl ExactBody {
         Self {
             items,
             placement,
+            perturbed: false,
             perturbation: 0.0,
             rounding: 0.0,
         }
@@ -119,11 +127,15 @@ impl ExactBody {
 
     /// The same body, built from operands whose faces may each have been
     /// moved by up to `metres` (a boolean that decided near-coincident faces
-    /// within its tolerance). Every distance measured on it is widened by
-    /// that much and reported inexact. A negative or non-finite value is
-    /// kept as unbounded, and such a body is never measured.
+    /// within its tolerance). The body is no longer exact, whatever
+    /// `metres` is, zero included: a decision was taken, and its reported
+    /// magnitude is a bound, not proof that nothing moved. Every distance
+    /// measured on it is widened by that much and reported inexact. A
+    /// negative or non-finite value is kept as unbounded, and such a body
+    /// is never measured.
     #[must_use]
     pub fn with_perturbation(mut self, metres: f64) -> Self {
+        self.perturbed = true;
         self.perturbation = if metres.is_finite() && metres >= 0.0 {
             self.perturbation.max(metres)
         } else {
@@ -161,7 +173,8 @@ impl ExactBody {
     }
 
     /// How far a face of the body may lie from the model's: zero when the
-    /// body is exactly the model's solid.
+    /// body is exactly the model's solid. Zero alone does not make a body
+    /// exact; [`Self::is_exact`] says whether it is.
     #[must_use]
     pub fn perturbation_metres(&self) -> f64 {
         self.perturbation
@@ -183,10 +196,11 @@ impl ExactBody {
     }
 
     /// Whether the body is exactly the model's solid (up to the rounding
-    /// of [`Self::rounding_metres`]).
+    /// of [`Self::rounding_metres`]): false for a perturbed body
+    /// ([`Self::with_perturbation`]), even one perturbed by zero.
     #[must_use]
     pub fn is_exact(&self) -> bool {
-        self.perturbation == 0.0
+        !self.perturbed
     }
 
     /// The single item in world coordinates, which the kernel's one-solid
@@ -248,6 +262,7 @@ pub fn exact_boundary(graph: &GeometryGraph, root: NodeId) -> Result<ExactBounda
     let (placement, members) = placed_members(graph, root)?;
     let mut items = Vec::with_capacity(members.len());
     let (mut moved, mut turned, mut rounding) = (0.0_f64, 0.0_f64, 0.0_f64);
+    let mut perturbed = false;
     let mut extent: Option<Extent> = None;
     for (transform, leaf) in members {
         let item = item(graph, leaf, transform)?;
@@ -269,6 +284,7 @@ pub fn exact_boundary(graph: &GeometryGraph, root: NodeId) -> Result<ExactBounda
         });
         // A distance to several items is the least over them, so it moves
         // no further than the furthest any one of them moved.
+        perturbed |= item.decided.perturbed;
         moved = moved.max(item.decided.moved);
         turned = turned.max(item.decided.turned);
         rounding = rounding.max(item.decided.rounding);
@@ -283,17 +299,15 @@ pub fn exact_boundary(graph: &GeometryGraph, root: NodeId) -> Result<ExactBounda
     {
         return Err("the solid's extent is not finite".into());
     }
-    // A face turned by the reported angle turns about a point of the
-    // body, so it moves no further than that angle over the body's
-    // extent; a face moved along it, no further than the reported length.
-    let perturbation = if moved > 0.0 || turned > 0.0 {
-        let diagonal = (0..3)
-            .map(|k| (extent.1[k] - extent.0[k]).powi(2))
-            .sum::<f64>()
-            .sqrt();
-        moved + turned * diagonal
-    } else {
-        0.0
+    let diagonal = (0..3)
+        .map(|k| (extent.1[k] - extent.0[k]).powi(2))
+        .sum::<f64>()
+        .sqrt();
+    let decided = Decided {
+        perturbed,
+        moved,
+        turned,
+        rounding,
     };
     // One item is placed in the world, as the one-solid measurements take
     // it; several stay in the body's frame, where their contacts are cut.
@@ -301,8 +315,12 @@ pub fn exact_boundary(graph: &GeometryGraph, root: NodeId) -> Result<ExactBounda
         [single] => ExactBody::new(place(single.clone(), &placement)?),
         _ => ExactBody::placed(items, placement),
     };
+    let body = match decided.perturbation(diagonal) {
+        Some(perturbation) => body.with_perturbation(perturbation),
+        None => body,
+    };
     Ok(ExactBoundary {
-        body: body.with_perturbation(perturbation).with_rounding(rounding),
+        body: body.with_rounding(rounding),
         extent,
     })
 }
@@ -389,6 +407,10 @@ struct Item {
 /// operands as given, in metres (and radians for `turned`).
 #[derive(Clone, Copy, Debug, Default)]
 struct Decided {
+    /// Whether any within-tolerance decision fired: the report was not
+    /// empty. Never inferred from `moved` and `turned`, which a decision
+    /// at no tolerance may report as zero (axiolid/kernel#251).
+    perturbed: bool,
     /// The furthest a within-tolerance decision moved an operand.
     moved: f64,
     /// The furthest a within-tolerance decision turned an operand.
@@ -451,12 +473,6 @@ fn boolean(graph: &GeometryGraph, node: NodeId) -> Result<(ExactBRep, Decided), 
         Err(_) => compile(TOLERANCE).map_err(refused)?,
     };
     let (brep, report) = built.pop().ok_or("the kernel built no body")?;
-    // An empty report: the exact boolean of the operands as given.
-    // Otherwise of operands moved and turned by at most these.
-    let (moved, turned) = (report.linear(), report.angular());
-    if !(moved.is_finite() && moved >= 0.0 && turned.is_finite() && turned >= 0.0) {
-        return Err("the kernel reported no bound on what its boolean decided".into());
-    }
     let mut reach = built
         .iter()
         .map(|(operand, _)| kernel_extent(operand))
@@ -466,14 +482,43 @@ fn boolean(graph: &GeometryGraph, node: NodeId) -> Result<(ExactBRep, Decided), 
     }
     #[allow(clippy::cast_precision_loss)]
     let rounding = chain.booleans as f64 * BOOLEAN_ROUNDING * reach;
-    Ok((
-        brep,
-        Decided {
+    let decided = Decided::reported(
+        !report.is_exact(),
+        report.linear(),
+        report.angular(),
+        rounding,
+    )?;
+    Ok((brep, decided))
+}
+
+impl Decided {
+    /// What a boolean's report states: an empty report (`perturbed`
+    /// false) is the exact boolean of the operands as given; any other is
+    /// of operands moved and turned by at most `moved` and `turned`, which
+    /// may be zero (axiolid/kernel#251) and still mark it perturbed.
+    fn reported(perturbed: bool, moved: f64, turned: f64, rounding: f64) -> Result<Self, String> {
+        if !(moved.is_finite() && moved >= 0.0 && turned.is_finite() && turned >= 0.0) {
+            return Err("the kernel reported no bound on what its boolean decided".into());
+        }
+        Ok(Self {
+            perturbed,
             moved,
             turned,
             rounding,
-        },
-    ))
+        })
+    }
+
+    /// The perturbation of a body over `diagonal` metres, `None` when no
+    /// boolean decided anything. A face turned by the reported angle turns
+    /// about a point of the body, so it moves no further than that angle
+    /// over the body's extent; a face moved along it, no further than the
+    /// reported length. A decision is never taken as having moved nothing:
+    /// the perturbation is at least the rounding floor, below which the
+    /// kernel reads no residue as a decision.
+    fn perturbation(&self, diagonal: f64) -> Option<f64> {
+        self.perturbed
+            .then(|| (self.moved + self.turned * diagonal).max(self.rounding))
+    }
 }
 
 /// The axis-aligned extent of `solid`, in closed form from its edges,
@@ -1218,8 +1263,39 @@ impl AxiolidGeometry {
 mod tests {
     use std::f64::consts::{FRAC_PI_2, PI};
 
-    use super::{arc_support, cosine_range};
+    use super::{Decided, ExactBody, arc_support, cosine_range};
     use axiolid_core::{Point2, Vec2};
+
+    #[test]
+    fn a_decision_reported_with_no_magnitude_still_perturbs_the_body() {
+        // axiolid/kernel#251: at no tolerance a boolean may report a
+        // decision whose linear and angular magnitudes are both zero. The
+        // report is not empty, so the body is not the exact boolean.
+        let floor = 1e-12;
+        let decided = Decided::reported(true, 0.0, 0.0, floor).unwrap();
+        assert!(decided.perturbed);
+        assert_eq!(decided.perturbation(5.0), Some(floor));
+        // Reported magnitudes widen it further, never below the floor.
+        let decided = Decided::reported(true, 3e-10, 1e-12, floor).unwrap();
+        assert_eq!(decided.perturbation(2.0), Some(3e-10 + 2e-12));
+        let decided = Decided::reported(true, 1e-13, 0.0, floor).unwrap();
+        assert_eq!(decided.perturbation(2.0), Some(floor));
+        // An empty report perturbs nothing.
+        let exact = Decided::reported(false, 0.0, 0.0, floor).unwrap();
+        assert_eq!(exact.perturbation(5.0), None);
+        // An unbounded report is refused.
+        assert!(Decided::reported(true, f64::NAN, 0.0, floor).is_err());
+        assert!(Decided::reported(true, 0.0, -1.0, floor).is_err());
+    }
+
+    #[test]
+    fn a_body_perturbed_by_zero_is_not_exact() {
+        let body = ExactBody::placed(Vec::new(), axiolid_core::Transform3::IDENTITY);
+        assert!(body.is_exact());
+        let body = body.with_perturbation(0.0);
+        assert!(!body.is_exact());
+        assert_eq!(body.perturbation_metres(), 0.0);
+    }
 
     #[test]
     fn arc_support_follows_the_sweep() {

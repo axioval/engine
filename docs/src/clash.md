@@ -376,8 +376,12 @@ distance. Where the report is not empty (an opening flush with a turned
 wall's face, which agrees with it only up to rounding), the result is the
 exact boolean of operands moved and turned by at most the reported
 magnitudes, and the body is **perturbed** by the linear one plus the
-angular one over its extent (a few femtometres for that flush window,
-never more than the micrometre tolerance). Every certified distance
+angular one over its extent, never less than its rounding below (a few
+femtometres for that flush window, never more than the micrometre
+tolerance). Any report that is not empty perturbs the body, even one
+whose magnitudes are zero: a decision taken with no tolerance can report
+none (axiolid/kernel#251), and the body is not the exact boolean all the
+same. Every certified distance
 measured on it is widened by that on both sides, it never certifies a plan
 overlap (a shared patch or a gap that narrow may not be the model's), and
 a comparison measures its meshes instead, since a surface distance must be

@@ -919,6 +919,16 @@ All notable changes are documented here. This project follows Semantic Versionin
   `axioval-ir` and `axioval-export`; 0.3.0 stays the last release with code
   and is not yanked.
 
+### Fixed
+
+- A boolean body whose kernel report is not empty is never exact, even
+  when every reported magnitude is zero (axiolid/kernel#251: a decision at
+  `Tolerance::ZERO` can report none). It was counted exact and could
+  certify a plan overlap or feed a comparison's exact surface distance.
+  Such a body is now perturbed by at least the reported magnitudes and
+  never less than its rounding floor. `ExactBody::with_perturbation` marks
+  a body inexact whatever the value, zero included.
+
 ## [0.3.0] - 2026-09-28
 
 ### Added

@@ -34,7 +34,8 @@
 //!
 //! With [`Options::exact_boundaries`], a body whose lowered graph has an
 //! exact construction (a rigidly placed extrusion, revolution or swept disk,
-//! one less its extruded openings, or several such items; see
+//! one less its extruded openings or clipped by half-spaces, or several
+//! such items; see
 //! `axioval::axiolid::exact_boundary`) also gets its exact boundary
 //! registered beside the mesh, built from the same graph the mesh is compiled
 //! from, so placement and mirroring are the mesh's own. The proximity service
@@ -57,6 +58,7 @@ use axiolid_core::Tolerance;
 use axiolid_curve::{Curve2, Curve3};
 use axiolid_mesh_boolean_boolmesh::BoolmeshBoolean;
 use axiolid_mesh_compile::{DeviationBound, DeviationReport, ReferenceMeshCompiler};
+use axiolid_mesh_compile_contract::MeshCompiler;
 use axiolid_model::{GeometryGraph, GeometryNode, NodeId, SolidOperation, SurfaceRelation};
 use axiolid_primitive::Primitive;
 use axiolid_profile::{Profile, SectionProfile};
@@ -953,29 +955,40 @@ enum Fit {
 
 /// `root` compiled into a mesh, and how it stands for the surface.
 ///
-/// A planar body is exact. A curved one is declared with the deviation the
-/// compiler certifies (axiolid/kernel#232): the chord budget where its
-/// construction proves it (`Proven`), the bound it computed for this mesh
-/// where that is larger or smaller (`Certified`). A mesh it cannot bound
-/// (`Unbounded`: a boolean of curved operands, a tapered extrusion, a
-/// sectioned spine, a bounded half-space, ...) is refused with the paths
-/// that have no bound, so the object is unmeasured rather than declared
-/// within a tolerance nothing proves.
+/// A planar body is exact, and compiled without a deviation report, which
+/// would only measure what its planarity already proves. A curved one is
+/// declared with the deviation the compiler certifies (axiolid/kernel#232):
+/// the chord budget where its construction proves it (`Proven`), the bound
+/// it computed for this mesh where that is larger or smaller (`Certified`),
+/// as returned. A boolean is certified by measuring its mesh against the
+/// exact compiler's result (#235: a wall with a round window, a beam cut by
+/// round holes, a wall clipped by its roof), which costs time per curved
+/// boolean. A mesh it cannot bound (`Unbounded`: a boolean the exact
+/// compiler refuses, a tapered extrusion, a sectioned spine, ...) is
+/// refused with the paths that have no bound, so the object is unmeasured
+/// rather than declared within a tolerance nothing proves.
 fn compile(
     backend: &Compiler,
     graph: &GeometryGraph,
     root: NodeId,
 ) -> Result<(axiolid_mesh::TriMesh, Fit), String> {
-    let exact = planar(graph, root, &mut NODE_BUDGET.clone());
+    let options = ExecutionOptions::new(TOLERANCE);
+    if planar(graph, root, &mut NODE_BUDGET.clone()) {
+        let mesh = backend
+            .compile_mesh(graph, root, &options)
+            .map_err(|error| compilation_refused(&error))?;
+        return if mesh.triangle_count() == 0 {
+            Err("mesh compilation produced no triangles".into())
+        } else {
+            Ok((mesh, Fit::Exact))
+        };
+    }
     let (outcome, report) = backend
-        .compile_mesh_with_deviation(graph, root, &ExecutionOptions::new(TOLERANCE))
+        .compile_mesh_with_deviation(graph, root, &options)
         .map_err(|error| compilation_refused(&error))?;
     let mesh = outcome.mesh;
     if mesh.triangle_count() == 0 {
         return Err("mesh compilation produced no triangles".into());
-    }
-    if exact {
-        return Ok((mesh, Fit::Exact));
     }
     match report.bound {
         Some(bound) if bound.is_finite() && bound >= 0.0 => Ok((mesh, Fit::Within(bound))),
@@ -1141,6 +1154,18 @@ fn planar(graph: &GeometryGraph, id: NodeId, budget: &mut usize) -> bool {
         }
         GeometryNode::SolidOperation(SolidOperation::Boolean { left, right, .. }) => {
             planar(graph, *left, budget) && planar(graph, *right, budget)
+        }
+        // A plane cut down to the prism of a polygon in it: planes only.
+        GeometryNode::SolidOperation(SolidOperation::BoundedHalfSpace {
+            half_space,
+            boundary,
+            ..
+        }) => {
+            planar(graph, *half_space, budget)
+                && matches!(
+                    graph.get(*boundary),
+                    Some(GeometryNode::Curve2(Curve2::Line(_) | Curve2::Polyline(_)))
+                )
         }
         GeometryNode::Profile(profile) => polygonal(profile),
         // A plane bounded by straight boundaries (a space boundary's

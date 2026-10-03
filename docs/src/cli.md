@@ -185,9 +185,11 @@ boundary, built from the graph its mesh is compiled from: an extrusion or
 revolution of a rectangle, circle, section or line-and-arc profile (an
 extrusion of an ellipse too), or a disk swept along one segment or one
 arc, under any rigid placement (tilted, horizontal, turned, mirrored or
-mapped), less its openings where they are extrusions (built within a
-micrometre and widened by it, see [Clash](./clash.md#axiolid-measurement)),
-and a body of several such items (a column on its footing). A boundary is
+mapped), less its openings where they are extrusions and clipped by roof
+planes (`IfcBooleanClippingResult`; exact where the kernel decides nothing
+within its tolerance, else widened by what it reports, see
+[Clash](./clash.md#axiolid-measurement)), and a body of several such items
+(a column on its footing). A boundary is
 registered only when its
 extent agrees with the mesh's within the chord deviation, and only when
 some curved body has one (two planar bodies are measured exactly anyway).
@@ -887,7 +889,7 @@ states:
 
 | State | Meaning | Effect on geometric rules |
 |---|---|---|
-| exact | every face is planar (polygonal extrusions, including steel sections without fillets or rounded edges, faceted B-reps, meshes, booleans of these), so the mesh is the shape | measured as exact |
+| exact | every face is planar (polygonal extrusions, including steel sections without fillets or rounded edges, faceted B-reps, meshes, booleans of these and clips by half-spaces, bounded by a polygon or not), so the mesh is the shape | measured as exact |
 | tessellated | some face is curved; the mesh is within the deviation the mesh compiler certifies for it (the 1 mm chord budget, or the bound it computed) | measured as approximate, never exact |
 | no body | the object occupies no material: spatial structure, openings, annotations, grids, ports, structural analysis items, non-products | ignored as an obstacle |
 | unmeasured | a physical product that could not be meshed, including one without a Body representation, or a curved one whose mesh the compiler certifies no deviation for | measurements it could affect are not evaluated |
@@ -910,19 +912,28 @@ certifies for it (`compile_mesh_with_deviation`, axiolid/kernel#232): the
 cylinders, cones, and disks swept along segments, arcs, composites of them
 and filleted polylines), the bound it computed for the mesh at hand
 otherwise (curved B-rep faces, disks swept along B-splines and ellipses,
-ellipse and spline profiles), larger or smaller than 1 mm. Where it
+ellipse and spline profiles), larger or smaller than 1 mm, as returned. A
+boolean whose result is curved (a wall with a round window, an I-beam cut
+by round holes, a roof-clipped wall with a round window) is certified by
+measuring its mesh against the kernel's exact result of the same boolean
+(axiolid/kernel#235); its bound reads close to the 1 mm asked. Where it
 certifies none, the body is unmeasured with the paths it names, never
-declared within a tolerance nothing proves: a boolean whose result is
-curved (an I-beam cut by round holes, a wall clipped by a roof's bounded
-half-space; cutting moves the intersection curve, so no operand's bound
-covers it), a tapered extrusion, a sectioned spine. A disk swept round a
+declared within a tolerance nothing proves: a boolean the exact compiler
+refuses (a union, a hole tangent to a flange's face: `exact boolean whose
+split face pieces do not close`), a tapered extrusion, a sectioned spine.
+A disk swept round a
 polyline corner without a fillet radius, which IFC leaves undefined, is
 refused by name (`swept disk directrix turns a corner … give a fillet
 radius`) and unmeasured; with `IfcSweptDiskSolidPolygonal`'s fillet radius
 each corner becomes a tangent arc and is certified. Planar bodies, booleans
-of planar operands included, stay exact. On a 29 MB model this left every
-one of its 56 curved bodies certified; on a small sample house two upper
-walls clipped by the roof became unmeasured.
+of planar operands and clips by polygonally bounded half-spaces included,
+stay exact and are meshed without a deviation report, which would only
+pay to measure their booleans. Measuring a curved boolean costs about
+half a second per opening at 1 mm (release build), so a model with many
+round openings takes correspondingly longer to mesh. On a 29 MB model
+every one of its 56 curved bodies is certified and meshing takes as long
+as before; on a small sample house the two upper walls clipped by the
+roof are exact.
 
 Space validation also needs roles and storeys: `IfcSpace`, `IfcSlab`, `IfcRoof`
 and `IfcBuilding` give roles, and the spatial tree gives each object's storey.

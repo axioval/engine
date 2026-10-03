@@ -182,13 +182,14 @@ impl AxiolidGeometry {
     /// (axiolid/kernel#229), as [`fn@crate::exact_boundary`] builds it.
     ///
     /// Several items are measured by the kernel's body queries
-    /// (`body_boundary_distance`, `one_sided_body_boundary_hausdorff`),
-    /// which certify the distance in space and the surface distance; the
-    /// plan measurements take one item only, so such a pair keeps the
-    /// mesh's plan relations. A perturbed body
+    /// (`body_boundary_distance`, `one_sided_body_boundary_hausdorff` and
+    /// the plan queries `body_plan_*`), which certify the distance in
+    /// space, the surface distance and the plan relations. A perturbed body
     /// ([`ExactBody::perturbation_metres`]) widens every distance measured
     /// on it by its perturbation, never certifies a plan overlap and is not
-    /// used for a surface distance (which needs exact surfaces).
+    /// used for a surface distance (which needs exact surfaces); a
+    /// boolean's rounding ([`ExactBody::rounding_metres`]) widens every
+    /// distance too, but the body stays exact.
     #[must_use]
     pub fn with_exact_body(mut self, object: ObjectId, body: ExactBody) -> Self {
         self.boundaries.insert(object, Arc::new(body));

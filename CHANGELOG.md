@@ -6,6 +6,32 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- Exact boundaries of walls clipped by roof planes (axiolid/kernel#234,
+  `axiolid-mesh-compile` 0.3.10): `exact_boundary` builds a clip by a
+  half-space, bounded by a polygon or not (`IfcBooleanClippingResult` of
+  `IfcHalfSpaceSolid` or `IfcPolygonalBoundedHalfSpace`), in any order
+  with the body's openings. Its extent is read from its edges, so a
+  clipped wall's agrees with its mesh. Unions and other intersections are
+  still refused by name.
+- Exact differences are exact where the kernel decided nothing within its
+  tolerance (axiolid/kernel#236, `axiolid-brep-boolean` 0.1.3): differences
+  and clips are built with the compiler's `BooleanReport`. An empty report
+  is the exact boolean of the operands as given, so a wall less openings
+  placed along the axes, or crossing a turned wall's faces, is exact: it
+  certifies plan overlaps and is compared between its boundaries. A
+  non-empty report (an opening flush with a turned wall's face) perturbs
+  the body by the reported magnitudes (a few femtometres there) instead
+  of the micrometre tolerance. Every boolean body also carries the
+  rounding its boolean merges points within, `2^-40` of its operands'
+  largest coordinate per boolean (`ExactBody::rounding_metres`,
+  `widening_metres`), which widens its certified distances and leaves it
+  exact.
+- Plan relations of bodies of several items (axiolid/kernel#237,
+  `axiolid-measure` 0.3.9): `Horizontal` distance, plan overlap and the
+  footprint relation of vertical distances of a column on its footing are
+  certified over every item pair (`body_plan_boundary_distance`,
+  `body_plan_boundary_clearance`, `body_plan_overlap`) instead of keeping
+  the mesh's.
 - Exact boundaries of walls and slabs less their openings
   (axiolid/kernel#228, `axiolid-mesh-compile` 0.3.9): `exact_boundary`
   builds a difference of placed extrusions (`IfcOpeningElement` voids,
@@ -48,6 +74,19 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- Geometry moves to `axiolid-mesh-compile` 0.3.10, `axiolid-measure` 0.3.9
+  and `axiolid-brep-boolean` 0.1.3. `plan_overlap` now shows a level face
+  over part of another's shadow, so a round column reaching a sliver over
+  a slab's edge is certified over it where the relation stayed open.
+- `axioval check --geometry` certifies curved booleans (axiolid/kernel#235):
+  the mesh compiler measures a boolean's mesh against the exact compiler's
+  result, so a wall with a round window, a beam cut by round holes and a
+  roof-clipped wall with one are tessellated within the bound it returns
+  instead of unmeasured; booleans the exact compiler refuses (a hole
+  tangent to a flange's face) stay unmeasured with that reason. Planar
+  bodies are meshed without a deviation report, and a polygonally bounded
+  half-space with a polyline boundary counts as planar, so walls clipped
+  by one (two upper walls of a small sample house) are exact again.
 - ifcXML in the `ifc-xml` codec's own layout is read schema-strict: a
   value is typed from its attribute's declaration, never its text, so
   `Name="1"` is the label `1` where it was refused before. Positional

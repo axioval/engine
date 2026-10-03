@@ -1,5 +1,6 @@
 //! Exact bodies beyond one solid: walls less their openings
-//! (axiolid/kernel#228) and bodies of several items (#229).
+//! (axiolid/kernel#228, #236), walls clipped by roof planes (#234) and
+//! bodies of several items (#229).
 //!
 //! Each body is built from a geometry graph as a host lowers it, meshed by
 //! the kernel's mesh compiler and built exactly by `exact_boundary`; the
@@ -8,8 +9,8 @@
 
 use axiolid_brep::ExactBRep;
 use axiolid_contracts::ExecutionOptions;
-use axiolid_core::{BooleanOperator, Point3, Tolerance, Transform3, Vec3};
-use axiolid_curve::{Curve3, Polyline};
+use axiolid_core::{BooleanOperator, Plane3, Point2, Point3, Tolerance, Transform3, Vec3};
+use axiolid_curve::{Curve2, Curve3, Polyline, Polyline2};
 use axiolid_measure::exact_properties;
 use axiolid_mesh::TriMesh;
 use axiolid_mesh_boolean_boolmesh::BoolmeshBoolean;
@@ -18,11 +19,13 @@ use axiolid_mesh_compile_contract::MeshCompiler;
 use axiolid_model::{
     GeometryGraph, GeometryGraphBuilder, GeometryNode, Instance, NodeId, SolidOperation,
 };
+use axiolid_primitive::HalfSpace;
 use axiolid_profile::{CircleProfile, Profile, RectangleProfile};
 use axioval_axiolid::proximity::CERTIFIED_ACCURACY_METRES;
 use axioval_axiolid::{AxiolidGeometry, AxiolidProximityService, ExactBoundary, exact_boundary};
 use axioval_engine::{
-    ProximityError, ProximityRequest, ProximityService, SurfaceBasis, SurfaceDistanceRequest,
+    ProximityError, ProximityProjection, ProximityRequest, ProximityService, SurfaceBasis,
+    SurfaceDistanceRequest,
 };
 use axioval_ir::{ObjectId, SourceId};
 
@@ -182,8 +185,8 @@ fn assert_close(actual: f64, expected: f64, within: f64) {
 }
 
 /// The wall (planar, so its mesh is exact) and the pipe (tessellated),
-/// with their exact bodies when `exact` is set, and the wall's
-/// perturbation.
+/// with their exact bodies when `exact` is set, and how far the wall's
+/// exact body may lie from the model's (its booleans' rounding).
 fn wall_and_pipe(exact: bool) -> (AxiolidGeometry, f64) {
     let mut builder = GeometryGraphBuilder::new();
     let wall = wall_with_openings(&mut builder);
@@ -196,11 +199,11 @@ fn wall_and_pipe(exact: bool) -> (AxiolidGeometry, f64) {
         return (geometry, 0.0);
     }
     let (wall, pipe) = (agreeing(&graph, wall), agreeing(&graph, pipe));
-    let perturbation = wall.body().perturbation_metres();
+    let widening = wall.body().widening_metres();
     let geometry = geometry
         .with_exact_body(id("wall"), wall.into_body())
         .with_exact_body(id("pipe"), pipe.into_body());
-    (geometry, perturbation)
+    (geometry, widening)
 }
 
 fn pipe_to_wall(geometry: AxiolidGeometry) -> (f64, f64) {
@@ -213,22 +216,68 @@ fn pipe_to_wall(geometry: AxiolidGeometry) -> (f64, f64) {
 }
 
 #[test]
-fn a_wall_less_a_door_and_a_window_is_built_within_the_kernels_tolerance() {
+fn a_wall_less_a_door_and_a_window_along_the_axes_is_exact() {
     let mut builder = GeometryGraphBuilder::new();
     let wall = wall_with_openings(&mut builder);
     let graph = builder.finish(vec![wall]).unwrap();
     let boundary = agreeing(&graph, wall);
-    // The kernel's general boolean takes placed operands only within a
-    // tolerance, so the body is the exact difference of operands moved by
-    // at most a micrometre (and turned by a nanoradian over its 5 m
-    // extent): marked perturbed, never exact.
-    let perturbation = boundary.body().perturbation_metres();
-    assert!(!boundary.body().is_exact());
+    // Openings placed by axis matrices meet the wall's faces exactly or
+    // cross them transversally: the kernel's general boolean decides
+    // nothing within a tolerance (axiolid/kernel#236), so the body is the
+    // exact difference of the operands as given. Its two booleans may
+    // still merge constructed points within 2^-40 of the operands' largest
+    // coordinate (a few metres here), which widens its distances.
+    assert!(boundary.body().is_exact());
+    let rounding = boundary.body().rounding_metres();
     assert!(
-        (1e-6..1e-6 + 6e-9).contains(&perturbation),
-        "{perturbation}"
+        rounding > 0.0 && rounding <= 2.0 * 10.0 / 1_099_511_627_776.0,
+        "{rounding}"
     );
     assert_close(volume(boundary.brep().unwrap()), WALL_VOLUME, 1e-9);
+}
+
+/// A wall 4 m by 0.2 m by 3 m less a window 1.2 m by 1 m standing 0.1 m
+/// out of its front face and flush with its back face, both turned
+/// 0.3 rad about z and moved to (100, 50): the window's end face agrees
+/// with the wall's back face only up to rounding.
+fn turned_wall_with_flush_window(builder: &mut GeometryGraphBuilder) -> NodeId {
+    let world = Transform3::from_translation(Vec3::new(100.0, 50.0, 0.0))
+        * Transform3::from_rotation_z(0.3);
+    let wall = extrusion(
+        builder,
+        rectangle(4.0, 0.2),
+        3.0,
+        world * Transform3::from_translation(Vec3::new(2.0, 0.1, 0.0)),
+    );
+    let turn = Transform3::from_cols(Vec3::X, -Vec3::Z, Vec3::Y, Vec3::ZERO);
+    let window = extrusion(
+        builder,
+        rectangle(1.2, 1.0),
+        0.3,
+        world * Transform3::from_translation(Vec3::new(2.8, -0.1, 1.5)) * turn,
+    );
+    difference(builder, wall, window)
+}
+
+#[test]
+fn a_turned_wall_with_a_flush_window_is_perturbed_by_what_the_kernel_reports() {
+    let mut builder = GeometryGraphBuilder::new();
+    let wall = turned_wall_with_flush_window(&mut builder);
+    let graph = builder.finish(vec![wall]).unwrap();
+    let boundary = agreeing(&graph, wall);
+    // Without a tolerance the kernel refuses the near-coincident faces;
+    // within one it reads them as one and reports how far that moved them
+    // (#236). The body is the exact difference of operands moved by that
+    // much, far less than the tolerance itself: marked perturbed by it,
+    // never exact.
+    let perturbation = boundary.body().perturbation_metres();
+    assert!(!boundary.body().is_exact());
+    assert!(perturbation > 0.0 && perturbation < 1e-9, "{perturbation}");
+    assert_close(
+        volume(boundary.brep().unwrap()),
+        4.0 * 0.2 * 3.0 - 1.2 * 1.0 * 0.2,
+        1e-9,
+    );
 }
 
 #[test]
@@ -246,15 +295,15 @@ fn the_window_decides_a_pipes_distance_the_mesh_left_open() {
     );
 
     // Through the window the exact bodies certify it, widened by the
-    // wall's perturbation on both sides.
-    let (geometry, perturbation) = wall_and_pipe(true);
+    // wall's rounding on both sides.
+    let (geometry, widening) = wall_and_pipe(true);
     let (lower, upper) = pipe_to_wall(geometry);
     assert!(
-        lower <= PIPE_TO_SILL - perturbation && PIPE_TO_SILL + perturbation <= upper,
+        lower <= PIPE_TO_SILL - widening && PIPE_TO_SILL + widening <= upper,
         "[{lower}, {upper}]"
     );
     assert!(
-        upper - lower <= 2.0 * perturbation + 4.0 * CERTIFIED_ACCURACY_METRES,
+        upper - lower <= 2.0 * widening + 4.0 * CERTIFIED_ACCURACY_METRES,
         "[{lower}, {upper}]"
     );
     assert!(lower > minimum, "certified: [{lower}, {upper}]");
@@ -424,10 +473,10 @@ fn items_the_kernel_cannot_unite_keep_the_mesh() {
 #[test]
 fn a_wall_built_within_a_tolerance_is_compared_on_its_meshes() {
     // The surface distance between revisions must be measured on exact
-    // surfaces: a wall less its openings is perturbed, so its exact
-    // (planar) meshes are compared instead, exactly.
+    // surfaces: a turned wall less a flush window is perturbed, so its
+    // exact (planar) meshes are compared instead, exactly.
     let mut builder = GeometryGraphBuilder::new();
-    let wall = wall_with_openings(&mut builder);
+    let wall = turned_wall_with_flush_window(&mut builder);
     let graph = builder.finish(vec![wall]).unwrap();
     let revised = ObjectId::new(SourceId::new("cad", "revised").unwrap(), "wall").unwrap();
     let session = |object: &ObjectId| {
@@ -446,4 +495,304 @@ fn a_wall_built_within_a_tolerance_is_compared_on_its_meshes() {
     assert_eq!(measured.basis(), SurfaceBasis::Mesh);
     assert!(measured.evidence().exact);
     assert!(measured.distance().upper_metres() < 1e-9, "{measured:?}");
+}
+
+#[test]
+fn a_wall_less_its_openings_is_compared_between_its_exact_bodies() {
+    // An exact difference (openings along the axes) feeds the surface
+    // distance: the revision moved 5 mm across the wall is 5 mm away,
+    // measured between the boundaries and cited as exact, the interval
+    // widened by both bodies' rounding.
+    let mut builder = GeometryGraphBuilder::new();
+    let before = wall_with_openings(&mut builder);
+    let moved = wall_with_openings(&mut builder);
+    let after = placed(
+        &mut builder,
+        moved,
+        Transform3::from_translation(Vec3::new(0.0, 0.005, 0.0)),
+    );
+    let graph = builder.finish(vec![before, after]).unwrap();
+    let revised = ObjectId::new(SourceId::new("cad", "revised").unwrap(), "wall").unwrap();
+    let session = |object: &ObjectId, root: NodeId| {
+        AxiolidProximityService::new(
+            AxiolidGeometry::new()
+                .with_mesh(object.clone(), mesh(&graph, root))
+                .with_exact_body(object.clone(), agreeing(&graph, root).into_body()),
+        )
+    };
+    let (base, revision) = (session(&id("wall"), before), session(&revised, after));
+    let surface = revision.body_surface(&revised).unwrap();
+    let request =
+        SurfaceDistanceRequest::try_new(id("wall"), std::sync::Arc::new(surface), 1e-4).unwrap();
+    let measured = base.measure_surface_distance(&request).unwrap();
+    assert_eq!(measured.basis(), SurfaceBasis::ExactBoundary);
+    assert!(measured.evidence().exact);
+    let (lower, upper) = (
+        measured.distance().lower_metres(),
+        measured.distance().upper_metres(),
+    );
+    assert!(lower <= 0.005 && 0.005 <= upper, "[{lower}, {upper}]");
+    assert!(upper - lower <= 2e-4, "[{lower}, {upper}]");
+}
+
+/// A gable wall 6 m long (`x` in `[-3, 3]`), 0.3 m thick and 3 m high
+/// under two roof planes `z = 2.4 -+ 0.3 x` (the half-spaces above them
+/// taken away, as an `IfcBooleanClippingResult` clips a wall), less a
+/// round window of radius 0.3 m centred at `x = -1.2`, `z = 1.2` and
+/// extruded across it.
+fn gable_wall_with_round_window(builder: &mut GeometryGraphBuilder) -> NodeId {
+    let mut wall = extrusion(builder, rectangle(6.0, 0.3), 3.0, Transform3::IDENTITY);
+    for slope in [0.3, -0.3] {
+        let roof = push(
+            builder,
+            GeometryNode::HalfSpace(HalfSpace {
+                boundary: Plane3 {
+                    origin: Point3::new(0.0, 0.0, 2.4),
+                    normal: Vec3::new(-slope, 0.0, 1.0),
+                },
+                agreement: true,
+            }),
+        );
+        wall = difference(builder, wall, roof);
+    }
+    let turn = Transform3::from_cols(Vec3::X, -Vec3::Z, Vec3::Y, Vec3::ZERO);
+    let window = extrusion(
+        builder,
+        circle(0.3),
+        0.5,
+        Transform3::from_translation(Vec3::new(-1.2, -0.25, 1.2)) * turn,
+    );
+    difference(builder, wall, window)
+}
+
+/// The gable wall's area, `2 (2.4 * 3 - 0.3 * 9 / 2)`, times its
+/// thickness, less the window's cylinder.
+const GABLE_VOLUME: f64 = 11.7 * 0.3 - std::f64::consts::PI * 0.09 * 0.3;
+
+#[test]
+fn a_roof_clipped_wall_with_a_window_is_exact() {
+    let mut builder = GeometryGraphBuilder::new();
+    let wall = gable_wall_with_round_window(&mut builder);
+    let graph = builder.finish(vec![wall]).unwrap();
+    // Its extent is the clipped one, from its edges: the ridge at 2.4 m,
+    // not the uncut wall's 3 m, so it agrees with the mesh.
+    let boundary = agreeing(&graph, wall);
+    let (low, high) = boundary.extent();
+    assert_close(low[2], 0.0, 1e-12);
+    assert_close(high[2], 2.4, 1e-12);
+    assert!(boundary.body().is_exact(), "{:?}", boundary.body());
+    assert!(boundary.body().rounding_metres() > 0.0);
+    assert_close(volume(boundary.brep().unwrap()), GABLE_VOLUME, 1e-9);
+}
+
+#[test]
+fn a_roof_slope_certifies_a_pipes_distance() {
+    // A pipe of radius 0.05 m along y over the right-hand slope, its axis
+    // at x = 1, z = 2.6: 0.5 / sqrt(1.09) from the plane z = 2.4 - 0.3 x,
+    // less its radius.
+    let expected = 0.5 / 1.09_f64.sqrt() - 0.05;
+    let mut builder = GeometryGraphBuilder::new();
+    let wall = gable_wall_with_round_window(&mut builder);
+    let line = push(
+        &mut builder,
+        GeometryNode::Curve3(Curve3::Polyline(Polyline {
+            points: vec![Point3::new(1.0, -1.0, 2.6), Point3::new(1.0, 1.2, 2.6)],
+            closed: false,
+        })),
+    );
+    let pipe = push(
+        &mut builder,
+        GeometryNode::SolidOperation(SolidOperation::SweptDisk {
+            directrix: line,
+            radius: 0.05,
+            inner_radius: None,
+            parameter_range: None,
+            fillet_radius: None,
+        }),
+    );
+    let graph = builder.finish(vec![wall, pipe]).unwrap();
+    let (wall_body, pipe_body) = (agreeing(&graph, wall), agreeing(&graph, pipe));
+    let widening = wall_body.body().widening_metres();
+    let geometry = AxiolidGeometry::new()
+        .with_tessellated_mesh(id("wall"), mesh(&graph, wall), DEVIATION)
+        .with_tessellated_mesh(id("pipe"), mesh(&graph, pipe), DEVIATION)
+        .with_exact_body(id("wall"), wall_body.into_body())
+        .with_exact_body(id("pipe"), pipe_body.into_body());
+    let (lower, upper) = pipe_to_wall(geometry);
+    assert!(lower <= expected && expected <= upper, "[{lower}, {upper}]");
+    assert!(
+        upper - lower <= 2.0 * widening + 4.0 * CERTIFIED_ACCURACY_METRES,
+        "[{lower}, {upper}]"
+    );
+}
+
+#[test]
+fn a_wall_clipped_by_a_bounded_half_space_is_exact() {
+    // The wall above z = 2 taken away over x in [0, 3.5] only: a
+    // polygonally bounded half-space, its boundary framed in the plane.
+    let mut builder = GeometryGraphBuilder::new();
+    let wall = extrusion(&mut builder, rectangle(6.0, 0.3), 3.0, Transform3::IDENTITY);
+    let plane = push(
+        &mut builder,
+        GeometryNode::HalfSpace(HalfSpace {
+            boundary: Plane3 {
+                origin: Point3::new(0.0, 0.0, 2.0),
+                normal: Vec3::Z,
+            },
+            agreement: true,
+        }),
+    );
+    let boundary = push(
+        &mut builder,
+        GeometryNode::Curve2(Curve2::Polyline(Polyline2 {
+            points: vec![
+                Point2::new(0.0, -1.0),
+                Point2::new(3.5, -1.0),
+                Point2::new(3.5, 1.0),
+                Point2::new(0.0, 1.0),
+            ],
+            closed: true,
+        })),
+    );
+    let bounded = push(
+        &mut builder,
+        GeometryNode::SolidOperation(SolidOperation::BoundedHalfSpace {
+            half_space: plane,
+            boundary,
+            placement: Transform3::IDENTITY,
+        }),
+    );
+    let clipped = difference(&mut builder, wall, bounded);
+    let graph = builder.finish(vec![clipped]).unwrap();
+    let boundary = agreeing(&graph, clipped);
+    assert!(boundary.body().is_exact());
+    assert_close(
+        volume(boundary.brep().unwrap()),
+        6.0 * 0.3 * 3.0 - 3.0 * 0.3 * 1.0,
+        1e-9,
+    );
+}
+
+#[test]
+fn a_column_on_its_footing_is_certified_against_a_wall_in_plan() {
+    // A body of two items in plan (axiolid/kernel#237): the footing,
+    // turned 0.4 rad, comes nearest the wall's face at x = 1.5.
+    let mut builder = GeometryGraphBuilder::new();
+    let body = column_on_footing(&mut builder, [0.0, 0.0], 0.5);
+    let wall = plain_wall(&mut builder);
+    let graph = builder.finish(vec![body, wall]).unwrap();
+    let expected = 1.5 - 0.5 * (0.4_f64.cos() + 0.4_f64.sin());
+    let geometry = |exact: bool| {
+        let geometry = AxiolidGeometry::new()
+            .with_tessellated_mesh(id("column"), mesh(&graph, body), DEVIATION)
+            .with_mesh(id("wall"), mesh(&graph, wall));
+        if !exact {
+            return geometry;
+        }
+        geometry
+            .with_exact_body(id("column"), agreeing(&graph, body).into_body())
+            .with_exact_body(id("wall"), agreeing(&graph, wall).into_body())
+    };
+    let horizontal = |exact: bool| {
+        let request =
+            ProximityRequest::projected(id("column"), id("wall"), ProximityProjection::Horizontal)
+                .unwrap();
+        AxiolidProximityService::new(geometry(exact))
+            .measure_distance(&request)
+            .unwrap()
+            .interval_metres()
+    };
+    let (lower, upper) = horizontal(false);
+    assert!(lower <= expected && expected <= upper, "[{lower}, {upper}]");
+    assert!(
+        upper - lower >= DEVIATION,
+        "the chord band: [{lower}, {upper}]"
+    );
+    let (lower, upper) = horizontal(true);
+    assert!(lower <= expected && expected <= upper, "[{lower}, {upper}]");
+    assert!(
+        upper - lower <= 4.0 * CERTIFIED_ACCURACY_METRES,
+        "certified: [{lower}, {upper}]"
+    );
+}
+
+/// A slab 4 m by 3 m and 0.3 m thick less a 1 m square shaft at its
+/// centre, both bare prisms along `+z`.
+fn slab_with_shaft(builder: &mut GeometryGraphBuilder) -> NodeId {
+    let bare = |builder: &mut GeometryGraphBuilder, x: f64, y: f64| {
+        let profile = push(builder, GeometryNode::Profile(rectangle(x, y)));
+        push(
+            builder,
+            GeometryNode::SolidOperation(SolidOperation::Extrusion {
+                profile,
+                direction: Vec3::Z,
+                depth: 0.3,
+            }),
+        )
+    };
+    let (slab, shaft) = (bare(builder, 4.0, 3.0), bare(builder, 1.0, 1.0));
+    difference(builder, slab, shaft)
+}
+
+#[test]
+fn a_column_over_a_shafts_edge_overlaps_the_slab_in_plan() {
+    // A round column standing in the shaft and reaching 0.5 mm over its edge
+    // at x = 0.5 onto the slab: within the chord deviation, so the meshes
+    // leave the plan overlap open, while the exact bodies (the slab an
+    // exact difference) show it.
+    let mut builder = GeometryGraphBuilder::new();
+    let slab = slab_with_shaft(&mut builder);
+    let column = extrusion(
+        &mut builder,
+        circle(0.2),
+        2.7,
+        Transform3::from_translation(Vec3::new(0.3005, 0.0, 0.3)),
+    );
+    let graph = builder.finish(vec![slab, column]).unwrap();
+    let overlap = |exact: bool| {
+        let mut geometry = AxiolidGeometry::new()
+            .with_mesh(id("slab"), mesh(&graph, slab))
+            .with_tessellated_mesh(id("column"), mesh(&graph, column), DEVIATION);
+        if exact {
+            geometry = geometry
+                .with_exact_body(id("slab"), agreeing(&graph, slab).into_body())
+                .with_exact_body(id("column"), agreeing(&graph, column).into_body());
+        }
+        let request =
+            ProximityRequest::projected(id("column"), id("slab"), ProximityProjection::PlanOverlap)
+                .unwrap();
+        AxiolidProximityService::new(geometry)
+            .measure_distance(&request)
+            .unwrap()
+            .interval_metres()
+    };
+    assert_eq!(overlap(false), (0.0, f64::INFINITY));
+    assert_eq!(overlap(true), (0.0, 0.0));
+}
+
+#[test]
+fn a_union_with_a_half_space_is_refused_by_name() {
+    let mut builder = GeometryGraphBuilder::new();
+    let wall = extrusion(&mut builder, rectangle(6.0, 0.3), 3.0, Transform3::IDENTITY);
+    let roof = push(
+        &mut builder,
+        GeometryNode::HalfSpace(HalfSpace {
+            boundary: Plane3 {
+                origin: Point3::new(0.0, 0.0, 2.4),
+                normal: Vec3::Z,
+            },
+            agreement: true,
+        }),
+    );
+    let union = push(
+        &mut builder,
+        GeometryNode::SolidOperation(SolidOperation::Boolean {
+            left: wall,
+            right: roof,
+            operator: BooleanOperator::Union,
+        }),
+    );
+    let graph = builder.finish(vec![union]).unwrap();
+    let refusal = exact_boundary(&graph, union).unwrap_err();
+    assert!(refusal.contains("union"), "{refusal}");
 }

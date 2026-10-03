@@ -81,7 +81,8 @@
 //!
 //! **Certified plan relations.** The same pair's footprints are certified
 //! with the kernel's plan measurements, which see a solid's shadow as its
-//! boundary's. `Horizontal` intersects the chord-widened interval with
+//! boundary's; a body of several items casts its items' shadows
+//! (`body_plan_*`, axiolid-measure 0.3.9). `Horizontal` intersects the chord-widened interval with
 //! `plan_boundary_distance` (zero also for a body standing inside another's
 //! footprint), widened as above. The footprint relation of `PlanOverlap`
 //! and of `Vertical` with a zero offset takes `plan_overlap`: `Overlapping`
@@ -105,7 +106,8 @@
 use axiolid_core::{Aabb, Point3, Ray3, Tolerance};
 use axiolid_inspect::{enclosed_volume, intersection_volume};
 use axiolid_measure::{
-    DistanceBounds, PlacedBody, PlanOverlap, WindingMesh, body_boundary_distance,
+    BodyPlanOverlap, DistanceBounds, PlacedBody, PlanOverlap, WindingMesh, body_boundary_distance,
+    body_plan_boundary_clearance, body_plan_boundary_distance, body_plan_overlap,
     boundary_distance, closest_point_on_triangle, closest_points_on_segments,
     closest_points_on_triangles, one_sided_body_boundary_hausdorff_with_budget,
     one_sided_boundary_hausdorff_with_budget, plan_boundary_clearance, plan_boundary_distance,
@@ -255,8 +257,10 @@ impl AxiolidProximityService {
             return Ok(None);
         };
         // A surface distance is certified only on exact surfaces: a body
-        // built within a tolerance (a wall less its openings) is not the
-        // model's exactly, so its meshes are compared instead.
+        // built from operands moved within a tolerance is not the model's
+        // exactly, so its meshes are compared instead. A boolean the kernel
+        // built without such a decision (a wall less its openings, placed
+        // along the axes) is, up to its rounding, which widens each side.
         if !subject.is_exact() || !counterpart.is_exact() {
             return Ok(None);
         }
@@ -285,7 +289,7 @@ impl AxiolidProximityService {
                     .bounds
                 }
             };
-            certified_directed(&bounds)
+            certified_directed(&bounds, from.widening_metres() + to.widening_metres())
         };
         let (Some(forward), Some(backward)) = (
             directed(subject, counterpart),
@@ -683,16 +687,25 @@ pub(crate) struct Boundaries<'a> {
 }
 
 impl<'a> Boundaries<'a> {
-    /// The two bodies when both are one solid in the world, as the plan
-    /// measurements take them.
+    /// The two bodies when both are one solid in the world, which the
+    /// one-solid measurements take; otherwise the body measurements over
+    /// their items (`body_*`, axiolid-measure 0.3.8 and 0.3.9).
     fn single(self) -> Option<(&'a axiolid_brep::ExactBRep, &'a axiolid_brep::ExactBRep)> {
         self.subject.single().zip(self.counterpart.single())
     }
 
-    /// How far both bodies' faces may lie from the model's together; every
-    /// certified distance is widened by it.
-    fn perturbation(self) -> f64 {
-        self.subject.perturbation_metres() + self.counterpart.perturbation_metres()
+    /// How far both bodies' faces may lie from the model's together, by
+    /// perturbation and rounding; every certified distance is widened by
+    /// it.
+    fn widening(self) -> f64 {
+        self.subject.widening_metres() + self.counterpart.widening_metres()
+    }
+
+    /// Whether either body was built from operands moved within a
+    /// tolerance: a shared patch or a gap within that may not be the
+    /// model's.
+    fn perturbed(self) -> bool {
+        !self.subject.is_exact() || !self.counterpart.is_exact()
     }
 
     /// The certified distance in space between the two boundaries: the
@@ -718,66 +731,102 @@ impl<'a> Boundaries<'a> {
                 .bounds
             }
         };
-        certified(&bounds, self.perturbation())
+        certified(&bounds, self.widening())
     }
 
     /// The certified distance between the two boundaries' plan projections,
     /// which are the solids' shadows: zero when they overlap, also when one
-    /// stands inside the other's footprint. Bodies of one solid only.
+    /// stands inside the other's footprint; the least over item pairs for
+    /// a body of several (`body_plan_boundary_distance`).
     fn plan_distance(self) -> Option<(f64, f64)> {
-        let (subject, counterpart) = self.single()?;
-        certified(
-            &plan_boundary_distance(
+        let bounds = match self.single() {
+            Some((subject, counterpart)) => plan_boundary_distance(
                 subject,
                 counterpart,
                 CERTIFIED_ACCURACY_METRES,
                 Tolerance::METRE,
             )
             .ok()?,
-            self.perturbation(),
-        )
+            None => {
+                body_plan_boundary_distance(
+                    placed(self.subject),
+                    placed(self.counterpart),
+                    CERTIFIED_ACCURACY_METRES,
+                    Tolerance::METRE,
+                )
+                .ok()?
+                .bounds
+            }
+        };
+        certified(&bounds, self.widening())
     }
 
     /// The certified plan distance, refined only until it clears `limit`.
     fn plan_clearance(self, limit: f64) -> Option<(f64, f64)> {
-        let (subject, counterpart) = self.single()?;
-        certified(
-            &plan_boundary_clearance(subject, counterpart, limit, Tolerance::METRE)
+        let bounds = match self.single() {
+            Some((subject, counterpart)) => {
+                plan_boundary_clearance(subject, counterpart, limit, Tolerance::METRE)
+                    .ok()?
+                    .0
+            }
+            None => {
+                body_plan_boundary_clearance(
+                    placed(self.subject),
+                    placed(self.counterpart),
+                    limit,
+                    Tolerance::METRE,
+                )
                 .ok()?
-                .0,
-            self.perturbation(),
-        )
+                .0
+                .bounds
+            }
+        };
+        certified(&bounds, self.widening())
     }
 
     /// Whether the shadows overlap with positive area: shown by two planar
     /// faces sharing an open patch in plan, denied by a certified gap wider
-    /// than the rounding of coordinates up to `magnitude`, open otherwise
-    /// (shadows that only touch, or overlap between curved faces alone).
-    /// Bodies of one solid only, and never a perturbed one: a shared patch
-    /// or a gap within its perturbation may not be the model's.
+    /// than the rounding of coordinates up to `magnitude` and the bodies'
+    /// own rounding, open otherwise (shadows that only touch, or overlap
+    /// between curved faces alone). Never for a perturbed body: a shared
+    /// patch or a gap within its perturbation may not be the model's. A
+    /// body of several items is measured over every item pair
+    /// (`body_plan_overlap`).
     ///
     /// Overlap is symmetric but the kernel's search is not: axiolid-measure
-    /// 0.3.4 shows a column's base over a slab only with the slab first. So
-    /// an undecided order is asked again the other way round; either answer
-    /// is certified.
+    /// 0.3.4 showed a column's base over a slab only with the slab first.
+    /// So an undecided order is asked again the other way round; either
+    /// answer is certified.
     fn plan_overlap(self, magnitude: f64) -> Relation {
-        let Some((subject, counterpart)) = self.single() else {
-            return Relation::Open;
-        };
-        if self.perturbation() != 0.0 {
+        if self.perturbed() {
             return Relation::Open;
         }
-        let decide = |first, second| match plan_overlap(first, second, Tolerance::METRE) {
-            Ok(PlanOverlap::Overlapping { .. }) => Relation::Related,
-            Ok(PlanOverlap::Disjoint { gap })
-                if gap.is_finite() && gap > rounding(magnitude.max(gap)) =>
-            {
-                Relation::Unrelated
+        let widening = self.widening();
+        let decide = |first: &ExactBody, second: &ExactBody| {
+            let verdict = match first.single().zip(second.single()) {
+                Some((first, second)) => match plan_overlap(first, second, Tolerance::METRE) {
+                    Ok(PlanOverlap::Overlapping { .. }) => Some(None),
+                    Ok(PlanOverlap::Disjoint { gap }) => Some(Some(gap)),
+                    _ => None,
+                },
+                None => match body_plan_overlap(placed(first), placed(second), Tolerance::METRE) {
+                    Ok(BodyPlanOverlap::Overlapping { .. }) => Some(None),
+                    Ok(BodyPlanOverlap::Disjoint { gap }) => Some(Some(gap)),
+                    _ => None,
+                },
+            };
+            match verdict {
+                Some(None) => Relation::Related,
+                Some(Some(gap))
+                    if gap.is_finite() && gap > rounding(magnitude.max(gap)) + widening =>
+                {
+                    Relation::Unrelated
+                }
+                _ => Relation::Open,
             }
-            _ => Relation::Open,
         };
-        match decide(subject, counterpart) {
-            Relation::Open => decide(counterpart, subject),
+        match decide(self.subject, self.counterpart) {
+            Relation::Open => decide(self.counterpart, self.subject),
             decided => decided,
         }
     }
@@ -795,13 +844,14 @@ fn rounding(magnitude: f64) -> f64 {
 }
 
 /// A kernel distance interval widened by a bound on the rounding of its
-/// witness points and by the bodies' `perturbation`; `None` when the
-/// kernel's interval is not well-formed or the perturbation unbounded.
-fn certified(bounds: &DistanceBounds, perturbation: f64) -> Option<(f64, f64)> {
+/// witness points and by the bodies' `widening` (perturbation and
+/// rounding); `None` when the kernel's interval is not well-formed or the
+/// widening unbounded.
+fn certified(bounds: &DistanceBounds, widening: f64) -> Option<(f64, f64)> {
     if !bounds.lower.is_finite()
         || !bounds.upper.is_finite()
         || bounds.lower > bounds.upper
-        || !perturbation.is_finite()
+        || !widening.is_finite()
     {
         return None;
     }
@@ -811,7 +861,7 @@ fn certified(bounds: &DistanceBounds, perturbation: f64) -> Option<(f64, f64)> {
         .iter()
         .flat_map(Point3::to_array)
         .fold(bounds.upper, |largest, value| largest.max(value.abs()));
-    let margin = rounding(magnitude) + perturbation;
+    let margin = rounding(magnitude) + widening;
     Some(((bounds.lower - margin).max(0.0), bounds.upper + margin))
 }
 
@@ -1663,19 +1713,25 @@ fn directed(
 
 /// One side of the kernel's certified boundary Hausdorff distance as
 /// evidence, its ends widened by a bound on the rounding of the evaluated
-/// boundary points, as [`certified`] widens a boundary distance. `None`
-/// when the kernel's interval is not well-formed.
+/// boundary points and by the bodies' `widening` (their booleans'
+/// rounding), as [`certified`] widens a boundary distance. `None` when the
+/// kernel's interval is not well-formed or the widening unbounded.
 fn certified_directed(
     bounds: &axiolid_measure::HausdorffBounds,
+    widening: f64,
 ) -> Option<axioval_engine::DirectedDistance> {
-    if !bounds.lower.is_finite() || !bounds.upper.is_finite() || bounds.lower > bounds.upper {
+    if !bounds.lower.is_finite()
+        || !bounds.upper.is_finite()
+        || bounds.lower > bounds.upper
+        || !widening.is_finite()
+    {
         return None;
     }
     let magnitude = [bounds.point_from, bounds.point_to]
         .iter()
         .flat_map(Point3::to_array)
         .fold(bounds.upper, |largest, value| largest.max(value.abs()));
-    let margin = rounding(magnitude);
+    let margin = rounding(magnitude) + widening;
     let point = |point: Point3| [point.x, point.y, point.z];
     axioval_engine::DirectedDistance::try_new(
         LengthInterval::try_new((bounds.lower - margin).max(0.0), bounds.upper + margin).ok()?,

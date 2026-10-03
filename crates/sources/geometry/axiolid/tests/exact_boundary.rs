@@ -522,12 +522,12 @@ fn what_has_no_exact_construction_is_refused_with_the_reason() {
             exact_boundary(&graph, several).unwrap_err(),
         )
     };
-    assert!(union.contains("union or intersection"), "{union}");
+    assert!(union.contains("boolean union"), "{union}");
     assert!(
         revolved_tool.contains("not an extrusion"),
         "{revolved_tool}"
     );
-    assert!(several.contains("union or intersection"), "{several}");
+    assert!(several.contains("boolean union"), "{several}");
 }
 
 /// A disk a metre off the revolution axis, so its turn is a torus.

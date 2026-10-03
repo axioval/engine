@@ -410,27 +410,44 @@ fn an_exact_pair_stays_uncertified() {
 }
 
 #[test]
-fn a_sliver_over_the_slab_edge_stays_open() {
+fn a_sliver_over_the_slab_edge_is_shown_by_the_boundaries_only() {
     // The column reaches 5 mm over the slab's edge at x = 4, less than the
-    // chord deviation, so the mesh cannot tell a sliver from a gap. The
-    // kernel shows overlap only from planar patches it isolates within its
-    // step budget, which it does not for a sliver: the relation stays open
-    // rather than guessed either way.
-    for certified in [false, true] {
-        let geometry = || column_on_slab([4.195, 2.0], certified);
-        assert_eq!(
-            measure(
-                geometry(),
-                "column",
-                "slab",
-                ProximityProjection::PlanOverlap
-            ),
-            Ok(OPEN)
-        );
-        let (lower, upper) = measure(geometry(), "column", "slab", vertical(0.0)).unwrap();
-        assert_eq!(lower, 0.0);
-        assert!(upper.is_infinite());
-    }
+    // chord deviation, so the mesh cannot tell a sliver from a gap and the
+    // relation stays open on the meshes alone. The kernel's plan overlap
+    // shows it on the exact bodies since axiolid-measure 0.3.9: the
+    // column's level base, a disc, lies over part of the slab's top, and a
+    // second search over the planar faces finds the shared patch that the
+    // first one, spent on the walls whose shadows only cross, left
+    // undecided.
+    let geometry = || column_on_slab([4.195, 2.0], false);
+    assert_eq!(
+        measure(
+            geometry(),
+            "column",
+            "slab",
+            ProximityProjection::PlanOverlap
+        ),
+        Ok(OPEN)
+    );
+    let (lower, upper) = measure(geometry(), "column", "slab", vertical(0.0)).unwrap();
+    assert_eq!(lower, 0.0);
+    assert!(upper.is_infinite());
+
+    let geometry = || column_on_slab([4.195, 2.0], true);
+    assert_eq!(
+        measure(
+            geometry(),
+            "column",
+            "slab",
+            ProximityProjection::PlanOverlap
+        ),
+        Ok((0.0, 0.0))
+    );
+    let (lower, upper) = measure(geometry(), "column", "slab", vertical(0.0)).unwrap();
+    assert!(
+        upper.is_finite(),
+        "related, so measured: [{lower}, {upper}]"
+    );
 }
 
 #[test]

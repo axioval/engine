@@ -16,7 +16,8 @@ axiolid-brep.workspace = true
 # Exact boundaries of rigidly placed extrusions, revolutions and swept
 # disks (`exact_boundary`); `axiolid-mesh-compile` reads a swept disk's
 # directrix exactly as it compiles the disk, and its exact compiler builds
-# differences of placed extrusions (openings).
+# differences of placed extrusions (openings) and half-space clips, with a
+# report of what its booleans decided within tolerance.
 axiolid-construct.workspace = true
 axiolid-contracts.workspace = true
 axiolid-core.workspace = true
@@ -32,6 +33,8 @@ axiolid-profile.workspace = true
 axiolid-ray-mesh.workspace = true
 axiolid-route.workspace = true
 axiolid-spatial.workspace = true
+# The surfaces a boolean's rounding is measured against.
+axiolid-surface.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
@@ -41,6 +44,8 @@ axiolid-mesh.workspace = true
 # the same graphs.
 axiolid-mesh-boolean-boolmesh.workspace = true
 axiolid-mesh-compile-contract.workspace = true
+# Roof planes clipping a wall (`HalfSpace`).
+axiolid-primitive.workspace = true
 
 [lints]
 workspace = true

@@ -255,8 +255,14 @@ boundary differs by …`, with the witness as
 evidence, `comparison:exact-boundary:<object>` on each side's source. A
 service that cannot read the counterpart's boundary, or whose kernel
 refuses the pair, measures the meshes as above. So does a boundary the
-Axiolid service built within a tolerance (a wall less its openings): it is
-not exactly the model's surface. A body of several items is compared by
+Axiolid service built from operands its kernel moved within a tolerance
+(an opening flush with a turned wall's face): it is not exactly the
+model's surface. A wall less its openings or clipped by its roof that the
+kernel built deciding nothing within its tolerance (axiolid/kernel#236) is
+the exact boolean of its operands and is compared between its boundaries,
+the interval widened by the rounding the boolean merges points within
+(2^-40 of its operands' largest coordinate): a wall less a door and a
+window moved 5 mm measures 5 mm. A body of several items is compared by
 the boundary of their union, which the kernel forms only for items apart,
 touching without a shared patch or sharing a face on an axis plane of the
 body's frame; any other layout measures the meshes.

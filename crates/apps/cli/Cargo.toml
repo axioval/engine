@@ -25,7 +25,7 @@ axiolid-core.workspace = true
 axiolid-curve.workspace = true
 axiolid-mesh.workspace = true
 # ifc-geometry's reference backend is this compiler (with the boolmesh
-# boolean); 0.3.9 reports each mesh's certified deviation
+# boolean); 0.3.10 reports each mesh's certified deviation, booleans included
 # (`compile_mesh_with_deviation`, axiolid/kernel#232), which the bridge
 # declares.
 axiolid-mesh-boolean-boolmesh.workspace = true

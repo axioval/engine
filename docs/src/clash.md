@@ -346,6 +346,10 @@ It is built only where the construction is exact:
   perpendicular to its extrusion (doors, windows) or parallel to it
   (shafts), with rectangle, circle and line-and-arc profiles, several per
   body, or an `IfcBooleanResult` difference (axiolid/kernel#228);
+- a clip of such a body by a half-space, bounded by a polygon in its plane
+  or not: a wall under its roof planes, an `IfcBooleanClippingResult` of
+  `IfcHalfSpaceSolid` or `IfcPolygonalBoundedHalfSpace`, in any order with
+  its openings (axiolid/kernel#234);
 - several such items in one body, a column on its footing say
   (axiolid/kernel#229).
 
@@ -357,24 +361,33 @@ mirroring are all exact, each coordinate rounded once. A scale or shear has
 no exact rigid copy and is refused. Everything else keeps its mesh alone,
 with the reason: an ellipse revolved, a directrix with corners or curved
 other than by a circle, tapered sweeps and sweeps of a profile along a
-directrix, unions and intersections, operands that are no extrusions and
-half-space clippings.
+directrix, unions, intersections other than with a half-space, and
+operands that are no extrusions.
 
-A difference is built by the kernel's own exact compiler. Its general
-boolean decides faces that agree only up to rounding (an opening flush
-with a wall's face, placed by its own transform) within the tolerance it
-is given, and its result is then the exact boolean of operands moved by at
-most that tolerance, not the model's solid. So a difference is first built
-with no tolerance at all, and only where that is refused (operands under
-their own placements always are) within a micrometre: the body is then
-**perturbed** by the linear tolerance plus the angular one (a nanoradian)
-over its extent, about a micrometre. Every certified distance measured on
-it is widened by that on both sides, it never certifies a plan overlap
-(a shared patch or a gap that narrow may not be the model's), and a
-comparison measures its meshes instead, since a surface distance must be
-measured on exact surfaces. A pipe passing 0.25 m above a window's sill is
-certified to within a few micrometres, where its 1 mm mesh leaves a
-0.24999 m minimum open.
+A difference or clip is built by the kernel's own exact compiler, which
+reports what its general boolean decided within the tolerance it is given
+(axiolid/kernel#236). It is first built with no tolerance at all, and only
+where that is refused within a micrometre. An **empty report** means the
+result is the exact boolean of the operands as given: openings placed by
+axis matrices (flush, through or blind) and openings crossing a turned
+wall's faces transversally are exact, and so are the roof clips above. The
+body is exact: it certifies plan overlaps and feeds a comparison's surface
+distance. Where the report is not empty (an opening flush with a turned
+wall's face, which agrees with it only up to rounding), the result is the
+exact boolean of operands moved and turned by at most the reported
+magnitudes, and the body is **perturbed** by the linear one plus the
+angular one over its extent (a few femtometres for that flush window,
+never more than the micrometre tolerance). Every certified distance
+measured on it is widened by that on both sides, it never certifies a plan
+overlap (a shared patch or a gap that narrow may not be the model's), and
+a comparison measures its meshes instead, since a surface distance must be
+measured on exact surfaces. Either way the boolean merges constructed
+points closer than 2^-40 of its operands' largest coordinate without a
+report, so every distance on such a body is also widened by that much per
+boolean (about 1e-10 m for a wall 100 m from the origin), which leaves it
+exact. A pipe passing 0.25 m above a window's sill is certified to within
+a few micrometres, where its 1 mm mesh leaves a 0.24999 m minimum open, and
+so is a pipe over a roof-clipped wall's slope.
 
 A body of several items keeps each item's solid in the body's own frame,
 under the placements below the collection, and the placement above it
@@ -386,12 +399,15 @@ which it forms only for items shown apart, touching without a shared
 patch, or sharing a face on a plane normal to a coordinate axis in the
 body's frame. Items overlapping, nearly sharing a face, or touching on a
 turned plane are refused by name, and the comparison measures the meshes.
-The plan measurements take one solid only, so such a body's plan relations
-are the mesh's.
+Its plan relations are measured over every item pair
+(`body_plan_boundary_distance`, `body_plan_boundary_clearance`,
+`body_plan_overlap`, axiolid-measure 0.3.9, axiolid/kernel#237), as below.
 `AxiolidGeometry::check_exact_boundary` compares the solid's extent,
 computed in closed form from the construction and its placement (arc,
-cylinder and torus extremes included), with the mesh's within its chord
-deviation and rounding; a boundary that fails is never registered. A
+cylinder and torus extremes included; a difference or clip from its
+edges, whose faces lie on planes and cylinders, so a clipped wall's
+extent is its ridge's), with the mesh's within its chord deviation and
+rounding; a boundary that fails is never registered. A
 swept disk's directrix is read by the kernel's own `exact_directrix`, the
 reading its mesh compiler uses, so the boundary and the mesh follow the
 same curve. The kernel keeps every point of a revolution (a revolved
@@ -400,8 +416,11 @@ budget of its mesh (axiolid/kernel#231), so such a body is checked against
 the 1 mm it is declared with; a turn that would need more than 4096 steps
 is refused and its body is unmeasured, never meshed coarser. Every curved
 mesh is declared with the deviation the compiler certifies for it
-(axiolid/kernel#232), and one it certifies none for (a curved boolean
-result) is unmeasured rather than declared within the budget. `axioval check
+(axiolid/kernel#232). A curved boolean (a wall with a round window, a beam
+cut by round holes, a roof-clipped wall with one) is certified by
+measuring its mesh against the exact compiler's result (axiolid/kernel#235),
+and one the exact compiler refuses (a hole tangent to a flange's face, a
+union) is unmeasured rather than declared within the budget. `axioval check
 --geometry` does all this by default (see [CLI](./cli.md)).
 
 **Certified plan relations.** The same pairs are certified in plan by
@@ -423,12 +442,15 @@ keeps the chord-widened one.
   with no offset, also asks `plan_overlap`. It shows overlap from two
   planar faces, not vertical, sharing an open patch in plan (a column's
   base over a slab), and shows the shadows apart by a certified gap; a gap
-  within rounding decides nothing. Its search depends on the order of the
-  two bodies, so an undecided order is asked the other way round. It
-  never shows overlap between curved faces alone, and a sliver narrower
-  than the chord deviation, such as a column reaching a few millimetres
-  over a slab's edge, stays open. A column standing 3 mm off a slab's edge
-  is certainly beside it, not over it.
+  within rounding (and the bodies' boolean rounding) decides nothing. Its
+  search depends on the order of the two bodies, so an undecided order is
+  asked the other way round. It never shows overlap between curved faces
+  alone. Since axiolid-measure 0.3.9 it also shows a level face lying over
+  only part of another's shadow, so a round column reaching a few
+  millimetres over a slab's edge, a sliver its mesh leaves open, is
+  certainly over it, and so is one reaching half a millimetre over a
+  shaft's edge in a slab less its shaft. A column standing 3 mm off a
+  slab's edge is certainly beside it, not over it.
 - With a positive footprint offset, the relation comes from
   `plan_boundary_clearance` against the offset, intersected with the
   chord-widened plan distance: two columns 0.6 m apart in plan are

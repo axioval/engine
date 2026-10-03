@@ -11610,10 +11610,11 @@ fn beam_supports_are_found_by_contact_with_geometry() {
     );
     // Every body meshes, the tangent hole's host included. The HEB has no
     // fillets, so its mesh is exact. The beam, cut by round holes, is
-    // curved, and the mesh compiler certifies no deviation for a boolean of
-    // curved operands (axiolid/kernel#232: cutting moves the intersection
-    // curve), so it is unmeasured with that reason and the openings in it
-    // are not evaluated, never judged on an unbounded mesh.
+    // curved: the mesh compiler certifies a boolean's mesh only against
+    // the exact compiler's result (axiolid/kernel#235), and that refuses
+    // the hole tangent to the flange's face (its split face pieces do not
+    // close). So the beam is unmeasured with that reason and the openings
+    // in it are not evaluated, never judged on an unbounded mesh.
     assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
     let geometry = &result["geometry"];
     let unmeasured = geometry["unmeasured"].as_array().unwrap();
@@ -11623,7 +11624,7 @@ fn beam_supports_are_found_by_contact_with_geometry() {
         unmeasured[0]["reason"]
             .as_str()
             .unwrap()
-            .contains("boolean result: no operand bound covers the cut"),
+            .contains("split face pieces do not close"),
         "{geometry:#}"
     );
     assert_eq!(geometry["tessellated"], 0, "{geometry:#}");
@@ -15446,8 +15447,9 @@ fn with_geometry_a_distance_through_a_window_is_certified() {
     assert_eq!(result["geometry"]["tessellated"], 1, "{result:#}");
 
     // The wall less its door and window has an exact boundary as well
-    // (built within the kernel's micrometre tolerance, and widened by it),
-    // and the certified distance through the window clears the minimum.
+    // (the exact difference, its openings placed along the axes, widened
+    // by the boolean's rounding), and the certified distance through the
+    // window clears the minimum.
     let (output, result) = distance(&[]);
     assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
     assert_eq!(result["geometry"]["exact_boundaries"], 2, "{result:#}");
@@ -15513,6 +15515,113 @@ fn with_geometry_a_column_of_two_items_is_certified_against_a_wall() {
 
     // Both items get their exact solids, kept in the column's frame, and
     // the certified distance over them clears the minimum.
+    let (output, result) = distance(&[]);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert_eq!(result["geometry"]["exact_boundaries"], 2, "{result:#}");
+    assert!(finding_ids(&result).is_empty(), "{result:#}");
+}
+
+/// A gable wall #31 (`x` -3 to 3, 0.3 m thick, 3 m high) clipped by two
+/// roof planes `z = 2.4 -+ 0.3 x` (`IfcBooleanClippingResult` of
+/// `IfcHalfSpaceSolid`s) and voided by a round window #49 (radius 0.3 m,
+/// centred at `x` -1.2, `z` 1.2), and a round member #69 (radius 0.05 m)
+/// along `y` over the right-hand slope, its axis at `x` 1, `z` 2.6:
+/// `0.5 / sqrt(1.09) - 0.05` (0.428913 m) from the roof plane.
+fn pipe_over_a_gable_wall() -> String {
+    let plane = |first: u32, slope: f64| {
+        format!(
+            "#{a}=IFCCARTESIANPOINT((0.,0.,2.4));\n\
+             #{b}=IFCDIRECTION(({slope:.1},0.,1.));\n\
+             #{c}=IFCDIRECTION((1.,0.,{run:.1}));\n\
+             #{d}=IFCAXIS2PLACEMENT3D(#{a},#{b},#{c});\n\
+             #{e}=IFCPLANE(#{d});\n\
+             #{f}=IFCHALFSPACESOLID(#{e},.F.);\n",
+            a = first,
+            b = first + 1,
+            c = first + 2,
+            d = first + 3,
+            e = first + 4,
+            f = first + 5,
+            run = -slope,
+        )
+    };
+    model_with(&format!(
+        "#10=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #11=IFCAXIS2PLACEMENT3D(#10,$,$);\n\
+         #12=IFCLOCALPLACEMENT($,#11);\n\
+         #13=IFCRECTANGLEPROFILEDEF(.AREA.,$,$,6.,0.3);\n\
+         #14=IFCEXTRUDEDAREASOLID(#13,#2,#4,3.);\n\
+         {}{}\
+         #27=IFCBOOLEANCLIPPINGRESULT(.DIFFERENCE.,#14,#20);\n\
+         #28=IFCBOOLEANCLIPPINGRESULT(.DIFFERENCE.,#27,#26);\n\
+         #29=IFCSHAPEREPRESENTATION(#5,'Body','Clipping',(#28));\n\
+         #30=IFCPRODUCTDEFINITIONSHAPE($,$,(#29));\n\
+         #31=IFCWALL('0000000000000000000031',$,$,$,$,#12,#30,$,$);\n\
+         #40=IFCCARTESIANPOINT((-1.2,-0.25,1.2));\n\
+         #41=IFCDIRECTION((0.,1.,0.));\n\
+         #42=IFCDIRECTION((1.,0.,0.));\n\
+         #43=IFCAXIS2PLACEMENT3D(#40,#41,#42);\n\
+         #44=IFCLOCALPLACEMENT($,#43);\n\
+         #45=IFCCIRCLEPROFILEDEF(.AREA.,$,$,0.3);\n\
+         #46=IFCEXTRUDEDAREASOLID(#45,#2,#4,0.5);\n\
+         #47=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#46));\n\
+         #48=IFCPRODUCTDEFINITIONSHAPE($,$,(#47));\n\
+         #49=IFCOPENINGELEMENT('0000000000000000000049',$,$,$,$,#44,#48,$,.OPENING.);\n\
+         #50=IFCRELVOIDSELEMENT('0000000000000000000050',$,$,$,#31,#49);\n\
+         #60=IFCCARTESIANPOINT((1.,-1.,2.6));\n\
+         #61=IFCDIRECTION((0.,1.,0.));\n\
+         #62=IFCDIRECTION((1.,0.,0.));\n\
+         #63=IFCAXIS2PLACEMENT3D(#60,#61,#62);\n\
+         #64=IFCLOCALPLACEMENT($,#63);\n\
+         #65=IFCCIRCLEPROFILEDEF(.AREA.,$,$,0.05);\n\
+         #66=IFCEXTRUDEDAREASOLID(#65,#2,#4,2.2);\n\
+         #67=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#66));\n\
+         #68=IFCPRODUCTDEFINITIONSHAPE($,$,(#67));\n\
+         #69=IFCMEMBER('0000000000000000000069',$,$,$,$,#64,#68,$,$);\n",
+        plane(15, 0.3),
+        plane(21, -0.3),
+    ))
+}
+
+#[test]
+fn with_geometry_a_roof_clipped_wall_with_a_round_window_is_certified() {
+    // The wall's mesh is certified against the exact clipped and cut wall
+    // (axiolid/kernel#234, #235), so it is measured, not unmeasured; its
+    // exact boundary is built too, exact (no decision within tolerance,
+    // #236), and certifies the member's distance to the roof slope.
+    let case = Case::new("geometry-gable-wall");
+    case.write("model.ifc", &pipe_over_a_gable_wall());
+    let distance = |args: &[&str]| {
+        case.geometry_rule_with(
+            &["model.ifc"],
+            &[("member", "IfcMember"), ("wall", "IfcWall")],
+            (
+                "axioval:capability.distance",
+                &registry_signature("axioval:capability.distance"),
+            ),
+            entity("member"),
+            json!({
+                "counterparts": {"type": "selector", "value": entity("wall")},
+                "mode": {"type": "string", "value": "none_closer_than"},
+                "minimum_metres": {"type": "number", "value": 0.4289},
+            }),
+            &json!({}),
+            args,
+        )
+    };
+
+    // Both meshes are within their certified deviations, which leave the
+    // minimum just under the true distance open.
+    let (output, result) = distance(&["--no-exact-boundaries"]);
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    assert_eq!(result["geometry"]["tessellated"], 2, "{result:#}");
+    assert!(
+        result["geometry"]["unmeasured"]
+            .as_array()
+            .is_none_or(Vec::is_empty),
+        "{result:#}"
+    );
+
     let (output, result) = distance(&[]);
     assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
     assert_eq!(result["geometry"]["exact_boundaries"], 2, "{result:#}");

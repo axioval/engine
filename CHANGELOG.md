@@ -79,6 +79,18 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- The IFC crates move to `openbim-ifc` 0.13, `ifc-geometry` 0.8,
+  `ifc-alignment` 0.6, `ifc-spatial` 0.5, `ifc-properties` 0.8,
+  `ifc-classification` 0.4, `ifc-material` 0.5, `ifc-systems` 0.4 and
+  `ifc-georef` 0.6, with `axiolid-curve` 0.3.3 and `axiolid-model` 0.3.4.
+  The crates now link only the release tables a build names; the workspace
+  names IFC2X3, IFC4 and IFC4X3, the releases the adapter reads, so models
+  read as before, and a release whose table were not linked would be
+  refused with its reason. `CUBIC` transitions and vertical circular arcs
+  and clothoids of IFC4X3 alignments now lower exactly instead of being
+  refused by name; a solid swept along such a gradient curve stays
+  unmeasured, now with the mesh compiler's reason, since the reference
+  compiler does not yet sweep along an elevated directrix.
 - `axioval-ids` and the CLI read and write IDS with `openbim-ids` 0.2.0.
   Its reader and writer are unchanged, so translation, export and the
   conformance corpus are too. Its new `audit` feature is left off: it

@@ -196,7 +196,11 @@ The session binds to the one release the file header declares: IFC2X3 TC1
 release than the session's, its classifications are refused. A header naming
 any other release (IFC4X1 and IFC4X2 included, which no reader here is
 verified against), several releases, or none is refused rather than read with
-the wrong tables. The session declares that release's type system on its
+the wrong tables. The IFC crates link only the release tables a build names
+(their `ifc2x3` ... `ifc4x3` features); the workspace names IFC2X3, IFC4 and
+IFC4X3, and a reader that should ever meet a release whose table is not
+linked answers `UnsupportedSchema`, which the adapter refuses with its
+reason, never reads as absent. The session declares that release's type system on its
 snapshot, so package concepts bind to IFC names (see
 [Concept binding](./concept-binding.md)), and registers that release's entity
 inheritance from the bundled normative schema for `includeSubtypes`.

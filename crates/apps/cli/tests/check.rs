@@ -1566,9 +1566,11 @@ fn a_real_without_a_decimal_point_is_read_and_reported_as_an_integrity_warning()
 }
 
 /// IFC4X3 geometry families are lowered or refused by name: a terrain
-/// written as an `IfcTriangulatedIrregularNetwork` is measured, and an
+/// written as an `IfcTriangulatedIrregularNetwork` is measured, an
 /// `IfcSectionedSolidHorizontal`, which has no neutral sweep over stations
-/// along an alignment, is unmeasured with that reason, never dropped.
+/// along an alignment, is unmeasured with that reason, and a pipe swept along
+/// a gradient curve with a vertical arc lowers but is unmeasured with the
+/// compiler's reason; none is dropped.
 #[test]
 fn with_geometry_ifc4x3_families_are_measured_or_unmeasured_by_name() {
     let case = Case::new("geometry-ifc4x3");
@@ -1583,7 +1585,31 @@ fn with_geometry_ifc4x3_families_are_measured_or_unmeasured_by_name() {
              #50=IFCSECTIONEDSOLIDHORIZONTAL($,$,$);\n\
              #51=IFCSHAPEREPRESENTATION(#5,'Body','AdvancedSweptSolid',(#50));\n\
              #52=IFCPRODUCTDEFINITIONSHAPE($,$,(#51));\n\
-             #53=IFCBUILDINGELEMENTPROXY('0000000000000000000053',$,$,$,$,#3,#52,$,$);\n",
+             #53=IFCBUILDINGELEMENTPROXY('0000000000000000000053',$,$,$,$,#3,#52,$,$);\n\
+             #60=IFCCARTESIANPOINT((0.,0.));\n\
+             #61=IFCDIRECTION((1.,0.));\n\
+             #62=IFCVECTOR(#61,1.);\n\
+             #63=IFCLINE(#60,#62);\n\
+             #64=IFCAXIS2PLACEMENT2D(#60,#61);\n\
+             #65=IFCCURVESEGMENT(.CONTINUOUS.,#64,IFCLENGTHMEASURE(0.),IFCLENGTHMEASURE(150.),#63);\n\
+             #66=IFCCARTESIANPOINT((150.,0.));\n\
+             #67=IFCAXIS2PLACEMENT2D(#66,#61);\n\
+             #68=IFCCURVESEGMENT(.CONTINUOUS.,#67,IFCLENGTHMEASURE(0.),IFCLENGTHMEASURE(0.),#63);\n\
+             #69=IFCCOMPOSITECURVE((#65,#68),.F.);\n\
+             #70=IFCCIRCLE(#64,1000.);\n\
+             #71=IFCCARTESIANPOINT((0.,10.));\n\
+             #72=IFCDIRECTION((0.9998000599800071,-0.01999600119960014));\n\
+             #73=IFCAXIS2PLACEMENT2D(#71,#72);\n\
+             #74=IFCCURVESEGMENT(.CONTINUOUS.,#73,IFCLENGTHMEASURE(0.),IFCLENGTHMEASURE(150.3703467020344),#70);\n\
+             #75=IFCCARTESIANPOINT((150.,18.286590431607237));\n\
+             #76=IFCDIRECTION((1.,0.13111672487879786));\n\
+             #77=IFCAXIS2PLACEMENT2D(#75,#76);\n\
+             #78=IFCCURVESEGMENT(.CONTINUOUS.,#77,IFCLENGTHMEASURE(0.),IFCLENGTHMEASURE(0.),#63);\n\
+             #79=IFCGRADIENTCURVE((#74,#78),.F.,#69,$);\n\
+             #80=IFCSWEPTDISKSOLID(#79,0.1,$,$,$);\n\
+             #81=IFCSHAPEREPRESENTATION(#5,'Body','AdvancedSweptSolid',(#80));\n\
+             #82=IFCPRODUCTDEFINITIONSHAPE($,$,(#81));\n\
+             #83=IFCPIPESEGMENT('0000000000000000000083',$,$,$,$,#3,#82,$,$);\n",
         )
         .replace("FILE_SCHEMA(('IFC4'))", "FILE_SCHEMA(('IFC4X3_ADD2'))"),
     );
@@ -1620,8 +1646,18 @@ fn with_geometry_ifc4x3_families_are_measured_or_unmeasured_by_name() {
             && sectioned.contains("IfcAxis2PlacementLinear stations"),
         "{sectioned}"
     );
+    // The pipe's directrix is an `IfcGradientCurve` whose profile is a
+    // vertical circular arc. Since ifc-geometry 0.8 that arc lowers exactly
+    // instead of being refused by name; the reference compiler does not yet
+    // sweep along an elevated directrix, so the pipe stays unmeasured with
+    // the compiler's reason, never dropped.
+    let pipe = reason("#83");
+    assert!(
+        pipe.starts_with("mesh compilation refused") && pipe.contains("CurveEvaluation"),
+        "{pipe}"
+    );
     assert_eq!(reason("#30"), "no body representation");
-    assert_eq!(unmeasured.len(), 2, "{geometry:#}");
+    assert_eq!(unmeasured.len(), 3, "{geometry:#}");
 }
 
 /// The crossing walls with `extra` entities added to the model.

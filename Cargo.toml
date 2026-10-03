@@ -70,7 +70,9 @@ axiolid-ray-mesh = "0.4.0"
 axiolid-route = "0.3.7"
 axiolid-spatial = "0.3.0"
 axiolid-contracts = "0.3.1"
-axiolid-curve = "0.3.0"
+# 0.3.3 and model 0.3.4 carry the exact alignment relations (CUBIC
+# transitions, vertical arcs and clothoids, cant) `ifc-geometry` 0.8 lowers to.
+axiolid-curve = "0.3.3"
 axiolid-evaluate = "0.3.3"
 # 0.3.9 subtracts placed extrusions exactly (axiolid/kernel#228, through
 # axiolid-brep-boolean 0.1.2) and reports a certified deviation per mesh
@@ -81,7 +83,7 @@ axiolid-mesh-compile = "0.3.10"
 axiolid-exact-compile-contract = "0.3.1"
 axiolid-mesh-compile-contract = "0.3.1"
 axiolid-mesh-boolean-boolmesh = "0.3.3"
-axiolid-model = "0.3.0"
+axiolid-model = "0.3.4"
 axiolid-primitive = "0.3.0"
 axiolid-profile = "0.3.0"
 axiolid-surface = "0.3.0"
@@ -90,16 +92,16 @@ openbim-ids = "0.2.0"
 # Door and window operation geometry (openbimrs/ifc#148, #170) is published
 # only in the IFC facade, which joins `ifc-geometry` and `ifc-properties`; `geometry-select`
 # compiles no geometry kernel.
-openbim_ifc = { package = "openbim-ifc", version = "0.12.0", default-features = false, features = ["geometry-select", "properties"] }
-ifc-classification = "0.3.0"
-ifc-geometry = { version = "0.7.0", default-features = false }
+openbim_ifc = { package = "openbim-ifc", version = "0.13.0", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
+ifc-classification = "0.4.0"
+ifc-geometry = { version = "0.8.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
 # Map conversions only: without the default `transform` feature it links no
 # geometry crate (never Axiolid).
-ifc-georef = { version = "0.5.1", default-features = false }
-ifc-material = "0.4.0"
-ifc-spatial = "0.4.0"
+ifc-georef = { version = "0.6.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
+ifc-material = "0.5.0"
+ifc-spatial = "0.5.0"
 ifc-model = "0.3.1"
-ifc-properties = "0.7.0"
+ifc-properties = "0.8.0"
 ifc-schema = "0.3.1"
 ifc-step = "0.5.0"
 # ifcXML: the codec's own layout and the buildingSMART XSD configuration,
@@ -109,7 +111,7 @@ ifc-xml = "0.4.1"
 # `axioval-engine` reads xlsx rule parameter tables with it.
 quick-xml = "0.42"
 ifc-style = "0.4.0"
-ifc-systems = "0.3.1"
+ifc-systems = "0.4.0"
 regex = "1.11.2"
 sha2 = "0.11.0"
 # ifcZIP archives; deflate is the only compression method they use.

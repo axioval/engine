@@ -18,7 +18,8 @@
 //! - a revolution of the same profiles about the profile's local y axis,
 //!   a full turn or part of one, never touching the axis on a full turn;
 //! - a disk, solid or bored, swept along one straight segment or one
-//!   circular arc.
+//!   circular arc, the directrix read by the kernel's own
+//!   [`exact_directrix`], as its compilers read it.
 //!
 //! Everything else is refused with the reason, and the host keeps the mesh
 //! alone: an ellipse revolved, a directrix with corners or curved other than
@@ -40,12 +41,11 @@ use axiolid_construct::swept_disk_exact::{
     swept_disk_along_arc_exact, swept_disk_along_line_exact,
 };
 use axiolid_construct::{contour_lower::contour_to_arc_ring, profile_lower::lower_derived};
+use axiolid_contracts::ExecutionOptions;
 use axiolid_core::{Interval, Point2, Point3, Tolerance, Transform2, Transform3, Vec2, Vec3};
-use axiolid_curve::{Circle3, Curve3};
-use axiolid_model::{
-    CurveRelation, GeometryGraph, GeometryNode, MasterRepresentation, NodeId, SolidOperation,
-    TrimSelector, TrimmingPreference,
-};
+use axiolid_curve::Circle3;
+use axiolid_mesh_compile::{ExactDirectrix, exact_directrix};
+use axiolid_model::{GeometryGraph, GeometryNode, NodeId, SolidOperation};
 use axiolid_overlay::ArcRing;
 use axiolid_profile::{CircleProfile, Profile};
 
@@ -200,7 +200,18 @@ fn construct(
         })) => {
             // A single segment or arc has no corners, so a fillet radius has
             // nothing to round.
-            let spine = Spine::of(graph, *directrix, *parameter_range, 0)?;
+            let spine = match exact_directrix(
+                graph,
+                *directrix,
+                *parameter_range,
+                &ExecutionOptions::new(TOLERANCE),
+            )
+            .map_err(refused)?
+            {
+                ExactDirectrix::Segment(start, end) => Spine::Segment(start, end),
+                ExactDirectrix::Arc(circle, span) => Spine::Arc(circle, span),
+                _ => return Err("the directrix has a form this adapter does not build".into()),
+            };
             let local = match &spine {
                 Spine::Segment(start, end) => {
                     swept_disk_along_line_exact(*start, *end, *radius, *inner_radius, TOLERANCE)
@@ -362,204 +373,12 @@ fn cosine_range(low: f64, high: f64, alpha: f64) -> (f64, f64) {
     (least, largest)
 }
 
-/// A directrix an exact swept disk follows.
+/// The directrix an exact swept disk follows, as
+/// [`exact_directrix`] reads it.
 enum Spine {
     Segment(Point3, Point3),
     /// Over an angle span of the circle, start to end.
     Arc(Circle3, Interval),
-}
-
-impl Spine {
-    /// The directrix `id` as one segment or one arc, read as the mesh
-    /// compiler reads it; anything with corners, or curved other than by a
-    /// circle, is refused.
-    // An empty trim is exactly equal ends, as the mesh compiler reads it.
-    #[allow(clippy::float_cmp)]
-    fn of(
-        graph: &GeometryGraph,
-        id: NodeId,
-        range: Option<(f64, f64)>,
-        depth: usize,
-    ) -> Result<Self, String> {
-        const OTHER: &str = "a swept disk along a directrix other than one segment or one arc \
-                             has no exact construction";
-        if depth > MAX_DEPTH {
-            return Err("the directrix is too deeply nested".into());
-        }
-        let slack = TOLERANCE.linear();
-        match graph.get(id) {
-            Some(GeometryNode::Curve3(Curve3::Line(line))) => {
-                let (start, end) = range
-                    .ok_or_else(|| {
-                        String::from(
-                            "a swept disk along an unbounded line has no exact construction",
-                        )
-                    })
-                    .and_then(finite_range)?;
-                Ok(Self::Segment(
-                    line.origin + line.direction * start,
-                    line.origin + line.direction * end,
-                ))
-            }
-            Some(GeometryNode::Curve3(Curve3::Polyline(polyline)))
-                if polyline.points.len() == 2 && !polyline.closed && range.is_none() =>
-            {
-                Ok(Self::Segment(polyline.points[0], polyline.points[1]))
-            }
-            Some(GeometryNode::Curve3(Curve3::Circle(circle))) => {
-                let span = match range {
-                    None => Interval::new(0.0, TAU),
-                    Some(range) => {
-                        let (start, end) = finite_range(range)?;
-                        let (low, high) = (start.min(end), start.max(end));
-                        if low < -slack || high > TAU + slack {
-                            return Err("the sweep range falls outside the circle".into());
-                        }
-                        Interval::new(low.max(0.0), high.min(TAU))
-                    }
-                };
-                Ok(Self::Arc(*circle, span))
-            }
-            Some(GeometryNode::CurveRelation(CurveRelation::SurfaceCurve {
-                curve_3d,
-                master: MasterRepresentation::Curve3d,
-                ..
-            })) => Self::of(graph, *curve_3d, range, depth + 1),
-            Some(GeometryNode::CurveRelation(CurveRelation::Composite { segments }))
-                if segments.len() == 1 && range.is_none() =>
-            {
-                // One segment has no corners, and its sense does not change
-                // the swept solid.
-                Self::of(graph, segments[0].curve, None, depth + 1)
-            }
-            Some(GeometryNode::CurveRelation(CurveRelation::Trimmed {
-                basis,
-                start,
-                end,
-                sense_agreement,
-                preference,
-            })) => {
-                let Some(GeometryNode::Curve3(curve)) = graph.get(*basis) else {
-                    return Err(OTHER.into());
-                };
-                let a = trim_parameter(start, *preference, curve)?;
-                let b = trim_parameter(end, *preference, curve)?;
-                if a == b {
-                    return Err("the trimmed directrix is empty".into());
-                }
-                match curve {
-                    Curve3::Line(line) => {
-                        let (low, high) = (a.min(b), a.max(b));
-                        let (s, e) = match range {
-                            None => (a, b),
-                            Some(range) => {
-                                let (s, e) = finite_range(range)?;
-                                if s.min(e) < low - slack || s.max(e) > high + slack {
-                                    return Err("the sweep range exceeds the trim".into());
-                                }
-                                (s.clamp(low, high), e.clamp(low, high))
-                            }
-                        };
-                        Ok(Self::Segment(
-                            line.origin + line.direction * s,
-                            line.origin + line.direction * e,
-                        ))
-                    }
-                    Curve3::Circle(circle) => {
-                        let (low, high) = periodic_trim(a, b, *sense_agreement, range)?;
-                        Ok(Self::Arc(*circle, Interval::new(low, high)))
-                    }
-                    _ => Err(OTHER.into()),
-                }
-            }
-            Some(GeometryNode::Curve3(_) | GeometryNode::CurveRelation(_)) => Err(OTHER.into()),
-            _ => Err("the swept disk has no directrix curve".into()),
-        }
-    }
-}
-
-// An empty range is exactly equal ends, as the mesh compiler reads it.
-#[allow(clippy::float_cmp)]
-fn finite_range((start, end): (f64, f64)) -> Result<(f64, f64), String> {
-    if !(start.is_finite() && end.is_finite()) || start == end {
-        return Err("the sweep range is empty or not finite".into());
-    }
-    Ok((start, end))
-}
-
-/// A trim end's parameter on `basis`, preferring what the source prefers;
-/// a point is inverted onto the curve, never projected.
-fn trim_parameter(
-    selectors: &[TrimSelector],
-    preference: TrimmingPreference,
-    basis: &Curve3,
-) -> Result<f64, String> {
-    let parameter = |selector: &TrimSelector| match selector {
-        TrimSelector::Parameter(value) => Some(*value),
-        _ => None,
-    };
-    let point = || {
-        selectors.iter().find_map(|selector| match selector {
-            TrimSelector::Point3(point) => {
-                axiolid_evaluate::curve::invert3(basis, *point, TOLERANCE).ok()
-            }
-            _ => None,
-        })
-    };
-    let selected = match preference {
-        TrimmingPreference::Parameter => selectors.iter().find_map(parameter),
-        TrimmingPreference::Unspecified => selectors.first().and_then(parameter).or_else(point),
-        TrimmingPreference::Cartesian => point().or_else(|| selectors.iter().find_map(parameter)),
-    };
-    selected
-        .filter(|value| value.is_finite())
-        .ok_or_else(|| "a trim end has no parameter on its curve".into())
-}
-
-/// The trim of a circle from `a` to `b` in the circle's own parameter,
-/// unwrapped (`low` may lie below zero or `high` above a turn), and the
-/// sweep `range` within it, as the mesh compiler reads them.
-// Ends mapped onto the same angle are compared exactly, as the mesh
-// compiler compares them.
-#[allow(clippy::float_cmp)]
-fn periodic_trim(
-    a: f64,
-    b: f64,
-    sense: bool,
-    range: Option<(f64, f64)>,
-) -> Result<(f64, f64), String> {
-    // Authoring tools write a quarter as `(3pi/2, 2pi + 1e-15)`.
-    const PERIOD_SLACK: f64 = 1e-9;
-    let travelled = if sense { b - a } else { a - b };
-    let span = if travelled > 0.0 && travelled <= TAU * (1.0 + PERIOD_SLACK) {
-        travelled
-    } else {
-        match travelled.rem_euclid(TAU) {
-            0.0 => TAU,
-            wrapped => wrapped,
-        }
-    };
-    let (low, high) = if sense { (a, a + span) } else { (a - span, a) };
-    let Some(range) = range else {
-        return Ok((low, high));
-    };
-    let (start, end) = finite_range(range)?;
-    let slack = TOLERANCE.linear();
-    let into_arc = |value: f64| -> Result<f64, String> {
-        let shifted = low + (value - low).rem_euclid(TAU);
-        let shifted = if shifted > low + TAU - slack {
-            low
-        } else {
-            shifted
-        };
-        if shifted > high + slack {
-            return Err("the sweep range exceeds the trim".into());
-        }
-        Ok(shifted.min(high))
-    };
-    let (s, e) = (into_arc(start)?, into_arc(end)?);
-    let (s, e) = if s == e { (low, high) } else { (s, e) };
-    Ok((s.min(e), s.max(e)))
 }
 
 /// What a solid's extent is computed from, in its own coordinates.

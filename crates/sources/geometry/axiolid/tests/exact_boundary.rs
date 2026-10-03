@@ -170,17 +170,12 @@ fn tilted(translation: Vec3) -> Transform3 {
 /// The exact boundary of `root`, checked against the kernel's mesh of the
 /// same graph.
 fn agreeing(graph: &GeometryGraph, root: NodeId) -> ExactBoundary {
-    agreeing_within(graph, root, DEVIATION)
-}
-
-/// The same, for a mesh declared within `deviation`.
-fn agreeing_within(graph: &GeometryGraph, root: NodeId, deviation: f64) -> ExactBoundary {
     let boundary = exact_boundary(graph, root).unwrap();
     let mesh = ReferenceMeshCompiler::new(BoolmeshBoolean)
         .compile_mesh(graph, root, &ExecutionOptions::new(Tolerance::MILLIMETRE))
         .unwrap();
     AxiolidGeometry::new()
-        .with_tessellated_mesh(id(), mesh, deviation)
+        .with_tessellated_mesh(id(), mesh, DEVIATION)
         .check_exact_boundary(&id(), &boundary)
         .unwrap();
     boundary
@@ -312,10 +307,10 @@ fn a_revolved_ring_is_its_closed_form() {
         TAU,
         transform,
     );
-    // The kernel's mesh of a doubly curved surface strays up to about
-    // 1.16 mm from it on a 1 mm chord budget (both directions' chords add),
-    // so it is compared within 2 mm here.
-    let boundary = agreeing_within(&graph, root, 2.0 * DEVIATION);
+    // The kernel keeps a doubly curved surface within the 1 mm chord budget
+    // of its mesh, splitting it between the profile and the turn
+    // (axiolid/kernel#231), so the torus is compared at the budget itself.
+    let boundary = agreeing(&graph, root);
     assert_close(
         volume(boundary.brep()),
         2.0 * PI * PI * bend * radius * radius,

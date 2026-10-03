@@ -891,6 +891,17 @@ The planarity check is conservative. Anything it does not recognise counts as
 tessellated, which only loses exactness, never presents an approximation as
 exact.
 
+The kernel keeps every surface point of a revolution (tapered too), a sphere,
+a torus and a sweep along one circle or ellipse arc within the 1 mm of its
+mesh (axiolid/kernel#231). A body that would need more than 4096 steps round
+an axis to do so, such as a ring kilometres across, is refused rather than
+meshed coarser: it is unmeasured, with the reason `mesh compilation refused:
+keeping the surface within the 0.001 m chord tolerance needs more revolution
+angular steps than the kernel's budget allows, …`. For sweeps along a
+polyline, composite or B-spline directrix, curved B-rep faces, primitive
+cylinders and cones, and ellipse or spline profiles the 1 mm is declared but
+not yet certified by the kernel (axiolid/kernel#232).
+
 Space validation also needs roles and storeys: `IfcSpace`, `IfcSlab`, `IfcRoof`
 and `IfcBuilding` give roles, and the spatial tree gives each object's storey.
 An element the file places twice, or anything under a structure aggregated

@@ -861,8 +861,10 @@ fn a_mesh_comparison_measures_curved_bodies_between_exact_boundaries() {
         change["lower"].as_f64().unwrap(),
         change["upper"].as_f64().unwrap(),
     );
+    // The moved boundary is matched as a translate (axiolid/kernel#227):
+    // the interval closes to the micrometre asked.
     assert!(
-        lower > 0.0005 && lower <= 0.001 && upper >= 0.001,
+        lower > 0.000_998 && lower <= 0.001 && (0.001..0.001_002).contains(&upper),
         "{moved:#}"
     );
     assert!(

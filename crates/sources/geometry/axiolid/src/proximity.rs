@@ -106,9 +106,10 @@ use axiolid_brep::ExactBRep;
 use axiolid_core::{Aabb, Point3, Ray3, Tolerance};
 use axiolid_inspect::{enclosed_volume, intersection_volume};
 use axiolid_measure::{
-    DistanceBounds, PlanOverlap, WindingMesh, boundary_distance, boundary_hausdorff_distance,
-    closest_point_on_triangle, closest_points_on_segments, closest_points_on_triangles,
-    plan_boundary_clearance, plan_boundary_distance, plan_overlap,
+    DistanceBounds, PlanOverlap, WindingMesh, boundary_distance, closest_point_on_triangle,
+    closest_points_on_segments, closest_points_on_triangles,
+    one_sided_boundary_hausdorff_with_budget, plan_boundary_clearance, plan_boundary_distance,
+    plan_overlap,
 };
 use axiolid_mesh::{TriMesh, audit_mesh};
 use axiolid_ray_mesh::intersect_triangle;
@@ -153,6 +154,17 @@ const HAUSDORFF_REFINEMENT: u32 = 2;
 /// coordinates. Refinement stops earlier only when its step budget runs
 /// out, and the interval is sound either way.
 pub const CERTIFIED_ACCURACY_METRES: f64 = 1e-6;
+
+/// Splits the boundary Hausdorff distance may spend in each direction of
+/// one pair before it stops with the interval it has.
+///
+/// Identical and translated copies, the changes a revision mostly makes,
+/// close without a split (axiolid/kernel#227); a turned or reshaped body
+/// closes only at first order and would otherwise spend the kernel's whole
+/// budget of 200,000 splits a side. The interval left at this cap is sound,
+/// only wider, and the comparison judges it as every interval: changed
+/// above the tolerance, unchanged within it, undetermined across it.
+pub const BOUNDARY_HAUSDORFF_SPLITS: usize = 4096;
 
 /// Measures pairwise proximity between registered meshes using Axiolid.
 #[derive(Debug)]
@@ -224,10 +236,11 @@ impl AxiolidProximityService {
     ///
     /// `None` leaves the mesh distance: a side without a boundary, a
     /// boundary of another backend, a kernel refusal or an ill-formed
-    /// interval. The interval may come back wider than the request's
-    /// accuracy where the kernel's refinement budget ran out (a rotated or
-    /// unmatched pair closes only at first order); it is sound either way,
-    /// and judging its width is the caller's.
+    /// interval. Each direction spends at most
+    /// [`BOUNDARY_HAUSDORFF_SPLITS`] splits, so the interval may come back
+    /// wider than the request's accuracy (a turned or reshaped pair closes
+    /// only at first order); it is sound either way, and judging its width
+    /// is the caller's.
     fn boundary_surface_distance(
         &self,
         request: &SurfaceDistanceRequest,
@@ -240,17 +253,21 @@ impl AxiolidProximityService {
         ) else {
             return Ok(None);
         };
-        let Ok(measured) = boundary_hausdorff_distance(
-            subject,
-            counterpart,
-            request.accuracy_metres(),
-            Tolerance::METRE,
-        ) else {
-            return Ok(None);
+        let directed = |from: &ExactBRep, to: &ExactBRep| {
+            one_sided_boundary_hausdorff_with_budget(
+                from,
+                to,
+                request.accuracy_metres(),
+                Tolerance::METRE,
+                BOUNDARY_HAUSDORFF_SPLITS,
+            )
+            .ok()
+            .as_ref()
+            .and_then(certified_directed)
         };
         let (Some(forward), Some(backward)) = (
-            certified_directed(&measured.forward),
-            certified_directed(&measured.backward),
+            directed(subject, counterpart),
+            directed(counterpart, subject),
         ) else {
             return Ok(None);
         };
@@ -1638,7 +1655,7 @@ impl ProximityService for AxiolidProximityService {
 
     /// The kernel's certified two-sided Hausdorff distance, between exact
     /// surfaces only. Where the subject and the counterpart both have an
-    /// exact boundary, between the boundaries (`boundary_hausdorff_distance`,
+    /// exact boundary, between the boundaries (`one_sided_boundary_hausdorff_with_budget` each way,
     /// [`axioval_engine::SurfaceBasis::ExactBoundary`]) whatever the meshes'
     /// fidelity; otherwise, or where the kernel refuses the boundaries, between the
     /// meshes (`hausdorff_distance`). A tessellation bounds its true

@@ -51,7 +51,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 
-use axiolid_contracts::ExecutionOptions;
+use axiolid_contracts::{ExecutionOptions, GeomError};
 use axiolid_core::Tolerance;
 use axiolid_curve::{Curve2, Curve3};
 use axiolid_mesh_compile_contract::MeshCompiler;
@@ -939,11 +939,30 @@ fn boundary_surface(
             lowered.root,
             &ExecutionOptions::new(TOLERANCE),
         )
-        .map_err(|error| format!("mesh compilation refused: {error}"))?;
+        .map_err(|error| compilation_refused(&error))?;
     if mesh.triangle_count() == 0 {
         return Err("mesh compilation produced no triangles".into());
     }
     Ok((mesh, exact))
+}
+
+/// Why the mesh compiler refused a body, which leaves it unmeasured.
+///
+/// A body whose surface needs more steps round an axis than the kernel
+/// takes (4096 a turn) to stay within the chord tolerance is refused with
+/// `BudgetExceeded` rather than meshed more coarsely (axiolid/kernel#231):
+/// its mesh would break the deviation declared for it, so it is not
+/// measured at all.
+fn compilation_refused(error: &GeomError) -> String {
+    match error {
+        GeomError::BudgetExceeded { resource } => format!(
+            "mesh compilation refused: keeping the surface within the {} m chord tolerance \
+             needs more {resource} than the kernel's budget allows, and a coarser mesh \
+             would break that tolerance",
+            TOLERANCE.linear()
+        ),
+        error => format!("mesh compilation refused: {error}"),
+    }
 }
 
 /// The frame a space's body is placed in, as lowering places it: the world
@@ -1025,7 +1044,7 @@ fn mesh(
             lowered.root,
             &ExecutionOptions::new(TOLERANCE),
         )
-        .map_err(|e| format!("mesh compilation refused: {e}"))?;
+        .map_err(|error| compilation_refused(&error))?;
     if mesh.triangle_count() == 0 {
         return Err("mesh compilation produced no triangles".into());
     }

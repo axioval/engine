@@ -355,11 +355,14 @@ directrix, booleans (openings, clippings), and bodies of several items.
 `AxiolidGeometry::check_exact_boundary` compares the solid's extent,
 computed in closed form from the construction and its placement (arc,
 cylinder and torus extremes included), with the mesh's within its chord
-deviation and rounding; a boundary that fails is never registered. The
-kernel's mesh of a doubly curved surface (a revolved circle, a torus) can
-stray up to about 1.16 mm from it on a 1 mm chord budget, so such a body's
-boundary fails the check against a 1 mm declaration and it keeps its mesh
-alone. `axioval check
+deviation and rounding; a boundary that fails is never registered. A
+swept disk's directrix is read by the kernel's own `exact_directrix`, the
+reading its mesh compiler uses, so the boundary and the mesh follow the
+same curve. The kernel keeps every point of a revolution (a revolved
+circle, a torus), a sphere and a disk swept along one arc within the chord
+budget of its mesh (axiolid/kernel#231), so such a body is checked against
+the 1 mm it is declared with; a turn that would need more than 4096 steps
+is refused and its body is unmeasured, never meshed coarser. `axioval check
 --geometry` does all this by default (see [CLI](./cli.md)).
 
 **Certified plan relations.** The same pairs are certified in plan by

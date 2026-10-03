@@ -890,12 +890,14 @@ accuracy. Both one-sided intervals come back with their witness points; a
 re-export of the same shape is zero apart up to rounding. Where the subject
 and the counterpart both have an exact boundary (`body_surface` hands out
 the registered one beside the mesh as an `ExactBoundaryHandle`), the
-distance is measured between the boundaries instead, with the kernel's
-certified `boundary_hausdorff_distance` (axiolid-measure 0.3.6), whatever
-the meshes' fidelity, widened by a bound on the rounding of its witness
-points and cited as `axiolid:boundary-hausdorff:…`. Boundaries the kernel
-cannot match face to face close only at first order and may come back
-wider than asked once its refinement budget is spent; the interval is sound
+distance is measured between the boundaries instead, each direction with
+the kernel's certified `one_sided_boundary_hausdorff_with_budget`
+(axiolid-measure 0.3.7) capped at `BOUNDARY_HAUSDORFF_SPLITS` (4096)
+splits, whatever the meshes' fidelity, widened by a bound on the rounding
+of its witness points and cited as `axiolid:boundary-hausdorff:…`.
+Identical and translated copies close without a split; boundaries the
+kernel cannot match face to face (a turned copy) close only at first order
+and may come back wider than asked at the cap; the interval is sound
 either way, and the caller judges it against its tolerance. Otherwise, or where the
 kernel refuses the boundaries, only exact meshes are measured: a tessellated
 subject or counterpart refuses (`EvidenceFidelityMismatch`), never widened

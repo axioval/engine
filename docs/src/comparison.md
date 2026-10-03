@@ -256,17 +256,21 @@ evidence, `comparison:exact-boundary:<object>` on each side's source. A
 service that cannot read the counterpart's boundary, or whose kernel
 refuses the pair, measures the meshes as above.
 
-A distance between exact boundaries is always sound, but it may come back
-wider than asked: two boundaries the kernel cannot match face to face (a
-turned copy, or a moved one whose faces are trimmed in world coordinates)
-close only at first order, and the kernel stops at its refinement budget.
-Since the interval is sound however wide, it is judged like every measure:
-changed when all of it lies above the tolerance, unchanged when none of it
-does, otherwise undetermined and not evaluated; its width never decides. An
-identical re-export matches face to face and is zero apart up to rounding.
-For example, a round column moved by 1 mm is measured between about 1.0 mm
-and 1.6 mm: changed against a 0.5 mm tolerance, undetermined against
-1.2 mm, and with meshes alone not compared at all.
+An identical re-export and a moved copy match face to face, a translate
+whatever coordinates its faces are trimmed in (axiolid/kernel#227), and
+close to the accuracy asked: a round column moved by 1 mm measures 1 mm
+to within a micrometre, changed against a 0.5 mm tolerance and with meshes
+alone not compared at all. A distance between exact boundaries is always
+sound, but it may come back wider than asked: two boundaries the kernel
+cannot match face to face (a turned or reshaped copy) close only at first
+order, and the Axiolid service stops each direction after 4096 splits
+(`BOUNDARY_HAUSDORFF_SPLITS`), so one pair never costs more than a few
+seconds. Since the interval is sound however wide, it is judged like every
+measure: changed when all of it lies above the tolerance, unchanged when
+none of it does, otherwise undetermined and not evaluated; its width never
+decides. A square column turned by 0.01 rad, whose corners move 2 mm,
+comes back between about 2 mm and 12.6 mm: changed against a 1 mm
+tolerance, undetermined against 5 mm.
 
 ### Coordinate systems
 
@@ -382,7 +386,7 @@ those of the [report](#reports) under the rule's id.
 - **Tessellated mesh difference.** The mesh mode certifies exact surfaces
   only: a curved body without an exact boundary on both sides (an ellipse,
   a revolution, a sweep, a boolean) stays unresolved in that mode.
-- **Slow boundary distances.** Boundaries the kernel cannot match face to
-  face close only at first order, so a move close to the tolerance may
-  come back straddling it (not evaluated) after the kernel's whole
-  refinement budget, which takes seconds per pair.
+- **Turned boundaries.** Boundaries the kernel cannot match face to face
+  (a turned or reshaped copy) close only at first order, so a change close
+  to the tolerance may come back straddling it at the split cap (not
+  evaluated). Moved copies close exactly.

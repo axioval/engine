@@ -163,7 +163,7 @@ impl AxiolidGeometry {
     /// footprint relation of vertical distances, where the chord deviation
     /// would leave them wide or open. The surface distance between two
     /// revisions is measured between their boundaries where both have one
-    /// (`boundary_hausdorff_distance`). The host asserts that boundary and
+    /// (`one_sided_boundary_hausdorff_with_budget` each way). The host asserts that boundary and
     /// mesh describe one body; a pair whose certified answer contradicts the
     /// mesh's widened one refuses.
     #[must_use]

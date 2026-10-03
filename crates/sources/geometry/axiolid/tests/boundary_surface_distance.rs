@@ -3,9 +3,11 @@
 //! A round column (radius 0.2 m, 3 m high) is meshed as a 16-gon, a
 //! tessellation, so no distance between two revisions' meshes is certified.
 //! With each revision's exact boundary registered beside its mesh, the
-//! kernel's `boundary_hausdorff_distance` measures between the boundaries:
-//! an identical copy is zero away up to rounding and a copy moved by a
-//! millimetre a millimetre, both decided where the meshes decide nothing.
+//! kernel's one-sided boundary Hausdorff distance measures between the
+//! boundaries: an identical copy is zero away up to rounding and a copy
+//! moved by a millimetre a millimetre, both decided where the meshes decide
+//! nothing. A turned copy, which the kernel closes only at first order,
+//! stops at the adapter's split cap with a sound interval.
 
 use std::f64::consts::{PI, TAU};
 use std::sync::Arc;
@@ -20,6 +22,7 @@ use axioval_engine::{
     SurfaceDistanceRequest,
 };
 use axioval_ir::{ObjectId, SourceId};
+use std::time::{Duration, Instant};
 
 const RADIUS: f64 = 0.2;
 const SIDES: u32 = 16;
@@ -148,11 +151,9 @@ fn identical_exact_boundaries_are_zero_apart() {
 /// A millimetre's move against the 16-gon's chord deviation of about four
 /// millimetres: the meshes certify nothing, the boundaries the move.
 ///
-/// The moved copy's faces are trimmed in world coordinates, so the kernel
-/// cannot match them and closes the upper bound only at first order: within
-/// its refinement budget the interval ends a little over half a millimetre
-/// above the true distance. It is sound, and wider than asked; judging its
-/// width is the comparison's.
+/// The moved copy's faces are trimmed in world coordinates; the kernel
+/// matches them as translates all the same (axiolid/kernel#227), so the
+/// interval closes to the accuracy asked without a split.
 #[test]
 fn a_millimetre_move_is_measured_between_the_boundaries_only() {
     let moved = [0.001, 0.0];
@@ -183,9 +184,57 @@ fn a_millimetre_move_is_measured_between_the_boundaries_only() {
         distance.lower_metres() <= 0.001 && distance.upper_metres() >= 0.001,
         "{distance:?}"
     );
-    // The witness lies on the boundary, a millimetre from the other.
-    assert!(distance.lower_metres() > 0.000_99, "{distance:?}");
-    assert!(distance.upper_metres() < 0.002, "{distance:?}");
+    // The witness lies on the boundary, a millimetre from the other, and
+    // the interval is as narrow as asked.
+    assert!(distance.lower_metres() > 0.000_999, "{distance:?}");
+    assert!(
+        distance.upper_metres() - distance.lower_metres() <= 1e-4 + 1e-9,
+        "{distance:?}"
+    );
+}
+
+/// A square column 0.4 m wide, turned by `angle` about its axis.
+fn exact_square(angle: f64) -> axiolid_brep::ExactBRep {
+    exact_prism(|scale| {
+        let half = 0.2 * scale;
+        let (sin, cos) = angle.sin_cos();
+        ArcRing::from_points(
+            &[(-half, -half), (half, -half), (half, half), (-half, half)]
+                .iter()
+                .map(|&(x, y)| Point2::new(x * cos - y * sin, x * sin + y * cos))
+                .collect::<Vec<_>>(),
+        )
+    })
+}
+
+/// A turned copy is no translate: the kernel closes it only at first
+/// order, so each direction stops at the adapter's split cap. The interval
+/// is sound, holding the corner's true distance, and the pair is measured
+/// in bounded time however fine the accuracy asked.
+#[test]
+fn a_turned_copy_stops_at_the_split_cap_with_a_sound_interval() {
+    let angle = 0.01;
+    let before = session(&base("#1"), [0.0, 0.0], Some(exact_square(0.0)));
+    let after = session(&revised("#9"), [0.0, 0.0], Some(exact_square(angle)));
+    let started = Instant::now();
+    let measured = measure(&before, &after, 1e-9).unwrap();
+    let elapsed = started.elapsed();
+    assert_eq!(measured.basis(), SurfaceBasis::ExactBoundary);
+    // A corner, 0.2 m out on both axes, turns out of the other square's
+    // side by `0.2 (sin θ + cos θ - 1)`; nothing strays further.
+    let corner = 0.2 * (angle.sin() + angle.cos() - 1.0);
+    let distance = measured.distance();
+    assert!(
+        distance.lower_metres() <= corner && corner <= distance.upper_metres(),
+        "{distance:?} against {corner}"
+    );
+    // Stopped by the cap, far wider than asked: a comparison judges it
+    // changed above its tolerance and undetermined across it.
+    assert!(
+        distance.upper_metres() - distance.lower_metres() > 1e-3,
+        "{distance:?}"
+    );
+    assert!(elapsed < Duration::from_secs(60), "{elapsed:?}");
 }
 
 /// A boundary this kernel cannot read is no boundary: the mesh distance

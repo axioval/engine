@@ -15183,3 +15183,46 @@ fn with_geometry_a_tilted_round_members_distance_is_certified() {
         "{result:#}"
     );
 }
+
+/// A ring 5 km round needs more than the kernel's 4096 steps a turn to stay
+/// within the 1 mm chord tolerance (axiolid/kernel#231): the kernel refuses
+/// the budget rather than mesh it coarser, so the wall is unmeasured with
+/// the reason and the clash between the other walls is still found.
+#[test]
+fn a_body_beyond_the_kernels_step_budget_is_unmeasured() {
+    let case = Case::new("step-budget");
+    let ring = "#40=IFCCARTESIANPOINT((5000.,0.));\n\
+                #41=IFCAXIS2PLACEMENT2D(#40,$);\n\
+                #42=IFCRECTANGLEPROFILEDEF(.AREA.,$,#41,0.2,0.2);\n\
+                #43=IFCDIRECTION((0.,1.,0.));\n\
+                #44=IFCAXIS1PLACEMENT(#1,#43);\n\
+                #45=IFCREVOLVEDAREASOLID(#42,#2,#44,6.283185307179586);\n\
+                #46=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#45));\n\
+                #47=IFCPRODUCTDEFINITIONSHAPE($,$,(#46));\n\
+                #48=IFCWALL('0000000000000000000048',$,$,$,$,#3,#47,$,$);\n";
+    let (output, result) = case.wall_clash(&crossing_walls_with(ring), &json!({}));
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = result["report"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1, "{result:#}");
+    let unmeasured = result["geometry"]["unmeasured"].as_array().unwrap();
+    let ring = unmeasured
+        .iter()
+        .find(|entry| entry["object"]["local_id"] == "#48")
+        .unwrap_or_else(|| panic!("{result:#}"));
+    let reason = ring["reason"].as_str().unwrap();
+    assert!(
+        reason.contains("within the 0.001 m chord tolerance")
+            && reason.contains("revolution angular steps")
+            && reason.contains("a coarser mesh would break that tolerance"),
+        "{reason}"
+    );
+    // Its clashes are neither found nor passed.
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|outcome| outcome.to_string().contains("#48")),
+        "{result:#}"
+    );
+}

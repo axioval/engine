@@ -1238,18 +1238,18 @@ fn a_millimetre_move_is_a_change_only_between_exact_boundaries() {
     }
 }
 
-/// The kernel stops a moved prism's distance at its refinement budget: a
-/// millimetre's move comes back as about 1.0 mm to 1.59 mm, far wider than
-/// asked. It is sound however wide, so lying wholly above a half-millimetre
-/// tolerance it is a change.
+/// A turned copy closes only at first order, so the adapter stops its
+/// distance at the split cap: a square column turned by 0.01 rad comes back
+/// as about 2.0 mm to 12.6 mm, far wider than asked. It is sound however
+/// wide, so lying wholly above a half-millimetre tolerance it is a change.
 #[test]
 fn a_wide_boundary_distance_above_the_tolerance_is_a_change() {
-    let evaluation = compare_walls(bounded((0.001, 0.001_59), (true, true)), by_mesh(0.0005));
+    let evaluation = compare_walls(bounded((0.001_99, 0.012_62), (true, true)), by_mesh(0.0005));
     assert_eq!(
         found(&evaluation),
         vec![(
             "#9".to_owned(),
-            "geometry changed: geometry boundary differs by 0.0010 m to 0.0016 m \
+            "geometry changed: geometry boundary differs by 0.0020 m to 0.0126 m \
              (tolerance 0.0005 m)"
                 .to_owned()
         )]
@@ -1257,8 +1257,8 @@ fn a_wide_boundary_distance_above_the_tolerance_is_a_change() {
     assert!(unevaluated(&evaluation).is_empty(), "{evaluation:?}");
 }
 
-/// A boundary distance straddling the tolerance is undetermined, never
-/// rounded either way.
+/// A boundary distance straddling the tolerance, as a pair stopped at the
+/// split cap may come back, is undetermined, never rounded either way.
 #[test]
 fn a_boundary_distance_straddling_the_tolerance_is_not_evaluated() {
     let evaluation = compare_walls(bounded((0.0002, 0.0006), (true, true)), by_mesh(0.0005));

@@ -9,6 +9,29 @@ All notable changes are documented here. This project follows Semantic Versionin
 - Geometry moves to `axiolid-overlay` 0.3.10 and `axiolid-route` 0.3.7,
   lifting the bound below overlay 0.3.5: coverage through an opening and
   cost regions cut flush with a turned wall measure correctly again.
+- Geometry moves to `axiolid-mesh-compile` 0.3.8, `axiolid-construct`
+  0.3.10, `axiolid-measure` 0.3.7 and `axiolid-reference` 0.3.3.
+  Revolutions (tapered too), spheres, tori and disks swept along one circle
+  or ellipse arc now keep every surface point within the 1 mm declared for
+  their meshes (axiolid/kernel#231): a torus's exact boundary passes its
+  check at 1 mm, where it needed 2 mm before. A body whose turn needs more
+  than 4096 steps to meet the tolerance is refused by the kernel instead
+  of meshed coarser, and `axioval check --geometry` reports it unmeasured
+  with a reason naming the tolerance and the exhausted budget, so the
+  measurements it could affect are not evaluated. Sweeps along polyline,
+  composite or B-spline directrices, curved B-rep faces, primitive
+  cylinders and cones, and ellipse or spline profiles are declared as
+  before, but their tolerance is not yet certified (axiolid/kernel#232).
+- Comparing exact boundaries is bounded per pair. A moved copy is matched
+  as a translate (axiolid/kernel#227) and closes to the accuracy asked: a
+  round column moved by 1 mm measures 1 mm to within a micrometre instead
+  of 1.0 to 1.6 mm, and in milliseconds instead of a minute (debug build).
+  A turned copy, which closes only at first order, now stops after 4096
+  splits a direction (`proximity::BOUNDARY_HAUSDORFF_SPLITS`) with a sound,
+  wider interval judged by the straddle rule, instead of the kernel's whole
+  budget of 200,000.
+- `exact_boundary` reads a swept disk's directrix with the kernel's public
+  `exact_directrix` (axiolid/kernel#230) instead of a copy of it.
 
 ### Added
 

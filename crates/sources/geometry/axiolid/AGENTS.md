@@ -14,9 +14,11 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   (`extrude_profile_exact`; against the profile normal it is built along
   it and mirrored in the profile plane, a hollow circle goes as its
   contour), a revolution (`revolve_profile_exact`) or a disk swept along
-  one segment or arc (`swept_disk_along_*_exact`; the directrix read as
-  axiolid-mesh-compile's private `directrix::exact` reads it, kept in step
-  by hand). Every other node, a scale or shear, and every kernel refusal
+  one segment or arc (`swept_disk_along_*_exact`; the directrix read by
+  axiolid-mesh-compile's public `exact_directrix`, 0.3.8,
+  axiolid/kernel#230, as its compilers read it; never re-implement that
+  reading here, and refuse an `ExactDirectrix` form not yet known).
+  Every other node, a scale or shear, and every kernel refusal
   refuse with the reason; never approximate a placement, an ellipse or a
   sweep. The extent is computed in closed form from the construction and
   the transform (support functions of the section, cosine ranges over
@@ -330,15 +332,19 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   `body_surface` also hands out the object's registered exact boundary
   (`ExactBoundaryHandle` over the shared `Arc<ExactBRep>`), and where the
   subject has one and the counterpart's downcasts to `ExactBRep`,
-  `measure_surface_distance` measures between the boundaries first
-  (`boundary_hausdorff_distance`, axiolid-measure 0.3.6, `Tolerance::METRE`,
-  each side widened by `certified_directed`'s rounding bound,
+  `measure_surface_distance` measures between the boundaries first (each direction with
+  `one_sided_boundary_hausdorff_with_budget`, axiolid-measure 0.3.7,
+  `Tolerance::METRE`, at most `BOUNDARY_HAUSDORFF_SPLITS` splits a side,
+  each widened by `certified_directed`'s rounding bound,
   `try_from_boundaries`), whatever the meshes' fidelity; a kernel refusal
   or ill-formed interval falls back to the mesh path, never to a guess.
-  Unmatched boundaries (a turned copy, or a moved prism, whose faces are
-  trimmed in world coordinates) close only at first order and run the
-  kernel's whole budget (about a minute per moved pair in a debug build);
-  never narrow the interval here. `tests/boundary_surface_distance.rs`
+  Identical and translated copies close without a split, prisms from
+  `boolean_arc_prisms_exact` included (axiolid/kernel#227); a turned or
+  reshaped copy closes only at first order and stops at the cap with a
+  sound, wider interval (a square column turned 0.01 rad: about 2 mm to
+  12.6 mm, seconds in a debug build). Never narrow the interval here and
+  never raise the cap to the kernel's own 200,000: the comparison judges a
+  wide interval by the straddle rule. `tests/boundary_surface_distance.rs`
   measures two sessions' round columns.
   A tessellated pair whose objects both have an exact boundary
   (`AxiolidGeometry::with_exact_boundary`) also gets the kernel's certified
@@ -481,10 +487,18 @@ registry source, not the kernel checkout, before relying on an API.
 - Exact boundaries: the kernel's exact boolean takes only unplaced sharp
   rectangle prisms along +z, so bodies with openings or clippings (and
   bodies of several items, which would need one B-rep of several solids)
-  keep their mesh alone. The mesh compiler's tessellation of a doubly
-  curved surface (a revolved circle, a torus) strays up to about 1.16 mm
-  on a 1 mm chord budget, so against the 1 mm a host declares such a
-  body's boundary fails `check_exact_boundary` and is not registered.
+  keep their mesh alone.
+- Certified tessellation (axiolid/kernel#231, mesh-compile 0.3.8,
+  construct 0.3.10): revolutions, tapered ones too, primitive spheres and
+  tori, and swept disks and sweeps along one circle or ellipse arc keep
+  every surface point within the chord budget of their triangles, and a
+  turn needing more than 4096 steps is refused (`BudgetExceeded`, the host
+  leaves the body unmeasured). Until axiolid/kernel#232 the declared
+  tolerance is not certified for: sweeps along polyline, composite or
+  B-spline directrices (swept as sampled), curved B-rep face tessellation,
+  primitive cylinders and cones (still clamped at 4096 steps rather than
+  refused), and ellipse or spline profile flattening. Their declaration is
+  unchanged until then.
 - axiolid/kernel discussion #175: winding numbers are O(n) per query; the
   deepest-first ordering in `proximity.rs` hides it in practice but not in
   the worst case.

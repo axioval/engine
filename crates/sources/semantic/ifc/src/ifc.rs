@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::sync::Arc;
 
 use axioval_engine::{
@@ -840,7 +841,13 @@ pub(crate) fn session(
     reals: Vec<RealWithoutPoint>,
     bytes: &[u8],
 ) -> Result<EvidenceSession, IfcSessionError> {
-    let fingerprint: Arc<str> = Arc::from(format!("sha256:{:x}", Sha256::digest(bytes)));
+    let fingerprint: Arc<str> = Arc::from(Sha256::digest(bytes).iter().fold(
+        String::from("sha256:"),
+        |mut hex, byte| {
+            let _ = write!(hex, "{byte:02x}");
+            hex
+        },
+    ));
     let global_ids = Arc::new(GlobalIds::read(release, &model));
     let objects = model
         .iter()

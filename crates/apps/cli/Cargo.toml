@@ -47,7 +47,8 @@ serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
-# Writes the ifcXML form of a test model.
+# Write the ifcXML form of a test model with IFC4's attribute names.
+ifc-schema.workspace = true
 ifc-xml.workspace = true
 openbim-bcf.workspace = true
 sha2.workspace = true

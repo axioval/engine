@@ -44,10 +44,12 @@ Runs the ruleset over one or more IFC2X3, IFC4 or IFC4X3 STEP models. Each
 model is one source, named by its file name, so a result does not depend on
 the directory it was checked from.
 
-A model may also be ifcXML (any file that starts as an XML document), read
-into the same model as its STEP form and so giving the same result apart from
-its source, `ifc-xml:<file name>`. A document the adapter cannot prove it
-read as stated is refused with status 1 (see [ifcXML](./adapters.md#ifcxml)).
+A model may also be ifcXML (any file that starts as an XML document), in the
+buildingSMART XSD configuration of IFC4 or IFC4X3 or in the `ifc-xml` codec's
+own layout, read into the same model as its STEP form and so giving the same
+result apart from its source, `ifc-xml:<file name>`. A document in neither
+layout, or stating a name or value its release does not declare or admit, is
+refused with status 1 (see [ifcXML](./adapters.md#ifcxml)).
 
 A model may also be an ifcZIP archive (`building.ifczip`, or any file that
 is a zip archive) holding exactly one `.ifc` member, which is read exactly as

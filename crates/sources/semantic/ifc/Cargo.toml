@@ -22,7 +22,6 @@ ifc-properties.workspace = true
 ifc-schema.workspace = true
 ifc-step.workspace = true
 # ifcXML: type conformance proves an XML read is the model the file states.
-ifc-validate.workspace = true
 ifc-xml.workspace = true
 quick-xml.workspace = true
 ifc-style.workspace = true

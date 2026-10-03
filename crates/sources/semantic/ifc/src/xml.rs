@@ -5,40 +5,36 @@
 //! session path as a STEP file ([`crate::ifc::session`]), so every service
 //! answers an ifcXML model exactly as its STEP form.
 //!
-//! XML attribute values are untyped text, and `ifc-xml` reads the dialect
-//! its own writer produces: attributes named by the release schema or by
-//! position (`a<i>`), and every value an attribute cannot spell as a child
-//! element with an explicit `kind`. A document in another arrangement, such
-//! as the buildingSMART XSD configuration with nested entity elements and
-//! `ref` attributes, would be read into wrong values without an error. So a
-//! read is accepted only when it is provably the model the file states:
+//! Two layouts are read, told apart by the root element alone:
 //!
-//! - no start tag holds more than [`MAX_ATTRIBUTES`] attributes or
-//!   [`MAX_NAMESPACES`] namespace declarations, checked before the codec
-//!   reads, so a hostile document's cost stays bounded;
-//! - the root declares one supported schema, and the document is read again
-//!   with that release's attribute names;
-//! - every attribute and attribute element of an entity is named by the
-//!   release or by a position the entity has (`ifc-xml` appends a value of
-//!   any other name after the named ones, into whichever slot comes next);
-//! - every entity is declared by the release, and holds no more values than
-//!   the release declares attributes (a value no attribute names would be
-//!   placed in the wrong slot); trailing attributes the document omits are
-//!   unset, as `ifc-xml` documents;
-//! - every value conforms to its attribute's declared type
-//!   (`ifc_validate::type_check`).
+//! - the buildingSMART configuration the release XSD declares, for IFC4
+//!   ADD2 TC1 and IFC4X3 ADD2: a root in one of that release's ifcXML
+//!   namespaces, without a `schema` attribute (which the XSD does not
+//!   declare). The codec's XSD reader (`XmlCodec::xsd`) is always
+//!   schema-strict; it numbers entities in document order.
+//! - the codec's own layout: a root stating its release in a `schema`
+//!   attribute, attributes named by that release. It is read strictly
+//!   (`SchemaReading::Strict`, the codec's default with a schema): every
+//!   value is typed from its declaration, and an entity or attribute the
+//!   release does not declare, a value it does not admit and a dangling or
+//!   wrongly typed reference are refused by the codec, never placed by
+//!   guess.
 //!
-//! Anything else is refused ([`IfcSessionError::Xml`]), never read in part.
-//! Entity names are compared and stored upper case, as STEP writes them.
+//! A root that is neither, a release no reader here binds, and every codec
+//! refusal are refused ([`IfcSessionError::Xml`] or
+//! [`IfcSessionError::UnsupportedSchema`]), never read in part. Before the
+//! codec parses, no start tag may hold more than [`MAX_ATTRIBUTES`]
+//! attributes or [`MAX_NAMESPACES`] namespace declarations, so a hostile
+//! document's cost stays bounded. Entity names are stored upper case, as
+//! STEP writes them.
 
 use std::sync::{Arc, OnceLock};
 
 use axioval_engine::EvidenceSession;
 use axioval_ir::SourceId;
-use ifc_model::{Codec, Entity, Model, Value};
-use ifc_schema::Schema;
-use ifc_validate::{Budget, Report, Severity};
-use ifc_xml::{SchemaReading, XmlCodec};
+use ifc_model::{Entity, Model};
+use ifc_schema::{Schema, SchemaVersion};
+use ifc_xml::{XmlCodec, XmlProfile};
 
 use crate::ifc::{IfcSessionError, session};
 use crate::release::Release;
@@ -117,127 +113,98 @@ fn bounded(bytes: &[u8]) -> Result<(), IfcSessionError> {
     }
 }
 
-/// Refuses a document stating a value under a name no attribute of its
-/// entity has. Entities are the root's children with an `id`; their XML
-/// attributes and child elements name attributes.
-fn unnamed_values(bytes: &[u8], release: Release) -> Result<(), IfcSessionError> {
-    use quick_xml::events::{BytesStart, Event};
+/// How a document lays out its entities, and the release it is read with.
+#[derive(Clone, Copy, Debug)]
+enum Layout {
+    /// The codec's own layout, under the release the root's `schema` names.
+    Native(Release),
+    /// The buildingSMART XSD configuration of one release.
+    Xsd(Release, XmlProfile),
+}
 
-    let schema = release.schema;
-    let mut reader = quick_xml::Reader::from_reader(bytes);
+/// The XSD profile whose release namespaces include `namespace`.
+fn profile_of(namespace: &str) -> Option<XmlProfile> {
+    [XmlProfile::Ifc4Add2Tc1, XmlProfile::Ifc4x3Add2]
+        .into_iter()
+        .find(|profile| profile.namespaces().contains(&namespace))
+}
+
+/// The layout and release the root element declares.
+fn layout(bytes: &[u8]) -> Result<Layout, IfcSessionError> {
+    use quick_xml::events::Event;
+    use quick_xml::name::ResolveResult;
+
+    let mut reader = quick_xml::NsReader::from_reader(bytes);
     let mut buffer = Vec::new();
-    let mut depth = 0_usize;
-    // The open entity's upper-case name and attribute names.
-    let mut entity: Option<(String, Vec<String>)> = None;
-    let known = |names: &[String], name: &str| {
-        names.iter().any(|known| known == name)
-            || name
-                .strip_prefix('a')
-                .and_then(|slot| slot.parse::<usize>().ok())
-                .is_some_and(|slot| slot < names.len())
-    };
-    let open =
-        |element: &BytesStart<'_>| -> Result<Option<(String, Vec<String>)>, IfcSessionError> {
-            let mut has_id = false;
-            let mut stated = Vec::new();
-            for attribute in element.attributes() {
-                let attribute = attribute.map_err(|error| refused(error.to_string()))?;
-                let name = attribute.key.local_name().as_ref().to_owned();
-                if name == "id" {
-                    has_id = true;
-                } else if attribute.key.prefix().is_none() {
-                    stated.push(name);
-                }
+    let (namespace, root) = loop {
+        match reader
+            .read_resolved_event_into(&mut buffer)
+            .map_err(|error| refused(error.to_string()))?
+        {
+            (namespace, Event::Start(element) | Event::Empty(element)) => {
+                let namespace = match namespace {
+                    ResolveResult::Bound(namespace) => Some(namespace.as_ref().to_owned()),
+                    _ => None,
+                };
+                break (namespace, element.into_owned());
             }
-            if !has_id {
-                return Ok(None);
-            }
-            let name = element
-                .local_name()
-                .as_ref()
-                .to_string()
-                .to_ascii_uppercase();
-            let names: Vec<String> = schema
-                .attribute_names(&name)
-                .into_iter()
-                .map(str::to_owned)
-                .collect();
-            if let Some(unknown) = stated.iter().find(|stated| !known(&names, stated)) {
-                return Err(refused(format!(
-                    "a {name} states `{unknown}`, which names no attribute of it"
-                )));
-            }
-            Ok(Some((name, names)))
-        };
-    loop {
-        let event = reader
-            .read_event_into(&mut buffer)
-            .map_err(|error| refused(error.to_string()))?;
-        match event {
-            Event::Eof => return Ok(()),
-            Event::Start(element) => {
-                depth += 1;
-                match depth {
-                    2 => entity = open(&element)?,
-                    3 => {
-                        if let Some((name, names)) = &entity {
-                            let child = element.local_name().as_ref().to_owned();
-                            if !known(names, &child) {
-                                return Err(refused(format!(
-                                    "a {name} states `{child}`, which names no attribute of it"
-                                )));
-                            }
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            Event::Empty(element) => match depth + 1 {
-                2 => {
-                    open(&element)?;
-                }
-                3 => {
-                    if let Some((name, names)) = &entity {
-                        let child = element.local_name().as_ref().to_owned();
-                        if !known(names, &child) {
-                            return Err(refused(format!(
-                                "a {name} states `{child}`, which names no attribute of it"
-                            )));
-                        }
-                    }
-                }
-                _ => {}
-            },
-            Event::End(_) => {
-                if depth == 2 {
-                    entity = None;
-                }
-                depth = depth.saturating_sub(1);
-            }
+            (_, Event::Eof) => return Err(refused("the document has no root element")),
             _ => {}
         }
         buffer.clear();
+    };
+    if root.local_name().as_ref() != "ifcXML" {
+        return Err(refused(format!(
+            "the root element is `{}`, not `ifcXML`",
+            root.name().as_ref()
+        )));
     }
+    let mut schema = None;
+    for attribute in root.attributes() {
+        let attribute = attribute.map_err(|error| refused(error.to_string()))?;
+        if attribute.key.as_ref() == "schema" {
+            let value = attribute
+                .normalized_value(quick_xml::XmlVersion::Implicit1_0)
+                .map_err(|error| refused(error.to_string()))?;
+            schema = Some(value.into_owned());
+        }
+    }
+    if let Some(schema) = schema {
+        let schemas = vec![schema];
+        return Release::from_header(&schemas)
+            .map(Layout::Native)
+            .ok_or(IfcSessionError::UnsupportedSchema(schemas));
+    }
+    let Some(profile) = namespace.as_deref().and_then(profile_of) else {
+        let namespace = namespace.as_deref().map_or_else(
+            || "no namespace".to_owned(),
+            |namespace| format!("`{namespace}`"),
+        );
+        return Err(refused(format!(
+            "the root names no `schema` and is in {namespace}, which is neither an IFC4 ADD2 TC1 \
+             nor the IFC4X3 ADD2 ifcXML namespace"
+        )));
+    };
+    let token = match profile.version() {
+        SchemaVersion::Ifc4 => "IFC4",
+        SchemaVersion::Ifc4x3 => "IFC4X3",
+        _ => profile.schema_token(),
+    };
+    let schemas = vec![token.to_owned()];
+    let release =
+        Release::from_header(&schemas).ok_or(IfcSessionError::UnsupportedSchema(schemas))?;
+    Ok(Layout::Xsd(release, profile))
 }
 
 /// Reads an ifcXML document into the model its STEP form parses to, and
 /// the release it declares.
 fn read(bytes: &[u8]) -> Result<(Release, Model), IfcSessionError> {
     bounded(bytes)?;
-    // The root names the schema; attribute names depend on it.
-    let declared = XmlCodec::default()
-        .read_bytes(bytes)
-        .map_err(|error| refused(error.to_string()))?;
-    let schemas = declared.header().schema.clone();
-    let Some(release) = Release::from_header(&schemas) else {
-        return Err(IfcSessionError::UnsupportedSchema(schemas));
+    let (release, codec) = match layout(bytes)? {
+        Layout::Native(release) => (release, XmlCodec::with_schema(shared(release))),
+        Layout::Xsd(release, profile) => (release, XmlCodec::xsd(shared(release), profile)),
     };
-    unnamed_values(bytes, release)?;
-    // The pre-0.4 read, which the checks above and below prove.
-    let read = XmlCodec::with_schema(shared(release))
-        .with_reading(SchemaReading::Lenient)
-        .read_bytes(bytes)
-        .map_err(|error| refused(error.to_string()))?;
+    let read = ifc_xml::reader::read(&codec, bytes).map_err(|error| refused(error.to_string()))?;
     if !read.diagnostics().is_empty() {
         return Err(IfcSessionError::IncompleteModel {
             diagnostics: read.diagnostics().len(),
@@ -248,43 +215,17 @@ fn read(bytes: &[u8]) -> Result<(Release, Model), IfcSessionError> {
     *model.header_mut() = read.header().clone();
     for (id, entity) in read.iter() {
         let name = entity.type_name.to_ascii_uppercase();
-        if schema.entity(&name).is_none() {
+        // The strict readers lay every entity out by its declaration; one
+        // that is not is refused, never padded or cut.
+        if schema.entity(&name).is_none()
+            || entity.attributes.len() != schema.attribute_names(&name).len()
+        {
             return Err(refused(format!(
-                "{id} is a {}, which {} does not declare",
-                entity.type_name, release.label
+                "{id} ({name}) is not laid out as {} declares it",
+                release.label
             )));
         }
-        let declared = schema.attribute_names(&name).len();
-        let mut values = entity.attributes.clone();
-        if values.len() > declared {
-            return Err(refused(format!(
-                "{id} ({name}) states {} values for {declared} attributes; a value no attribute names cannot be placed",
-                values.len()
-            )));
-        }
-        values.resize(declared, Value::Null);
-        model.insert(id, Entity::new(name, values));
-    }
-    let mut report = Report::new();
-    ifc_validate::type_check::check(&model, schema, Budget::DEFAULT, &mut report);
-    let violations: Vec<String> = report
-        .findings()
-        .iter()
-        .filter(|finding| {
-            matches!(
-                finding.severity,
-                Severity::Error | Severity::EvaluationError
-            )
-        })
-        .take(3)
-        .map(ToString::to_string)
-        .collect();
-    if !violations.is_empty() {
-        return Err(refused(format!(
-            "values do not conform to {}, so the document was not read as it states: {}",
-            release.label,
-            violations.join("; ")
-        )));
+        model.insert(id, Entity::new(name, entity.attributes.clone()));
     }
     Ok((release, model))
 }
@@ -296,10 +237,10 @@ fn read(bytes: &[u8]) -> Result<(Release, Model), IfcSessionError> {
 ///
 /// # Errors
 ///
-/// Returns [`IfcSessionError::Xml`] when the document cannot be read, or is
-/// read into values its schema does not declare or admit, and
-/// [`IfcSessionError::UnsupportedSchema`] for a schema the adapter does not
-/// read.
+/// Returns [`IfcSessionError::Xml`] when the document is in neither layout,
+/// cannot be read, or states a name or value its release does not declare
+/// or admit, and [`IfcSessionError::UnsupportedSchema`] for a release the
+/// adapter does not read.
 pub fn read_ifc_xml(bytes: &[u8]) -> Result<Model, IfcSessionError> {
     read(bytes).map(|(_, model)| model)
 }
@@ -307,9 +248,11 @@ pub fn read_ifc_xml(bytes: &[u8]) -> Result<Model, IfcSessionError> {
 /// Reads an ifcXML document into an evidence session, as
 /// [`crate::import_ifc_session`] reads a STEP file.
 ///
-/// The source is `ifc-xml:<document>`; object identities are the document's
-/// entity ids (`i42` is `#42`), so a model written to ifcXML from STEP keeps
-/// every identity, and answers every rule as its STEP form does.
+/// The source is `ifc-xml:<document>`. In the codec's own layout object
+/// identities are the document's entity ids (`i42` is `#42`), so a model
+/// written to ifcXML from STEP keeps every identity; in the XSD layout they
+/// are the entities' places in document order (`#1`, `#2`, ...), as the
+/// codec numbers them. Either answers every rule as its STEP form does.
 ///
 /// # Errors
 ///

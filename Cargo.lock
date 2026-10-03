@@ -652,6 +652,7 @@ dependencies = [
  "clap",
  "ifc-geometry",
  "ifc-model",
+ "ifc-schema",
  "ifc-spatial",
  "ifc-step",
  "ifc-xml",
@@ -734,7 +735,6 @@ dependencies = [
  "ifc-step",
  "ifc-style",
  "ifc-systems",
- "ifc-validate",
  "ifc-xml",
  "openbim-ifc",
  "quick-xml",
@@ -1503,16 +1503,6 @@ name = "ifc-systems"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0a43ed0afc3ce31277e6ee05b1ab2e4f28bedd55e9cf1fcc4662d5c4a6afff30"
-dependencies = [
- "ifc-model",
- "ifc-schema",
-]
-
-[[package]]
-name = "ifc-validate"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43ea532fccd055f992745e1f99534d8de559e18d70646ac5649d94c191d0c664"
 dependencies = [
  "ifc-model",
  "ifc-schema",

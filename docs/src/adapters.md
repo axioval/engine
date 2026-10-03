@@ -273,29 +273,33 @@ STEP codec would produce, and the session is bound from that model, so an
 ifcXML model answers every rule as its STEP form does. `read_ifc_xml` gives
 hosts the model itself (the CLI meshes it), with the same refusals, and
 `is_ifc_xml` tells an XML document from a STEP file by its first bytes. The
-source is `ifc-xml:<document>`; entity ids `i42` are the objects `#42`, so a
-model written to ifcXML from STEP keeps every identity.
+source is `ifc-xml:<document>`.
 
-XML attribute values are untyped text, and the codec reads the arrangement
-its own writer produces: attributes named by the release schema or by
-position (`a0`, `a1`, ...), and every value an XML attribute cannot spell as
-a child element carrying its `kind`. A document arranged otherwise, such as
-the buildingSMART XSD configuration with nested entity elements and `ref`
-attributes, would be read into wrong values without an error, so a read is
-accepted only when it is provably what the file states:
+Two layouts are read, told apart by the root element:
 
-- no start tag holds more than 256 attributes or 8 namespace declarations,
-  checked before the codec parses, so a hostile document's cost stays
-  bounded;
-- the root declares one supported schema (IFC2X3, IFC4 or IFC4X3), and the
-  document is read with that release's attribute names;
-- every entity is declared by the release, and every XML attribute and
-  attribute element of an entity names one of its attributes (a value under
-  any other name would land in the next free slot);
-- trailing attributes the document omits are unset, as the codec defines;
-- every value conforms to its attribute's declared type
-  (`ifc-validate`'s type check), which refuses a nested entity read as an
-  empty value and a label such as `1` read as a number.
+- **The buildingSMART XSD configuration** (ISO 10303-28 as the release XSD
+  declares it), for IFC4 ADD2 TC1 and IFC4X3 ADD2: a root in one of that
+  release's ifcXML namespaces, without a `schema` attribute. Entities nest
+  and are defined in place, `ref` references carry `xsi:nil`, subtypes are
+  named by `xsi:type`, inverse attributes supply the attribute they invert,
+  and typed values are `-wrapper` elements. The codec's XSD reader
+  (`ifc-xml` 0.4, `XmlCodec::xsd`) numbers entities in document order, so
+  object identities are `#1`, `#2`, ... in the order their start tags appear.
+- **The codec's own layout**: a root naming its release in a `schema`
+  attribute (IFC2X3, IFC4 or IFC4X3), attributes named by that release.
+  Entity ids `i42` are the objects `#42`, so a model written to ifcXML from
+  STEP keeps every identity.
+
+Both are read schema-strict: every value is typed from its attribute's
+declaration, never from its text (`Name="1"` is the label `'1'`), and the
+codec refuses an entity or attribute the release does not declare, a value
+its declaration does not admit (a decimal comma in a real included), and a
+dangling or wrongly typed reference. Positional attribute names (`a0`,
+`a1`, ...) are refused: they do not say which attribute a value is. A root
+in neither layout, an ifcXML namespace of another release (IFC2X3's
+included), and a release the adapter does not read are refused too. Before
+the codec parses, no start tag may hold more than 256 attributes or 8
+namespace declarations, so a hostile document's cost stays bounded.
 
 Anything else is refused (`IfcSessionError::Xml`), never read in part.
 Element names may be in any case and are stored upper case, as STEP writes

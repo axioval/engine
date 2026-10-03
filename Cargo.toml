@@ -93,10 +93,10 @@ ifc-model = "0.3.1"
 ifc-properties = "0.7.0"
 ifc-schema = "0.3.0"
 ifc-step = "0.4.0"
-ifc-validate = { version = "0.5.0", default-features = false }
-# ifcXML: the codec reads its own lossless dialect; `xml.rs` proves each read.
+# ifcXML: the codec's own layout and the buildingSMART XSD configuration,
+# both read schema-strict.
 ifc-xml = "0.4.0"
-# `xml.rs` scans an ifcXML document with it before `ifc-xml` reads it;
+# `xml.rs` bounds an ifcXML document's start tags and reads its root with it;
 # `axioval-engine` reads xlsx rule parameter tables with it.
 quick-xml = "0.42"
 ifc-style = "0.4.0"

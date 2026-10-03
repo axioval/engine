@@ -882,6 +882,82 @@ fn a_zipped_model_gives_the_plain_files_report_under_its_archive_name() {
     assert!(refused.stdout.is_empty());
 }
 
+/// `ifc("0000000000000000000002", false)` in the buildingSMART XSD
+/// configuration of IFC4 ADD2 TC1, numbered in document order as the STEP
+/// form numbers it.
+const WALLS_XSD: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<ifcXML xmlns="https://standards.buildingsmart.org/IFC/RELEASE/IFC4/ADD2_TC1/XML" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <IfcWall id="w1" GlobalId="0000000000000000000001"/>
+  <IfcWallStandardCase GlobalId="0000000000000000000002"/>
+  <IfcSlab GlobalId="0000000000000000000003"/>
+  <IfcPropertySingleValue id="reference" Name="Reference">
+    <NominalValue><IfcIdentifier-wrapper>W-1</IfcIdentifier-wrapper></NominalValue>
+  </IfcPropertySingleValue>
+  <IfcPropertySet id="pset" GlobalId="0000000000000000000005" Name="Pset_WallCommon">
+    <HasProperties><IfcPropertySingleValue ref="reference" xsi:nil="true"/></HasProperties>
+  </IfcPropertySet>
+  <IfcRelDefinesByProperties GlobalId="0000000000000000000006">
+    <RelatedObjects><IfcWall ref="w1" xsi:nil="true"/></RelatedObjects>
+    <RelatingPropertyDefinition><IfcPropertySet ref="pset" xsi:nil="true"/></RelatingPropertyDefinition>
+  </IfcRelDefinesByProperties>
+</ifcXML>
+"#;
+
+#[test]
+fn an_xsd_configuration_ifcxml_model_gives_the_report_of_its_step_form() {
+    let case = Case::new("ifcxml-xsd");
+    let plain = case.check(&ifc("0000000000000000000002", false), true, &[]);
+    assert_eq!(plain.status.code(), Some(3), "{}", stderr(&plain));
+    let model = case.write("model.ifcxml", WALLS_XSD);
+    let xml = case.check_file(&model, true, &[]);
+    assert_eq!(xml.status.code(), Some(3), "{}", stderr(&xml));
+    let text = String::from_utf8(xml.stdout.clone()).unwrap();
+    assert!(text.contains("\"ifc-xml\""), "{text}");
+    // Apart from the source, the same report; finding ids and evidence
+    // locators carry the fingerprint of the file's own bytes.
+    let fingerprint = |text: &str| {
+        let start = text.find("ifc:sha256:").unwrap() + "ifc:sha256:".len();
+        text[start..start + 64].to_owned()
+    };
+    let text = text.replace(&fingerprint(&text), &fingerprint(&stdout(&plain)));
+    let without_ids = |mut report: Value| {
+        if let Some(findings) = report["findings"].as_array_mut() {
+            for finding in findings {
+                finding.as_object_mut().unwrap().remove("id");
+            }
+        }
+        report
+    };
+    let renamed: Value = serde_json::from_str(
+        &text
+            .replace("model.ifcxml", "model.ifc")
+            .replace("\"ifc-xml\"", "\"ifc-step\""),
+    )
+    .unwrap();
+    assert_eq!(
+        without_ids(renamed["report"].clone()),
+        without_ids(json(&plain)["report"].clone())
+    );
+
+    // A decimal comma, which the XSD's reals do not admit: refused, naming
+    // the file, nothing written.
+    let comma = WALLS_XSD.replace(
+        "<IfcSlab GlobalId=\"0000000000000000000003\"/>",
+        "<IfcSlab GlobalId=\"0000000000000000000003\" Tag=\"x\" PredefinedType=\"floor\"><ObjectPlacement xsi:type=\"IfcLocalPlacement\"><RelativePlacement><IfcAxis2Placement3D><Location Coordinates=\"0,5 0 0\"/></IfcAxis2Placement3D></RelativePlacement></ObjectPlacement></IfcSlab>",
+    );
+    assert_ne!(comma, WALLS_XSD);
+    let model = case.write("model.ifcxml", &comma);
+    let refused = case.check_file(&model, true, &[]);
+    assert_eq!(refused.status.code(), Some(1), "{}", stderr(&refused));
+    assert!(
+        stderr(&refused).contains("model.ifcxml")
+            && stderr(&refused).contains("@Coordinates: invalid REAL scalar \"0,5\""),
+        "{}",
+        stderr(&refused)
+    );
+    assert!(refused.stdout.is_empty());
+}
+
 #[test]
 fn bcf_options_without_bcf_output_are_usage_errors() {
     let case = Case::new("usage");
@@ -5132,11 +5208,14 @@ fn a_clash_with_a_model_in_another_coordinate_system_is_not_evaluated() {
     );
 }
 
-/// `model`, a STEP file, written as ifcXML.
+/// `model`, a STEP file, written as ifcXML in the codec's own layout with
+/// IFC4's attribute names.
 fn as_ifc_xml(model: &str) -> Vec<u8> {
     use ifc_model::Codec;
     let model = ifc_step::StepCodec.read_bytes(model.as_bytes()).unwrap();
-    ifc_xml::XmlCodec::default().write_bytes(&model).unwrap()
+    ifc_xml::XmlCodec::with_schema(std::sync::Arc::new(ifc_schema::ifc4().clone()))
+        .write_bytes(&model)
+        .unwrap()
 }
 
 /// The report with the structural model's source spelled as its STEP form

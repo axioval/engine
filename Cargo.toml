@@ -93,6 +93,9 @@ openbim-ids = "0.1.4"
 openbim_ifc = { package = "openbim-ifc", version = "0.12.0", default-features = false, features = ["geometry-select", "properties"] }
 ifc-classification = "0.3.0"
 ifc-geometry = { version = "0.7.0", default-features = false }
+# Map conversions only: without the default `transform` feature it links no
+# geometry crate (never Axiolid).
+ifc-georef = { version = "0.5.1", default-features = false }
 ifc-material = "0.4.0"
 ifc-spatial = "0.4.0"
 ifc-model = "0.3.1"

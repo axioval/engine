@@ -208,6 +208,53 @@ fn a_structural_model_shifted_by_one_metre_is_a_finding_naming_it() {
     assert!(within.findings().is_empty(), "within an explicit tolerance");
 }
 
+/// A map unit the source leaves to its standard's default compares in
+/// metres, and the finding says the unit was not stated.
+#[test]
+fn a_default_map_unit_is_compared_and_named_as_the_default() {
+    let by_default = |name: &str, easting: f64| {
+        let map = MapConversion::try_new(
+            Some("EPSG:25832".into()),
+            [easting * 1000.0, 5_600_000_000.0, 50_000.0],
+            [1.0, 0.0],
+            1.0,
+            Some(0.001),
+        )
+        .unwrap()
+        .with_map_unit_by_default();
+        system(name, Some(map))
+    };
+    let same = evaluate(
+        vec![
+            (
+                "architecture",
+                Ok(georeferenced("architecture", 500_000.0, false)),
+            ),
+            ("structural", Ok(by_default("structural", 500_000.0))),
+        ],
+        by_architecture(),
+    );
+    assert!(same.findings().is_empty(), "{same:?}");
+    assert!(unevaluated(&same).is_empty(), "compared, never unknown");
+    let shifted = evaluate(
+        vec![
+            (
+                "architecture",
+                Ok(georeferenced("architecture", 500_000.0, false)),
+            ),
+            ("structural", Ok(by_default("structural", 500_001.0))),
+        ],
+        by_architecture(),
+    );
+    assert_eq!(
+        found(&shifted),
+        vec![(
+            "structural".into(),
+            "`test:structural` does not share the coordinate system of `test:architecture`: map offset moved by 1.0000 m (this source's map unit is the standard's default, not stated)".into()
+        )]
+    );
+}
+
 #[test]
 fn the_reference_defaults_to_the_first_source_and_names_the_other() {
     let evaluation = evaluate(

@@ -76,6 +76,7 @@ fn the_model_context_states_world_frame_true_north_and_map_conversion() {
         "an unset scale is 1"
     );
     assert_eq!(map.metres_per_map_unit(), Some(1.0));
+    assert!(!map.map_unit_by_default(), "the unit is stated");
     assert!(system.evidence().exact);
     assert!(
         system
@@ -86,18 +87,98 @@ fn the_model_context_states_world_frame_true_north_and_map_conversion() {
 }
 
 #[test]
-fn an_unstated_map_unit_is_unknown_not_metres() {
+fn an_unstated_map_unit_is_the_project_unit_and_marked_as_its_default() {
     let data = format!(
         "{CONTEXT}\
          #21=IFCPROJECTEDCRS('EPSG:25832',$,$,$,$,$,$);\n\
-         #22=IFCMAPCONVERSION(#5,#21,500000.,5600000.,50.,$,$,0.9996);\n"
+         #22=IFCMAPCONVERSION(#5,#21,500000000.,5600000000.,50000.,$,$,0.9996);\n"
     );
     let system = system("IFC4", &data).unwrap();
     let map = system.map().unwrap();
-    assert_eq!(map.metres_per_map_unit(), None);
-    assert_eq!(map.offset_metres(), None);
+    // IFC prescribes the project length unit, millimetres here.
+    assert_eq!(map.metres_per_map_unit(), Some(0.001));
+    assert!(close(
+        &map.offset_metres().unwrap(),
+        &[500_000.0, 5_600_000.0, 50.0]
+    ));
+    assert!(map.map_unit_by_default(), "never presented as stated");
+    assert!(
+        system
+            .evidence()
+            .locator
+            .contains(":#22:map-unit-project-default"),
+        "{}",
+        system.evidence().locator
+    );
     assert_eq!(map.x_axis(), [1.0, 0.0], "an unset rotation is none");
     assert!((map.scale() - 0.9996).abs() < f64::EPSILON);
+}
+
+#[test]
+fn a_dangling_or_mistyped_source_crs_is_unreadable() {
+    let dangling = format!(
+        "{CONTEXT}#21=IFCPROJECTEDCRS('EPSG:25832',$,$,$,$,$,$);\n\
+         #22=IFCMAPCONVERSION(#77,#21,0.,0.,0.,$,$,$);\n"
+    );
+    assert!(matches!(
+        system("IFC4", &dangling),
+        Err(CoordinateSystemError::Unreadable(reason)) if reason.contains("#77")
+    ));
+    let mistyped = format!(
+        "{CONTEXT}#21=IFCPROJECTEDCRS('EPSG:25832',$,$,$,$,$,$);\n\
+         #22=IFCMAPCONVERSION(#10,#21,0.,0.,0.,$,$,$);\n"
+    );
+    assert!(matches!(
+        system("IFC4", &mistyped),
+        Err(CoordinateSystemError::Unreadable(reason)) if reason.contains("#10")
+    ));
+}
+
+/// The IFC4X3 header token.
+const IFC4X3: &str = "IFC4X3_ADD2";
+
+/// A metre-based projection for IFC4X3 operations.
+const METRE_CRS: &str = "\
+#20=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);
+#21=IFCPROJECTEDCRS('EPSG:25832',$,$,$,$,$,#20);
+";
+
+#[test]
+fn an_ifc4x3_scaled_conversion_is_compared_with_its_scale() {
+    let data = format!(
+        "{CONTEXT}{METRE_CRS}#22=IFCMAPCONVERSIONSCALED(#5,#21,500000.,5600000.,50.,$,$,0.5,2.,2.,2.);\n"
+    );
+    let system_4x3 = system(IFC4X3, &data).unwrap();
+    let map = system_4x3.map().unwrap();
+    assert_eq!(map.offset_metres(), Some([500_000.0, 5_600_000.0, 50.0]));
+    assert!((map.scale() - 1.0).abs() < f64::EPSILON, "{}", map.scale());
+    assert!(!map.map_unit_by_default());
+
+    let unequal = data.replace(",2.,2.,2.)", ",2.,2.,1.)");
+    assert!(matches!(
+        system(IFC4X3, &unequal),
+        Err(CoordinateSystemError::Unsupported(reason))
+            if reason.contains("IfcMapConversionScaled #22")
+    ));
+}
+
+#[test]
+fn an_ifc4x3_rigid_operation_is_a_translation() {
+    let data = format!(
+        "{CONTEXT}{METRE_CRS}#22=IFCRIGIDOPERATION(#5,#21,IFCLENGTHMEASURE(500000.),IFCLENGTHMEASURE(5600000.),50.);\n"
+    );
+    let system = system(IFC4X3, &data).unwrap();
+    let map = system.map().unwrap();
+    assert_eq!(map.target(), Some("EPSG:25832"));
+    assert_eq!(map.offset_metres(), Some([500_000.0, 5_600_000.0, 50.0]));
+    assert_eq!(map.x_axis(), [1.0, 0.0]);
+    assert!((map.scale() - 1.0).abs() < f64::EPSILON);
+    assert!(
+        system
+            .evidence()
+            .locator
+            .contains(":coordinate-system:#5:#22")
+    );
 }
 
 #[test]

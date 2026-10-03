@@ -8,13 +8,20 @@
 //!   reader that places bodies, and its origin is converted through the exact
 //!   project length unit, never assumed to be in metres.
 //! - `TrueNorth` is the plan direction of geographic north.
-//! - An IFC4 `IfcMapConversion` whose `SourceCRS` is that context maps the
-//!   model onto the named `TargetCRS`. `XAxisAbscissa`/`XAxisOrdinate` and
-//!   `Scale` take the schema's stated defaults (no rotation, scale 1) when
-//!   unset. The offset is in the map's unit, the target's `MapUnit`: when it
-//!   is not stated, or cannot be resolved exactly, the unit is reported
-//!   unknown rather than assumed.
-//!
+//! - A coordinate operation whose `SourceCRS` is that context maps the
+//!   model onto the named `TargetCRS`: an IFC4/IFC4X3 `IfcMapConversion`, an
+//!   IFC4X3 `IfcMapConversionScaled` or an IFC4X3 `IfcRigidOperation` with
+//!   length coordinates, each resolved by `ifc-georef` (built without its
+//!   `transform` feature, so without a geometry kernel). Unset
+//!   `XAxisAbscissa`/`XAxisOrdinate`/`Scale` take the schema defaults; a
+//!   rigid operation is a translation (no rotation, scale 1); a scaled
+//!   conversion's factors fold into the scale when they are equal and are
+//!   refused by name when they are not, since a map conversion holds one
+//!   scale. The offset is in the target's `MapUnit`; an unstated one is the
+//!   project length unit, as IFC prescribes, and the conversion and its
+//!   evidence say so (`map-unit-project-default`). Whatever `ifc-georef`
+//!   refuses (a dangling, mistyped or shared `SourceCRS`, an unresolvable
+//!   unit) refuses the coordinate system with its reason.
 //! - The site placement is the `ObjectPlacement` of the file's one `IfcSite`,
 //!   composed by `ifc-geometry`'s `PlacementResolver` as object frames are,
 //!   origin in metres through the exact project length unit. No site is
@@ -35,6 +42,9 @@ use axioval_ir::{Evidence, SourceId};
 use ifc_geometry::constraint::local::PlacementResolver;
 use ifc_geometry::resource::{Direction, axis_placement_transform};
 use ifc_geometry::{RepresentationContext, all_contexts};
+use ifc_georef::{
+    GeorefError, GeorefView, OperationKind, resolve_operation_source, resolve_project_to_map_in,
+};
 use ifc_model::{Entity, EntityId, Model, Value};
 use ifc_properties::exact_unit;
 
@@ -69,33 +79,6 @@ impl IfcCoordinateSystem {
             .iter()
             .position(|attribute| attribute.eq_ignore_ascii_case(name))?;
         entity.attribute(slot)
-    }
-
-    fn number(
-        &self,
-        entity: &Entity,
-        id: EntityId,
-        name: &str,
-    ) -> Result<Option<f64>, CoordinateSystemError> {
-        match self.attribute(entity, name).map(Value::unwrap_typed) {
-            None | Some(Value::Null) => Ok(None),
-            Some(Value::Real(value)) => Ok(Some(*value)),
-            #[allow(clippy::cast_precision_loss)] // STEP integers in a real slot
-            Some(Value::Integer(value)) => Ok(Some(*value as f64)),
-            Some(_) => Err(CoordinateSystemError::Unreadable(format!(
-                "{id}.{name} is not a number"
-            ))),
-        }
-    }
-
-    fn required(
-        &self,
-        entity: &Entity,
-        id: EntityId,
-        name: &str,
-    ) -> Result<f64, CoordinateSystemError> {
-        self.number(entity, id, name)?
-            .ok_or_else(|| CoordinateSystemError::Unreadable(format!("{id}.{name} is not set")))
     }
 
     fn reference(&self, entity: &Entity, name: &str) -> Option<EntityId> {
@@ -244,13 +227,20 @@ impl IfcCoordinateSystem {
         }
     }
 
-    /// The map conversion of `context`, if the file states one.
+    /// The coordinate operation of `context`, if the file states one,
+    /// resolved by `ifc-georef`.
     fn map(
         &self,
         context: EntityId,
     ) -> Result<Option<(EntityId, MapConversion)>, CoordinateSystemError> {
-        let conversions = self.model.ids_of_type("IFCMAPCONVERSION");
-        let own: Vec<EntityId> = conversions
+        let operations: Vec<EntityId> = OPERATIONS
+            .iter()
+            .flat_map(|kind| self.model.ids_of_type(kind).iter().copied())
+            .collect();
+        if operations.is_empty() {
+            return Ok(None);
+        }
+        let own: Vec<EntityId> = operations
             .iter()
             .copied()
             .filter(|&id| {
@@ -260,12 +250,18 @@ impl IfcCoordinateSystem {
                     == Some(context)
             })
             .collect();
+        let view = GeorefView::for_model(&self.model).map_err(|error| refused(&error))?;
         let id = match own.as_slice() {
-            [] if conversions.is_empty() => return Ok(None),
             [] => {
+                // An operation whose source `ifc-georef` refuses (dangling,
+                // of the wrong type, shared) makes the map unreadable; one
+                // from a valid other source is not this context's.
+                for &operation in &operations {
+                    resolve_operation_source(&view, operation).map_err(|error| refused(&error))?;
+                }
                 return Err(CoordinateSystemError::Unsupported(format!(
-                    "map conversions {} convert from something other than the model context {context}",
-                    conversions
+                    "coordinate operations {} convert from something other than the model context {context}",
+                    operations
                         .iter()
                         .map(ToString::to_string)
                         .collect::<Vec<_>>()
@@ -280,51 +276,67 @@ impl IfcCoordinateSystem {
                 )));
             }
         };
-        let entity = self
-            .model
-            .get(id)
-            .ok_or_else(|| CoordinateSystemError::Unreadable(format!("{id} is missing")))?;
-        let offset = [
-            self.required(entity, id, "Eastings")?,
-            self.required(entity, id, "Northings")?,
-            self.required(entity, id, "OrthogonalHeight")?,
-        ];
-        let x_axis = [
-            self.number(entity, id, "XAxisAbscissa")?.unwrap_or(1.0),
-            self.number(entity, id, "XAxisOrdinate")?.unwrap_or(0.0),
-        ];
-        let scale = self.number(entity, id, "Scale")?.unwrap_or(1.0);
-        let (target, unit) = match self.reference(entity, "TargetCRS") {
-            Some(target) => self.target(target)?,
-            None => {
-                return Err(CoordinateSystemError::Unreadable(format!(
-                    "{id}.TargetCRS is not a reference"
-                )));
+        let resolved = resolve_project_to_map_in(&view, id, self.metres()?)
+            .map_err(|error| refused(&error))?;
+        let scale = match resolved.kind {
+            OperationKind::MapConversionScaled { factors: (x, y, z) } => {
+                #[allow(clippy::float_cmp)] // Equal as stated, not measured.
+                let uniform = x == y && y == z;
+                if !uniform {
+                    return Err(CoordinateSystemError::Unsupported(format!(
+                        "IfcMapConversionScaled {id} scales its axes unequally (FactorX {x}, FactorY {y}, FactorZ {z}); a map conversion holds one scale"
+                    )));
+                }
+                resolved.declared_scale * x
             }
+            _ => resolved.declared_scale,
         };
+        let target = resolved
+            .target_crs
+            .name
+            .as_deref()
+            .filter(|name| !name.trim().is_empty())
+            .map(str::to_owned);
+        let map = MapConversion::try_new(
+            target,
+            [
+                resolved.eastings,
+                resolved.northings,
+                resolved.orthogonal_height,
+            ],
+            [resolved.x_axis_direction.0, resolved.x_axis_direction.1],
+            scale,
+            Some(resolved.map_unit.metres_per_unit),
+        )?;
         Ok(Some((
             id,
-            MapConversion::try_new(target, offset, x_axis, scale, unit)?,
+            if resolved.declared_map_unit().is_none() {
+                map.with_map_unit_by_default()
+            } else {
+                map
+            },
         )))
     }
+}
 
-    /// The target system's name and metres per map unit, when known.
-    fn target(&self, id: EntityId) -> Result<(Option<String>, Option<f64>), CoordinateSystemError> {
-        let entity = self
-            .model
-            .get(id)
-            .ok_or_else(|| CoordinateSystemError::Unreadable(format!("{id} is missing")))?;
-        let name = match self.attribute(entity, "Name").map(Value::unwrap_typed) {
-            Some(Value::Text(name)) if !name.trim().is_empty() => Some(name.to_string()),
-            _ => None,
-        };
-        let unit = self.reference(entity, "MapUnit").and_then(|unit| {
-            exact_unit(&self.model, "IFCLENGTHMEASURE", Some(unit))
-                .ok()
-                .filter(|unit| unit.offset == 0.0 && unit.scale.is_finite() && unit.scale > 0.0)
-                .map(|unit| unit.scale)
-        });
-        Ok((name, unit))
+/// The coordinate operations `ifc-georef` resolves onto a map: IFC4's
+/// `IfcMapConversion`, and IFC4X3's scaled conversion and rigid operation.
+const OPERATIONS: [&str; 3] = [
+    "IFCMAPCONVERSION",
+    "IFCMAPCONVERSIONSCALED",
+    "IFCRIGIDOPERATION",
+];
+
+/// An `ifc-georef` refusal: a construct it does not lower is unsupported,
+/// anything else unreadable, each with the library's reason.
+fn refused(error: &GeorefError) -> CoordinateSystemError {
+    match error {
+        GeorefError::UnsupportedOperation { .. }
+        | GeorefError::CoordinateMeasureMismatch { .. }
+        | GeorefError::UnsupportedSchema { .. } => {
+            CoordinateSystemError::Unsupported(format!("map conversion: {error}"))
+        }
+        _ => CoordinateSystemError::Unreadable(format!("map conversion: {error}")),
     }
 }
 
@@ -377,8 +389,16 @@ impl CoordinateSystemService for IfcCoordinateSystem {
         let locator = format!(
             "ifc:{fingerprint}:coordinate-system:{}:{}{site_locator}",
             context.id(),
-            map.as_ref()
-                .map_or_else(|| "no-map-conversion".to_owned(), |(id, _)| id.to_string())
+            map.as_ref().map_or_else(
+                || "no-map-conversion".to_owned(),
+                // An unstated `MapUnit` is the project length unit, and the
+                // evidence says so: never presented as stated.
+                |(id, map)| if map.map_unit_by_default() {
+                    format!("{id}:map-unit-project-default")
+                } else {
+                    id.to_string()
+                }
+            )
         );
         Ok(SourceCoordinateSystem::try_new(
             source.clone(),

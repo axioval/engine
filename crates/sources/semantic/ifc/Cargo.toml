@@ -16,6 +16,9 @@ ifc-classification.workspace = true
 # Placement chains only: the workspace entry disables every feature, so no
 # geometry kernel is pulled in.
 ifc-geometry.workspace = true
+# Map conversions (`coordinates.rs`); the workspace entry disables the
+# `transform` feature, so no Axiolid crate is linked.
+ifc-georef.workspace = true
 ifc-material.workspace = true
 ifc-model.workspace = true
 ifc-properties.workspace = true

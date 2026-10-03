@@ -269,9 +269,22 @@ fn maps(
         (Some(x), Some(y)) => {
             let shift = distance(x, y);
             if shift > tolerance.length_metres {
-                result
-                    .differences
-                    .push((aspect, format!("map offset moved by {}", metres(shift))));
+                // A unit the source did not state is named as the default
+                // it is, never presented as stated.
+                let default = match (a.map_unit_by_default(), b.map_unit_by_default()) {
+                    (false, false) => "",
+                    (true, true) => " (both map units are the standard's default, not stated)",
+                    (true, false) => {
+                        " (the reference's map unit is the standard's default, not stated)"
+                    }
+                    (false, true) => {
+                        " (this source's map unit is the standard's default, not stated)"
+                    }
+                };
+                result.differences.push((
+                    aspect,
+                    format!("map offset moved by {}{default}", metres(shift)),
+                ));
             }
         }
         // Identical statements in one unit are equal whatever the unit.

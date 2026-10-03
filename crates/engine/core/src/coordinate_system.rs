@@ -120,6 +120,7 @@ pub struct MapConversion {
     x_axis: [f64; 2],
     scale: f64,
     metres_per_map_unit: Option<f64>,
+    map_unit_by_default: bool,
 }
 
 impl MapConversion {
@@ -129,7 +130,9 @@ impl MapConversion {
     /// `x_axis` is the direction of the source's X axis in the map's plan
     /// (abscissa, ordinate) and is normalized; `scale` is the factor from
     /// source to map lengths. `metres_per_map_unit` is `None` when the map's
-    /// unit is not stated or cannot be resolved exactly, never a guess.
+    /// unit is not known exactly, never a guess. A unit the source does not
+    /// state but its standard prescribes is marked with
+    /// [`Self::with_map_unit_by_default`].
     pub fn try_new(
         target: Option<String>,
         offset: [f64; 3],
@@ -154,7 +157,25 @@ impl MapConversion {
             x_axis: [x_axis[0] / norm, x_axis[1] / norm],
             scale,
             metres_per_map_unit,
+            map_unit_by_default: false,
         })
+    }
+
+    /// The same conversion, its map unit not stated by the source but the
+    /// default its standard prescribes (for IFC, the project length unit).
+    /// The unit is known, so offsets compare in metres; the mark keeps it
+    /// from being presented as stated.
+    #[must_use]
+    pub fn with_map_unit_by_default(mut self) -> Self {
+        self.map_unit_by_default = true;
+        self
+    }
+
+    /// Whether the map unit is the standard's default rather than stated
+    /// by the source ([`Self::with_map_unit_by_default`]).
+    #[must_use]
+    pub fn map_unit_by_default(&self) -> bool {
+        self.map_unit_by_default
     }
 
     /// The name of the target map coordinate reference system, when stated.
@@ -404,6 +425,8 @@ mod tests {
             MapConversion::try_new(None, [1.0, 2.0, 3.0], [0.0, 2.0], 1.0, Some(0.001)).unwrap();
         assert_eq!(map.x_axis(), [0.0, 1.0]);
         assert_eq!(map.offset_metres(), Some([0.001, 0.002, 0.003]));
+        assert!(!map.map_unit_by_default(), "a unit is stated unless marked");
+        assert!(map.with_map_unit_by_default().map_unit_by_default());
     }
 
     #[test]

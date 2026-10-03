@@ -751,6 +751,7 @@ dependencies = [
  "axioval-ir",
  "ifc-classification",
  "ifc-geometry",
+ "ifc-georef",
  "ifc-material",
  "ifc-model",
  "ifc-properties",
@@ -1449,6 +1450,16 @@ dependencies = [
  "ifc-model",
  "ifc-schema",
  "thiserror",
+]
+
+[[package]]
+name = "ifc-georef"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a74c3473c577587db8333fb0e69f2e09c2982d0e22d19ec77cc57f035e27d91f"
+dependencies = [
+ "ifc-model",
+ "ifc-schema",
 ]
 
 [[package]]

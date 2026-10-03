@@ -2017,7 +2017,11 @@ conversion (target system, offset in metres, rotation and scale) and the
 site placement, within `length_tolerance` (metres, default 0.001),
 `angle_tolerance` (degrees, default 0.01) and `scale_tolerance` (absolute,
 default 0). Map offsets stated in different units are compared in metres,
-so a model georeferenced in millimetres agrees with one in metres. A source
+so a model georeferenced in millimetres agrees with one in metres. A map
+unit the source leaves to its standard's default (an IFC `IfcProjectedCRS`
+without `MapUnit` is in the project length unit) is compared, and a
+difference says so (`map offset moved by 1.0000 m (this source's map unit
+is the standard's default, not stated)`). A source
 that differs is a finding against that source naming every difference
 (`` `struct.ifc` does not share the coordinate system of `arch.ifc`: map
 offset moved by 1.0000 m ``), citing both coordinate systems.

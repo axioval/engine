@@ -5265,6 +5265,26 @@ fn federated_models_with_one_georeference_pass_and_a_shifted_one_is_named() {
         "`ifc-step:struct.ifc` does not share the coordinate system of `ifc-step:arch.ifc`: map offset moved by 1.0000 m"
     );
 
+    // A target system without a `MapUnit` is in the project length unit,
+    // metres here: compared, and the finding says the unit was not stated.
+    let unstated = |easting: f64| {
+        georeferenced(&structure, easting).replace(
+            "IFCPROJECTEDCRS('EPSG:25832',$,$,$,$,$,#6)",
+            "IFCPROJECTEDCRS('EPSG:25832',$,$,$,$,$,$)",
+        )
+    };
+    case.write("struct.ifc", &unstated(500_000.0));
+    let (output, result) = coordinate_consistency(&case);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+    case.write("struct.ifc", &unstated(500_001.0));
+    let (output, result) = coordinate_consistency(&case);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(
+        result["report"]["findings"][0]["message"],
+        "`ifc-step:struct.ifc` does not share the coordinate system of `ifc-step:arch.ifc`: map offset moved by 1.0000 m (this source's map unit is the standard's default, not stated)"
+    );
+
     // Not georeferenced: never assumed to agree.
     case.write("struct.ifc", &structure);
     let (output, result) = coordinate_consistency(&case);

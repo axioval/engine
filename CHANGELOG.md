@@ -71,9 +71,28 @@ All notable changes are documented here. This project follows Semantic Versionin
   measured; sectioned solids and surfaces, segmented reference curves and
   distance-along-curve geometry leave their objects unmeasured with the
   lowering's named reason.
+- `MapConversion::with_map_unit_by_default` and `map_unit_by_default`
+  mark a map unit the source leaves to its standard's default. The
+  `coordinate-consistency` finding names it (`map offset moved by
+  1.0000 m (this source's map unit is the standard's default, not
+  stated)`).
 
 ### Changed
 
+- The IFC coordinate system's map conversion is read by `ifc-georef` 0.5.1
+  (without its `transform` feature, so no Axiolid crate is linked) instead
+  of the adapter's own reader. An unstated `MapUnit` is now the project
+  length unit, as IFC prescribes, so such a georeference is compared
+  instead of not evaluated; the conversion is marked
+  (`map_unit_by_default`) and its evidence locator carries
+  `map-unit-project-default`. What `ifc-georef` refuses (a dangling,
+  mistyped or shared `SourceCRS`, a stated `MapUnit` it cannot resolve, an
+  IFC4 `IfcProjectedCRS` without a name) makes the coordinate system
+  unreadable with its reason, so the source is not evaluated. IFC4X3
+  `IfcMapConversionScaled` (equal factors fold into the scale; unequal
+  ones are refused by name, since a map conversion holds one scale) and
+  `IfcRigidOperation` with length coordinates (a translation) are now read
+  and compared.
 - Geometry moves to `axiolid-mesh-compile` 0.3.10, `axiolid-measure` 0.3.9
   and `axiolid-brep-boolean` 0.1.3. `plan_overlap` now shows a level face
   over part of another's shadow, so a round column reaching a sliver over

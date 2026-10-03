@@ -922,10 +922,14 @@ declared within a tolerance nothing proves: a boolean the exact compiler
 refuses (a union, a hole tangent to a flange's face: `exact boolean whose
 split face pieces do not close`), a tapered extrusion, a sectioned spine.
 A disk swept round a
-polyline corner without a fillet radius, which IFC leaves undefined, is
-refused by name (`swept disk directrix turns a corner … give a fillet
-radius`) and unmeasured; with `IfcSweptDiskSolidPolygonal`'s fillet radius
-each corner becomes a tangent arc and is certified. Planar bodies, booleans
+polyline corner without a fillet radius is mitred at half angle, as
+`IfcSweptDiskSolid` defines it, and certified within the budget
+(axiolid/kernel#245); with `IfcSweptDiskSolidPolygonal`'s fillet radius
+each corner becomes a tangent arc and is certified too. Still refused by
+name and unmeasured (axiolid/kernel#248): a disk swept along a closed
+polyline (`the mitre where it closes`), a fillet radius equal to the disk
+radius (a horn torus), a corner beside an arc and a mitre reaching past
+its leg. Planar bodies, booleans
 of planar operands and clips by polygonally bounded half-spaces included,
 stay exact and are meshed without a deviation report, which would only
 pay to measure their booleans. Measuring a curved boolean costs about

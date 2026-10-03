@@ -86,6 +86,16 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- Moved to `axiolid-mesh-compile` 0.3.12, `axiolid-construct` 0.3.13 and
+  `axiolid-brep-boolean` 0.1.4. A disk swept round a sharp polyline corner
+  without a fillet radius is mitred again and certified within the chord
+  budget (axiolid/kernel#245), so such pipes are measured instead of
+  unmeasured; a closed polyline, a fillet radius equal to the disk radius,
+  a corner beside an arc and a mitre past its leg stay refused by name
+  (#248). A boolean body's rounding allowance is the kernel's reported
+  rounding floor (`BooleanReport::rounding_floor`, #244) per boolean,
+  instead of a mirrored copy of its private factor and extent reading.
+
 - The IFC crates move to `openbim-ifc` 0.13, `ifc-geometry` 0.8,
   `ifc-alignment` 0.6, `ifc-spatial` 0.5, `ifc-properties` 0.8,
   `ifc-classification` 0.4, `ifc-material` 0.5, `ifc-systems` 0.4 and

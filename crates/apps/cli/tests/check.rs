@@ -15684,22 +15684,25 @@ fn with_geometry_a_roof_clipped_wall_with_a_round_window_is_certified() {
     assert!(finding_ids(&result).is_empty(), "{result:#}");
 }
 
-/// A disk swept along a polyline with a corner and no fillet radius has no
-/// defined surface at the corner (IFC leaves it undefined), and the kernel
-/// refuses it by name since axiolid/kernel#232 instead of sweeping it with
-/// sharp mitres: the body is unmeasured with that reason, its clashes not
-/// evaluated. The same polyline with a fillet radius
-/// (`IfcSweptDiskSolidPolygonal`) is meshed and declared within the
-/// certified 1 mm.
+/// A disk swept along a polyline with a sharp corner and no fillet radius
+/// is mitred at half angle, as `IfcSweptDiskSolid` defines it, and the
+/// kernel proves its mesh within the chord budget again
+/// (axiolid/kernel#245): the body is measured and declared within the
+/// certified 1 mm, like the same polyline with a fillet radius
+/// (`IfcSweptDiskSolidPolygonal`). Still refused by name upstream
+/// (axiolid/kernel#248), and so unmeasured with the reason and their
+/// clashes not evaluated: a closed polyline, whose closing mitre is not
+/// built, and a fillet radius equal to the disk radius, whose bend is a
+/// horn torus.
 #[test]
-fn a_swept_disk_round_an_unfilleted_corner_is_unmeasured() {
+fn a_swept_disk_round_an_unfilleted_corner_is_certified() {
     let case = Case::new("unfilleted-corner");
-    let bent = |id: u32, solid: &str| {
+    let bent = |id: u32, x: f64, closed: bool, solid: &str| {
         format!(
-            "#{a}=IFCCARTESIANPOINT((10.,0.,1.));\n\
-             #{b}=IFCCARTESIANPOINT((12.,0.,1.));\n\
-             #{c}=IFCCARTESIANPOINT((12.,2.,1.));\n\
-             #{line}=IFCPOLYLINE((#{a},#{b},#{c}));\n\
+            "#{a}=IFCCARTESIANPOINT(({x0:.1},0.,1.));\n\
+             #{b}=IFCCARTESIANPOINT(({x1:.1},0.,1.));\n\
+             #{c}=IFCCARTESIANPOINT(({x1:.1},2.,1.));\n\
+             #{line}=IFCPOLYLINE((#{a},#{b},#{c}{close}));\n\
              #{disk}={solid};\n\
              #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','AdvancedSweptSolid',(#{disk}));\n\
              #{definition}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
@@ -15711,39 +15714,62 @@ fn a_swept_disk_round_an_unfilleted_corner_is_unmeasured() {
             disk = id - 3,
             shape = id - 2,
             definition = id - 1,
+            x0 = x,
+            x1 = x + 2.0,
+            close = if closed {
+                format!(",#{}", id - 7)
+            } else {
+                String::new()
+            },
             solid = solid.replace("LINE", &format!("#{}", id - 4)),
         )
     };
     let model = crossing_walls_with(&format!(
-        "{}{}",
-        bent(68, "IFCSWEPTDISKSOLID(LINE,0.05,$,$,$)"),
-        bent(78, "IFCSWEPTDISKSOLIDPOLYGONAL(LINE,0.05,$,$,$,0.2)"),
+        "{}{}{}{}",
+        bent(68, 10.0, false, "IFCSWEPTDISKSOLID(LINE,0.05,$,$,$)"),
+        bent(
+            78,
+            14.0,
+            false,
+            "IFCSWEPTDISKSOLIDPOLYGONAL(LINE,0.05,$,$,$,0.2)"
+        ),
+        bent(88, 18.0, true, "IFCSWEPTDISKSOLID(LINE,0.05,$,$,$)"),
+        bent(
+            98,
+            22.0,
+            false,
+            "IFCSWEPTDISKSOLIDPOLYGONAL(LINE,0.05,$,$,$,0.05)"
+        ),
     ));
     let (output, result) = case.wall_clash(&model, &json!({}));
     assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
     let unmeasured = result["geometry"]["unmeasured"].as_array().unwrap();
-    let cornered = unmeasured
-        .iter()
-        .find(|entry| entry["object"]["local_id"] == "#68")
-        .unwrap_or_else(|| panic!("{result:#}"));
-    let reason = cornered["reason"].as_str().unwrap();
-    assert!(
-        reason.contains("turns a corner") && reason.contains("fillet radius"),
-        "{reason}"
-    );
-    assert!(
+    let reason = |local: &str| {
         unmeasured
             .iter()
-            .all(|entry| entry["object"]["local_id"] != "#78"),
+            .find(|entry| entry["object"]["local_id"] == local)
+            .and_then(|entry| entry["reason"].as_str())
+            .map(str::to_owned)
+    };
+    // The sharp corner and the filleted one are both measured, each mesh
+    // declared within the certified chord tolerance.
+    assert_eq!(reason("#68"), None, "{result:#}");
+    assert_eq!(reason("#78"), None, "{result:#}");
+    assert_eq!(result["geometry"]["tessellated"], 2, "{result:#}");
+    let closed = reason("#88").unwrap_or_else(|| panic!("{result:#}"));
+    assert!(closed.contains("closed polyline"), "{closed}");
+    let horn = reason("#98").unwrap_or_else(|| panic!("{result:#}"));
+    assert!(
+        horn.contains("equals the fillet radius") && horn.contains("horn torus"),
+        "{horn}"
+    );
+    let not_evaluated = result["report"]["not_evaluated"].to_string();
+    assert!(
+        !not_evaluated.contains("#68") && !not_evaluated.contains("#78"),
         "{result:#}"
     );
-    assert_eq!(result["geometry"]["tessellated"], 1, "{result:#}");
     assert!(
-        result["report"]["not_evaluated"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|outcome| outcome.to_string().contains("#68")),
+        not_evaluated.contains("#88") && not_evaluated.contains("#98"),
         "{result:#}"
     );
 }

@@ -29,10 +29,9 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   distances against closed forms.
   A difference (openings, `IfcBooleanResult`) or a clip by a half-space,
   bounded or not (`IfcBooleanClippingResult`, axiolid/kernel#234), is built
-  by `ReferenceExactCompiler::compile_exact_batch_with_reports`
-  (axiolid-mesh-compile 0.3.10), first with `Tolerance::ZERO` and only on a
-  refusal with `Tolerance::METRE`, its operands compiled first in the same
-  batch. An empty `BooleanReport` (#236) is the exact boolean of the
+  by `ReferenceExactCompiler::compile_exact_with_report`
+  (axiolid-mesh-compile 0.3.12), first with `Tolerance::ZERO` and only on a
+  refusal with `Tolerance::METRE`. An empty `BooleanReport` (#236) is the exact boolean of the
   operands as given: the body is exact. A non-empty one perturbs the
   `ExactBody` by the reported linear magnitude plus the angular one over
   its extent, never less than its rounding; non-empty is the test, never
@@ -42,11 +41,15 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   perturbation. Never register such a body as exact, never drop the
   perturbation from a certified distance (`certified` adds it), never
   certify a plan overlap or a surface distance on it. Either way the
-  boolean merges constructed points within `2^-40` of its operands'
-  largest coordinate unreported (`BOOLEAN_ROUNDING`), so the body carries
-  booleans times that times a bound on that coordinate (`kernel_extent` of
-  every operand as the kernel reads it, `clip_reach` for a half-space's
-  prism) as `ExactBody::rounding_metres`, which widens every certified
+  boolean merges constructed points closer than its rounding floor
+  unreported, which the compiler's report states
+  (`BooleanReport::rounding_floor`, axiolid/kernel#244, mesh-compile
+  0.3.12: `2^-40` of the largest coordinate of any boolean's or clip's
+  operands beneath the body, as the kernel reads it). Never mirror the
+  kernel's factor or extent reading here; read the floor. The body
+  carries booleans times that floor (the per-boolean count is ours: each
+  boolean of a chain may merge points within it) as
+  `ExactBody::rounding_metres`, which widens every certified
   distance (`widening_metres`) and plan-overlap gap but leaves the body
   exact. It is far above the `16 ε` witness rounding, so never drop it. A
   boolean item's extent is its edges' (`edge_extent`: faces on planes and
@@ -497,10 +500,10 @@ Depend only on what the registry publishes. The workspace pins `axiolid-*`
 space and in plan, and the plan measurements `plan_boundary_distance`,
 `plan_boundary_clearance` and `plan_overlap`, with `axiolid-brep` 0.3.3 for
 the `ExactBRep` hosts register, built by `exact_boundary` with
-`axiolid-construct` 0.3.11, `axiolid-curve`, `axiolid-model`,
-`axiolid-profile`, `axiolid-surface` and `axiolid-mesh-compile` 0.3.10's
-`ReferenceExactCompiler` with its boolean reports (axiolid-brep-boolean
-0.1.3); the tests compile meshes with
+`axiolid-construct` 0.3.13, `axiolid-curve`, `axiolid-model`,
+`axiolid-profile`, `axiolid-surface` and `axiolid-mesh-compile` 0.3.12's
+`ReferenceExactCompiler` with its boolean reports and rounding floors
+(axiolid-brep-boolean 0.1.4); the tests compile meshes with
 `axiolid-mesh-compile` and `axiolid-mesh-boolean-boolmesh`), `axiolid-overlay` 0.3.10 (`minimum_area_rectangle`, the
 Minkowski and dilation family, settled `union_soup` output, fast on mesh
 soups, features within the caller's tolerance snapped before the exact
@@ -533,11 +536,25 @@ registry source, not the kernel checkout, before relying on an API.
 - Exact booleans (axiolid/kernel#228, #234, #236): unions, intersections
   other than a half-space clip, and operands that are no placed extrusions
   keep the mesh alone; so do the general boolean's refusals (a hole
-  tangent to a flange's face: "split face pieces do not close"). The
-  `2^-40` rounding floor is the kernel's private constant, mirrored here
-  as `BOOLEAN_ROUNDING` with its extent reading (`kernel_extent`, and the
-  clip prism bound in `clip_reach`); a published accessor would let them
-  go.
+  tangent to a flange's face: "split face pieces do not close", #243,
+  fixed upstream but not yet published as axiolid-brep-boolean 0.1.5 /
+  axiolid-mesh-compile 0.3.13; an I-beam with root fillets cut by such a
+  hole is #249).
+- A boolean at `Tolerance::ZERO` can report a decision with zero
+  magnitudes (axiolid/kernel#251); the adapter treats any non-empty
+  report as perturbed, never inferring exactness from a magnitude.
+- IPE-size profiles fail at `Tolerance::ZERO` and work at a positive
+  tolerance (axiolid/kernel#250); the ZERO-then-METRE fallback in
+  `boolean` covers it, perturbing the body by what the METRE run reports.
+- Swept disks (axiolid/kernel#245, #248): sharp corners without a fillet
+  radius are mitred again with a `Proven` bound (mesh-compile 0.3.12,
+  construct 0.3.13), so such pipes are measured; still refused by name: a
+  corner beside an arc, a closed polyline, a fillet radius equal to the
+  disk radius (a horn torus), a mitre reaching past its leg. The exact
+  compiler (and so `exact_boundary`) still refuses directrices with
+  corners.
+- Sweeps along an `IfcGradientCurve` (axiolid/kernel#252) are not yet
+  built by the kernel.
 - Bodies of several items (axiolid/kernel#229): items under openings are
   cut part by part in world coordinates by the host's lowering, so a turned
   wall of several parts touches on planes no axis is normal to and keeps

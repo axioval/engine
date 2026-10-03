@@ -17,7 +17,8 @@ axiolid-brep.workspace = true
 # disks (`exact_boundary`); `axiolid-mesh-compile` reads a swept disk's
 # directrix exactly as it compiles the disk, and its exact compiler builds
 # differences of placed extrusions (openings) and half-space clips, with a
-# report of what its booleans decided within tolerance.
+# report of what its booleans decided within tolerance and their rounding
+# floor.
 axiolid-construct.workspace = true
 axiolid-contracts.workspace = true
 axiolid-core.workspace = true

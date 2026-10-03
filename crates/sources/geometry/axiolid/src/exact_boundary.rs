@@ -38,9 +38,11 @@
 //!   Any report that is not empty marks the body perturbed, even one whose
 //!   magnitudes are zero (a decision at no tolerance may report none,
 //!   axiolid/kernel#251). Either way the boolean merges constructed
-//!   points closer than `2^-40` of its operands' largest coordinate
-//!   without a report, so the body carries that much per boolean as a
-//!   rounding allowance ([`ExactBody::rounding_metres`]), which widens its
+//!   points closer than its rounding floor (`2^-40` of its operands'
+//!   largest coordinate, which the report states:
+//!   `BooleanReport::rounding_floor`, axiolid/kernel#244) without a
+//!   report, so the body carries that floor per boolean as a rounding
+//!   allowance ([`ExactBody::rounding_metres`]), which widens its
 //!   distances without making it inexact;
 //! - a collection of several such items (axiolid/kernel#229): each item is
 //!   built in the body's own frame (under its own placements below the
@@ -73,7 +75,7 @@ use axiolid_contracts::ExecutionOptions;
 use axiolid_core::{
     BooleanOperator, Interval, Point2, Point3, Tolerance, Transform2, Transform3, Vec2, Vec3,
 };
-use axiolid_curve::{Circle3, Curve2, Curve3};
+use axiolid_curve::{Circle3, Curve3};
 use axiolid_mesh_compile::{ExactDirectrix, ReferenceExactCompiler, exact_directrix};
 use axiolid_model::{GeometryGraph, GeometryNode, NodeId, SolidOperation};
 use axiolid_overlay::ArcRing;
@@ -460,28 +462,23 @@ fn boolean(graph: &GeometryGraph, node: NodeId) -> Result<(ExactBRep, Decided), 
     subtractions_only(graph, node)?;
     let mut chain = Chain::default();
     chain.walk(graph, node, 0)?;
-    // The operands first, as the booleans are handed them, so their
-    // extents can be read; the body's own compilation finds them cached.
-    let mut roots = chain.operands.clone();
-    roots.push(node);
     let compiler = ReferenceExactCompiler::new();
     let compile = |tolerance: Tolerance| {
-        compiler.compile_exact_batch_with_reports(graph, &roots, &ExecutionOptions::new(tolerance))
+        compiler.compile_exact_with_report(graph, node, &ExecutionOptions::new(tolerance))
     };
-    let mut built = match compile(Tolerance::ZERO) {
+    let (brep, report) = match compile(Tolerance::ZERO) {
         Ok(built) => built,
         Err(_) => compile(TOLERANCE).map_err(refused)?,
     };
-    let (brep, report) = built.pop().ok_or("the kernel built no body")?;
-    let mut reach = built
-        .iter()
-        .map(|(operand, _)| kernel_extent(operand))
-        .fold(0.0, f64::max);
-    for clip in &chain.clips {
-        reach = reach.max(clip_reach(graph, clip.tool, &built[clip.subject].0)?);
+    // The kernel's rounding floor (axiolid/kernel#244): the largest of any
+    // boolean or clip beneath the body, each of which may merge points
+    // within it, so a chain of booleans carries it once per boolean.
+    let floor = report.rounding_floor();
+    if !(floor.is_finite() && floor >= 0.0) {
+        return Err("the kernel reported no rounding floor for its boolean".into());
     }
     #[allow(clippy::cast_precision_loss)]
-    let rounding = chain.booleans as f64 * BOOLEAN_ROUNDING * reach;
+    let rounding = chain.booleans as f64 * floor;
     let decided = Decided::reported(
         !report.is_exact(),
         report.linear(),
@@ -583,26 +580,11 @@ fn edge_extent(solid: &ExactBRep) -> Option<Extent> {
     finite.then_some((min, max))
 }
 
-/// What the kernel's general boolean merges without reporting a decision
-/// (axiolid-brep-boolean 0.1.3, axiolid/kernel#236): constructed points
-/// closer than `2^-40` of its operands' largest coordinate are one point.
-const BOOLEAN_ROUNDING: f64 = 1.0 / 1_099_511_627_776.0;
-
-/// The booleans under a node and the operands they are handed.
+/// The booleans under a node.
 #[derive(Default)]
 struct Chain {
-    /// Every solid operand, as its node compiles: what a boolean is handed.
-    operands: Vec<NodeId>,
-    /// Every half-space tool, with its subject's index in `operands`.
-    clips: Vec<Clip>,
     /// The booleans, each of which may merge points within its rounding.
     booleans: usize,
-}
-
-/// A half-space clip: the subject's index among the operands and the tool.
-struct Clip {
-    subject: usize,
-    tool: NodeId,
 }
 
 impl Chain {
@@ -615,16 +597,8 @@ impl Chain {
                     left, right, ..
                 })) => {
                     self.booleans += 1;
-                    let subject = self.operands.len();
-                    self.operands.push(*left);
                     self.walk(graph, *left, depth + 1)?;
-                    if half_space(graph, *right) {
-                        self.clips.push(Clip {
-                            subject,
-                            tool: *right,
-                        });
-                    } else {
-                        self.operands.push(*right);
+                    if !half_space(graph, *right) {
                         self.walk(graph, *right, depth + 1)?;
                     }
                     return Ok(());
@@ -674,140 +648,6 @@ fn subtractions_only(graph: &GeometryGraph, mut node: NodeId) -> Result<(), Stri
         }
     }
     Err("the boolean chain is too deep".into())
-}
-
-/// The extent the kernel's boolean measures its rounding against: the
-/// largest coordinate of any vertex, and of each elementary surface's
-/// origin widened by its size (as axiolid-brep-boolean 0.1.3 reads it).
-fn kernel_extent(brep: &ExactBRep) -> f64 {
-    let mut out: f64 = 0.0;
-    for vertex in brep.topology().vertices() {
-        out = out.max(vertex.position.abs().max_element());
-    }
-    for surface in brep.surfaces() {
-        let (origin, size) = match surface {
-            Surface::Plane(plane) => (plane.frame.origin, 0.0),
-            Surface::Cylinder(cylinder) => (cylinder.frame.origin, cylinder.radius),
-            Surface::EllipticalCylinder(cylinder) => (
-                cylinder.frame.origin,
-                cylinder.semi_axis_x.max(cylinder.semi_axis_y),
-            ),
-            Surface::Cone(cone) => (cone.frame.origin, cone.radius.abs()),
-            Surface::Sphere(sphere) => (sphere.frame.origin, sphere.radius),
-            Surface::Torus(torus) => (torus.frame.origin, torus.major_radius + torus.minor_radius),
-            _ => continue,
-        };
-        out = out.max(origin.abs().max_element() + size.abs());
-    }
-    if out.is_finite() { out } else { f64::INFINITY }
-}
-
-/// A bound on the largest coordinate of the finite prism the kernel puts
-/// in place of the half-space `tool` clipping `subject` (axiolid-mesh-compile
-/// 0.3.10): it stands on the plane over the subject's edge box grown by a
-/// margin, or over the polygon of a bounded half-space, and reaches the
-/// margin past the box's farthest point on the kept side. Each length below
-/// bounds one leg of the way from the origin to a prism point, so their sum
-/// bounds every coordinate.
-fn clip_reach(graph: &GeometryGraph, tool: NodeId, subject: &ExactBRep) -> Result<f64, String> {
-    let mut placement = Transform3::IDENTITY;
-    let mut id = tool;
-    for _ in 0..MAX_DEPTH {
-        let (half_space, bounded) = match graph.get(id) {
-            Some(GeometryNode::Instance(instance)) => {
-                placement *= instance.transform;
-                id = instance.source;
-                continue;
-            }
-            Some(GeometryNode::HalfSpace(half_space)) => (half_space, None),
-            Some(GeometryNode::SolidOperation(SolidOperation::BoundedHalfSpace {
-                half_space,
-                boundary,
-                placement: frame,
-            })) => {
-                let Some(GeometryNode::HalfSpace(half_space)) = graph.get(*half_space) else {
-                    return Err("the bounded half-space has no plane".into());
-                };
-                let Some(GeometryNode::Curve2(Curve2::Polyline(polyline))) = graph.get(*boundary)
-                else {
-                    return Err("the bounded half-space's boundary is no polyline".into());
-                };
-                let reach = polyline
-                    .points
-                    .iter()
-                    .map(|point| point.length())
-                    .fold(0.0, f64::max);
-                (half_space, Some((frame.translation.length(), reach)))
-            }
-            _ => return Err("the clip's tool is not a half-space".into()),
-        };
-        // The subject's edge box, as the kernel bounds it (`edges`), mapped
-        // into the half-space's frame by the inverse of its placement
-        // (`moved`): its corners lie within `edges + moved` of the origin,
-        // and the plane's origin within `plane`.
-        let edges = edge_reach(subject)?;
-        let moved = placement.translation.length();
-        let plane = half_space.boundary.origin.length();
-        let corners = edges + moved + plane;
-        // The margin is a quarter of the box's diagonal (at most twice
-        // `edges`) plus four times the tolerance.
-        let margin = 0.5 * edges + 4.0 * TOLERANCE.linear();
-        let reach = match bounded {
-            // The anchor (the frame's origin dropped onto the plane) within
-            // `2 frame + plane`, the polygon within `polygon` of it, the
-            // height within the farthest corner's distance `corners` plus
-            // the margin, and the placement's `moved`.
-            Some((frame, polygon)) => 2.0 * frame + polygon + corners + plane + moved + margin,
-            // The rectangle around the corners' shadows, centred within
-            // `√2 corners` of the plane's origin and reaching as far again
-            // plus `√2` margins, the same height, `plane` and `moved`:
-            // within `(2√2 + 2) corners + (√2 + 1) margin`.
-            None => 5.0 * corners + 3.0 * margin,
-        };
-        return if reach.is_finite() {
-            Ok(reach)
-        } else {
-            Err("the clip's prism has no finite extent".into())
-        };
-    }
-    Err("the placement chain is too deep".into())
-}
-
-/// The largest distance from the origin of a corner of `solid`'s edge
-/// box: vertices, full circles and ellipses, polyline points and spline
-/// control points, as the kernel's clip bounds its subject.
-fn edge_reach(solid: &ExactBRep) -> Result<f64, String> {
-    let mut far = Vec3::ZERO;
-    let mut include = |point: Vec3| far = far.max(point.abs());
-    for vertex in solid.topology().vertices() {
-        include(vertex.position);
-    }
-    let across = |a: Vec3, b: Vec3| (a * a + b * b).powf(0.5);
-    for curve in solid.curves3() {
-        match curve {
-            Curve3::Line(_) => {}
-            Curve3::Circle(circle) => {
-                let r = across(circle.frame.x, circle.frame.y) * circle.radius.abs();
-                include(circle.frame.origin.abs() + r);
-            }
-            Curve3::Ellipse(ellipse) => {
-                let r = across(
-                    ellipse.frame.x * ellipse.semi_axis_x,
-                    ellipse.frame.y * ellipse.semi_axis_y,
-                );
-                include(ellipse.frame.origin.abs() + r);
-            }
-            Curve3::Polyline(polyline) => polyline.points.iter().for_each(|p| include(*p)),
-            Curve3::BSpline(spline) => spline.control_points.iter().for_each(|p| include(*p)),
-            _ => return Err("the clip's subject has an edge with no bounded box".into()),
-        }
-    }
-    let reach = far.length();
-    if reach.is_finite() {
-        Ok(reach)
-    } else {
-        Err("the clip's subject has no finite extent".into())
-    }
 }
 
 /// The shape of a difference's innermost subject, placed in the

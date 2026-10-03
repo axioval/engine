@@ -386,9 +386,10 @@ measured on it is widened by that on both sides, it never certifies a plan
 overlap (a shared patch or a gap that narrow may not be the model's), and
 a comparison measures its meshes instead, since a surface distance must be
 measured on exact surfaces. Either way the boolean merges constructed
-points closer than 2^-40 of its operands' largest coordinate without a
-report, so every distance on such a body is also widened by that much per
-boolean (about 1e-10 m for a wall 100 m from the origin), which leaves it
+points closer than its rounding floor (2^-40 of its operands' largest
+coordinate, which the kernel's report states, axiolid/kernel#244) without
+a report, so every distance on such a body is also widened by that floor
+per boolean (about 1e-10 m for a wall 100 m from the origin), which leaves it
 exact. A pipe passing 0.25 m above a window's sill is certified to within
 a few micrometres, where its 1 mm mesh leaves a 0.24999 m minimum open, and
 so is a pipe over a roof-clipped wall's slope.

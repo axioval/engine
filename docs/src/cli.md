@@ -888,9 +888,9 @@ states:
 | State | Meaning | Effect on geometric rules |
 |---|---|---|
 | exact | every face is planar (polygonal extrusions, including steel sections without fillets or rounded edges, faceted B-reps, meshes, booleans of these), so the mesh is the shape | measured as exact |
-| tessellated | some face is curved; the mesh is within 1 mm of it | measured as approximate, never exact |
+| tessellated | some face is curved; the mesh is within the deviation the mesh compiler certifies for it (the 1 mm chord budget, or the bound it computed) | measured as approximate, never exact |
 | no body | the object occupies no material: spatial structure, openings, annotations, grids, ports, structural analysis items, non-products | ignored as an obstacle |
-| unmeasured | a physical product that could not be meshed, including one without a Body representation | measurements it could affect are not evaluated |
+| unmeasured | a physical product that could not be meshed, including one without a Body representation, or a curved one whose mesh the compiler certifies no deviation for | measurements it could affect are not evaluated |
 
 The planarity check is conservative. Anything it does not recognise counts as
 tessellated, which only loses exactness, never presents an approximation as
@@ -902,10 +902,27 @@ mesh (axiolid/kernel#231). A body that would need more than 4096 steps round
 an axis to do so, such as a ring kilometres across, is refused rather than
 meshed coarser: it is unmeasured, with the reason `mesh compilation refused:
 keeping the surface within the 0.001 m chord tolerance needs more revolution
-angular steps than the kernel's budget allows, …`. For sweeps along a
-polyline, composite or B-spline directrix, curved B-rep faces, primitive
-cylinders and cones, and ellipse or spline profiles the 1 mm is declared but
-not yet certified by the kernel (axiolid/kernel#232).
+angular steps than the kernel's budget allows, …`.
+
+Every curved mesh is declared with the deviation the mesh compiler
+certifies for it (`compile_mesh_with_deviation`, axiolid/kernel#232): the
+1 mm budget where its construction proves it (revolutions, spheres, tori,
+cylinders, cones, and disks swept along segments, arcs, composites of them
+and filleted polylines), the bound it computed for the mesh at hand
+otherwise (curved B-rep faces, disks swept along B-splines and ellipses,
+ellipse and spline profiles), larger or smaller than 1 mm. Where it
+certifies none, the body is unmeasured with the paths it names, never
+declared within a tolerance nothing proves: a boolean whose result is
+curved (an I-beam cut by round holes, a wall clipped by a roof's bounded
+half-space; cutting moves the intersection curve, so no operand's bound
+covers it), a tapered extrusion, a sectioned spine. A disk swept round a
+polyline corner without a fillet radius, which IFC leaves undefined, is
+refused by name (`swept disk directrix turns a corner … give a fillet
+radius`) and unmeasured; with `IfcSweptDiskSolidPolygonal`'s fillet radius
+each corner becomes a tangent arc and is certified. Planar bodies, booleans
+of planar operands included, stay exact. On a 29 MB model this left every
+one of its 56 curved bodies certified; on a small sample house two upper
+walls clipped by the roof became unmeasured.
 
 Space validation also needs roles and storeys: `IfcSpace`, `IfcSlab`, `IfcRoof`
 and `IfcBuilding` give roles, and the spatial tree gives each object's storey.

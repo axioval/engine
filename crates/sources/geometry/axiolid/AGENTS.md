@@ -522,17 +522,18 @@ registry source, not the kernel checkout, before relying on an API.
   under openings are cut part by part in world coordinates by the host's
   lowering, so a turned wall of several parts touches on planes no axis is
   normal to and keeps the mesh for the surface distance.
-- Certified tessellation (axiolid/kernel#231, mesh-compile 0.3.8,
-  construct 0.3.10): revolutions, tapered ones too, primitive spheres and
-  tori, and swept disks and sweeps along one circle or ellipse arc keep
-  every surface point within the chord budget of their triangles, and a
-  turn needing more than 4096 steps is refused (`BudgetExceeded`, the host
-  leaves the body unmeasured). Until axiolid/kernel#232 the declared
-  tolerance is not certified for: sweeps along polyline, composite or
-  B-spline directrices (swept as sampled), curved B-rep face tessellation,
-  primitive cylinders and cones (still clamped at 4096 steps rather than
-  refused), and ellipse or spline profile flattening. Their declaration is
-  unchanged until then.
+- Certified tessellation (axiolid/kernel#231, #232, mesh-compile 0.3.9):
+  hosts declare each mesh with `compile_mesh_with_deviation`'s bound. The
+  compiler certifies no bound for a boolean result ("no operand bound
+  covers the cut"), tapered extrusions, sectioned spines, bounded
+  half-spaces and composites holding other curves, so a curved body built
+  that way is unmeasured at the host, even where its exact boundary exists
+  (a wall with a round window, a beam cut by round holes). Asked: a
+  certified deviation for a boolean of certified operands (the cut moved
+  by at most the operands' bounds), or a bound measured between the
+  boolean's mesh and its exact result where `ReferenceExactCompiler` builds
+  one. Half-space clipping (axiolid/kernel#234) is still open, for the
+  exact boundary and the deviation alike.
 - axiolid/kernel discussion #175: winding numbers are O(n) per query; the
   deepest-first ordering in `proximity.rs` hides it in practice but not in
   the worst case.

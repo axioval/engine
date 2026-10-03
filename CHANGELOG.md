@@ -106,6 +106,21 @@ All notable changes are documented here. This project follows Semantic Versionin
   a one-item body only (`Option`), and `ExactBoundary::into_brep` is
   replaced by `into_body` for `AxiolidGeometry::with_exact_body`.
   `with_exact_boundary` still registers one exact solid.
+- `axioval check --geometry` declares every curved mesh with the deviation
+  the mesh compiler certifies for it (`compile_mesh_with_deviation`,
+  axiolid/kernel#232) instead of the 1 mm budget everywhere: the budget
+  where the construction proves it (now also cylinders, cones and pipes
+  along segments, arcs, composites and filleted polylines), the computed
+  bound otherwise (curved B-rep faces, sweeps along B-splines and
+  ellipses, ellipse and spline profiles). **Behaviour change:** a curved
+  mesh the compiler certifies no bound for is unmeasured with the paths
+  it names, so its measurements are not evaluated where they were judged
+  on an unproven 1 mm: booleans whose result is curved (a beam cut by
+  round holes, a wall clipped by a bounded half-space), tapered
+  extrusions, sectioned spines. A disk swept round a polyline corner
+  without a fillet radius is refused by name and unmeasured; with a fillet
+  radius (`IfcSweptDiskSolidPolygonal`) each corner is a tangent arc.
+  Opening voids and space-boundary surfaces are declared the same way.
 
 ### Added
 

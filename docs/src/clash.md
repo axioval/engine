@@ -398,7 +398,10 @@ same curve. The kernel keeps every point of a revolution (a revolved
 circle, a torus), a sphere and a disk swept along one arc within the chord
 budget of its mesh (axiolid/kernel#231), so such a body is checked against
 the 1 mm it is declared with; a turn that would need more than 4096 steps
-is refused and its body is unmeasured, never meshed coarser. `axioval check
+is refused and its body is unmeasured, never meshed coarser. Every curved
+mesh is declared with the deviation the compiler certifies for it
+(axiolid/kernel#232), and one it certifies none for (a curved boolean
+result) is unmeasured rather than declared within the budget. `axioval check
 --geometry` does all this by default (see [CLI](./cli.md)).
 
 **Certified plan relations.** The same pairs are certified in plan by

@@ -24,7 +24,7 @@
 //! services treat them differently:
 //!
 //! - **meshed**, either exactly (every face planar, so the mesh is the shape)
-//!   or as a tessellation within the compiler's chord budget;
+//!   or as a tessellation within the deviation the compiler certifies;
 //! - **no body**: it occupies no material (a storey, a zone, an opening);
 //! - **unmeasured**: it is physical but could not be meshed. Measurements it
 //!   could affect refuse rather than act as if it were not there.
@@ -55,7 +55,8 @@ use std::error::Error;
 use axiolid_contracts::{ExecutionOptions, GeomError};
 use axiolid_core::Tolerance;
 use axiolid_curve::{Curve2, Curve3};
-use axiolid_mesh_compile_contract::MeshCompiler;
+use axiolid_mesh_boolean_boolmesh::BoolmeshBoolean;
+use axiolid_mesh_compile::{DeviationBound, DeviationReport, ReferenceMeshCompiler};
 use axiolid_model::{GeometryGraph, GeometryNode, NodeId, SolidOperation, SurfaceRelation};
 use axiolid_primitive::Primitive;
 use axiolid_profile::{Profile, SectionProfile};
@@ -90,11 +91,17 @@ use ifc_spatial::relation::boundary::{ConnectionGeometryAnomaly, SpaceBoundary};
 use ifc_spatial::{SpatialAnomaly, SpatialKind, SpatialTree};
 use std::sync::Arc;
 
-/// Linear tolerance handed to the mesh compiler. With no explicit chord
-/// budget, curved geometry stays within this distance of the true surface,
-/// which is the deviation declared for every tessellated mesh.
+/// Linear tolerance handed to the mesh compiler: with no explicit chord
+/// budget, its chord budget. Each tessellated mesh is declared with the
+/// deviation the compiler certifies for it (`compile_mesh_with_deviation`,
+/// axiolid/kernel#232): this budget where its construction proves it, the
+/// bound it computed otherwise, and none at all (the body unmeasured)
+/// where it has no bound.
 const TOLERANCE: Tolerance = Tolerance::MILLIMETRE;
-const CHORD_DEVIATION_METRES: f64 = 1e-3;
+
+/// The mesh compiler `ifc-geometry` lowers for, whose deviation reports
+/// are its own claim about its meshes.
+type Compiler = ReferenceMeshCompiler<BoolmeshBoolean>;
 
 /// Graph nodes the planarity check visits before calling a product curved.
 const NODE_BUDGET: usize = 100_000;
@@ -314,7 +321,7 @@ pub fn attach(
                     .and_then(|entity| mesh(&backend, model, units, entity, false))
                     .and_then(|meshed| {
                         meshed
-                            .map(|body| (body.mesh, body.exact))
+                            .map(|body| (body.mesh, body.fit))
                             .ok_or_else(|| "no body representation".into())
                     });
                 voids.push((id.clone(), void));
@@ -339,15 +346,17 @@ pub fn attach(
         match keep(&mut report, options.keep_meshes.then_some(&id), meshed) {
             Ok(Some(body)) => {
                 if let Some(boundary) = body.boundary {
-                    boundaries.push((id.clone(), boundary, !body.exact));
+                    boundaries.push((id.clone(), boundary, body.fit != Fit::Exact));
                 }
-                if body.exact {
-                    geometry = geometry.with_mesh(id, body.mesh);
-                    report.exact += 1;
-                } else {
-                    geometry =
-                        geometry.with_tessellated_mesh(id, body.mesh, CHORD_DEVIATION_METRES);
-                    report.tessellated += 1;
+                match body.fit {
+                    Fit::Exact => {
+                        geometry = geometry.with_mesh(id, body.mesh);
+                        report.exact += 1;
+                    }
+                    Fit::Within(deviation) => {
+                        geometry = geometry.with_tessellated_mesh(id, body.mesh, deviation);
+                        report.tessellated += 1;
+                    }
                 }
             }
             // A space without a body is still no material; it cannot be
@@ -604,8 +613,9 @@ fn envelope_service(
     Ok(service)
 }
 
-/// An opening's meshed void and whether it is exact, or why it has none.
-type Void = Result<(axiolid_mesh::TriMesh, bool), String>;
+/// An opening's meshed void and how it stands for the void, or why it has
+/// none.
+type Void = Result<(axiolid_mesh::TriMesh, Fit), String>;
 
 /// Relationships derived from geometry, over the model's spaces, its
 /// doors, windows and openings, and its walls and slabs.
@@ -635,9 +645,9 @@ fn derived_service(
     }
     for (id, void) in voids {
         service = match void {
-            Ok((mesh, true)) => service.with_opening_void(id, mesh),
-            Ok((mesh, false)) => {
-                service.with_tessellated_opening_void(id, mesh, CHORD_DEVIATION_METRES)
+            Ok((mesh, Fit::Exact)) => service.with_opening_void(id, mesh),
+            Ok((mesh, Fit::Within(deviation))) => {
+                service.with_tessellated_opening_void(id, mesh, deviation)
             }
             Err(reason) => service.with_unmeasured_opening_void(id, reason),
         };
@@ -725,8 +735,8 @@ fn plan_area_service(
     voids.iter().fold(
         AxiolidPlanAreaService::new(geometry.clone(), source.clone()),
         |service, (id, void)| match void {
-            Ok((mesh, true)) => service.with_opening_void(id.clone(), mesh.clone()),
-            Ok((_, false)) | Err(_) => service.with_unmeasured_opening_void(id.clone()),
+            Ok((mesh, Fit::Exact)) => service.with_opening_void(id.clone(), mesh.clone()),
+            Ok((_, Fit::Within(_))) | Err(_) => service.with_unmeasured_opening_void(id.clone()),
         },
     )
 }
@@ -740,12 +750,10 @@ fn linear_service(
     voids.iter().fold(
         AxiolidLinearQuantityService::new(geometry.clone()),
         |service, (id, void)| match void {
-            Ok((mesh, true)) => service.with_opening_void(id.clone(), mesh.clone()),
-            Ok((mesh, false)) => service.with_tessellated_opening_void(
-                id.clone(),
-                mesh.clone(),
-                CHORD_DEVIATION_METRES,
-            ),
+            Ok((mesh, Fit::Exact)) => service.with_opening_void(id.clone(), mesh.clone()),
+            Ok((mesh, Fit::Within(deviation))) => {
+                service.with_tessellated_opening_void(id.clone(), mesh.clone(), *deviation)
+            }
             Err(_) => service.with_unmeasured_opening_void(id.clone()),
         },
     )
@@ -778,8 +786,10 @@ fn walkability_service(
     voids.iter().fold(
         AxiolidWalkabilityService::new(geometry.clone(), source.clone()),
         |service, (id, void)| match void {
-            Ok((mesh, true)) => service.with_opening_void(id.clone(), mesh.clone()),
-            Ok((mesh, false)) => service.with_tessellated_opening_void(id.clone(), mesh.clone()),
+            Ok((mesh, Fit::Exact)) => service.with_opening_void(id.clone(), mesh.clone()),
+            Ok((mesh, Fit::Within(_))) => {
+                service.with_tessellated_opening_void(id.clone(), mesh.clone())
+            }
             Err(reason) => service.with_unmeasured_opening_void(id.clone(), reason.clone()),
         },
     )
@@ -809,8 +819,10 @@ fn routing_service(
     }
     for (id, void) in voids {
         service = match void {
-            Ok((mesh, true)) => service.with_opening_void(id.clone(), mesh.clone()),
-            Ok((mesh, false)) => service.with_tessellated_opening_void(id.clone(), mesh.clone()),
+            Ok((mesh, Fit::Exact)) => service.with_opening_void(id.clone(), mesh.clone()),
+            Ok((mesh, Fit::Within(_))) => {
+                service.with_tessellated_opening_void(id.clone(), mesh.clone())
+            }
             Err(reason) => service.with_unmeasured_opening_void(id.clone(), reason.clone()),
         };
     }
@@ -851,7 +863,7 @@ fn facade_service(
 /// geometry, one that is not a surface, and any surface the lowering or
 /// compiler refuses are unmeasured.
 fn boundary_service(
-    backend: &impl MeshCompiler,
+    backend: &Compiler,
     parsed: &BTreeMap<SourceId, Parsed>,
     geometry: &AxiolidGeometry,
     kinds: &BTreeMap<ObjectId, String>,
@@ -876,14 +888,10 @@ fn boundary_service(
                 .filter(|id| kinds.contains_key(id));
             let id = object(boundary.id);
             service = match boundary_surface(backend, model, units, &boundary, &space) {
-                Ok((mesh, true)) => service.with_boundary(space, id, element, mesh),
-                Ok((mesh, false)) => service.with_tessellated_boundary(
-                    space,
-                    id,
-                    element,
-                    mesh,
-                    CHORD_DEVIATION_METRES,
-                ),
+                Ok((mesh, Fit::Exact)) => service.with_boundary(space, id, element, mesh),
+                Ok((mesh, Fit::Within(deviation))) => {
+                    service.with_tessellated_boundary(space, id, element, mesh, deviation)
+                }
                 Err(reason) => service.with_unmeasured_boundary(space, id, element, reason),
             };
         }
@@ -892,7 +900,7 @@ fn boundary_service(
 }
 
 /// One boundary's connection surface as a mesh in the coordinates of its
-/// space's body, and whether it is exact.
+/// space's body, and how it stands for the surface.
 ///
 /// `ifc-spatial` reads the boundary's `ConnectionGeometry` and `ifc-geometry`
 /// lowers its `SurfaceOnRelatingElement`: a surface, a face surface or a
@@ -904,12 +912,12 @@ fn boundary_service(
 /// plane takes that frame on its basis plane only, its boundaries staying
 /// in the plane's parameters (openbimrs/ifc#163).
 fn boundary_surface(
-    backend: &impl MeshCompiler,
+    backend: &Compiler,
     model: &Model,
     units: &ifc_geometry::units::UnitScale,
     boundary: &SpaceBoundary,
     space: &ObjectId,
-) -> Result<(axiolid_mesh::TriMesh, bool), String> {
+) -> Result<(axiolid_mesh::TriMesh, Fit), String> {
     let connection = match boundary.connection_geometry(model) {
         Ok(Some(connection)) => connection,
         Ok(None) => return Err("the boundary states no connection geometry".into()),
@@ -930,18 +938,72 @@ fn boundary_surface(
     let root = lower_connection_surface(&mut session, connection, frame)
         .map_err(|error| error.to_string())?;
     let lowered = session.finish(root).map_err(|error| error.to_string())?;
-    let exact = planar(&lowered.graph, lowered.root, &mut NODE_BUDGET.clone());
-    let mesh = backend
-        .compile_mesh(
-            &lowered.graph,
-            lowered.root,
-            &ExecutionOptions::new(TOLERANCE),
-        )
+    compile(backend, &lowered.graph, lowered.root)
+}
+
+/// How a compiled mesh stands for the surface it was compiled from.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Fit {
+    /// Every face is planar: the mesh is the shape.
+    Exact,
+    /// Curved: every point of the true surface lies within this many
+    /// metres of the mesh, as the compiler certifies it.
+    Within(f64),
+}
+
+/// `root` compiled into a mesh, and how it stands for the surface.
+///
+/// A planar body is exact. A curved one is declared with the deviation the
+/// compiler certifies (axiolid/kernel#232): the chord budget where its
+/// construction proves it (`Proven`), the bound it computed for this mesh
+/// where that is larger or smaller (`Certified`). A mesh it cannot bound
+/// (`Unbounded`: a boolean of curved operands, a tapered extrusion, a
+/// sectioned spine, a bounded half-space, ...) is refused with the paths
+/// that have no bound, so the object is unmeasured rather than declared
+/// within a tolerance nothing proves.
+fn compile(
+    backend: &Compiler,
+    graph: &GeometryGraph,
+    root: NodeId,
+) -> Result<(axiolid_mesh::TriMesh, Fit), String> {
+    let exact = planar(graph, root, &mut NODE_BUDGET.clone());
+    let (outcome, report) = backend
+        .compile_mesh_with_deviation(graph, root, &ExecutionOptions::new(TOLERANCE))
         .map_err(|error| compilation_refused(&error))?;
+    let mesh = outcome.mesh;
     if mesh.triangle_count() == 0 {
         return Err("mesh compilation produced no triangles".into());
     }
-    Ok((mesh, exact))
+    if exact {
+        return Ok((mesh, Fit::Exact));
+    }
+    match report.bound {
+        Some(bound) if bound.is_finite() && bound >= 0.0 => Ok((mesh, Fit::Within(bound))),
+        _ => Err(uncertified(&report)),
+    }
+}
+
+/// Why a curved mesh has no certified deviation: the paths the compiler
+/// names unbounded, each with its reason.
+fn uncertified(report: &DeviationReport) -> String {
+    let paths: Vec<String> = report
+        .contributions
+        .iter()
+        .filter_map(|contribution| match contribution.bound {
+            DeviationBound::Unbounded(reason) => Some(reason.to_owned()),
+            _ => None,
+        })
+        .collect();
+    format!(
+        "the mesh compiler certifies no bound on how far the curved surface lies from its \
+         mesh ({}), so it is not declared within the {} m chord tolerance",
+        if paths.is_empty() {
+            "no path reported one".to_owned()
+        } else {
+            paths.join("; ")
+        },
+        TOLERANCE.linear()
+    )
 }
 
 /// Why the mesh compiler refused a body, which leaves it unmeasured.
@@ -999,8 +1061,8 @@ fn keep(report: &mut GeometryReport, id: Option<&ObjectId>, meshed: Meshed) -> M
 /// One product's meshed body.
 struct Body {
     mesh: axiolid_mesh::TriMesh,
-    /// Every face planar: the mesh is the shape.
-    exact: bool,
+    /// How the mesh stands for the body.
+    fit: Fit,
     /// The exact boundary built from the same graph, when asked for and
     /// exactly constructible.
     boundary: Option<ExactBoundary>,
@@ -1024,7 +1086,7 @@ fn entity_id(id: &ObjectId) -> Option<EntityId> {
 /// One product's net body (openings subtracted), whether it is exact, and
 /// with `boundary` its exact boundary where the lowered graph has one.
 fn mesh(
-    backend: &impl MeshCompiler,
+    backend: &Compiler,
     model: &Model,
     units: &ifc_geometry::units::UnitScale,
     product: EntityId,
@@ -1035,17 +1097,7 @@ fn mesh(
         return Ok(None);
     };
     let lowered = session.finish(net.root).map_err(|e| e.to_string())?;
-    let exact = planar(&lowered.graph, lowered.root, &mut NODE_BUDGET.clone());
-    let mesh = backend
-        .compile_mesh(
-            &lowered.graph,
-            lowered.root,
-            &ExecutionOptions::new(TOLERANCE),
-        )
-        .map_err(|error| compilation_refused(&error))?;
-    if mesh.triangle_count() == 0 {
-        return Err("mesh compilation produced no triangles".into());
-    }
+    let (mesh, fit) = compile(backend, &lowered.graph, lowered.root)?;
     // Built from the graph the mesh was compiled from, so it carries the
     // same placement; anything without an exact construction keeps its
     // mesh alone.
@@ -1054,7 +1106,7 @@ fn mesh(
         .flatten();
     Ok(Some(Body {
         mesh,
-        exact,
+        fit,
         boundary,
     }))
 }

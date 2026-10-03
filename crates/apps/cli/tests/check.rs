@@ -11608,28 +11608,31 @@ fn beam_supports_are_found_by_contact_with_geometry() {
             "support_distance": {"type": "quantity", "value": 500.0, "unit": "mm"},
         }),
     );
-    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
     // Every body meshes, the tangent hole's host included. The HEB has no
-    // fillets, so its mesh is exact; only the beam, cut by round holes, is
-    // a tessellation.
+    // fillets, so its mesh is exact. The beam, cut by round holes, is
+    // curved, and the mesh compiler certifies no deviation for a boolean of
+    // curved operands (axiolid/kernel#232: cutting moves the intersection
+    // curve), so it is unmeasured with that reason and the openings in it
+    // are not evaluated, never judged on an unbounded mesh.
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
     let geometry = &result["geometry"];
-    assert_eq!(geometry["unmeasured"], json!([]), "{geometry:#}");
-    assert_eq!(geometry["tessellated"], 1, "{geometry:#}");
-    assert_eq!(
-        finding_messages(&result),
-        [
-            (
-                "#500".to_owned(),
-                "opening is 0.1 m from support #700 along its host #50; 0.5 m required".to_owned()
-            ),
-            (
-                "#900".to_owned(),
-                "opening is 0.3 m from support #800 along its host #50; 0.5 m required".to_owned()
-            ),
-        ],
+    let unmeasured = geometry["unmeasured"].as_array().unwrap();
+    assert_eq!(unmeasured.len(), 1, "{geometry:#}");
+    assert_eq!(unmeasured[0]["object"]["local_id"], "#50", "{geometry:#}");
+    assert!(
+        unmeasured[0]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("boolean result: no operand bound covers the cut"),
+        "{geometry:#}"
+    );
+    assert_eq!(geometry["tessellated"], 0, "{geometry:#}");
+    assert_eq!(finding_messages(&result), [], "{result:#}");
+    let not_evaluated = result["report"]["not_evaluated"].to_string();
+    assert!(
+        not_evaluated.contains("#500") && not_evaluated.contains("#900"),
         "{result:#}"
     );
-    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
 }
 
 /// Stair flight #108 (four 0.17 m risers, x 0 to 1.12, y -1.2 to 0) with
@@ -15514,6 +15517,70 @@ fn with_geometry_a_column_of_two_items_is_certified_against_a_wall() {
     assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
     assert_eq!(result["geometry"]["exact_boundaries"], 2, "{result:#}");
     assert!(finding_ids(&result).is_empty(), "{result:#}");
+}
+
+/// A disk swept along a polyline with a corner and no fillet radius has no
+/// defined surface at the corner (IFC leaves it undefined), and the kernel
+/// refuses it by name since axiolid/kernel#232 instead of sweeping it with
+/// sharp mitres: the body is unmeasured with that reason, its clashes not
+/// evaluated. The same polyline with a fillet radius
+/// (`IfcSweptDiskSolidPolygonal`) is meshed and declared within the
+/// certified 1 mm.
+#[test]
+fn a_swept_disk_round_an_unfilleted_corner_is_unmeasured() {
+    let case = Case::new("unfilleted-corner");
+    let bent = |id: u32, solid: &str| {
+        format!(
+            "#{a}=IFCCARTESIANPOINT((10.,0.,1.));\n\
+             #{b}=IFCCARTESIANPOINT((12.,0.,1.));\n\
+             #{c}=IFCCARTESIANPOINT((12.,2.,1.));\n\
+             #{line}=IFCPOLYLINE((#{a},#{b},#{c}));\n\
+             #{disk}={solid};\n\
+             #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','AdvancedSweptSolid',(#{disk}));\n\
+             #{definition}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
+             #{id}=IFCWALL('{id:022}',$,$,$,$,#3,#{definition},$,$);\n",
+            a = id - 7,
+            b = id - 6,
+            c = id - 5,
+            line = id - 4,
+            disk = id - 3,
+            shape = id - 2,
+            definition = id - 1,
+            solid = solid.replace("LINE", &format!("#{}", id - 4)),
+        )
+    };
+    let model = crossing_walls_with(&format!(
+        "{}{}",
+        bent(68, "IFCSWEPTDISKSOLID(LINE,0.05,$,$,$)"),
+        bent(78, "IFCSWEPTDISKSOLIDPOLYGONAL(LINE,0.05,$,$,$,0.2)"),
+    ));
+    let (output, result) = case.wall_clash(&model, &json!({}));
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let unmeasured = result["geometry"]["unmeasured"].as_array().unwrap();
+    let cornered = unmeasured
+        .iter()
+        .find(|entry| entry["object"]["local_id"] == "#68")
+        .unwrap_or_else(|| panic!("{result:#}"));
+    let reason = cornered["reason"].as_str().unwrap();
+    assert!(
+        reason.contains("turns a corner") && reason.contains("fillet radius"),
+        "{reason}"
+    );
+    assert!(
+        unmeasured
+            .iter()
+            .all(|entry| entry["object"]["local_id"] != "#78"),
+        "{result:#}"
+    );
+    assert_eq!(result["geometry"]["tessellated"], 1, "{result:#}");
+    assert!(
+        result["report"]["not_evaluated"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|outcome| outcome.to_string().contains("#68")),
+        "{result:#}"
+    );
 }
 
 /// A ring 5 km round needs more than the kernel's 4096 steps a turn to stay

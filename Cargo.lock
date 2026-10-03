@@ -659,6 +659,7 @@ dependencies = [
  "axiolid-core",
  "axiolid-curve",
  "axiolid-mesh",
+ "axiolid-mesh-boolean-boolmesh",
  "axiolid-mesh-compile",
  "axiolid-mesh-compile-contract",
  "axiolid-model",

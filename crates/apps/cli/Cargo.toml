@@ -24,8 +24,11 @@ axiolid-contracts.workspace = true
 axiolid-core.workspace = true
 axiolid-curve.workspace = true
 axiolid-mesh.workspace = true
-# Required at 0.3.4 for curve-bounded planes (space-boundary surfaces);
-# ifc-geometry's reference backend is this compiler.
+# ifc-geometry's reference backend is this compiler (with the boolmesh
+# boolean); 0.3.9 reports each mesh's certified deviation
+# (`compile_mesh_with_deviation`, axiolid/kernel#232), which the bridge
+# declares.
+axiolid-mesh-boolean-boolmesh.workspace = true
 axiolid-mesh-compile.workspace = true
 axiolid-mesh-compile-contract.workspace = true
 axiolid-model.workspace = true

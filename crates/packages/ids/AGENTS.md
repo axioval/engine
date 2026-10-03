@@ -52,11 +52,15 @@ back as a document. See `docs/src/ids.md` for the mapping of every facet.
   profile and the comparator), `axioval-engine` (the
   capability descriptors, so definitions follow every new parameter or
   column), `axioval-rules` (XML Schema pattern translation only),
-  `openbim-ids` (the reader and writer) and `ifc-schema` (which IDS classes are
+  `openbim-ids` 0.2 (the reader and writer, without its `audit` feature) and `ifc-schema` (which IDS classes are
   occurrences, per release). Never a source adapter: the architecture gate
   exempts exactly `openbim-ids` and `ifc-schema` for this crate
   (`PERMITTED_COUPLINGS` in `scripts/architecture.py`). The facade is a
   path-only dev-dependency, left out of the published manifest.
+- Never enable `openbim-ids`'s `audit` feature without the maintainers'
+  decision: it pulls in `ifc-template-catalog` (`AGPL-3.0-or-later AND
+  CC-BY-ND-4.0`, buildingSMART template data embedded), which `deny.toml`
+  does not allow. Never add CC-BY-ND-4.0 to the allow list to make it pass.
 - Run `cargo test -p axioval-ids`. The conformance harness needs the
   buildingSMART corpus, which is CC BY-ND 4.0 and not vendored:
   `IDS_TEST_CASES=<IDS>/Documentation/ImplementersDocumentation/TestCases cargo test -p axioval-ids -- --ignored corpus`.

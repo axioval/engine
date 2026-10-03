@@ -79,6 +79,13 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- `axioval-ids` and the CLI read and write IDS with `openbim-ids` 0.2.0.
+  Its reader and writer are unchanged, so translation, export and the
+  conformance corpus are too. Its new `audit` feature is left off: it
+  depends on `ifc-template-catalog`, whose embedded buildingSMART
+  property and quantity set templates are CC BY-ND 4.0, a licence
+  `cargo deny` does not allow. Documents are not audited yet.
+
 - The IFC coordinate system's map conversion is read by `ifc-georef` 0.5.1
   (without its `transform` feature, so no Axiolid crate is linked) instead
   of the adapter's own reader. An unstated `MapUnit` is now the project

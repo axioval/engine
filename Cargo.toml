@@ -66,7 +66,7 @@ axiolid-measure = "0.3.7"
 # with a sliver along a turned wall (axiolid/kernel#219, #222); 0.3.10 fixes
 # both.
 axiolid-overlay = "0.3.10"
-axiolid-ray-mesh = "0.3.0"
+axiolid-ray-mesh = "0.4.0"
 axiolid-route = "0.3.7"
 axiolid-spatial = "0.3.0"
 axiolid-contracts = "0.3.1"
@@ -89,7 +89,7 @@ ifc-classification = "0.2.2"
 ifc-geometry = { version = "0.4.3", default-features = false }
 ifc-material = "0.3.0"
 ifc-spatial = "0.2.3"
-ifc-model = "0.2.3"
+ifc-model = "0.3.0"
 ifc-properties = "0.5.3"
 ifc-schema = "0.2.2"
 ifc-step = "0.3.0"
@@ -102,7 +102,7 @@ quick-xml = "0.42"
 ifc-style = "0.3.0"
 ifc-systems = "0.2.2"
 regex = "1.11.2"
-sha2 = "0.10.9"
+sha2 = "0.11.0"
 # ifcZIP archives; deflate is the only compression method they use.
 zip = { version = "8.6", default-features = false }
 

@@ -34,7 +34,8 @@
 //!
 //! With [`Options::exact_boundaries`], a body whose lowered graph has an
 //! exact construction (a rigidly placed extrusion, revolution or swept disk,
-//! see `axioval::axiolid::exact_boundary`) also gets its exact boundary
+//! one less its extruded openings, or several such items; see
+//! `axioval::axiolid::exact_boundary`) also gets its exact boundary
 //! registered beside the mesh, built from the same graph the mesh is compiled
 //! from, so placement and mirroring are the mesh's own. The proximity service
 //! then certifies distances between curved bodies the chord deviation would
@@ -410,7 +411,7 @@ fn with_boundaries(
         return geometry;
     }
     for (id, boundary, _) in agreeing {
-        geometry = geometry.with_exact_boundary(id, boundary.into_brep());
+        geometry = geometry.with_exact_body(id, boundary.into_body());
         report.exact_boundaries += 1;
     }
     geometry

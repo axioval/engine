@@ -254,7 +254,12 @@ boundary differs by …`, with the witness as
 `comparison:witness:boundary:…` and both boundaries cited as exact
 evidence, `comparison:exact-boundary:<object>` on each side's source. A
 service that cannot read the counterpart's boundary, or whose kernel
-refuses the pair, measures the meshes as above.
+refuses the pair, measures the meshes as above. So does a boundary the
+Axiolid service built within a tolerance (a wall less its openings): it is
+not exactly the model's surface. A body of several items is compared by
+the boundary of their union, which the kernel forms only for items apart,
+touching without a shared patch or sharing a face on an axis plane of the
+body's frame; any other layout measures the meshes.
 
 An identical re-export and a moved copy match face to face, a translate
 whatever coordinates its faces are trimmed in (axiolid/kernel#227), and

@@ -27,6 +27,21 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   its extent. `tests/exact_boundary.rs` checks every family against the
   kernel's own mesh of the same graph, the exact volume and certified
   distances against closed forms.
+  A difference (openings, `IfcBooleanResult`) is built by
+  `ReferenceExactCompiler` (axiolid-mesh-compile 0.3.9, axiolid/kernel#228),
+  first with `Tolerance::ZERO` and only on a refusal with
+  `Tolerance::METRE`; then its `ExactBody` is perturbed by the linear
+  tolerance plus the angular one over its extent, because the general
+  boolean's result is the exact boolean of operands moved by up to that.
+  Never register such a body as exact, never drop the perturbation from a
+  certified distance (`certified` adds it), never certify a plan overlap or
+  a surface distance on it. Its extent is its innermost subject's
+  (`Shape::Placed`). A collection of several solids becomes one item each
+  in the body's frame, the placement above the collection kept apart
+  (`ExactBody::placement`, axiolid/kernel#229); one item is placed in the
+  world, as the one-solid measurements need. `tests/exact_bodies.rs` pins
+  openings (a pipe through a window), perturbation, a column on its
+  footing and the fallbacks.
 - `src/guard.rs` implements `GuardService`: barriers, landings and climbing
   aids around a walking surface's edge. Proximity is footprint-to-footprint,
   never vertex-to-vertex.
@@ -333,7 +348,10 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   (`ExactBoundaryHandle` over the shared `Arc<ExactBRep>`), and where the
   subject has one and the counterpart's downcasts to `ExactBRep`,
   `measure_surface_distance` measures between the boundaries first (each direction with
-  `one_sided_boundary_hausdorff_with_budget`, axiolid-measure 0.3.7,
+  `one_sided_boundary_hausdorff_with_budget`, axiolid-measure 0.3.7, or
+  `one_sided_body_boundary_hausdorff_with_budget` for several items, 0.3.8,
+  whose layout refusals fall back to the meshes; a perturbed body never
+  takes this path,
   `Tolerance::METRE`, at most `BOUNDARY_HAUSDORFF_SPLITS` splits a side,
   each widened by `certified_directed`'s rounding bound,
   `try_from_boundaries`), whatever the meshes' fidelity; a kernel refusal
@@ -347,15 +365,19 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   wide interval by the straddle rule. `tests/boundary_surface_distance.rs`
   measures two sessions' round columns.
   A tessellated pair whose objects both have an exact boundary
-  (`AxiolidGeometry::with_exact_boundary`) also gets the kernel's certified
-  `boundary_distance` (axiolid-measure 0.3.4, `exact` feature) to
+  (`AxiolidGeometry::with_exact_boundary`/`with_exact_body`) also gets the
+  kernel's certified `boundary_distance` (`body_boundary_distance` over
+  several items or a placed body; axiolid-measure 0.3.4/0.3.8, `exact`
+  feature), widened by both bodies' perturbation, to
   `CERTIFIED_ACCURACY_METRES`, widened by a rounding bound on its witness
   points, and reports the intersection with the chord-widened interval
   (`with_certified_separation` in `measure_proximity`, the interval itself
   for `Minimum3d` in `measure_distance`); an empty intersection refuses
   (boundary and mesh disagree), a kernel refusal keeps the chord interval.
-  The same pair's plan relations (`proximity::Boundaries`) are certified
-  by the kernel's plan measurements under the same rules: `Horizontal` by
+  The same pair's plan relations (`proximity::Boundaries`), for bodies of
+  one solid in the world only, are certified by the kernel's plan
+  measurements under the same rules (a perturbed pair never by
+  `plan_overlap`): `Horizontal` by
   `plan_boundary_distance`; the footprint relation of `PlanOverlap` and
   zero-offset `Vertical` (`relation`) by `plan_overlap`, asked in both
   orders because its search is order-dependent (`Undecided` keeps the
@@ -449,13 +471,15 @@ Geometry evidence for any source, measured with the Axiolid kernel.
 ## Pitfall
 
 Depend only on what the registry publishes. The workspace pins `axiolid-*`
-0.3.0, except `axiolid-measure` 0.3.6 with the `exact` feature (certified
-`boundary_distance`, and the plan measurements `plan_boundary_distance`,
+0.3.0, except `axiolid-measure` 0.3.8 with the `exact` feature (certified
+`boundary_distance` and the `body_*` measurements over several items, and
+the plan measurements `plan_boundary_distance`,
 `plan_boundary_clearance` and `plan_overlap`, with `axiolid-brep` 0.3.3 for
 the `ExactBRep` hosts register, built by `exact_boundary` with
-`axiolid-construct` 0.3.9, `axiolid-curve`, `axiolid-evaluate` 0.3.2,
-`axiolid-model` and `axiolid-profile`; the tests compile meshes with
-`axiolid-mesh-compile` 0.3.7 and `axiolid-mesh-boolean-boolmesh`), `axiolid-overlay` 0.3.10 (`minimum_area_rectangle`, the
+`axiolid-construct` 0.3.11, `axiolid-curve`, `axiolid-model`,
+`axiolid-profile` and `axiolid-mesh-compile` 0.3.9's `ReferenceExactCompiler`
+through `axiolid-exact-compile-contract`; the tests compile meshes with
+`axiolid-mesh-compile` and `axiolid-mesh-boolean-boolmesh`), `axiolid-overlay` 0.3.10 (`minimum_area_rectangle`, the
 Minkowski and dilation family, settled `union_soup` output, fast on mesh
 soups, features within the caller's tolerance snapped before the exact
 arrangement), `axiolid-route`
@@ -484,10 +508,20 @@ registry source, not the kernel checkout, before relying on an API.
   axiolid-route 0.3.3) and needs axiolid-triangulate 0.3.1 with the fix for
   axiolid/kernel#190; it calls the skeleton directly, without a worker,
   timeout or retry spacings.
-- Exact boundaries: the kernel's exact boolean takes only unplaced sharp
-  rectangle prisms along +z, so bodies with openings or clippings (and
-  bodies of several items, which would need one B-rep of several solids)
-  keep their mesh alone.
+- Exact openings (axiolid/kernel#228): the general boolean does not report
+  whether a tolerance decision fired, and with `Tolerance::ZERO` refuses
+  even axis-aligned openings, so every difference of placed operands is
+  perturbed by about a micrometre and never compared or cited as exact. A
+  report of the decisions taken (or exact predicates for coincident axis
+  planes) would let an unsnapped difference be exact. Half-space clippings
+  (`IfcHalfSpaceSolid`, axiolid/kernel#234), unions, intersections and
+  non-extrusion operands keep the mesh alone.
+- Bodies of several items (axiolid/kernel#229): the plan measurements
+  (`plan_boundary_distance`, `plan_boundary_clearance`, `plan_overlap`)
+  take one solid, so such a body's plan relations stay the mesh's; items
+  under openings are cut part by part in world coordinates by the host's
+  lowering, so a turned wall of several parts touches on planes no axis is
+  normal to and keeps the mesh for the surface distance.
 - Certified tessellation (axiolid/kernel#231, mesh-compile 0.3.8,
   construct 0.3.10): revolutions, tapered ones too, primitive spheres and
   tori, and swept disks and sweeps along one circle or ellipse arc keep

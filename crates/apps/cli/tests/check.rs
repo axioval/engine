@@ -15372,6 +15372,150 @@ fn with_geometry_a_tilted_round_members_distance_is_certified() {
     );
 }
 
+/// A wall #19 (`x` 0 to 4, `y` 0 to 0.2, 3 m high) voided by a door
+/// opening #29 (`x` 0.5 to 1.5, up to 2.1 m) and a window opening #39 (`x`
+/// 2.2 to 3.4, `z` 1 to 2), and a round member #59 (radius 0.05 m) running
+/// along `y` through the window, its axis at `x` 2.8 and `z` 1.3: 0.25 m
+/// above the sill.
+fn pipe_through_a_window() -> String {
+    model_with(&format!(
+        "{}{}{}\
+         #40=IFCRELVOIDSELEMENT('0000000000000000000040',$,$,$,#19,#29);\n\
+         #41=IFCRELVOIDSELEMENT('0000000000000000000041',$,$,$,#19,#39);\n\
+         #50=IFCCARTESIANPOINT((2.8,-1.,1.3));\n\
+         #51=IFCDIRECTION((0.,1.,0.));\n\
+         #52=IFCDIRECTION((1.,0.,0.));\n\
+         #53=IFCAXIS2PLACEMENT3D(#50,#51,#52);\n\
+         #54=IFCLOCALPLACEMENT($,#53);\n\
+         #55=IFCCIRCLEPROFILEDEF(.AREA.,$,$,0.05);\n\
+         #56=IFCEXTRUDEDAREASOLID(#55,#2,#4,2.2);\n\
+         #57=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#56));\n\
+         #58=IFCPRODUCTDEFINITIONSHAPE($,$,(#57));\n\
+         #59=IFCMEMBER('0000000000000000000059',$,$,$,$,#54,#58,$,$);\n",
+        placed_box(
+            10,
+            [2.0, 0.1, 0.0],
+            [4.0, 0.2, 3.0],
+            "IFCWALL('GID',$,$,$,$,PL,REP,$,$)"
+        ),
+        placed_box(
+            20,
+            [1.0, 0.1, -0.1],
+            [1.0, 0.4, 2.2],
+            "IFCOPENINGELEMENT('GID',$,$,$,$,PL,REP,$,.OPENING.)"
+        ),
+        placed_box(
+            30,
+            [2.8, 0.1, 1.0],
+            [1.2, 0.4, 1.0],
+            "IFCOPENINGELEMENT('GID',$,$,$,$,PL,REP,$,.OPENING.)"
+        ),
+    ))
+}
+
+#[test]
+fn with_geometry_a_distance_through_a_window_is_certified() {
+    let case = Case::new("geometry-certified-window");
+    case.write("model.ifc", &pipe_through_a_window());
+    let distance = |args: &[&str]| {
+        case.geometry_rule_with(
+            &["model.ifc"],
+            &[("member", "IfcMember"), ("wall", "IfcWall")],
+            (
+                "axioval:capability.distance",
+                &registry_signature("axioval:capability.distance"),
+            ),
+            entity("member"),
+            json!({
+                "counterparts": {"type": "selector", "value": entity("wall")},
+                "mode": {"type": "string", "value": "none_closer_than"},
+                "minimum_metres": {"type": "number", "value": 0.24999},
+            }),
+            &json!({}),
+            args,
+        )
+    };
+
+    // The member's mesh, within 1 mm of its cylinder, leaves the minimum
+    // just under the true 0.25 m open.
+    let (output, result) = distance(&["--no-exact-boundaries"]);
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    assert_eq!(result["geometry"]["tessellated"], 1, "{result:#}");
+
+    // The wall less its door and window has an exact boundary as well
+    // (built within the kernel's micrometre tolerance, and widened by it),
+    // and the certified distance through the window clears the minimum.
+    let (output, result) = distance(&[]);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert_eq!(result["geometry"]["exact_boundaries"], 2, "{result:#}");
+    assert!(finding_ids(&result).is_empty(), "{result:#}");
+}
+
+/// A column #19 of two body items, placed at `x` 5, `y` 3: a footing 1 m
+/// square and 0.5 m high, and a round shaft (radius 0.2 m) standing on it
+/// from 0.5 m to 3.5 m. A wall #29 has its face at `x` 6, 0.5 m from the
+/// footing's side.
+fn column_on_its_footing_beside_a_wall() -> String {
+    model_with(&format!(
+        "#10=IFCCARTESIANPOINT((5.,3.,0.));\n\
+         #11=IFCAXIS2PLACEMENT3D(#10,$,$);\n\
+         #12=IFCLOCALPLACEMENT($,#11);\n\
+         #13=IFCRECTANGLEPROFILEDEF(.AREA.,$,$,1.,1.);\n\
+         #14=IFCEXTRUDEDAREASOLID(#13,#2,#4,0.5);\n\
+         #15=IFCCIRCLEPROFILEDEF(.AREA.,$,$,0.2);\n\
+         #16=IFCCARTESIANPOINT((0.,0.,0.5));\n\
+         #17=IFCAXIS2PLACEMENT3D(#16,$,$);\n\
+         #18=IFCEXTRUDEDAREASOLID(#15,#17,#4,3.);\n\
+         #40=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#14,#18));\n\
+         #41=IFCPRODUCTDEFINITIONSHAPE($,$,(#40));\n\
+         #19=IFCCOLUMN('0000000000000000000019',$,$,$,$,#12,#41,$,$);\n\
+         {}",
+        placed_box(
+            20,
+            [6.1, 3.0, 0.0],
+            [0.2, 6.0, 4.0],
+            "IFCWALL('GID',$,$,$,$,PL,REP,$,$)"
+        ),
+    ))
+}
+
+#[test]
+fn with_geometry_a_column_of_two_items_is_certified_against_a_wall() {
+    let case = Case::new("geometry-certified-footing");
+    case.write("model.ifc", &column_on_its_footing_beside_a_wall());
+    let distance = |args: &[&str]| {
+        case.geometry_rule_with(
+            &["model.ifc"],
+            &[("column", "IfcColumn"), ("wall", "IfcWall")],
+            (
+                "axioval:capability.distance",
+                &registry_signature("axioval:capability.distance"),
+            ),
+            entity("column"),
+            json!({
+                "counterparts": {"type": "selector", "value": entity("wall")},
+                "mode": {"type": "string", "value": "none_closer_than"},
+                "minimum_metres": {"type": "number", "value": 0.49999},
+            }),
+            &json!({}),
+            args,
+        )
+    };
+
+    // The body is tessellated as a whole (its shaft is round), so its mesh
+    // leaves the footing's 0.5 m open by the 1 mm chord deviation.
+    let (output, result) = distance(&["--no-exact-boundaries"]);
+    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    assert_eq!(result["geometry"]["tessellated"], 1, "{result:#}");
+
+    // Both items get their exact solids, kept in the column's frame, and
+    // the certified distance over them clears the minimum.
+    let (output, result) = distance(&[]);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert_eq!(result["geometry"]["exact_boundaries"], 2, "{result:#}");
+    assert!(finding_ids(&result).is_empty(), "{result:#}");
+}
+
 /// A ring 5 km round needs more than the kernel's 4096 steps a turn to stay
 /// within the 1 mm chord tolerance (axiolid/kernel#231): the kernel refuses
 /// the budget rather than mesh it coarser, so the wall is unmeasured with

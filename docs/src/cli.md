@@ -185,7 +185,10 @@ boundary, built from the graph its mesh is compiled from: an extrusion or
 revolution of a rectangle, circle, section or line-and-arc profile (an
 extrusion of an ellipse too), or a disk swept along one segment or one
 arc, under any rigid placement (tilted, horizontal, turned, mirrored or
-mapped), without openings or clippings. A boundary is registered only when its
+mapped), less its openings where they are extrusions (built within a
+micrometre and widened by it, see [Clash](./clash.md#axiolid-measurement)),
+and a body of several such items (a column on its footing). A boundary is
+registered only when its
 extent agrees with the mesh's within the chord deviation, and only when
 some curved body has one (two planar bodies are measured exactly anyway).
 Distances between such bodies are then certified to a micrometre instead

@@ -1,8 +1,8 @@
 //! Exact boundaries built from the geometry graph a host meshes.
 //!
 //! A host that compiles an Axiolid [`GeometryGraph`] into a tessellated mesh
-//! can ask [`exact_boundary`] for the exact solid of the same graph node, to
-//! register beside the mesh ([`AxiolidGeometry::with_exact_boundary`]). It is
+//! can ask [`exact_boundary`] for the exact body of the same graph node, to
+//! register beside the mesh ([`AxiolidGeometry::with_exact_body`]). It is
 //! built only where the kernel's construction is exact:
 //!
 //! - a chain of instance placements (a single-child collection is looked
@@ -19,16 +19,34 @@
 //!   a full turn or part of one, never touching the axis on a full turn;
 //! - a disk, solid or bored, swept along one straight segment or one
 //!   circular arc, the directrix read by the kernel's own
-//!   [`exact_directrix`], as its compilers read it.
+//!   [`exact_directrix`], as its compilers read it;
+//! - a difference of placed extrusions (a wall or slab less its openings,
+//!   an `IfcBooleanResult` difference), several nested, built by the
+//!   kernel's own [`ReferenceExactCompiler`] (axiolid/kernel#228). Its
+//!   general boolean decides faces that agree only up to rounding within
+//!   the tolerance it is given, and the result is then the exact boolean of
+//!   operands moved by at most that tolerance. So a difference is first
+//!   built with no tolerance at all, where nothing can have been snapped,
+//!   and only where that is refused with [`Tolerance::METRE`]: the body is
+//!   then marked perturbed ([`ExactBody::perturbation_metres`]) by the
+//!   linear tolerance plus the angular one over the body's extent, and
+//!   every distance measured on it is widened by that (and never cited
+//!   as exact);
+//! - a collection of several such items (axiolid/kernel#229): each item is
+//!   built in the body's own frame (under its own placements below the
+//!   collection) and the placement above the collection is kept apart, as
+//!   the kernel's body measurements take it ([`ExactBody::placement`]).
 //!
 //! Everything else is refused with the reason, and the host keeps the mesh
 //! alone: an ellipse revolved, a directrix with corners or curved other than
-//! by a circle, tapered or directrix sweeps of a profile, booleans (openings,
-//! clippings), several items, and anything the kernel refuses.
+//! by a circle, tapered or directrix sweeps of a profile, unions and
+//! intersections, operands that are no extrusions, half-space clippings,
+//! and anything the kernel refuses.
 //!
-//! The result carries the axis-aligned extent of the solid it describes,
-//! computed in closed form from the construction and the transform, so the
-//! host can check it against the mesh before registering it
+//! The result carries the axis-aligned extent of the body it describes,
+//! computed in closed form from the construction and the transform (a
+//! difference by its subject's, which encloses it), so the host can check
+//! it against the mesh before registering it
 //! ([`AxiolidGeometry::check_exact_boundary`]).
 
 use std::f64::consts::{PI, TAU};
@@ -42,9 +60,12 @@ use axiolid_construct::swept_disk_exact::{
 };
 use axiolid_construct::{contour_lower::contour_to_arc_ring, profile_lower::lower_derived};
 use axiolid_contracts::ExecutionOptions;
-use axiolid_core::{Interval, Point2, Point3, Tolerance, Transform2, Transform3, Vec2, Vec3};
+use axiolid_core::{
+    BooleanOperator, Interval, Point2, Point3, Tolerance, Transform2, Transform3, Vec2, Vec3,
+};
 use axiolid_curve::Circle3;
-use axiolid_mesh_compile::{ExactDirectrix, exact_directrix};
+use axiolid_exact_compile_contract::ExactCompiler;
+use axiolid_mesh_compile::{ExactDirectrix, ReferenceExactCompiler, exact_directrix};
 use axiolid_model::{GeometryGraph, GeometryNode, NodeId, SolidOperation};
 use axiolid_overlay::ArcRing;
 use axiolid_profile::{CircleProfile, Profile};
@@ -57,53 +78,151 @@ const MAX_DEPTH: usize = 64;
 /// The kernel's tolerance for geometry already in metres.
 const TOLERANCE: Tolerance = Tolerance::METRE;
 
-/// An exact solid and the axis-aligned extent it occupies, in metres.
+/// An object's exact body: one or more exact solids (its items) in the
+/// body's own frame, the rigid placement that puts them in the world, and
+/// how far any face may have been moved to build them.
+///
+/// A body of one item built by [`exact_boundary`] is placed in the world
+/// already ([`Self::placement`] is the identity).
+#[derive(Clone, Debug)]
+pub struct ExactBody {
+    items: Vec<ExactBRep>,
+    placement: Transform3,
+    perturbation: f64,
+}
+
+impl ExactBody {
+    /// One exact solid, in world coordinates, exactly as the model states it.
+    #[must_use]
+    pub fn new(brep: ExactBRep) -> Self {
+        Self::placed(vec![brep], Transform3::IDENTITY)
+    }
+
+    /// Several items in the body's own frame, placed by `placement`.
+    #[must_use]
+    pub fn placed(items: Vec<ExactBRep>, placement: Transform3) -> Self {
+        Self {
+            items,
+            placement,
+            perturbation: 0.0,
+        }
+    }
+
+    /// The same body, built from operands whose faces may each have been
+    /// moved by up to `metres` (a boolean that decided near-coincident faces
+    /// within its tolerance). Every distance measured on it is widened by
+    /// that much and reported inexact. A negative or non-finite value is
+    /// kept as unbounded, and such a body is never measured.
+    #[must_use]
+    pub fn with_perturbation(mut self, metres: f64) -> Self {
+        self.perturbation = if metres.is_finite() && metres >= 0.0 {
+            self.perturbation.max(metres)
+        } else {
+            f64::INFINITY
+        };
+        self
+    }
+
+    /// The items, in the body's own frame.
+    #[must_use]
+    pub fn items(&self) -> &[ExactBRep] {
+        &self.items
+    }
+
+    /// The rigid placement of the body's frame in the world.
+    #[must_use]
+    pub fn placement(&self) -> Transform3 {
+        self.placement
+    }
+
+    /// How far a face of the body may lie from the model's: zero when the
+    /// body is exactly the model's solid.
+    #[must_use]
+    pub fn perturbation_metres(&self) -> f64 {
+        self.perturbation
+    }
+
+    /// Whether the body is exactly the model's solid.
+    #[must_use]
+    pub fn is_exact(&self) -> bool {
+        self.perturbation == 0.0
+    }
+
+    /// The single item in world coordinates, which the kernel's one-solid
+    /// measurements (plan distances and overlap) take; `None` for several
+    /// items or a body kept in its own frame.
+    #[must_use]
+    pub fn single(&self) -> Option<&ExactBRep> {
+        match self.items.as_slice() {
+            [brep] if self.placement == Transform3::IDENTITY => Some(brep),
+            _ => None,
+        }
+    }
+}
+
+/// An exact body and the axis-aligned extent it occupies, in metres.
 #[derive(Clone, Debug)]
 pub struct ExactBoundary {
-    brep: ExactBRep,
+    body: ExactBody,
     extent: Extent,
 }
 
 impl ExactBoundary {
-    /// The exact solid.
+    /// The exact body.
     #[must_use]
-    pub fn brep(&self) -> &ExactBRep {
-        &self.brep
+    pub fn body(&self) -> &ExactBody {
+        &self.body
     }
 
-    /// The exact solid, for [`AxiolidGeometry::with_exact_boundary`].
+    /// The exact solid of a body of one item, in world coordinates.
     #[must_use]
-    pub fn into_brep(self) -> ExactBRep {
-        self.brep
+    pub fn brep(&self) -> Option<&ExactBRep> {
+        self.body.single()
     }
 
-    /// The solid's axis-aligned extent as `(min, max)`, computed in closed
+    /// The exact body, for [`AxiolidGeometry::with_exact_body`].
+    #[must_use]
+    pub fn into_body(self) -> ExactBody {
+        self.body
+    }
+
+    /// The body's axis-aligned extent as `(min, max)`, computed in closed
     /// form from its construction and placement: arc and surface extremes
-    /// included.
+    /// included, a difference by its subject's.
     #[must_use]
     pub fn extent(&self) -> ([f64; 3], [f64; 3]) {
         self.extent
     }
 }
 
-/// The exact solid of `root` in world coordinates, or why it has none.
+/// The exact body of `root` in world coordinates, or why it has none.
 ///
 /// # Errors
 ///
 /// Returns the reason whenever the node is not a rigidly placed extrusion,
-/// revolution or swept disk the kernel builds exactly, or the kernel
-/// refuses to build or place it.
+/// revolution, swept disk or difference of extrusions the kernel builds
+/// exactly (or a collection of them), or the kernel refuses to build or
+/// place it.
 pub fn exact_boundary(graph: &GeometryGraph, root: NodeId) -> Result<ExactBoundary, String> {
-    let (transform, leaf) = placed_solid(graph, root)?;
-    let (local, shape, transform) = construct(graph, leaf, transform)?;
-    let brep = if transform == Transform3::IDENTITY {
-        local
-    } else {
-        local
-            .transformed(&transform)
-            .map_err(|error| format!("the placement has no exact rigid copy: {error}"))?
-    };
-    let extent = shape.extent(&transform);
+    let (placement, members) = placed_members(graph, root)?;
+    let mut items = Vec::with_capacity(members.len());
+    let mut perturbed = false;
+    let mut extent: Option<Extent> = None;
+    for (transform, leaf) in members {
+        let item = item(graph, leaf, transform)?;
+        // Each item's extent in the world, through the outer placement.
+        let placed = item.shape.extent(&(placement * item.transform));
+        extent = Some(match extent {
+            None => placed,
+            Some((min, max)) => (
+                std::array::from_fn(|k| min[k].min(placed.0[k])),
+                std::array::from_fn(|k| max[k].max(placed.1[k])),
+            ),
+        });
+        perturbed |= item.perturbed;
+        items.push(item.brep);
+    }
+    let extent = extent.ok_or("the body has no solid")?;
     if !extent
         .0
         .iter()
@@ -112,12 +231,76 @@ pub fn exact_boundary(graph: &GeometryGraph, root: NodeId) -> Result<ExactBounda
     {
         return Err("the solid's extent is not finite".into());
     }
-    Ok(ExactBoundary { brep, extent })
+    // A face turned within the angular tolerance turns about a point of
+    // the body, so it moves no further than that angle over the body's
+    // extent; a face moved along it, no further than the linear tolerance.
+    let perturbation = if perturbed {
+        let diagonal = (0..3)
+            .map(|k| (extent.1[k] - extent.0[k]).powi(2))
+            .sum::<f64>()
+            .sqrt();
+        TOLERANCE.linear() + TOLERANCE.angular() * diagonal
+    } else {
+        0.0
+    };
+    // One item is placed in the world, as the one-solid measurements take
+    // it; several stay in the body's frame, where their contacts are cut.
+    let body = match items.as_slice() {
+        [single] => ExactBody::new(place(single.clone(), &placement)?),
+        _ => ExactBody::placed(items, placement),
+    };
+    Ok(ExactBoundary {
+        body: body.with_perturbation(perturbation),
+        extent,
+    })
 }
 
-/// The solid under `root` and the placement composed down to it.
-fn placed_solid(graph: &GeometryGraph, root: NodeId) -> Result<(Transform3, NodeId), String> {
-    let mut transform = Transform3::IDENTITY;
+/// The placement above `root`'s solids, composed, and each solid below it
+/// with its own placement relative to it: one for a single solid, several
+/// for a collection (nested collections flattened).
+fn placed_members(
+    graph: &GeometryGraph,
+    root: NodeId,
+) -> Result<(Transform3, Vec<(Transform3, NodeId)>), String> {
+    let (placement, node) = placed(graph, root, Transform3::IDENTITY)?;
+    let Some(GeometryNode::Collection(children)) = graph.get(node) else {
+        return Ok((placement, vec![(Transform3::IDENTITY, node)]));
+    };
+    let mut members = Vec::new();
+    let mut pending: Vec<(Transform3, NodeId, usize)> = children
+        .iter()
+        .rev()
+        .map(|child| (Transform3::IDENTITY, *child, 0))
+        .collect();
+    while let Some((above, child, depth)) = pending.pop() {
+        if depth > MAX_DEPTH {
+            return Err("the collection is nested too deep".into());
+        }
+        let (transform, node) = placed(graph, child, above)?;
+        match graph.get(node) {
+            Some(GeometryNode::Collection(children)) => pending.extend(
+                children
+                    .iter()
+                    .rev()
+                    .map(|grandchild| (transform, *grandchild, depth + 1)),
+            ),
+            _ => members.push((transform, node)),
+        }
+    }
+    if members.is_empty() {
+        return Err("the body has no solid".into());
+    }
+    Ok((placement, members))
+}
+
+/// The placements below `root` composed onto `transform`, down to a solid
+/// or a collection of several (a single-child collection is looked
+/// through).
+fn placed(
+    graph: &GeometryGraph,
+    root: NodeId,
+    mut transform: Transform3,
+) -> Result<(Transform3, NodeId), String> {
     let mut id = root;
     for _ in 0..MAX_DEPTH {
         match graph.get(id) {
@@ -127,7 +310,8 @@ fn placed_solid(graph: &GeometryGraph, root: NodeId) -> Result<(Transform3, Node
             }
             Some(GeometryNode::Collection(children)) => match children.as_slice() {
                 [child] => id = *child,
-                _ => return Err("a body of several solids has no exact construction".into()),
+                [] => return Err("the body has no solid".into()),
+                _ => return Ok((transform, id)),
             },
             Some(GeometryNode::SolidOperation(_)) => return Ok((transform, id)),
             Some(_) => return Err("the body is not a solid with an exact construction".into()),
@@ -135,6 +319,100 @@ fn placed_solid(graph: &GeometryGraph, root: NodeId) -> Result<(Transform3, Node
         }
     }
     Err("the placement chain is too deep".into())
+}
+
+/// One solid of a body, in the body's own frame.
+struct Item {
+    brep: ExactBRep,
+    shape: Shape,
+    /// The placement of `shape` in the body's frame.
+    transform: Transform3,
+    /// Whether the kernel decided faces within its tolerance.
+    perturbed: bool,
+}
+
+/// The solid `leaf` placed by `transform` in the body's frame.
+fn item(graph: &GeometryGraph, leaf: NodeId, transform: Transform3) -> Result<Item, String> {
+    if let Some(GeometryNode::SolidOperation(SolidOperation::Boolean { .. })) = graph.get(leaf) {
+        let (brep, perturbed) = difference(graph, leaf)?;
+        return Ok(Item {
+            brep: place(brep, &transform)?,
+            shape: subject_shape(graph, leaf)?,
+            transform,
+            perturbed,
+        });
+    }
+    let (local, shape, transform) = construct(graph, leaf, transform)?;
+    Ok(Item {
+        brep: place(local, &transform)?,
+        shape,
+        transform,
+        perturbed: false,
+    })
+}
+
+fn place(brep: ExactBRep, transform: &Transform3) -> Result<ExactBRep, String> {
+    if *transform == Transform3::IDENTITY {
+        return Ok(brep);
+    }
+    brep.transformed(transform)
+        .map_err(|error| format!("the placement has no exact rigid copy: {error}"))
+}
+
+/// A difference of placed extrusions, built by the kernel's exact compiler
+/// in its own coordinates, and whether faces were decided within a
+/// tolerance: first with none, so nothing can be snapped, and only where
+/// that is refused within [`TOLERANCE`].
+fn difference(graph: &GeometryGraph, node: NodeId) -> Result<(ExactBRep, bool), String> {
+    differences_only(graph, node)?;
+    let compile = |tolerance: Tolerance| {
+        ReferenceExactCompiler::new().compile_exact(graph, node, &ExecutionOptions::new(tolerance))
+    };
+    match compile(Tolerance::ZERO) {
+        Ok(brep) => Ok((brep, false)),
+        Err(_) => compile(TOLERANCE).map(|brep| (brep, true)).map_err(refused),
+    }
+}
+
+/// Refuses a union or intersection by name before the kernel is asked.
+fn differences_only(graph: &GeometryGraph, mut node: NodeId) -> Result<(), String> {
+    for _ in 0..MAX_DEPTH {
+        match graph.get(node) {
+            Some(GeometryNode::SolidOperation(SolidOperation::Boolean {
+                left, operator, ..
+            })) => {
+                if *operator != BooleanOperator::Difference {
+                    return Err("a boolean union or intersection has no exact construction".into());
+                }
+                node = *left;
+            }
+            Some(GeometryNode::Instance(instance)) => node = instance.source,
+            _ => return Ok(()),
+        }
+    }
+    Err("the boolean chain is too deep".into())
+}
+
+/// The shape of a difference's innermost subject, placed in the
+/// difference's coordinates: the difference lies inside it.
+fn subject_shape(graph: &GeometryGraph, node: NodeId) -> Result<Shape, String> {
+    let mut transform = Transform3::IDENTITY;
+    let mut id = node;
+    for _ in 0..MAX_DEPTH {
+        match graph.get(id) {
+            Some(GeometryNode::SolidOperation(SolidOperation::Boolean { left, .. })) => id = *left,
+            Some(GeometryNode::Instance(instance)) => {
+                transform *= instance.transform;
+                id = instance.source;
+            }
+            Some(GeometryNode::SolidOperation(_)) => {
+                let (_, shape, transform) = construct(graph, id, transform)?;
+                return Ok(Shape::Placed(Box::new(shape), transform));
+            }
+            _ => return Err("the boolean's subject is not a solid".into()),
+        }
+    }
+    Err("the boolean chain is too deep".into())
 }
 
 /// The solid of `leaf` in its own coordinates, the shape its extent is
@@ -266,7 +544,7 @@ fn solid_family(operation: &SolidOperation) -> &'static str {
         SolidOperation::FixedReferenceSweep { .. } => "a fixed-reference sweep",
         SolidOperation::SurfaceCurveSweep { .. } => "a surface-curve sweep",
         SolidOperation::SectionedSpine { .. } => "a sectioned spine",
-        SolidOperation::Boolean { .. } => "a boolean result (an opening or a clipping)",
+        SolidOperation::Boolean { .. } => "a boolean operand",
         SolidOperation::BoundedHalfSpace { .. } => "a bounded half-space",
         _ => "this solid",
     }
@@ -397,6 +675,8 @@ enum Shape {
     },
     /// A disk of `radius` kept square to the spine.
     Tube { spine: Spine, radius: f64 },
+    /// A shape placed by a transform of its own, applied first.
+    Placed(Box<Shape>, Transform3),
 }
 
 impl Shape {
@@ -427,6 +707,9 @@ impl Shape {
 
     /// The axis-aligned extent once placed by `transform`.
     fn extent(&self, transform: &Transform3) -> Extent {
+        if let Self::Placed(shape, inner) = self {
+            return shape.extent(&(*transform * *inner));
+        }
         let mut min = [0.0; 3];
         let mut max = [0.0; 3];
         let linear = |v: Vec3| transform.transform_vector3(v);
@@ -500,6 +783,7 @@ impl Shape {
                         )
                     }
                 },
+                Self::Placed(..) => unreachable!("placed shapes return above"),
             };
             min[k] = low;
             max[k] = high;
@@ -513,7 +797,7 @@ impl AxiolidGeometry {
     /// mesh: their extents must agree within the mesh's chord deviation
     /// (plus rounding) on every side.
     ///
-    /// A cheap guard before [`Self::with_exact_boundary`], not a proof:
+    /// A cheap guard before [`Self::with_exact_body`], not a proof:
     /// the proximity service still refuses a pair whose certified answer
     /// contradicts the mesh.
     ///

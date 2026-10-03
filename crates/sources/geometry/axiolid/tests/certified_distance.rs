@@ -306,8 +306,8 @@ fn boundaries_built_from_the_meshed_graph_certify_the_pair() {
         .unwrap();
     geometry.check_exact_boundary(&id("wall"), &wall).unwrap();
     let geometry = geometry
-        .with_exact_boundary(id("column"), column.into_brep())
-        .with_exact_boundary(id("wall"), wall.into_brep());
+        .with_exact_body(id("column"), column.into_body())
+        .with_exact_body(id("wall"), wall.into_body());
     let (lower, upper) = distance(geometry).unwrap();
     assert!(lower <= DISTANCE && DISTANCE <= upper, "[{lower}, {upper}]");
     assert!(lower > 0.799, "[{lower}, {upper}]");

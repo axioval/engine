@@ -12,6 +12,8 @@ use axiolid_mesh::{TriMesh, TriangleMeshView};
 use axioval_engine::{GeometryFidelity, ProximityError};
 use axioval_ir::ObjectId;
 
+use crate::exact_boundary::ExactBody;
+
 /// Geometry for one object, keyed by the identity the engine uses.
 ///
 /// Holding meshes by `ObjectId` is what keeps this adapter source-neutral:
@@ -32,7 +34,7 @@ pub struct AxiolidGeometry {
     bodiless: BTreeSet<ObjectId>,
     unmeasured: BTreeMap<ObjectId, String>,
     groups: BTreeMap<ObjectId, Result<Vec<ObjectId>, String>>,
-    boundaries: BTreeMap<ObjectId, Arc<ExactBRep>>,
+    boundaries: BTreeMap<ObjectId, Arc<ExactBody>>,
 }
 
 impl AxiolidGeometry {
@@ -166,21 +168,42 @@ impl AxiolidGeometry {
     /// (`one_sided_boundary_hausdorff_with_budget` each way). The host asserts that boundary and
     /// mesh describe one body; a pair whose certified answer contradicts the
     /// mesh's widened one refuses.
+    ///
+    /// The solid is one item in world coordinates, exactly the model's;
+    /// [`Self::with_exact_body`] takes several items, a placement and a
+    /// perturbation.
     #[must_use]
-    pub fn with_exact_boundary(mut self, object: ObjectId, boundary: ExactBRep) -> Self {
-        self.boundaries.insert(object, Arc::new(boundary));
+    pub fn with_exact_boundary(self, object: ObjectId, boundary: ExactBRep) -> Self {
+        self.with_exact_body(object, ExactBody::new(boundary))
+    }
+
+    /// Registers the exact body of an object whose mesh is registered too:
+    /// one or more items in the body's frame and their placement
+    /// (axiolid/kernel#229), as [`fn@crate::exact_boundary`] builds it.
+    ///
+    /// Several items are measured by the kernel's body queries
+    /// (`body_boundary_distance`, `one_sided_body_boundary_hausdorff`),
+    /// which certify the distance in space and the surface distance; the
+    /// plan measurements take one item only, so such a pair keeps the
+    /// mesh's plan relations. A perturbed body
+    /// ([`ExactBody::perturbation_metres`]) widens every distance measured
+    /// on it by its perturbation, never certifies a plan overlap and is not
+    /// used for a surface distance (which needs exact surfaces).
+    #[must_use]
+    pub fn with_exact_body(mut self, object: ObjectId, body: ExactBody) -> Self {
+        self.boundaries.insert(object, Arc::new(body));
         self
     }
 
-    /// The exact boundary registered for an object.
+    /// The exact body registered for an object.
     #[must_use]
-    pub fn exact_boundary(&self, object: &ObjectId) -> Option<&ExactBRep> {
+    pub fn exact_boundary(&self, object: &ObjectId) -> Option<&ExactBody> {
         self.boundaries.get(object).map(Arc::as_ref)
     }
 
-    /// The exact boundary registered for an object, shared, to hand out
-    /// beside its surface.
-    pub(crate) fn shared_exact_boundary(&self, object: &ObjectId) -> Option<Arc<ExactBRep>> {
+    /// The exact body registered for an object, shared, to hand out beside
+    /// its surface.
+    pub(crate) fn shared_exact_boundary(&self, object: &ObjectId) -> Option<Arc<ExactBody>> {
         self.boundaries.get(object).cloned()
     }
 

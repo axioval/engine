@@ -46,7 +46,7 @@ pub use boundary_coverage::AxiolidBoundaryCoverageService;
 pub use contact::AxiolidContactService;
 pub use derived_relationships::AxiolidDerivedRelationshipService;
 pub use envelope_membership::AxiolidEnvelopeMembershipService;
-pub use exact_boundary::{ExactBoundary, exact_boundary};
+pub use exact_boundary::{ExactBody, ExactBoundary, exact_boundary};
 pub use facade_area::AxiolidFacadeAreaService;
 pub use free_space::AxiolidFreeSpaceService;
 pub use geometry::AxiolidGeometry;

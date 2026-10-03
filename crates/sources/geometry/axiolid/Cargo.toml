@@ -15,11 +15,13 @@ axioval-ir.workspace = true
 axiolid-brep.workspace = true
 # Exact boundaries of rigidly placed extrusions, revolutions and swept
 # disks (`exact_boundary`); `axiolid-mesh-compile` reads a swept disk's
-# directrix exactly as it compiles the disk.
+# directrix exactly as it compiles the disk, and its exact compiler builds
+# differences of placed extrusions (openings).
 axiolid-construct.workspace = true
 axiolid-contracts.workspace = true
 axiolid-core.workspace = true
 axiolid-curve.workspace = true
+axiolid-exact-compile-contract.workspace = true
 axiolid-mesh-compile.workspace = true
 axiolid-inspect.workspace = true
 axiolid-mesh.workspace = true

@@ -57,11 +57,11 @@ uuid = { version = "1.18.1", features = ["serde", "v5"] }
 tracing = "0.1.41"
 clap = { version = "4.5.46", features = ["derive"] }
 axiolid-brep = "0.3.3"
-axiolid-construct = "0.3.10"
+axiolid-construct = "0.3.11"
 axiolid-core = "0.3.0"
 axiolid-inspect = "0.3.2"
 axiolid-mesh = "0.3.0"
-axiolid-measure = "0.3.7"
+axiolid-measure = "0.3.8"
 # 0.3.5 to 0.3.9 regressed coverage through an opening and cut cost regions
 # with a sliver along a turned wall (axiolid/kernel#219, #222); 0.3.10 fixes
 # both.
@@ -71,8 +71,12 @@ axiolid-route = "0.3.7"
 axiolid-spatial = "0.3.0"
 axiolid-contracts = "0.3.1"
 axiolid-curve = "0.3.0"
-axiolid-evaluate = "0.3.2"
-axiolid-mesh-compile = "0.3.8"
+axiolid-evaluate = "0.3.3"
+# 0.3.9 subtracts placed extrusions exactly (axiolid/kernel#228, through
+# axiolid-brep-boolean 0.1.2) and reports a certified deviation per mesh
+# (#232, with axiolid-reference 0.3.4); both come in at those versions.
+axiolid-mesh-compile = "0.3.9"
+axiolid-exact-compile-contract = "0.3.1"
 axiolid-mesh-compile-contract = "0.3.1"
 axiolid-mesh-boolean-boolmesh = "0.3.0"
 axiolid-model = "0.3.0"

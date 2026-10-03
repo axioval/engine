@@ -341,7 +341,13 @@ It is built only where the construction is exact:
 - a revolution of the same profiles (an ellipse excepted) about the
   profile's local y axis, a full turn clear of the axis or part of one;
 - a disk, solid or bored, swept along one straight segment or one circular
-  arc (a pipe, a bar, a handrail bend).
+  arc (a pipe, a bar, a handrail bend);
+- a difference of placed extrusions: a wall or slab less its openings,
+  perpendicular to its extrusion (doors, windows) or parallel to it
+  (shafts), with rectangle, circle and line-and-arc profiles, several per
+  body, or an `IfcBooleanResult` difference (axiolid/kernel#228);
+- several such items in one body, a column on its footing say
+  (axiolid/kernel#229).
 
 The solid is built in its own coordinates and placed once with the
 kernel's rigid placement of exact solids (`ExactBRep::transformed`,
@@ -351,7 +357,37 @@ mirroring are all exact, each coordinate rounded once. A scale or shear has
 no exact rigid copy and is refused. Everything else keeps its mesh alone,
 with the reason: an ellipse revolved, a directrix with corners or curved
 other than by a circle, tapered sweeps and sweeps of a profile along a
-directrix, booleans (openings, clippings), and bodies of several items.
+directrix, unions and intersections, operands that are no extrusions and
+half-space clippings.
+
+A difference is built by the kernel's own exact compiler. Its general
+boolean decides faces that agree only up to rounding (an opening flush
+with a wall's face, placed by its own transform) within the tolerance it
+is given, and its result is then the exact boolean of operands moved by at
+most that tolerance, not the model's solid. So a difference is first built
+with no tolerance at all, and only where that is refused (operands under
+their own placements always are) within a micrometre: the body is then
+**perturbed** by the linear tolerance plus the angular one (a nanoradian)
+over its extent, about a micrometre. Every certified distance measured on
+it is widened by that on both sides, it never certifies a plan overlap
+(a shared patch or a gap that narrow may not be the model's), and a
+comparison measures its meshes instead, since a surface distance must be
+measured on exact surfaces. A pipe passing 0.25 m above a window's sill is
+certified to within a few micrometres, where its 1 mm mesh leaves a
+0.24999 m minimum open.
+
+A body of several items keeps each item's solid in the body's own frame,
+under the placements below the collection, and the placement above it
+apart, as the kernel's body measurements take them. Its distance in space
+is the least over the items (`body_boundary_distance`, which needs no
+layout of the items); between revisions the kernel measures the boundary
+of the items' union (`one_sided_body_boundary_hausdorff_with_budget`),
+which it forms only for items shown apart, touching without a shared
+patch, or sharing a face on a plane normal to a coordinate axis in the
+body's frame. Items overlapping, nearly sharing a face, or touching on a
+turned plane are refused by name, and the comparison measures the meshes.
+The plan measurements take one solid only, so such a body's plan relations
+are the mesh's.
 `AxiolidGeometry::check_exact_boundary` compares the solid's extent,
 computed in closed form from the construction and its placement (arc,
 cylinder and torus extremes included), with the mesh's within its chord

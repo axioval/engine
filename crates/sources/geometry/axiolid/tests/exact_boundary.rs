@@ -202,7 +202,11 @@ fn wall(at: f64) -> ExactBRep {
         40.0,
         Transform3::from_translation(Vec3::new(at + 0.1, 0.0, -20.0)),
     );
-    exact_boundary(&graph, root).unwrap().into_brep()
+    exact_boundary(&graph, root)
+        .unwrap()
+        .brep()
+        .unwrap()
+        .clone()
 }
 
 /// The certified distance from `brep` to the wall at `at`.
@@ -218,7 +222,11 @@ fn a_tilted_round_column_is_its_closed_form() {
     let transform = tilted(start);
     let (graph, root) = extrusion(circle(radius), Vec3::Z, height, transform);
     let boundary = agreeing(&graph, root);
-    assert_close(volume(boundary.brep()), PI * radius * radius * height, 1e-9);
+    assert_close(
+        volume(boundary.brep().unwrap()),
+        PI * radius * radius * height,
+        1e-9,
+    );
 
     // The axis runs from `start` along the tilted z; the farthest point
     // in x is on the rim of the end farther along x.
@@ -232,7 +240,7 @@ fn a_tilted_round_column_is_its_closed_form() {
         "{min:?} {max:?}"
     );
 
-    let (lower, upper) = distance_to_wall(boundary.brep(), reach + 0.8);
+    let (lower, upper) = distance_to_wall(boundary.brep().unwrap(), reach + 0.8);
     assert!(lower <= 0.8 && 0.8 <= upper, "[{lower}, {upper}]");
     assert!(upper - lower <= 2.0 * ACCURACY, "[{lower}, {upper}]");
 }
@@ -291,7 +299,11 @@ fn a_section_with_several_voids_is_built() {
     });
     let (graph, root) = extrusion(profile, Vec3::Z, 2.0, tilted(Vec3::new(0.0, 0.0, 1.0)));
     let boundary = agreeing(&graph, root);
-    assert_close(volume(boundary.brep()), 2.0 * (0.4 - 2.0 * PI * 0.01), 1e-9);
+    assert_close(
+        volume(boundary.brep().unwrap()),
+        2.0 * (0.4 - 2.0 * PI * 0.01),
+        1e-9,
+    );
 }
 
 #[test]
@@ -312,7 +324,7 @@ fn a_revolved_ring_is_its_closed_form() {
     // (axiolid/kernel#231), so the torus is compared at the budget itself.
     let boundary = agreeing(&graph, root);
     assert_close(
-        volume(boundary.brep()),
+        volume(boundary.brep().unwrap()),
         2.0 * PI * PI * bend * radius * radius,
         1e-9,
     );
@@ -320,7 +332,7 @@ fn a_revolved_ring_is_its_closed_form() {
     let axis = transform.transform_vector3(Vec3::Y);
     let reach = centre.x + bend * (1.0 - axis.x * axis.x).sqrt() + radius;
     assert_close(boundary.extent().1[0], reach, 1e-12);
-    let (lower, upper) = distance_to_wall(boundary.brep(), reach + 0.5);
+    let (lower, upper) = distance_to_wall(boundary.brep().unwrap(), reach + 0.5);
     assert!(lower <= 0.5 && 0.5 <= upper, "[{lower}, {upper}]");
     assert!(upper - lower <= 2.0 * ACCURACY, "[{lower}, {upper}]");
 }
@@ -337,7 +349,7 @@ fn a_partial_revolution_agrees_with_its_mesh() {
     );
     let boundary = agreeing(&graph, root);
     // Pappus: the area times the path of its centroid.
-    assert_close(volume(boundary.brep()), 0.08 * 0.6 * angle, 1e-9);
+    assert_close(volume(boundary.brep().unwrap()), 0.08 * 0.6 * angle, 1e-9);
 }
 
 #[test]
@@ -355,10 +367,10 @@ fn swept_disks_along_a_segment_and_an_arc_are_exact() {
     );
     let boundary = agreeing(&graph, root);
     let length = (end - start).length();
-    assert_close(volume(boundary.brep()), PI * 0.0025 * length, 1e-9);
+    assert_close(volume(boundary.brep().unwrap()), PI * 0.0025 * length, 1e-9);
     let direction = (end - start) / length;
     let reach = end.x + 0.05 * (1.0 - direction.x * direction.x).sqrt();
-    let (lower, upper) = distance_to_wall(boundary.brep(), reach + 0.3);
+    let (lower, upper) = distance_to_wall(boundary.brep().unwrap(), reach + 0.3);
     assert!(lower <= 0.3 && 0.3 <= upper, "[{lower}, {upper}]");
 
     // A bored disk along a quarter of a tilted circle of radius 1, placed
@@ -381,7 +393,7 @@ fn swept_disks_along_a_segment_and_an_arc_are_exact() {
     );
     let boundary = agreeing(&graph, root);
     assert_close(
-        volume(boundary.brep()),
+        volume(boundary.brep().unwrap()),
         PI * (0.0025 - 0.0009) * FRAC_PI_2,
         1e-9,
     );
@@ -413,7 +425,7 @@ fn nested_mapped_instances_compose_into_one_placement() {
         )
     });
     let boundary = agreeing(&graph, root);
-    assert_close(volume(boundary.brep()), PI * 0.04 * 2.0, 1e-9);
+    assert_close(volume(boundary.brep().unwrap()), PI * 0.04 * 2.0, 1e-9);
 }
 
 #[test]
@@ -456,7 +468,7 @@ fn what_has_no_exact_construction_is_refused_with_the_reason() {
     let flat = refusal(extrusion(circle(0.2), Vec3::X, 1.0, Transform3::IDENTITY));
     assert!(flat.contains("profile plane"), "{flat}");
 
-    let (boolean, several) = {
+    let (union, revolved_tool, several) = {
         let mut builder = GeometryGraphBuilder::new();
         let profile = push(&mut builder, GeometryNode::Profile(rectangle(1.0, 1.0)));
         let solid = |builder: &mut GeometryGraphBuilder| {
@@ -473,25 +485,54 @@ fn what_has_no_exact_construction_is_refused_with_the_reason() {
         let moved = placed(
             &mut builder,
             right,
-            Transform3::from_translation(Vec3::X * 0.5),
+            Transform3::from_translation(Vec3::new(0.5, 0.3, 0.2)),
         );
-        let boolean = push(
+        let union = push(
             &mut builder,
             GeometryNode::SolidOperation(SolidOperation::Boolean {
                 left,
                 right: moved,
+                operator: BooleanOperator::Union,
+            }),
+        );
+        let disk = push(&mut builder, GeometryNode::Profile(moved_circle()));
+        let turned = push(
+            &mut builder,
+            GeometryNode::SolidOperation(SolidOperation::Revolution {
+                profile: disk,
+                axis_origin: Point3::ZERO,
+                axis_direction: Vec3::Y,
+                angle: TAU,
+            }),
+        );
+        let revolved_tool = push(
+            &mut builder,
+            GeometryNode::SolidOperation(SolidOperation::Boolean {
+                left,
+                right: turned,
                 operator: BooleanOperator::Difference,
             }),
         );
-        let several = push(&mut builder, GeometryNode::Collection(vec![left, moved]));
-        let graph = builder.finish(vec![boolean, several]).unwrap();
+        // A collection is refused for the first item that is.
+        let several = push(&mut builder, GeometryNode::Collection(vec![left, union]));
+        let graph = builder.finish(vec![union, revolved_tool, several]).unwrap();
         (
-            exact_boundary(&graph, boolean).unwrap_err(),
+            exact_boundary(&graph, union).unwrap_err(),
+            exact_boundary(&graph, revolved_tool).unwrap_err(),
             exact_boundary(&graph, several).unwrap_err(),
         )
     };
-    assert!(boolean.contains("boolean"), "{boolean}");
-    assert!(several.contains("several"), "{several}");
+    assert!(union.contains("union or intersection"), "{union}");
+    assert!(
+        revolved_tool.contains("not an extrusion"),
+        "{revolved_tool}"
+    );
+    assert!(several.contains("union or intersection"), "{several}");
+}
+
+/// A disk a metre off the revolution axis, so its turn is a torus.
+fn moved_circle() -> Profile {
+    moved(circle(0.1), 1.0, 0.0)
 }
 
 #[test]
@@ -502,5 +543,9 @@ fn a_hollow_circle_keeps_its_bore() {
     });
     let (graph, root) = extrusion(profile, Vec3::Z, 2.0, tilted(Vec3::ZERO));
     let boundary = agreeing(&graph, root);
-    assert_close(volume(boundary.brep()), PI * (0.09 - 0.0625) * 2.0, 1e-9);
+    assert_close(
+        volume(boundary.brep().unwrap()),
+        PI * (0.09 - 0.0625) * 2.0,
+        1e-9,
+    );
 }

@@ -6,6 +6,29 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- Exact boundaries of walls and slabs less their openings
+  (axiolid/kernel#228, `axiolid-mesh-compile` 0.3.9): `exact_boundary`
+  builds a difference of placed extrusions (`IfcOpeningElement` voids,
+  `IfcBooleanResult` differences, several nested) with the kernel's
+  `ReferenceExactCompiler`. Its general boolean decides faces that agree
+  only up to rounding within the tolerance it is given, so a difference is
+  first built with none and, where that is refused (operands under their
+  own placements always are), within a micrometre: the body is then marked
+  perturbed (`ExactBody::perturbation_metres`, the linear tolerance plus
+  the angular one over the body's extent), every certified distance on it
+  is widened by that, it never certifies a plan overlap and a comparison
+  measures its meshes instead. Unions, intersections and operands that are
+  no extrusions are refused by name. `axioval check --geometry` certifies
+  a pipe's distance through a window that its mesh leaves open.
+- Exact bodies of several items (axiolid/kernel#229, `axiolid-measure`
+  0.3.8): a body of several solids (a column on its footing) is built item
+  by item in its own frame with the placement above kept apart
+  (`ExactBody`, `AxiolidGeometry::with_exact_body`), and measured with the
+  kernel's `body_boundary_distance` and, between revisions,
+  `one_sided_body_boundary_hausdorff_with_budget`. Items the kernel cannot
+  unite (overlapping, nearly sharing a face, touching on a plane no axis
+  is normal to) keep the mesh for the surface distance; plan relations,
+  which the kernel measures for one solid only, keep the mesh's.
 - ifcXML in the buildingSMART XSD configuration is read, for IFC4 ADD2 TC1
   and IFC4X3 ADD2, into the same model and so the same report as its STEP
   form (`ifc-xml` 0.4's XSD reader). Its objects are numbered in document
@@ -74,6 +97,15 @@ All notable changes are documented here. This project follows Semantic Versionin
   budget of 200,000.
 - `exact_boundary` reads a swept disk's directrix with the kernel's public
   `exact_directrix` (axiolid/kernel#230) instead of a copy of it.
+- Geometry moves to `axiolid-mesh-compile` 0.3.9, `axiolid-construct`
+  0.3.11, `axiolid-measure` 0.3.8 and `axiolid-evaluate` 0.3.3 (with
+  `axiolid-brep-boolean` 0.1.2 and `axiolid-reference` 0.3.4 through the
+  compiler). **Breaking** for the adapter's API: an exact boundary is an
+  `ExactBody` (items, placement, perturbation); `AxiolidGeometry::
+  exact_boundary` returns one, `ExactBoundary::brep` returns the solid of
+  a one-item body only (`Option`), and `ExactBoundary::into_brep` is
+  replaced by `into_body` for `AxiolidGeometry::with_exact_body`.
+  `with_exact_boundary` still registers one exact solid.
 
 ### Added
 

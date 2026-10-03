@@ -180,11 +180,12 @@ The session binds to the one release the file header declares: IFC2X3 TC1
 (`IFC2X3_TYPE_SYSTEM`), IFC4 ADD2 TC1 (`IFC4_TYPE_SYSTEM`) or IFC4X3 ADD2
 (`IFC4X3_TYPE_SYSTEM`, the bSDD `ifc/4.3` dictionary), whose properties
 `ifc-properties` (0.4.1) resolves exactly. Classifications
-(`ifc-classification` 0.2.2) and zones (`ifc-systems` 0.2.2) are read with the
-IFC4X3 table too (openbimrs/ifc#194), so an IFC4X3-only element such as
+(`ifc-classification` 0.3) and systems, zones and spatial placements
+(`ifc-systems` 0.3) are read with the IFC4X3 table too (openbimrs/ifc#194), so an IFC4X3-only element such as
 `IfcRoad` is classified; should the classification library ever bind another
 release than the session's, its classifications are refused. A header naming
-any other release, several releases, or none is refused rather than read with
+any other release (IFC4X1 and IFC4X2 included, which no reader here is
+verified against), several releases, or none is refused rather than read with
 the wrong tables. The session declares that release's type system on its
 snapshot, so package concepts bind to IFC names (see
 [Concept binding](./concept-binding.md)), and registers that release's entity

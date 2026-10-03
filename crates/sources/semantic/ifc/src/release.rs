@@ -70,15 +70,17 @@ impl Release {
                 type_system: IFC4_TYPE_SYSTEM,
                 version: SchemaVersion::Ifc4,
             }),
-            // `ifc-properties` (≥ 0.4.1) resolves IFC4X3 ADD2 exactly. Named,
-            // not wildcarded, so a release added upstream is a compile error
-            // here, not a silent refusal.
+            // `ifc-properties` (≥ 0.4.1) resolves IFC4X3 ADD2 exactly.
             SchemaVersion::Ifc4x3 => Some(Self {
                 schema: ifc4x3(),
                 label: "IFC4X3",
                 type_system: IFC4X3_TYPE_SYSTEM,
                 version: SchemaVersion::Ifc4x3,
             }),
+            // IFC4X1 and IFC4X2 (and any release added upstream later) are
+            // bundled by `ifc-schema` but read by none of the services this
+            // adapter binds; never alias them to a neighbouring release.
+            _ => None,
         }
     }
 }

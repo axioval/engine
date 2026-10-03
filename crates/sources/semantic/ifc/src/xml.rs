@@ -38,7 +38,7 @@ use axioval_ir::SourceId;
 use ifc_model::{Codec, Entity, Model, Value};
 use ifc_schema::Schema;
 use ifc_validate::{Budget, Report, Severity};
-use ifc_xml::XmlCodec;
+use ifc_xml::{SchemaReading, XmlCodec};
 
 use crate::ifc::{IfcSessionError, session};
 use crate::release::Release;
@@ -233,7 +233,9 @@ fn read(bytes: &[u8]) -> Result<(Release, Model), IfcSessionError> {
         return Err(IfcSessionError::UnsupportedSchema(schemas));
     };
     unnamed_values(bytes, release)?;
+    // The pre-0.4 read, which the checks above and below prove.
     let read = XmlCodec::with_schema(shared(release))
+        .with_reading(SchemaReading::Lenient)
         .read_bytes(bytes)
         .map_err(|error| refused(error.to_string()))?;
     if !read.diagnostics().is_empty() {

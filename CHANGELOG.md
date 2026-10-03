@@ -6,6 +6,17 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- The IFC adapter moves to the 0.3 line of the IFC crates: `openbim-ifc`
+  0.10, `ifc-schema` 0.3, `ifc-model` 0.3, `ifc-step` 0.4, `ifc-geometry`
+  0.6, `ifc-properties` 0.7, `ifc-validate` 0.5, `ifc-xml` 0.4,
+  `ifc-classification` 0.3, `ifc-material` 0.4, `ifc-spatial` 0.3,
+  `ifc-style` 0.4 and `ifc-systems` 0.3. Models read as before. A header
+  declaring IFC4X1 or IFC4X2, which the schema crate now bundles, is
+  refused as an unsupported schema like any release no reader here is
+  verified against. The integrity scan's spatial-containment warnings are
+  now read with the IFC4X3 table for IFC4X3 files, and the scan reports
+  itself unavailable rather than silently empty should the systems reader
+  refuse the header.
 - Geometry moves to `axiolid-overlay` 0.3.10 and `axiolid-route` 0.3.7,
   lifting the bound below overlay 0.3.5: coverage through an opening and
   cost regions cut flush with a turned wall measure correctly again.

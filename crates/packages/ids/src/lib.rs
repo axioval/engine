@@ -2878,8 +2878,9 @@ fn declared_kind(schema: &Schema, type_name: &str) -> Option<AttributeKind> {
         }
         match schema.type_def(&current).map(|definition| &definition.kind) {
             Some(TypeKind::Enumeration(_)) => return Some(AttributeKind::Enumeration),
-            Some(TypeKind::Select(_)) => return None,
             Some(TypeKind::Defined(alias)) => current.clone_from(alias),
+            // A select, and any type kind added upstream, is no known kind.
+            Some(_) => return None,
             None => break,
         }
     }

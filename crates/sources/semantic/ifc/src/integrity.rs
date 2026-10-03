@@ -124,7 +124,7 @@ impl SourceIntegrityService for IfcIntegrity {
                 }));
             }
         }
-        issues.extend(self.schema_violations(&locator));
+        issues.extend(self.schema_violations(&locator)?);
         issues.extend(self.global_id_defects(&locator));
         Ok(issues)
     }
@@ -170,10 +170,19 @@ impl IfcIntegrity {
     }
 
     /// Cardinality and membership violations stated by the file.
-    fn schema_violations(&self, locator: &impl Fn(String) -> Evidence) -> Vec<IntegrityIssue> {
-        let (_, placement_anomalies) = spatial_placements(&self.model);
-        let (_, zone_anomalies) = zones(&self.model);
-        placement_anomalies
+    ///
+    /// `ifc-systems` binds the header's release itself; a release it refuses
+    /// leaves the scan incomplete, never silently free of these warnings.
+    fn schema_violations(
+        &self,
+        locator: &impl Fn(String) -> Evidence,
+    ) -> Result<Vec<IntegrityIssue>, IntegrityError> {
+        let unavailable = |error: ifc_systems::SchemaResolutionError| {
+            IntegrityError::Unavailable(format!("spatial and zone cardinality are unread: {error}"))
+        };
+        let (_, placement_anomalies) = spatial_placements(&self.model).map_err(unavailable)?;
+        let (_, zone_anomalies) = zones(&self.model).map_err(unavailable)?;
+        Ok(placement_anomalies
             .into_iter()
             .chain(zone_anomalies)
             .filter_map(|anomaly| match anomaly {
@@ -210,6 +219,6 @@ impl IfcIntegrity {
                 // the rest describe systems and ports, not source integrity.
                 _ => None,
             })
-            .collect()
+            .collect())
     }
 }

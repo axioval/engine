@@ -166,9 +166,12 @@ fn malformed_or_unsupported_input_cannot_create_an_exact_session() {
             .replace("FILE_SCHEMA(('IFC4'))", header)
     };
     // Several or no schemas leave the release undecided, and an unknown one
-    // has no table. All are refused, not guessed.
+    // has no table. IFC4X1 and IFC4X2 have tables upstream but no reader
+    // here is verified against them. All are refused, not guessed.
     for header in [
         "FILE_SCHEMA(('IFC5'))",
+        "FILE_SCHEMA(('IFC4X1'))",
+        "FILE_SCHEMA(('IFC4X2'))",
         "FILE_SCHEMA(('IFC2X3','IFC4'))",
         "FILE_SCHEMA(())",
     ] {

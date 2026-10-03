@@ -183,6 +183,11 @@ fn leaf(leaf: &Leaf, depth: Option<f64>) -> Result<DoorLeaf, DoorLeavesError> {
         PanelPosition::Middle => LeafPosition::Middle,
         PanelPosition::Right => LeafPosition::Right,
         PanelPosition::NotDefined => LeafPosition::NotDefined,
+        other => {
+            return Err(DoorLeavesError::Refused(format!(
+                "panel position {other:?} is not mapped"
+            )));
+        }
     };
     let motion = match leaf.motion {
         openbim_ifc::LeafMotion::Swing => LeafMotion::Swing,

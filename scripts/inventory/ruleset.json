@@ -1,0 +1,678 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:inventory.ruleset",
+    "name": {
+      "default": "Not-evaluated inventory",
+      "translations": {
+        "de": "Nicht-bewertet-Inventur"
+      }
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "A broad geometric rule set run over real models to count not-evaluated outcomes. Its bounds are deliberately loose: it measures coverage, not compliance.",
+      "translations": {
+        "de": "Ein breiter geometrischer Regelsatz, der über reale Modelle läuft, um Nicht-bewertet-Ergebnisse zu zählen. Seine Grenzen sind bewusst weit: er misst Abdeckung, nicht Konformität."
+      }
+    },
+    "repository": "https://github.com/axioval/engine",
+    "authors": []
+  },
+  "sources": {},
+  "definitionPackages": [
+    "axioval:inventory.definitions"
+  ],
+  "root": {
+    "id": "root",
+    "name": {
+      "default": "Inventory",
+      "translations": {
+        "de": "Inventur"
+      }
+    },
+    "rules": [
+      {
+        "id": "element-clash",
+        "definitionId": "axioval:inventory.clash",
+        "name": {
+          "default": "Building elements do not interpenetrate",
+          "translations": {}
+        },
+        "enabled": true,
+        "severity": "warning",
+        "parameters": {
+          "counterparts": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:inventory.ifc.building-element",
+              "includeSubtypes": true
+            }
+          },
+          "penetration_tolerance_metres": {
+            "type": "number",
+            "value": 0.01
+          }
+        },
+        "applicability": {
+          "groups": {
+            "subjects": {
+              "id": "subjects",
+              "name": {
+                "default": "Subjects",
+                "translations": {
+                  "de": "Prüfobjekte"
+                }
+              },
+              "selector": {
+                "kind": "entityType",
+                "objectType": "axioval:inventory.ifc.building-element",
+                "includeSubtypes": true
+              }
+            }
+          }
+        },
+        "requirements": [
+          {
+            "id": "requirement",
+            "statement": {
+              "default": "Building elements do not interpenetrate",
+              "translations": {}
+            },
+            "targetGroups": [
+              "subjects"
+            ],
+            "citations": []
+          }
+        ],
+        "citations": [],
+        "parameterCitations": [],
+        "explanatoryImages": [],
+        "tags": [
+          "inventory"
+        ]
+      },
+      {
+        "id": "furnishing-in-space",
+        "definitionId": "axioval:inventory.containment",
+        "name": {
+          "default": "Furnishing lies inside a space",
+          "translations": {}
+        },
+        "enabled": true,
+        "severity": "warning",
+        "parameters": {
+          "counterparts": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:inventory.ifc.space",
+              "includeSubtypes": true
+            }
+          },
+          "minimum_volume_ratio": {
+            "type": "number",
+            "value": 0.99
+          },
+          "report_orphans": {
+            "type": "boolean",
+            "value": true
+          }
+        },
+        "applicability": {
+          "groups": {
+            "subjects": {
+              "id": "subjects",
+              "name": {
+                "default": "Subjects",
+                "translations": {
+                  "de": "Prüfobjekte"
+                }
+              },
+              "selector": {
+                "kind": "entityType",
+                "objectType": "axioval:inventory.ifc.furnishing",
+                "includeSubtypes": true
+              }
+            }
+          }
+        },
+        "requirements": [
+          {
+            "id": "requirement",
+            "statement": {
+              "default": "Furnishing lies inside a space",
+              "translations": {}
+            },
+            "targetGroups": [
+              "subjects"
+            ],
+            "citations": []
+          }
+        ],
+        "citations": [],
+        "parameterCitations": [],
+        "explanatoryImages": [],
+        "tags": [
+          "inventory"
+        ]
+      },
+      {
+        "id": "column-wall-distance",
+        "definitionId": "axioval:inventory.distance",
+        "name": {
+          "default": "Columns keep a distance to walls",
+          "translations": {}
+        },
+        "enabled": true,
+        "severity": "warning",
+        "parameters": {
+          "counterparts": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:inventory.ifc.wall",
+              "includeSubtypes": true
+            }
+          },
+          "minimum_metres": {
+            "type": "number",
+            "value": 0.0
+          }
+        },
+        "applicability": {
+          "groups": {
+            "subjects": {
+              "id": "subjects",
+              "name": {
+                "default": "Subjects",
+                "translations": {
+                  "de": "Prüfobjekte"
+                }
+              },
+              "selector": {
+                "kind": "entityType",
+                "objectType": "axioval:inventory.ifc.column",
+                "includeSubtypes": true
+              }
+            }
+          }
+        },
+        "requirements": [
+          {
+            "id": "requirement",
+            "statement": {
+              "default": "Columns keep a distance to walls",
+              "translations": {}
+            },
+            "targetGroups": [
+              "subjects"
+            ],
+            "citations": []
+          }
+        ],
+        "citations": [],
+        "parameterCitations": [],
+        "explanatoryImages": [],
+        "tags": [
+          "inventory"
+        ]
+      },
+      {
+        "id": "element-triangle-count",
+        "definitionId": "axioval:inventory.triangle-count",
+        "name": {
+          "default": "Element meshes stay within a triangle budget",
+          "translations": {}
+        },
+        "enabled": true,
+        "severity": "warning",
+        "parameters": {
+          "maximum": {
+            "type": "integer",
+            "value": 10000000
+          }
+        },
+        "applicability": {
+          "groups": {
+            "subjects": {
+              "id": "subjects",
+              "name": {
+                "default": "Subjects",
+                "translations": {
+                  "de": "Prüfobjekte"
+                }
+              },
+              "selector": {
+                "kind": "entityType",
+                "objectType": "axioval:inventory.ifc.element",
+                "includeSubtypes": true
+              }
+            }
+          }
+        },
+        "requirements": [
+          {
+            "id": "requirement",
+            "statement": {
+              "default": "Element meshes stay within a triangle budget",
+              "translations": {}
+            },
+            "targetGroups": [
+              "subjects"
+            ],
+            "citations": []
+          }
+        ],
+        "citations": [],
+        "parameterCitations": [],
+        "explanatoryImages": [],
+        "tags": [
+          "inventory"
+        ]
+      },
+      {
+        "id": "wall-thickness",
+        "definitionId": "axioval:inventory.body-extent",
+        "name": {
+          "default": "Walls are at least 1 cm thick",
+          "translations": {}
+        },
+        "enabled": true,
+        "severity": "warning",
+        "parameters": {
+          "axis": {
+            "type": "string",
+            "value": "forward"
+          },
+          "minimum": {
+            "type": "quantity",
+            "value": 0.01,
+            "unit": "m"
+          }
+        },
+        "applicability": {
+          "groups": {
+            "subjects": {
+              "id": "subjects",
+              "name": {
+                "default": "Subjects",
+                "translations": {
+                  "de": "Prüfobjekte"
+                }
+              },
+              "selector": {
+                "kind": "entityType",
+                "objectType": "axioval:inventory.ifc.wall",
+                "includeSubtypes": true
+              }
+            }
+          }
+        },
+        "requirements": [
+          {
+            "id": "requirement",
+            "statement": {
+              "default": "Walls are at least 1 cm thick",
+              "translations": {}
+            },
+            "targetGroups": [
+              "subjects"
+            ],
+            "citations": []
+          }
+        ],
+        "citations": [],
+        "parameterCitations": [],
+        "explanatoryImages": [],
+        "tags": [
+          "inventory"
+        ]
+      },
+      {
+        "id": "space-validation",
+        "definitionId": "axioval:inventory.space-validation",
+        "name": {
+          "default": "Spaces are bounded and capped",
+          "translations": {}
+        },
+        "enabled": true,
+        "severity": "warning",
+        "parameters": {
+          "required_height_metres": {
+            "type": "number",
+            "value": 2.0
+          },
+          "uncovered_segment_length_metres": {
+            "type": "number",
+            "value": 0.5
+          },
+          "check_top_cap": {
+            "type": "boolean",
+            "value": true
+          },
+          "check_bottom_cap": {
+            "type": "boolean",
+            "value": true
+          },
+          "check_unallocated_area": {
+            "type": "boolean",
+            "value": false
+          },
+          "maximum_unallocated_area_square_metres": {
+            "type": "number",
+            "value": 1.0
+          },
+          "boundary_elements": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:inventory.ifc.building-element",
+              "includeSubtypes": true
+            }
+          },
+          "intersection_elements": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:inventory.ifc.building-element",
+              "includeSubtypes": true
+            }
+          }
+        },
+        "applicability": {
+          "groups": {
+            "subjects": {
+              "id": "subjects",
+              "name": {
+                "default": "Subjects",
+                "translations": {
+                  "de": "Prüfobjekte"
+                }
+              },
+              "selector": {
+                "kind": "entityType",
+                "objectType": "axioval:inventory.ifc.space",
+                "includeSubtypes": true
+              }
+            }
+          }
+        },
+        "requirements": [
+          {
+            "id": "requirement",
+            "statement": {
+              "default": "Spaces are bounded and capped",
+              "translations": {}
+            },
+            "targetGroups": [
+              "subjects"
+            ],
+            "citations": []
+          }
+        ],
+        "citations": [],
+        "parameterCitations": [],
+        "explanatoryImages": [],
+        "tags": [
+          "inventory"
+        ]
+      },
+      {
+        "id": "storey-space-area",
+        "definitionId": "axioval:inventory.plan-area",
+        "name": {
+          "default": "Storeys sum the plan area of their spaces",
+          "translations": {}
+        },
+        "enabled": true,
+        "severity": "warning",
+        "parameters": {
+          "maximum": {
+            "type": "number",
+            "value": 1000000000.0
+          },
+          "member_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:inventory.ifc.space",
+              "includeSubtypes": true
+            }
+          },
+          "relationship": {
+            "type": "string",
+            "value": "axioval:derived.spans-level;overlap=1"
+          },
+          "direction": {
+            "type": "string",
+            "value": "backward"
+          }
+        },
+        "applicability": {
+          "groups": {
+            "subjects": {
+              "id": "subjects",
+              "name": {
+                "default": "Subjects",
+                "translations": {
+                  "de": "Prüfobjekte"
+                }
+              },
+              "selector": {
+                "kind": "entityType",
+                "objectType": "axioval:inventory.ifc.storey",
+                "includeSubtypes": true
+              }
+            }
+          }
+        },
+        "requirements": [
+          {
+            "id": "requirement",
+            "statement": {
+              "default": "Storeys sum the plan area of their spaces",
+              "translations": {}
+            },
+            "targetGroups": [
+              "subjects"
+            ],
+            "citations": []
+          }
+        ],
+        "citations": [],
+        "parameterCitations": [],
+        "explanatoryImages": [],
+        "tags": [
+          "inventory"
+        ]
+      },
+      {
+        "id": "space-boundary-coverage",
+        "definitionId": "axioval:inventory.space-boundary-coverage",
+        "name": {
+          "default": "Space boundaries cover the space surface",
+          "translations": {}
+        },
+        "enabled": true,
+        "severity": "warning",
+        "parameters": {
+          "minimum_covered_share": {
+            "type": "number",
+            "value": 0.5
+          }
+        },
+        "applicability": {
+          "groups": {
+            "subjects": {
+              "id": "subjects",
+              "name": {
+                "default": "Subjects",
+                "translations": {
+                  "de": "Prüfobjekte"
+                }
+              },
+              "selector": {
+                "kind": "entityType",
+                "objectType": "axioval:inventory.ifc.space",
+                "includeSubtypes": true
+              }
+            }
+          }
+        },
+        "requirements": [
+          {
+            "id": "requirement",
+            "statement": {
+              "default": "Space boundaries cover the space surface",
+              "translations": {}
+            },
+            "targetGroups": [
+              "subjects"
+            ],
+            "citations": []
+          }
+        ],
+        "citations": [],
+        "parameterCitations": [],
+        "explanatoryImages": [],
+        "tags": [
+          "inventory"
+        ]
+      },
+      {
+        "id": "space-free-floor",
+        "definitionId": "axioval:inventory.free-floor-rectangle",
+        "name": {
+          "default": "Spaces hold a free floor rectangle",
+          "translations": {}
+        },
+        "enabled": true,
+        "severity": "warning",
+        "parameters": {
+          "width_metres": {
+            "type": "number",
+            "value": 0.9
+          },
+          "length_metres": {
+            "type": "number",
+            "value": 0.9
+          },
+          "height_metres": {
+            "type": "number",
+            "value": 2.0
+          },
+          "orientation": {
+            "type": "string",
+            "value": "any"
+          },
+          "obstacles": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:inventory.ifc.building-element",
+              "includeSubtypes": true
+            }
+          }
+        },
+        "applicability": {
+          "groups": {
+            "subjects": {
+              "id": "subjects",
+              "name": {
+                "default": "Subjects",
+                "translations": {
+                  "de": "Prüfobjekte"
+                }
+              },
+              "selector": {
+                "kind": "entityType",
+                "objectType": "axioval:inventory.ifc.space",
+                "includeSubtypes": true
+              }
+            }
+          }
+        },
+        "requirements": [
+          {
+            "id": "requirement",
+            "statement": {
+              "default": "Spaces hold a free floor rectangle",
+              "translations": {}
+            },
+            "targetGroups": [
+              "subjects"
+            ],
+            "citations": []
+          }
+        ],
+        "citations": [],
+        "parameterCitations": [],
+        "explanatoryImages": [],
+        "tags": [
+          "inventory"
+        ]
+      },
+      {
+        "id": "stair-risers",
+        "definitionId": "axioval:inventory.stair-geometry",
+        "name": {
+          "default": "Stair flights have walkable steps",
+          "translations": {}
+        },
+        "enabled": true,
+        "severity": "warning",
+        "parameters": {
+          "riser_maximum": {
+            "type": "quantity",
+            "value": 0.21,
+            "unit": "m"
+          },
+          "going_minimum": {
+            "type": "quantity",
+            "value": 0.21,
+            "unit": "m"
+          }
+        },
+        "applicability": {
+          "groups": {
+            "subjects": {
+              "id": "subjects",
+              "name": {
+                "default": "Subjects",
+                "translations": {
+                  "de": "Prüfobjekte"
+                }
+              },
+              "selector": {
+                "kind": "entityType",
+                "objectType": "axioval:inventory.ifc.stair-flight",
+                "includeSubtypes": true
+              }
+            }
+          }
+        },
+        "requirements": [
+          {
+            "id": "requirement",
+            "statement": {
+              "default": "Stair flights have walkable steps",
+              "translations": {}
+            },
+            "targetGroups": [
+              "subjects"
+            ],
+            "citations": []
+          }
+        ],
+        "citations": [],
+        "parameterCitations": [],
+        "explanatoryImages": [],
+        "tags": [
+          "inventory"
+        ]
+      }
+    ],
+    "folders": []
+  }
+}

@@ -33,6 +33,7 @@
 
 - [Command line](./cli.md)
 - [Capability migration](./migration.md)
+- [Not-evaluated inventory](./not-evaluated-inventory.md)
 - [Compatibility ledger](./compatibility.md)
 - [Contributing](./contributing.md)
 - [Security](./security.md)

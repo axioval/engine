@@ -15790,3 +15790,59 @@ fn a_body_beyond_the_kernels_step_budget_is_unmeasured() {
         "{result:#}"
     );
 }
+
+/// The packages of the not-evaluated inventory (`scripts/inventory`) bind
+/// every capability with its current signature, so they keep compiling, and
+/// run with geometry: the proxy without a body is unmeasured, so the clash
+/// and triangle-count rules are not evaluated for it rather than passed.
+#[test]
+fn the_not_evaluated_inventory_packages_bind_and_run_with_geometry() {
+    let inventory = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../scripts/inventory");
+    let definitions = format!("{inventory}/definitions.json");
+    let ruleset = format!("{inventory}/ruleset.json");
+    let declared: Value =
+        serde_json::from_str(&std::fs::read_to_string(&definitions).unwrap()).unwrap();
+    for (id, definition) in declared["definitions"].as_object().unwrap() {
+        let capability = definition["capability"].as_str().unwrap();
+        assert_eq!(
+            definition["parameters"],
+            registry_signature(capability),
+            "{id}: regenerate its signature from the registry"
+        );
+    }
+
+    let case = Case::new("not-evaluated-inventory");
+    let model = case.write("model.ifc", &crossing_walls());
+    let saved = case.path("result.json");
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .args(["check", "--geometry", "--model"])
+        .arg(&model)
+        .args([
+            "--definitions",
+            &definitions,
+            "--ruleset",
+            &ruleset,
+            "--report",
+        ])
+        .arg(&saved)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
+    assert_eq!(
+        result["geometry"]["unmeasured"][0]["object"]["local_id"],
+        "#30"
+    );
+    let refused: Vec<&str> = result["report"]["not_evaluated"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|outcome| outcome["object_id"]["local_id"] == "#30")
+        .map(|outcome| outcome["rule_id"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        refused,
+        ["element-clash", "element-triangle-count"],
+        "{result:#}"
+    );
+}

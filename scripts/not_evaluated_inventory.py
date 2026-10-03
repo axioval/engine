@@ -1,0 +1,229 @@
+#!/usr/bin/env python3
+"""Rank the causes of not-evaluated outcomes across saved check results.
+
+Usage:
+  scripts/not_evaluated_inventory.py [--ruleset R]... [--format F] [--top N]
+                                     [LABEL=]RESULT...
+
+Each RESULT is a `result.json` written by `axioval check --report` (with
+`--geometry`), one per model; LABEL names that model in the output and
+defaults to the file's stem. `--ruleset` maps rule ids to the capability
+their definition binds (default: the inventory packages beside this script);
+a rule it does not know is listed under its own id.
+
+Every not-evaluated outcome and every unmeasured object is counted once,
+under one cause:
+
+- an outcome about an unmeasured object, or whose message names one, is
+  caused by that object's unmeasured reason (`unmeasured: ...`);
+- any other outcome is caused by its reason code, capability and message
+  pattern;
+- an unmeasured object no outcome names still counts under its reason.
+
+Messages and reasons are reduced to patterns: object references become
+`<object>`, instance ids `#<id>` and numbers `<n>`, so one cause on many
+objects is one row. Causes are ranked by the number of not-evaluated
+outcomes they account for, then unmeasured objects, then models affected,
+then the pattern, so the table is deterministic for the same inputs.
+
+Exit status: 0 on success, 1 when a result cannot be read, 2 for usage.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+from collections import Counter, defaultdict
+from dataclasses import dataclass, field
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+DEFAULT_RULESET = HERE / "inventory" / "ruleset.json"
+DEFAULT_DEFINITIONS = HERE / "inventory" / "definitions.json"
+
+# `ifc-step:model.ifc/#42`, `ifc-step:a.ifczip/b.ifc/#42`: a source-qualified
+# object reference as the runtime writes it into messages.
+OBJECT_REFERENCE = re.compile(r"[A-Za-z][\w.+-]*:[^\s,;`']*?/#\d+")
+INSTANCE = re.compile(r"#\d+")
+NUMBER = re.compile(r"(?<![\w<])-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?(?![\w>])")
+SPACES = re.compile(r"\s+")
+
+
+def pattern(message: str) -> str:
+    """The message with object references, instance ids and numbers abstracted."""
+    text = OBJECT_REFERENCE.sub("<object>", message)
+    text = INSTANCE.sub("#<id>", text)
+    text = NUMBER.sub("<n>", text)
+    return SPACES.sub(" ", text).strip()
+
+
+def object_key(object_id: dict) -> str:
+    """`system:document/#id`, the form the runtime writes into messages."""
+    source = object_id.get("source") or {}
+    return f"{source.get('system', '')}:{source.get('document', '')}/{object_id.get('local_id', '')}"
+
+
+def capabilities(rulesets: list[Path], definitions: list[Path]) -> dict[str, str]:
+    """Rule id (bare and package-qualified) -> capability id."""
+    bound: dict[str, str] = {}
+    for path in definitions:
+        document = json.loads(path.read_text(encoding="utf-8"))
+        for identifier, definition in document.get("definitions", {}).items():
+            bound[identifier] = definition.get("capability", identifier)
+    mapping: dict[str, str] = {}
+    for path in rulesets:
+        document = json.loads(path.read_text(encoding="utf-8"))
+        package = document.get("package", {}).get("id", "")
+        stack = [document.get("root", {})]
+        while stack:
+            folder = stack.pop()
+            for rule in folder.get("rules", []):
+                capability = bound.get(rule.get("definitionId", ""), rule.get("definitionId", ""))
+                capability = capability.removeprefix("axioval:capability.")
+                mapping[rule["id"]] = capability
+                mapping[f"{package}/{rule['id']}"] = capability
+            stack.extend(folder.get("folders", []))
+    return mapping
+
+
+@dataclass
+class Cause:
+    kind: str  # "unmeasured" or a reason code
+    text: str
+    outcomes: int = 0
+    objects: int = 0
+    models: set[str] = field(default_factory=set)
+    capabilities: Counter = field(default_factory=Counter)
+    entities: Counter = field(default_factory=Counter)
+
+    def key(self) -> tuple:
+        return (-self.outcomes, -self.objects, -len(self.models), self.kind, self.text)
+
+    def label(self) -> str:
+        return f"unmeasured: {self.text}" if self.kind == "unmeasured" else self.text
+
+
+def inventory(results: list[tuple[str, dict]], rules: dict[str, str]) -> list[Cause]:
+    causes: dict[tuple[str, str], Cause] = {}
+
+    def cause(kind: str, text: str) -> Cause:
+        return causes.setdefault((kind, text), Cause(kind, text))
+
+    for label, result in results:
+        objects = result.get("objects") or {}
+
+        def entity(key: str | None) -> str:
+            if key is None:
+                return "(no object)"
+            return (objects.get(key) or {}).get("kind", "(unknown)")
+
+        unmeasured: dict[str, str] = {}
+        for record in (result.get("geometry") or {}).get("unmeasured", []):
+            key = object_key(record["object"])
+            reason = pattern(record["reason"])
+            unmeasured[key] = reason
+            found = cause("unmeasured", reason)
+            found.objects += 1
+            found.models.add(label)
+            found.entities[entity(key)] += 1
+        for outcome in (result.get("report") or {}).get("not_evaluated", []):
+            subject = object_key(outcome["object_id"]) if outcome.get("object_id") else None
+            capability = rules.get(outcome["rule_id"], outcome["rule_id"])
+            named = sorted(set(OBJECT_REFERENCE.findall(outcome.get("message", ""))))
+            blamed = [key for key in ([subject] if subject else []) + named if key in unmeasured]
+            if blamed:
+                found = cause("unmeasured", unmeasured[blamed[0]])
+                blamed_entity = entity(blamed[0])
+            else:
+                text = f"{outcome['reason']} · {capability} · {pattern(outcome.get('message', ''))}"
+                found = cause(outcome["reason"], text)
+                blamed_entity = entity(subject)
+            found.outcomes += 1
+            found.models.add(label)
+            found.capabilities[capability] += 1
+            if not blamed:
+                found.entities[blamed_entity] += 1
+    return sorted(causes.values(), key=Cause.key)
+
+
+def top(counter: Counter, limit: int = 3) -> str:
+    ranked = sorted(counter.items(), key=lambda item: (-item[1], item[0]))
+    shown = ", ".join(f"{name} {count}" for name, count in ranked[:limit])
+    rest = len(ranked) - limit
+    return shown + (f", +{rest} more" if rest > 0 else "")
+
+
+def markdown(causes: list[Cause], labels: list[str]) -> str:
+    lines = [
+        f"Inventory of {len(labels)} model(s): "
+        f"{sum(c.outcomes for c in causes)} not-evaluated outcome(s), "
+        f"{sum(c.objects for c in causes)} unmeasured object(s), {len(causes)} cause(s).",
+        "",
+        "| # | Cause | Outcomes | Unmeasured objects | Models | Capabilities | Entities |",
+        "|---|---|---:|---:|---:|---|---|",
+    ]
+    for rank, found in enumerate(causes, 1):
+        cell = found.label().replace("|", "\\|")
+        lines.append(
+            f"| {rank} | {cell} | {found.outcomes} | {found.objects} | {len(found.models)} "
+            f"| {top(found.capabilities)} | {top(found.entities)} |"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def as_json(causes: list[Cause], labels: list[str]) -> str:
+    rows = [
+        {
+            "rank": rank,
+            "cause": found.label(),
+            "kind": found.kind,
+            "outcomes": found.outcomes,
+            "unmeasured_objects": found.objects,
+            "models": sorted(found.models),
+            "capabilities": dict(sorted(found.capabilities.items())),
+            "entities": dict(sorted(found.entities.items())),
+        }
+        for rank, found in enumerate(causes, 1)
+    ]
+    return json.dumps({"models": labels, "causes": rows}, indent=2, sort_keys=True) + "\n"
+
+
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument("results", nargs="+", metavar="[LABEL=]RESULT")
+    parser.add_argument("--ruleset", action="append", type=Path)
+    parser.add_argument("--definitions", action="append", type=Path)
+    parser.add_argument("--format", choices=("markdown", "json"), default="markdown")
+    parser.add_argument("--top", type=int, default=0, help="rows to print (0: all)")
+    arguments = parser.parse_args(argv)
+
+    try:
+        rules = capabilities(
+            arguments.ruleset or [DEFAULT_RULESET],
+            arguments.definitions or [DEFAULT_DEFINITIONS],
+        )
+        results = []
+        for argument in arguments.results:
+            label, _, path = argument.rpartition("=")
+            path = Path(path)
+            results.append((label or path.stem, json.loads(path.read_text(encoding="utf-8"))))
+    except (OSError, ValueError, KeyError) as error:
+        print(f"not_evaluated_inventory: {error}", file=sys.stderr)
+        return 1
+    labels = [label for label, _ in results]
+    if len(set(labels)) != len(labels):
+        print("not_evaluated_inventory: model labels must be distinct", file=sys.stderr)
+        return 2
+
+    causes = inventory(results, rules)
+    if arguments.top > 0:
+        causes = causes[: arguments.top]
+    render = as_json if arguments.format == "json" else markdown
+    sys.stdout.write(render(causes, labels))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

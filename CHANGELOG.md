@@ -6,6 +6,13 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- Not-evaluated inventory (#186): `scripts/not_evaluated_inventory.py`
+  ranks the causes of not-evaluated outcomes and unmeasured objects across
+  saved check results. It attributes an outcome to the unmeasured object it
+  involves, and its output is deterministic. `scripts/inventory/` holds a
+  broad geometric rule set bound to IFC2X3, IFC4 and IFC4X3. The ranking
+  over 14 real models and its follow-up issues are in the new
+  `not-evaluated-inventory` page.
 - Exact boundaries of walls clipped by roof planes (axiolid/kernel#234,
   `axiolid-mesh-compile` 0.3.10): `exact_boundary` builds a clip by a
   half-space, bounded by a polygon or not (`IfcBooleanClippingResult` of

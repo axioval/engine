@@ -1,0 +1,2269 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:inventory.definitions",
+    "name": {
+      "default": "Not-evaluated inventory definitions",
+      "translations": {
+        "de": "Definitionen der Nicht-bewertet-Inventur"
+      }
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "Definitions of the geometric rule set the not-evaluated inventory runs.",
+      "translations": {
+        "de": "Definitionen des geometrischen Regelsatzes der Nicht-bewertet-Inventur."
+      }
+    },
+    "repository": "https://github.com/axioval/engine",
+    "authors": []
+  },
+  "sources": {},
+  "objectTypes": {
+    "axioval:inventory.ifc.element": {
+      "id": "axioval:inventory.ifc.element",
+      "name": {
+        "default": "IfcElement",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcElement"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcElement"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcElement"
+        }
+      ],
+      "citations": []
+    },
+    "axioval:inventory.ifc.building-element": {
+      "id": "axioval:inventory.ifc.building-element",
+      "name": {
+        "default": "IfcBuildingElement",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcBuildingElement"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcBuildingElement"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcBuiltElement"
+        }
+      ],
+      "citations": []
+    },
+    "axioval:inventory.ifc.wall": {
+      "id": "axioval:inventory.ifc.wall",
+      "name": {
+        "default": "IfcWall",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcWall"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcWall"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcWall"
+        }
+      ],
+      "citations": []
+    },
+    "axioval:inventory.ifc.column": {
+      "id": "axioval:inventory.ifc.column",
+      "name": {
+        "default": "IfcColumn",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcColumn"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcColumn"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcColumn"
+        }
+      ],
+      "citations": []
+    },
+    "axioval:inventory.ifc.slab": {
+      "id": "axioval:inventory.ifc.slab",
+      "name": {
+        "default": "IfcSlab",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcSlab"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcSlab"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcSlab"
+        }
+      ],
+      "citations": []
+    },
+    "axioval:inventory.ifc.space": {
+      "id": "axioval:inventory.ifc.space",
+      "name": {
+        "default": "IfcSpace",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcSpace"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcSpace"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcSpace"
+        }
+      ],
+      "citations": []
+    },
+    "axioval:inventory.ifc.storey": {
+      "id": "axioval:inventory.ifc.storey",
+      "name": {
+        "default": "IfcBuildingStorey",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcBuildingStorey"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcBuildingStorey"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcBuildingStorey"
+        }
+      ],
+      "citations": []
+    },
+    "axioval:inventory.ifc.stair-flight": {
+      "id": "axioval:inventory.ifc.stair-flight",
+      "name": {
+        "default": "IfcStairFlight",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcStairFlight"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcStairFlight"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcStairFlight"
+        }
+      ],
+      "citations": []
+    },
+    "axioval:inventory.ifc.furnishing": {
+      "id": "axioval:inventory.ifc.furnishing",
+      "name": {
+        "default": "IfcFurnishingElement",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcFurnishingElement"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcFurnishingElement"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcFurnishingElement"
+        }
+      ],
+      "citations": []
+    }
+  },
+  "properties": {},
+  "propertySets": {},
+  "definitions": {
+    "axioval:inventory.clash": {
+      "id": "axioval:inventory.clash",
+      "name": {
+        "default": "clash",
+        "translations": {}
+      },
+      "description": {
+        "default": "Runs the `clash` capability.",
+        "translations": {
+          "de": "Führt die Fähigkeit `clash` aus."
+        }
+      },
+      "capability": "axioval:capability.clash",
+      "parameters": {
+        "clearance_metres": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "clearance_metres",
+          "kind": "number",
+          "name": {
+            "default": "clearance_metres",
+            "translations": {}
+          },
+          "required": false
+        },
+        "counterparts": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "counterparts",
+          "kind": "selector",
+          "name": {
+            "default": "counterparts",
+            "translations": {}
+          },
+          "required": true
+        },
+        "duplicate_quantities": {
+          "allowedValues": [],
+          "citations": [],
+          "columns": [
+            {
+              "id": "property_set",
+              "kind": "string",
+              "name": {
+                "default": "property_set",
+                "translations": {}
+              },
+              "required": false
+            },
+            {
+              "id": "property",
+              "kind": "string",
+              "name": {
+                "default": "property",
+                "translations": {}
+              },
+              "required": true
+            }
+          ],
+          "id": "duplicate_quantities",
+          "kind": "table",
+          "name": {
+            "default": "duplicate_quantities",
+            "translations": {}
+          },
+          "required": false
+        },
+        "duplicate_tolerance_metres": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "duplicate_tolerance_metres",
+          "kind": "number",
+          "name": {
+            "default": "duplicate_tolerance_metres",
+            "translations": {}
+          },
+          "required": false
+        },
+        "exclude_paths": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "exclude_paths",
+          "kind": "stringList",
+          "name": {
+            "default": "exclude_paths",
+            "translations": {}
+          },
+          "required": false
+        },
+        "exclude_same_layer": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "exclude_same_layer",
+          "kind": "boolean",
+          "name": {
+            "default": "exclude_same_layer",
+            "translations": {}
+          },
+          "required": false
+        },
+        "exclude_target_property": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "exclude_target_property",
+          "kind": "propertyReference",
+          "name": {
+            "default": "exclude_target_property",
+            "translations": {}
+          },
+          "required": false
+        },
+        "grade_by": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "grade_by",
+          "kind": "string",
+          "name": {
+            "default": "grade_by",
+            "translations": {}
+          },
+          "required": false
+        },
+        "group_by": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "group_by",
+          "kind": "string",
+          "name": {
+            "default": "group_by",
+            "translations": {}
+          },
+          "required": false
+        },
+        "group_property": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "group_property",
+          "kind": "propertyReference",
+          "name": {
+            "default": "group_property",
+            "translations": {}
+          },
+          "required": false
+        },
+        "group_tolerance_metres": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "group_tolerance_metres",
+          "kind": "number",
+          "name": {
+            "default": "group_tolerance_metres",
+            "translations": {}
+          },
+          "required": false
+        },
+        "horizontal_tolerance_metres": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "horizontal_tolerance_metres",
+          "kind": "number",
+          "name": {
+            "default": "horizontal_tolerance_metres",
+            "translations": {}
+          },
+          "required": false
+        },
+        "penetration_tolerance_metres": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "penetration_tolerance_metres",
+          "kind": "number",
+          "name": {
+            "default": "penetration_tolerance_metres",
+            "translations": {}
+          },
+          "required": true
+        },
+        "per_storey": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "per_storey",
+          "kind": "boolean",
+          "name": {
+            "default": "per_storey",
+            "translations": {}
+          },
+          "required": false
+        },
+        "report_containment": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "report_containment",
+          "kind": "boolean",
+          "name": {
+            "default": "report_containment",
+            "translations": {}
+          },
+          "required": false
+        },
+        "report_duplicates": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "report_duplicates",
+          "kind": "boolean",
+          "name": {
+            "default": "report_duplicates",
+            "translations": {}
+          },
+          "required": false
+        },
+        "report_intersections": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "report_intersections",
+          "kind": "boolean",
+          "name": {
+            "default": "report_intersections",
+            "translations": {}
+          },
+          "required": false
+        },
+        "severity_by_class": {
+          "allowedValues": [],
+          "citations": [],
+          "columns": [
+            {
+              "id": "class",
+              "kind": "string",
+              "name": {
+                "default": "class",
+                "translations": {}
+              },
+              "required": true
+            },
+            {
+              "id": "severity",
+              "kind": "string",
+              "name": {
+                "default": "severity",
+                "translations": {}
+              },
+              "required": true
+            }
+          ],
+          "id": "severity_by_class",
+          "kind": "table",
+          "name": {
+            "default": "severity_by_class",
+            "translations": {}
+          },
+          "required": false
+        },
+        "severity_grades": {
+          "allowedValues": [],
+          "citations": [],
+          "columns": [
+            {
+              "id": "above",
+              "kind": "number",
+              "name": {
+                "default": "above",
+                "translations": {}
+              },
+              "required": true
+            },
+            {
+              "id": "severity",
+              "kind": "string",
+              "name": {
+                "default": "severity",
+                "translations": {}
+              },
+              "required": true
+            }
+          ],
+          "id": "severity_grades",
+          "kind": "table",
+          "name": {
+            "default": "severity_grades",
+            "translations": {}
+          },
+          "required": false
+        },
+        "storey_path": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "storey_path",
+          "kind": "string",
+          "name": {
+            "default": "storey_path",
+            "translations": {}
+          },
+          "required": false
+        },
+        "tolerance_cases": {
+          "allowedValues": [],
+          "citations": [],
+          "columns": [
+            {
+              "id": "case",
+              "kind": "string",
+              "name": {
+                "default": "case",
+                "translations": {}
+              },
+              "required": true
+            },
+            {
+              "id": "first_selector",
+              "kind": "selector",
+              "name": {
+                "default": "first_selector",
+                "translations": {}
+              },
+              "required": false
+            },
+            {
+              "id": "second_selector",
+              "kind": "selector",
+              "name": {
+                "default": "second_selector",
+                "translations": {}
+              },
+              "required": false
+            },
+            {
+              "id": "tolerance_metres",
+              "kind": "number",
+              "name": {
+                "default": "tolerance_metres",
+                "translations": {}
+              },
+              "required": true
+            }
+          ],
+          "id": "tolerance_cases",
+          "kind": "table",
+          "name": {
+            "default": "tolerance_cases",
+            "translations": {}
+          },
+          "required": false
+        },
+        "vertical_tolerance_metres": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "vertical_tolerance_metres",
+          "kind": "number",
+          "name": {
+            "default": "vertical_tolerance_metres",
+            "translations": {}
+          },
+          "required": false
+        },
+        "volume_tolerance_cubic_metres": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "volume_tolerance_cubic_metres",
+          "kind": "number",
+          "name": {
+            "default": "volume_tolerance_cubic_metres",
+            "translations": {}
+          },
+          "required": false
+        }
+      },
+      "citations": [],
+      "tags": []
+    },
+    "axioval:inventory.containment": {
+      "id": "axioval:inventory.containment",
+      "name": {
+        "default": "containment",
+        "translations": {}
+      },
+      "description": {
+        "default": "Runs the `containment` capability.",
+        "translations": {
+          "de": "Führt die Fähigkeit `containment` aus."
+        }
+      },
+      "capability": "axioval:capability.containment",
+      "parameters": {
+        "combine_adjacent": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "combine_adjacent",
+          "kind": "boolean",
+          "name": {
+            "default": "combine_adjacent",
+            "translations": {}
+          },
+          "required": false
+        },
+        "counterparts": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "counterparts",
+          "kind": "selector",
+          "name": {
+            "default": "counterparts",
+            "translations": {}
+          },
+          "required": true
+        },
+        "cover": {
+          "allowedValues": [],
+          "citations": [],
+          "columns": [
+            {
+              "id": "faces",
+              "kind": "string",
+              "name": {
+                "default": "faces",
+                "translations": {}
+              },
+              "required": true
+            },
+            {
+              "id": "side",
+              "kind": "string",
+              "name": {
+                "default": "side",
+                "translations": {}
+              },
+              "required": false
+            },
+            {
+              "id": "minimum_metres",
+              "kind": "number",
+              "name": {
+                "default": "minimum_metres",
+                "translations": {}
+              },
+              "required": false
+            },
+            {
+              "id": "maximum_metres",
+              "kind": "number",
+              "name": {
+                "default": "maximum_metres",
+                "translations": {}
+              },
+              "required": false
+            }
+          ],
+          "id": "cover",
+          "kind": "table",
+          "name": {
+            "default": "cover",
+            "translations": {}
+          },
+          "required": false
+        },
+        "maximum_count": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "maximum_count",
+          "kind": "integer",
+          "name": {
+            "default": "maximum_count",
+            "translations": {}
+          },
+          "required": false
+        },
+        "minimum_count": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "minimum_count",
+          "kind": "integer",
+          "name": {
+            "default": "minimum_count",
+            "translations": {}
+          },
+          "required": false
+        },
+        "minimum_volume_ratio": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "minimum_volume_ratio",
+          "kind": "number",
+          "name": {
+            "default": "minimum_volume_ratio",
+            "translations": {}
+          },
+          "required": true
+        },
+        "report_orphans": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "report_orphans",
+          "kind": "boolean",
+          "name": {
+            "default": "report_orphans",
+            "translations": {}
+          },
+          "required": false
+        }
+      },
+      "citations": [],
+      "tags": []
+    },
+    "axioval:inventory.distance": {
+      "id": "axioval:inventory.distance",
+      "name": {
+        "default": "distance",
+        "translations": {}
+      },
+      "description": {
+        "default": "Runs the `distance` capability.",
+        "translations": {
+          "de": "Führt die Fähigkeit `distance` aus."
+        }
+      },
+      "capability": "axioval:capability.distance",
+      "parameters": {
+        "container_selector": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "container_selector",
+          "kind": "selector",
+          "name": {
+            "default": "container_selector",
+            "translations": {}
+          },
+          "required": false
+        },
+        "count": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "count",
+          "kind": "integer",
+          "name": {
+            "default": "count",
+            "translations": {}
+          },
+          "required": false
+        },
+        "counterpart_extent": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "counterpart_extent",
+          "kind": "string",
+          "name": {
+            "default": "counterpart_extent",
+            "translations": {}
+          },
+          "required": false
+        },
+        "counterpart_surface": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "counterpart_surface",
+          "kind": "string",
+          "name": {
+            "default": "counterpart_surface",
+            "translations": {}
+          },
+          "required": false
+        },
+        "counterparts": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "counterparts",
+          "kind": "selector",
+          "name": {
+            "default": "counterparts",
+            "translations": {}
+          },
+          "required": true
+        },
+        "direction": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "direction",
+          "kind": "string",
+          "name": {
+            "default": "direction",
+            "translations": {}
+          },
+          "required": false
+        },
+        "elevation_offset_metres": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "elevation_offset_metres",
+          "kind": "number",
+          "name": {
+            "default": "elevation_offset_metres",
+            "translations": {}
+          },
+          "required": false
+        },
+        "elevation_overlap": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "elevation_overlap",
+          "kind": "string",
+          "name": {
+            "default": "elevation_overlap",
+            "translations": {}
+          },
+          "required": false
+        },
+        "follow_chain": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "follow_chain",
+          "kind": "boolean",
+          "name": {
+            "default": "follow_chain",
+            "translations": {}
+          },
+          "required": false
+        },
+        "footprint_offset_metres": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "footprint_offset_metres",
+          "kind": "number",
+          "name": {
+            "default": "footprint_offset_metres",
+            "translations": {}
+          },
+          "required": false
+        },
+        "maximum_metres": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "maximum_metres",
+          "kind": "number",
+          "name": {
+            "default": "maximum_metres",
+            "translations": {}
+          },
+          "required": false
+        },
+        "minimum_metres": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "minimum_metres",
+          "kind": "number",
+          "name": {
+            "default": "minimum_metres",
+            "translations": {}
+          },
+          "required": false
+        },
+        "mode": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "mode",
+          "kind": "string",
+          "name": {
+            "default": "mode",
+            "translations": {}
+          },
+          "required": false
+        },
+        "path": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "path",
+          "kind": "stringList",
+          "name": {
+            "default": "path",
+            "translations": {}
+          },
+          "required": false
+        },
+        "projection": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "projection",
+          "kind": "string",
+          "name": {
+            "default": "projection",
+            "translations": {}
+          },
+          "required": false
+        },
+        "relationship": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "relationship",
+          "kind": "string",
+          "name": {
+            "default": "relationship",
+            "translations": {}
+          },
+          "required": false
+        },
+        "skip_absent_relationship_ends": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "skip_absent_relationship_ends",
+          "kind": "boolean",
+          "name": {
+            "default": "skip_absent_relationship_ends",
+            "translations": {}
+          },
+          "required": false
+        },
+        "subject_extent": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "subject_extent",
+          "kind": "string",
+          "name": {
+            "default": "subject_extent",
+            "translations": {}
+          },
+          "required": false
+        },
+        "subject_surface": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "subject_surface",
+          "kind": "string",
+          "name": {
+            "default": "subject_surface",
+            "translations": {}
+          },
+          "required": false
+        },
+        "vertical_direction": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "vertical_direction",
+          "kind": "string",
+          "name": {
+            "default": "vertical_direction",
+            "translations": {}
+          },
+          "required": false
+        }
+      },
+      "citations": [],
+      "tags": []
+    },
+    "axioval:inventory.triangle-count": {
+      "id": "axioval:inventory.triangle-count",
+      "name": {
+        "default": "triangle-count",
+        "translations": {}
+      },
+      "description": {
+        "default": "Runs the `triangle-count` capability.",
+        "translations": {
+          "de": "Führt die Fähigkeit `triangle-count` aus."
+        }
+      },
+      "capability": "axioval:capability.triangle-count",
+      "parameters": {
+        "maximum": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "maximum",
+          "kind": "integer",
+          "name": {
+            "default": "maximum",
+            "translations": {}
+          },
+          "required": true
+        }
+      },
+      "citations": [],
+      "tags": []
+    },
+    "axioval:inventory.body-extent": {
+      "id": "axioval:inventory.body-extent",
+      "name": {
+        "default": "body-extent",
+        "translations": {}
+      },
+      "description": {
+        "default": "Runs the `body-extent` capability.",
+        "translations": {
+          "de": "Führt die Fähigkeit `body-extent` aus."
+        }
+      },
+      "capability": "axioval:capability.body-extent",
+      "parameters": {
+        "axis": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "axis",
+          "kind": "string",
+          "name": {
+            "default": "axis",
+            "translations": {}
+          },
+          "required": true
+        },
+        "maximum": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "maximum",
+          "kind": "quantity",
+          "name": {
+            "default": "maximum",
+            "translations": {}
+          },
+          "required": false
+        },
+        "minimum": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "minimum",
+          "kind": "quantity",
+          "name": {
+            "default": "minimum",
+            "translations": {}
+          },
+          "required": false
+        },
+        "target_property": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "target_property",
+          "kind": "propertyReference",
+          "name": {
+            "default": "target_property",
+            "translations": {}
+          },
+          "required": false
+        },
+        "tolerance": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "tolerance",
+          "kind": "quantity",
+          "name": {
+            "default": "tolerance",
+            "translations": {}
+          },
+          "required": false
+        }
+      },
+      "citations": [],
+      "tags": []
+    },
+    "axioval:inventory.space-validation": {
+      "id": "axioval:inventory.space-validation",
+      "name": {
+        "default": "space-validation",
+        "translations": {}
+      },
+      "description": {
+        "default": "Runs the `space-validation` capability.",
+        "translations": {
+          "de": "Führt die Fähigkeit `space-validation` aus."
+        }
+      },
+      "capability": "axioval:capability.space-validation",
+      "parameters": {
+        "bottom_cap_elements": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "bottom_cap_elements",
+          "kind": "selector",
+          "name": {
+            "default": "bottom_cap_elements",
+            "translations": {}
+          },
+          "required": false
+        },
+        "boundary_elements": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "boundary_elements",
+          "kind": "selector",
+          "name": {
+            "default": "boundary_elements",
+            "translations": {}
+          },
+          "required": false
+        },
+        "check_bottom_cap": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "check_bottom_cap",
+          "kind": "boolean",
+          "name": {
+            "default": "check_bottom_cap",
+            "translations": {}
+          },
+          "required": true
+        },
+        "check_top_cap": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "check_top_cap",
+          "kind": "boolean",
+          "name": {
+            "default": "check_top_cap",
+            "translations": {}
+          },
+          "required": true
+        },
+        "check_unallocated_area": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "check_unallocated_area",
+          "kind": "boolean",
+          "name": {
+            "default": "check_unallocated_area",
+            "translations": {}
+          },
+          "required": true
+        },
+        "intersection_elements": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "intersection_elements",
+          "kind": "selector",
+          "name": {
+            "default": "intersection_elements",
+            "translations": {}
+          },
+          "required": false
+        },
+        "maximum_unallocated_area_square_metres": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "maximum_unallocated_area_square_metres",
+          "kind": "number",
+          "name": {
+            "default": "maximum_unallocated_area_square_metres",
+            "translations": {}
+          },
+          "required": true
+        },
+        "maximum_unallocated_share": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "maximum_unallocated_share",
+          "kind": "number",
+          "name": {
+            "default": "maximum_unallocated_share",
+            "translations": {}
+          },
+          "required": false
+        },
+        "required_height_metres": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "required_height_metres",
+          "kind": "number",
+          "name": {
+            "default": "required_height_metres",
+            "translations": {}
+          },
+          "required": true
+        },
+        "tolerance_metres": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "tolerance_metres",
+          "kind": "number",
+          "name": {
+            "default": "tolerance_metres",
+            "translations": {}
+          },
+          "required": false
+        },
+        "top_cap_elements": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "top_cap_elements",
+          "kind": "selector",
+          "name": {
+            "default": "top_cap_elements",
+            "translations": {}
+          },
+          "required": false
+        },
+        "uncovered_segment_length_metres": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "uncovered_segment_length_metres",
+          "kind": "number",
+          "name": {
+            "default": "uncovered_segment_length_metres",
+            "translations": {}
+          },
+          "required": true
+        }
+      },
+      "citations": [],
+      "tags": []
+    },
+    "axioval:inventory.plan-area": {
+      "id": "axioval:inventory.plan-area",
+      "name": {
+        "default": "plan-area",
+        "translations": {}
+      },
+      "description": {
+        "default": "Runs the `plan-area` capability.",
+        "translations": {
+          "de": "Führt die Fähigkeit `plan-area` aus."
+        }
+      },
+      "capability": "axioval:capability.plan-area",
+      "parameters": {
+        "direction": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "direction",
+          "kind": "string",
+          "name": {
+            "default": "direction",
+            "translations": {}
+          },
+          "required": false
+        },
+        "follow_chain": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "follow_chain",
+          "kind": "boolean",
+          "name": {
+            "default": "follow_chain",
+            "translations": {}
+          },
+          "required": false
+        },
+        "maximum": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "maximum",
+          "kind": "number",
+          "name": {
+            "default": "maximum",
+            "translations": {}
+          },
+          "required": false
+        },
+        "measure": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "measure",
+          "kind": "string",
+          "name": {
+            "default": "measure",
+            "translations": {}
+          },
+          "required": false
+        },
+        "member_selector": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "member_selector",
+          "kind": "selector",
+          "name": {
+            "default": "member_selector",
+            "translations": {}
+          },
+          "required": false
+        },
+        "minimum": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "minimum",
+          "kind": "number",
+          "name": {
+            "default": "minimum",
+            "translations": {}
+          },
+          "required": false
+        },
+        "path": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "path",
+          "kind": "stringList",
+          "name": {
+            "default": "path",
+            "translations": {}
+          },
+          "required": false
+        },
+        "relationship": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "relationship",
+          "kind": "string",
+          "name": {
+            "default": "relationship",
+            "translations": {}
+          },
+          "required": false
+        },
+        "skip_absent_relationship_ends": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "skip_absent_relationship_ends",
+          "kind": "boolean",
+          "name": {
+            "default": "skip_absent_relationship_ends",
+            "translations": {}
+          },
+          "required": false
+        }
+      },
+      "citations": [],
+      "tags": []
+    },
+    "axioval:inventory.space-boundary-coverage": {
+      "id": "axioval:inventory.space-boundary-coverage",
+      "name": {
+        "default": "space-boundary-coverage",
+        "translations": {}
+      },
+      "description": {
+        "default": "Runs the `space-boundary-coverage` capability.",
+        "translations": {
+          "de": "Führt die Fähigkeit `space-boundary-coverage` aus."
+        }
+      },
+      "capability": "axioval:capability.space-boundary-coverage",
+      "parameters": {
+        "maximum_overlap_area": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "maximum_overlap_area",
+          "kind": "quantity",
+          "name": {
+            "default": "maximum_overlap_area",
+            "translations": {}
+          },
+          "required": false
+        },
+        "maximum_uncovered_area": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "maximum_uncovered_area",
+          "kind": "quantity",
+          "name": {
+            "default": "maximum_uncovered_area",
+            "translations": {}
+          },
+          "required": false
+        },
+        "minimum_covered_share": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "minimum_covered_share",
+          "kind": "number",
+          "name": {
+            "default": "minimum_covered_share",
+            "translations": {}
+          },
+          "required": false
+        },
+        "plane_tolerance": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "plane_tolerance",
+          "kind": "quantity",
+          "name": {
+            "default": "plane_tolerance",
+            "translations": {}
+          },
+          "required": false
+        }
+      },
+      "citations": [],
+      "tags": []
+    },
+    "axioval:inventory.free-floor-rectangle": {
+      "id": "axioval:inventory.free-floor-rectangle",
+      "name": {
+        "default": "free-floor-rectangle",
+        "translations": {}
+      },
+      "description": {
+        "default": "Runs the `free-floor-rectangle` capability.",
+        "translations": {
+          "de": "Führt die Fähigkeit `free-floor-rectangle` aus."
+        }
+      },
+      "capability": "axioval:capability.free-floor-rectangle",
+      "parameters": {
+        "access_path": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "access_path",
+          "kind": "stringList",
+          "name": {
+            "default": "access_path",
+            "translations": {}
+          },
+          "required": false
+        },
+        "band_from_metres": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "band_from_metres",
+          "kind": "number",
+          "name": {
+            "default": "band_from_metres",
+            "translations": {}
+          },
+          "required": false
+        },
+        "band_to_metres": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "band_to_metres",
+          "kind": "number",
+          "name": {
+            "default": "band_to_metres",
+            "translations": {}
+          },
+          "required": false
+        },
+        "door_selector": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "door_selector",
+          "kind": "selector",
+          "name": {
+            "default": "door_selector",
+            "translations": {}
+          },
+          "required": false
+        },
+        "entrance_path_width": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "entrance_path_width",
+          "kind": "number",
+          "name": {
+            "default": "entrance_path_width",
+            "translations": {}
+          },
+          "required": false
+        },
+        "entrance_tolerance_metres": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "entrance_tolerance_metres",
+          "kind": "number",
+          "name": {
+            "default": "entrance_tolerance_metres",
+            "translations": {}
+          },
+          "required": false
+        },
+        "height_metres": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "height_metres",
+          "kind": "number",
+          "name": {
+            "default": "height_metres",
+            "translations": {}
+          },
+          "required": true
+        },
+        "length_metres": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "length_metres",
+          "kind": "number",
+          "name": {
+            "default": "length_metres",
+            "translations": {}
+          },
+          "required": true
+        },
+        "merge_path": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "merge_path",
+          "kind": "stringList",
+          "name": {
+            "default": "merge_path",
+            "translations": {}
+          },
+          "required": false
+        },
+        "obstacles": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "obstacles",
+          "kind": "selector",
+          "name": {
+            "default": "obstacles",
+            "translations": {}
+          },
+          "required": false
+        },
+        "opening_selector": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "opening_selector",
+          "kind": "selector",
+          "name": {
+            "default": "opening_selector",
+            "translations": {}
+          },
+          "required": false
+        },
+        "orientation": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "orientation",
+          "kind": "string",
+          "name": {
+            "default": "orientation",
+            "translations": {}
+          },
+          "required": false
+        },
+        "space_selector": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "space_selector",
+          "kind": "selector",
+          "name": {
+            "default": "space_selector",
+            "translations": {}
+          },
+          "required": false
+        },
+        "subtract_door_swings": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "subtract_door_swings",
+          "kind": "selector",
+          "name": {
+            "default": "subtract_door_swings",
+            "translations": {}
+          },
+          "required": false
+        },
+        "width_metres": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "width_metres",
+          "kind": "number",
+          "name": {
+            "default": "width_metres",
+            "translations": {}
+          },
+          "required": true
+        }
+      },
+      "citations": [],
+      "tags": []
+    },
+    "axioval:inventory.stair-geometry": {
+      "id": "axioval:inventory.stair-geometry",
+      "name": {
+        "default": "stair-geometry",
+        "translations": {}
+      },
+      "description": {
+        "default": "Runs the `stair-geometry` capability.",
+        "translations": {
+          "de": "Führt die Fähigkeit `stair-geometry` aus."
+        }
+      },
+      "capability": "axioval:capability.stair-geometry",
+      "parameters": {
+        "clear_width_band_from": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "clear_width_band_from",
+          "kind": "quantity",
+          "name": {
+            "default": "clear_width_band_from",
+            "translations": {}
+          },
+          "required": false
+        },
+        "clear_width_band_to": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "clear_width_band_to",
+          "kind": "quantity",
+          "name": {
+            "default": "clear_width_band_to",
+            "translations": {}
+          },
+          "required": false
+        },
+        "clear_width_minimum": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "clear_width_minimum",
+          "kind": "quantity",
+          "name": {
+            "default": "clear_width_minimum",
+            "translations": {}
+          },
+          "required": false
+        },
+        "clear_width_obstacles": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "clear_width_obstacles",
+          "kind": "selector",
+          "name": {
+            "default": "clear_width_obstacles",
+            "translations": {}
+          },
+          "required": false
+        },
+        "end_space_depth": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "end_space_depth",
+          "kind": "quantity",
+          "name": {
+            "default": "end_space_depth",
+            "translations": {}
+          },
+          "required": false
+        },
+        "end_space_height": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "end_space_height",
+          "kind": "quantity",
+          "name": {
+            "default": "end_space_height",
+            "translations": {}
+          },
+          "required": false
+        },
+        "end_space_obstacles": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "end_space_obstacles",
+          "kind": "selector",
+          "name": {
+            "default": "end_space_obstacles",
+            "translations": {}
+          },
+          "required": false
+        },
+        "end_space_width": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "end_space_width",
+          "kind": "quantity",
+          "name": {
+            "default": "end_space_width",
+            "translations": {}
+          },
+          "required": false
+        },
+        "forbid_open_risers": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "forbid_open_risers",
+          "kind": "boolean",
+          "name": {
+            "default": "forbid_open_risers",
+            "translations": {}
+          },
+          "required": false
+        },
+        "going_maximum": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "going_maximum",
+          "kind": "quantity",
+          "name": {
+            "default": "going_maximum",
+            "translations": {}
+          },
+          "required": false
+        },
+        "going_minimum": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "going_minimum",
+          "kind": "quantity",
+          "name": {
+            "default": "going_minimum",
+            "translations": {}
+          },
+          "required": false
+        },
+        "going_tolerance": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "going_tolerance",
+          "kind": "quantity",
+          "name": {
+            "default": "going_tolerance",
+            "translations": {}
+          },
+          "required": false
+        },
+        "handrail_both_sides_above_width": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "handrail_both_sides_above_width",
+          "kind": "quantity",
+          "name": {
+            "default": "handrail_both_sides_above_width",
+            "translations": {}
+          },
+          "required": false
+        },
+        "handrail_break_doors": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "handrail_break_doors",
+          "kind": "selector",
+          "name": {
+            "default": "handrail_break_doors",
+            "translations": {}
+          },
+          "required": false
+        },
+        "handrail_continuous_across_landings": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "handrail_continuous_across_landings",
+          "kind": "boolean",
+          "name": {
+            "default": "handrail_continuous_across_landings",
+            "translations": {}
+          },
+          "required": false
+        },
+        "handrail_extension_from": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "handrail_extension_from",
+          "kind": "string",
+          "name": {
+            "default": "handrail_extension_from",
+            "translations": {}
+          },
+          "required": false
+        },
+        "handrail_extension_maximum": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "handrail_extension_maximum",
+          "kind": "quantity",
+          "name": {
+            "default": "handrail_extension_maximum",
+            "translations": {}
+          },
+          "required": false
+        },
+        "handrail_extension_minimum": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "handrail_extension_minimum",
+          "kind": "quantity",
+          "name": {
+            "default": "handrail_extension_minimum",
+            "translations": {}
+          },
+          "required": false
+        },
+        "handrail_gap_maximum": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "handrail_gap_maximum",
+          "kind": "quantity",
+          "name": {
+            "default": "handrail_gap_maximum",
+            "translations": {}
+          },
+          "required": false
+        },
+        "handrail_height_maximum": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "handrail_height_maximum",
+          "kind": "quantity",
+          "name": {
+            "default": "handrail_height_maximum",
+            "translations": {}
+          },
+          "required": false
+        },
+        "handrail_height_minimum": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "handrail_height_minimum",
+          "kind": "quantity",
+          "name": {
+            "default": "handrail_height_minimum",
+            "translations": {}
+          },
+          "required": false
+        },
+        "handrail_objects": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "handrail_objects",
+          "kind": "selector",
+          "name": {
+            "default": "handrail_objects",
+            "translations": {}
+          },
+          "required": false
+        },
+        "handrail_reach_above": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "handrail_reach_above",
+          "kind": "quantity",
+          "name": {
+            "default": "handrail_reach_above",
+            "translations": {}
+          },
+          "required": false
+        },
+        "handrail_reach_across": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "handrail_reach_across",
+          "kind": "quantity",
+          "name": {
+            "default": "handrail_reach_across",
+            "translations": {}
+          },
+          "required": false
+        },
+        "handrail_sides": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "handrail_sides",
+          "kind": "string",
+          "name": {
+            "default": "handrail_sides",
+            "translations": {}
+          },
+          "required": false
+        },
+        "headroom_below_spaces": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "headroom_below_spaces",
+          "kind": "selector",
+          "name": {
+            "default": "headroom_below_spaces",
+            "translations": {}
+          },
+          "required": false
+        },
+        "headroom_obstacles": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "headroom_obstacles",
+          "kind": "selector",
+          "name": {
+            "default": "headroom_obstacles",
+            "translations": {}
+          },
+          "required": false
+        },
+        "landing_at_least_walking_width": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "landing_at_least_walking_width",
+          "kind": "boolean",
+          "name": {
+            "default": "landing_at_least_walking_width",
+            "translations": {}
+          },
+          "required": false
+        },
+        "landing_clear_width_minimum": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "landing_clear_width_minimum",
+          "kind": "quantity",
+          "name": {
+            "default": "landing_clear_width_minimum",
+            "translations": {}
+          },
+          "required": false
+        },
+        "landing_depth_minimum": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "landing_depth_minimum",
+          "kind": "quantity",
+          "name": {
+            "default": "landing_depth_minimum",
+            "translations": {}
+          },
+          "required": false
+        },
+        "landing_door_height": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "landing_door_height",
+          "kind": "quantity",
+          "name": {
+            "default": "landing_door_height",
+            "translations": {}
+          },
+          "required": false
+        },
+        "landing_door_swing": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "landing_door_swing",
+          "kind": "boolean",
+          "name": {
+            "default": "landing_door_swing",
+            "translations": {}
+          },
+          "required": false
+        },
+        "landing_doors": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "landing_doors",
+          "kind": "selector",
+          "name": {
+            "default": "landing_doors",
+            "translations": {}
+          },
+          "required": false
+        },
+        "landing_objects": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "landing_objects",
+          "kind": "selector",
+          "name": {
+            "default": "landing_objects",
+            "translations": {}
+          },
+          "required": false
+        },
+        "landing_width_minimum": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "landing_width_minimum",
+          "kind": "quantity",
+          "name": {
+            "default": "landing_width_minimum",
+            "translations": {}
+          },
+          "required": false
+        },
+        "landings_required": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "landings_required",
+          "kind": "boolean",
+          "name": {
+            "default": "landings_required",
+            "translations": {}
+          },
+          "required": false
+        },
+        "maximum_rise": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "maximum_rise",
+          "kind": "quantity",
+          "name": {
+            "default": "maximum_rise",
+            "translations": {}
+          },
+          "required": false
+        },
+        "maximum_risers": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "maximum_risers",
+          "kind": "integer",
+          "name": {
+            "default": "maximum_risers",
+            "translations": {}
+          },
+          "required": false
+        },
+        "maximum_total_rise": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "maximum_total_rise",
+          "kind": "quantity",
+          "name": {
+            "default": "maximum_total_rise",
+            "translations": {}
+          },
+          "required": false
+        },
+        "minimum_headroom": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "minimum_headroom",
+          "kind": "quantity",
+          "name": {
+            "default": "minimum_headroom",
+            "translations": {}
+          },
+          "required": false
+        },
+        "minimum_headroom_below": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "minimum_headroom_below",
+          "kind": "quantity",
+          "name": {
+            "default": "minimum_headroom_below",
+            "translations": {}
+          },
+          "required": false
+        },
+        "minimum_risers": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "minimum_risers",
+          "kind": "integer",
+          "name": {
+            "default": "minimum_risers",
+            "translations": {}
+          },
+          "required": false
+        },
+        "nosing_maximum": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "nosing_maximum",
+          "kind": "quantity",
+          "name": {
+            "default": "nosing_maximum",
+            "translations": {}
+          },
+          "required": false
+        },
+        "nosing_minimum": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "nosing_minimum",
+          "kind": "quantity",
+          "name": {
+            "default": "nosing_minimum",
+            "translations": {}
+          },
+          "required": false
+        },
+        "riser_maximum": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "riser_maximum",
+          "kind": "quantity",
+          "name": {
+            "default": "riser_maximum",
+            "translations": {}
+          },
+          "required": false
+        },
+        "riser_minimum": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "riser_minimum",
+          "kind": "quantity",
+          "name": {
+            "default": "riser_minimum",
+            "translations": {}
+          },
+          "required": false
+        },
+        "riser_tolerance": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "riser_tolerance",
+          "kind": "quantity",
+          "name": {
+            "default": "riser_tolerance",
+            "translations": {}
+          },
+          "required": false
+        },
+        "stair_flights": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "stair_flights",
+          "kind": "selector",
+          "name": {
+            "default": "stair_flights",
+            "translations": {}
+          },
+          "required": false
+        },
+        "stair_path": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "stair_path",
+          "kind": "stringList",
+          "name": {
+            "default": "stair_path",
+            "translations": {}
+          },
+          "required": false
+        },
+        "step_length_maximum": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "step_length_maximum",
+          "kind": "quantity",
+          "name": {
+            "default": "step_length_maximum",
+            "translations": {}
+          },
+          "required": false
+        },
+        "step_length_minimum": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "step_length_minimum",
+          "kind": "quantity",
+          "name": {
+            "default": "step_length_minimum",
+            "translations": {}
+          },
+          "required": false
+        },
+        "tactile_depth": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "tactile_depth",
+          "kind": "quantity",
+          "name": {
+            "default": "tactile_depth",
+            "translations": {}
+          },
+          "required": false
+        },
+        "tactile_objects": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "tactile_objects",
+          "kind": "selector",
+          "name": {
+            "default": "tactile_objects",
+            "translations": {}
+          },
+          "required": false
+        },
+        "tactile_offset": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "tactile_offset",
+          "kind": "quantity",
+          "name": {
+            "default": "tactile_offset",
+            "translations": {}
+          },
+          "required": false
+        },
+        "tactile_on_intermediate_landings": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "tactile_on_intermediate_landings",
+          "kind": "boolean",
+          "name": {
+            "default": "tactile_on_intermediate_landings",
+            "translations": {}
+          },
+          "required": false
+        },
+        "total_clear_width_minimum": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "total_clear_width_minimum",
+          "kind": "quantity",
+          "name": {
+            "default": "total_clear_width_minimum",
+            "translations": {}
+          },
+          "required": false
+        },
+        "walking_line_offset": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "walking_line_offset",
+          "kind": "quantity",
+          "name": {
+            "default": "walking_line_offset",
+            "translations": {}
+          },
+          "required": false
+        },
+        "width_maximum": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "width_maximum",
+          "kind": "quantity",
+          "name": {
+            "default": "width_maximum",
+            "translations": {}
+          },
+          "required": false
+        },
+        "width_minimum": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "width_minimum",
+          "kind": "quantity",
+          "name": {
+            "default": "width_minimum",
+            "translations": {}
+          },
+          "required": false
+        },
+        "winder_angle_maximum": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "winder_angle_maximum",
+          "kind": "quantity",
+          "name": {
+            "default": "winder_angle_maximum",
+            "translations": {}
+          },
+          "required": false
+        },
+        "winder_angle_minimum": {
+          "allowedValues": [],
+          "citations": [],
+          "id": "winder_angle_minimum",
+          "kind": "quantity",
+          "name": {
+            "default": "winder_angle_minimum",
+            "translations": {}
+          },
+          "required": false
+        }
+      },
+      "citations": [],
+      "tags": []
+    }
+  }
+}

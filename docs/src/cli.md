@@ -973,6 +973,8 @@ integrity warning.
 The result's `geometry` field records the counts and every unmeasured object
 with its reason. The summary prints a `geometry:` line and groups unmeasured
 objects by reason; `axioval report result.json --section geometry` lists them.
+To rank these reasons and the not-evaluated outcomes they cause across many
+models, see the [Not-evaluated inventory](./not-evaluated-inventory.md).
 
 On a real 6 MiB IFC4 model, 951 bodies mesh exactly, 20 as tessellations
 (round columns) and none fail, and a wall-against-wall clash check finds the

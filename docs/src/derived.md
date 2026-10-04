@@ -909,7 +909,10 @@ refused. The engine forwards the name to the host's property resolver.
 
 A value measured exactly is a quantity with exact evidence. Anything
 coarser (a tessellated body) is a `measured` value, an interval sure to hold
-the exact value, whose evidence is never exact:
+the exact value, whose evidence is not exact. Built-in code measuring on
+exact geometry may answer an interval holding only the rounding of exact
+arithmetic (`Measurement::Rounded`): its evidence is exact, as the
+capability measuring it cites it:
 
 ```json
 {"type": "measured", "value": {"lower": 0.045, "upper": 0.055, "dimension": "length"}}

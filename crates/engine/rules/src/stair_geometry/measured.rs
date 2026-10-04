@@ -35,6 +35,20 @@ fn value(
     }
 }
 
+/// A value of a measurement whose evidence is `exact`: rounded when so.
+fn measured(interval: MeasuredInterval, exact: bool, locator: String) -> Measurement {
+    if exact {
+        Measurement::Rounded {
+            lower: interval.lower(),
+            upper: interval.upper(),
+            dimension: LENGTH,
+            locator,
+        }
+    } else {
+        value(interval, LENGTH, locator)
+    }
+}
+
 fn number(
     interval: Option<MeasuredInterval>,
     dimension: Option<QuantityDimension>,
@@ -371,20 +385,20 @@ impl StairMeasures {
             }
         };
         let request = LandingRequest::new(object.clone(), end, candidates);
-        let measured = stairs
+        let measured_landing = stairs
             .measure_landing(&request)
             .map_err(|error| refused(name, object, &error))?;
         let place = if top { "top" } else { "bottom" };
         let locator = format!("{name}:{object}:{place}");
-        let Some(landing) = measured.landing() else {
+        let Some(landing) = measured_landing.landing() else {
             return Ok(Measurement::Absent {
                 locator: format!("{locator}: no selected object carries a landing there"),
             });
         };
         let size = if name == "landing_depth" {
-            measured.depth()
+            measured_landing.depth()
         } else {
-            measured.width()
+            measured_landing.width()
         };
         let size = size.ok_or_else(|| {
             PropertyResolutionError::Incomplete(format!(
@@ -393,9 +407,9 @@ impl StairMeasures {
                 landing.carrier()
             ))
         })?;
-        Ok(value(
+        Ok(measured(
             size,
-            LENGTH,
+            measured_landing.evidence().exact,
             format!("{locator}:{}", landing.carrier()),
         ))
     }
@@ -428,7 +442,7 @@ impl MeasuredProvider for StairMeasures {
         let flight = flight(call, object, &walking(context)?)?;
         let locator = format!("{name}:{object}");
         if name == "flight_rise" {
-            return Ok(value(flight.rise(), LENGTH, locator));
+            return Ok(measured(flight.rise(), flight.evidence().exact, locator));
         }
         let width = flight.width().ok_or_else(|| {
             PropertyResolutionError::Incomplete(format!(
@@ -436,7 +450,7 @@ impl MeasuredProvider for StairMeasures {
                  width is not measured"
             ))
         })?;
-        Ok(value(width, LENGTH, locator))
+        Ok(measured(width, flight.evidence().exact, locator))
     }
 
     fn members(

@@ -155,6 +155,17 @@ impl DoorMeasures {
                 dimension,
                 format!("{}: {what}", locator("measured")),
             ),
+            Measurement::Rounded {
+                lower,
+                upper,
+                dimension,
+                locator: what,
+            } => Measurement::Rounded {
+                lower,
+                upper,
+                dimension,
+                locator: format!("{}: {what}", locator("measured")),
+            },
             absent @ Measurement::Absent { .. } => absent,
         })
     }

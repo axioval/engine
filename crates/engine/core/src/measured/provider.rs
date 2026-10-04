@@ -32,6 +32,19 @@ pub enum Measurement {
         /// Where the measurement came from, for its evidence.
         locator: String,
     },
+    /// A value measured exactly, sure to lie in `[lower, upper]`: the
+    /// interval holds only the rounding of exact arithmetic on exact
+    /// positions, so its evidence is exact, as the measurement's own is.
+    Rounded {
+        /// The least value it may have.
+        lower: f64,
+        /// The greatest value it may have.
+        upper: f64,
+        /// The value's dimension; `None` for a plain number.
+        dimension: Option<QuantityDimension>,
+        /// Where the measurement came from, for its evidence.
+        locator: String,
+    },
     /// No value, known exactly: a path reaching nothing, a space with no
     /// obstacle above.
     Absent {

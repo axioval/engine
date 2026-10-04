@@ -124,12 +124,20 @@ impl<'a> ObjectLeaves<'a> {
                 value: Ok(Value::Null),
                 evidence: cited(locator),
             },
-            Some(MemberValue::Measured(Measurement::Value {
-                lower,
-                upper,
-                dimension,
-                locator,
-            })) => {
+            Some(MemberValue::Measured(
+                Measurement::Value {
+                    lower,
+                    upper,
+                    dimension,
+                    locator,
+                }
+                | Measurement::Rounded {
+                    lower,
+                    upper,
+                    dimension,
+                    locator,
+                },
+            )) => {
                 let value = Value::from_property(&axioval_ir::PropertyValue::Measured {
                     lower: *lower,
                     upper: *upper,

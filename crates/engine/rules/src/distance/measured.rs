@@ -226,8 +226,9 @@ impl MeasuredProvider for DistanceMeasures {
         } else {
             extreme(&all, call.choice("mode") == Some("farthest")).map_err(unavailable)?
         };
-        let (Measurement::Value { locator: cited, .. } | Measurement::Absent { locator: cited }) =
-            &mut measurement;
+        let (Measurement::Value { locator: cited, .. }
+        | Measurement::Rounded { locator: cited, .. }
+        | Measurement::Absent { locator: cited }) = &mut measurement;
         *cited = if cited.is_empty() {
             locator
         } else {

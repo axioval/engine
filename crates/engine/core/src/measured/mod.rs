@@ -227,6 +227,9 @@ pub(crate) fn rounded_difference(minuend: f64, subtrahend: f64) -> (f64, f64) {
 /// A measured answer before it becomes a property.
 enum Answer {
     Value(f64, f64, QuantityDimension, String),
+    /// A value measured exactly whose interval holds only rounding: its
+    /// evidence is exact.
+    Rounded(f64, f64, Option<QuantityDimension>, String),
     /// A plain number, such as a count, known to lie in the interval.
     Number(f64, f64, String),
     Absent(String),
@@ -316,11 +319,14 @@ impl Measures {
                 request.property().to_ascii_lowercase()
             )
         };
-        let (lower, upper, dimension, locator) = match self.measure(&name, object)? {
+        let (lower, upper, dimension, locator, rounded) = match self.measure(&name, object)? {
             Answer::Value(lower, upper, dimension, locator) => {
-                (lower, upper, Some(dimension), locator)
+                (lower, upper, Some(dimension), locator, false)
             }
-            Answer::Number(lower, upper, locator) => (lower, upper, None, locator),
+            Answer::Rounded(lower, upper, dimension, locator) => {
+                (lower, upper, dimension, locator, true)
+            }
+            Answer::Number(lower, upper, locator) => (lower, upper, None, locator, false),
             Answer::Absent(locator) => {
                 return Ok(PropertyResolution::Absent(
                     CompletePropertyAbsenceEvidence::try_new(
@@ -352,7 +358,7 @@ impl Measures {
             },
         };
         let mut evidence = Evidence::exact(object.source.clone(), locate(locator));
-        evidence.exact = exact;
+        evidence.exact = exact || rounded;
         let property = Property::new(MEASURED_SET, request.property(), value)
             .map_err(|_| PropertyResolutionError::InvalidRequest)?
             .with_evidence(evidence);
@@ -645,6 +651,12 @@ impl Measures {
                 Some(dimension) => Answer::Value(lower, upper, dimension, locator),
                 None => Answer::Number(lower, upper, locator),
             },
+            provider::Measurement::Rounded {
+                lower,
+                upper,
+                dimension,
+                locator,
+            } => Answer::Rounded(lower, upper, dimension, locator),
             provider::Measurement::Absent { locator } => Answer::Absent(locator),
         })
     }

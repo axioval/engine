@@ -1129,21 +1129,26 @@ enum Fit {
 /// compiler refuses, a tapered extrusion, a sectioned spine, ...) is
 /// refused with the paths that have no bound, so the object is unmeasured
 /// rather than declared within a tolerance nothing proves.
+///
+/// Authored polygon faces warped off their plane by more than the
+/// tolerance ([`warp`]) make either kind tessellated, declared within
+/// twice their warp, and leave a body that cuts or is cut by one
+/// unmeasured.
 fn compile(
     backend: &Compiler,
     graph: &GeometryGraph,
     root: NodeId,
 ) -> Result<(axiolid_mesh::TriMesh, Fit), String> {
     let options = ExecutionOptions::new(TOLERANCE);
+    let warp = warp(graph, root)?;
     if planar(graph, root, &mut NODE_BUDGET.clone()) {
         let mesh = backend
             .compile_mesh(graph, root, &options)
             .map_err(|error| compilation_refused(&error))?;
-        return if mesh.triangle_count() == 0 {
-            Err("mesh compilation produced no triangles".into())
-        } else {
-            Ok((mesh, Fit::Exact))
-        };
+        if mesh.triangle_count() == 0 {
+            return Err("mesh compilation produced no triangles".into());
+        }
+        return Ok((mesh, warp.map_or(Fit::Exact, Fit::Within)));
     }
     let (outcome, report) = backend
         .compile_mesh_with_deviation(graph, root, &options)
@@ -1153,9 +1158,226 @@ fn compile(
         return Err("mesh compilation produced no triangles".into());
     }
     match report.bound {
-        Some(bound) if bound.is_finite() && bound >= 0.0 => Ok((mesh, Fit::Within(bound))),
+        Some(bound) if bound.is_finite() && bound >= 0.0 => {
+            Ok((mesh, Fit::Within(bound.max(warp.unwrap_or(0.0)))))
+        }
         _ => Err(uncertified(&report)),
     }
+}
+
+/// How far the true surface of the authored polygon faces under `root`
+/// (`PolygonMesh` faces, and B-rep faces given only by their loops) may
+/// lie from their mesh, in metres, or `None` when every such face is
+/// within the tolerance of its plane, which the mesh compiler counts as
+/// planar.
+///
+/// A face whose corners leave its plane has no single true surface
+/// (axiolid/kernel#254): the two triangulations of a quad, a bilinear
+/// patch and the face flattened onto its plane are all readings of it.
+/// The mesh compiler reports a polygon mesh face's warp `w` as the largest
+/// distance of a corner from the face's fit plane (the outer ring's
+/// centroid and Newell normal), which bounds the distance to the face
+/// flattened onto that plane. Every reading through the face's corners
+/// that keeps within their hull lies within the corners' spread across
+/// that plane, which can be `2 w` (the diagonals of a quad warped by `w`
+/// pass `w` above and below it), so the face is declared within `2 w`,
+/// never `w`. A faceted B-rep face carries no surface, and the compiler
+/// reports it planar however far its corners leave its plane, so the warp
+/// is computed here for both kinds, as the compiler computes it, and
+/// scaled by each placement's largest stretch.
+///
+/// A boolean cut by or cutting a warped face moves its section by more
+/// than any bound on its operands covers (#235), so such a body is
+/// refused, and so is a graph too large to walk.
+fn warp(graph: &GeometryGraph, root: NodeId) -> Result<Option<f64>, String> {
+    let mut walk = WarpWalk {
+        budget: NODE_BUDGET,
+        bound: None,
+        under_boolean: None,
+    };
+    walk.visit(graph, root, 1.0, false)?;
+    if let Some(warp) = walk.under_boolean {
+        return Err(format!(
+            "an authored polygon face warped {:.3} m off its plane is an operand of a \
+             boolean, and nothing bounds how far the boolean's result lies from its mesh",
+            warp / 2.0
+        ));
+    }
+    Ok(walk.bound)
+}
+
+/// Why a face's corners could not be read to bound its warp.
+const UNREADABLE_FACE: &str =
+    "an authored polygon face's corners could not be read to bound how far it is warped";
+
+/// The walk behind [`warp`]: authored faces enter a body as its items,
+/// instances, collection members and boolean operands.
+struct WarpWalk {
+    budget: usize,
+    /// The largest declared bound (twice the warp) outside booleans.
+    bound: Option<f64>,
+    /// The largest declared bound under a boolean.
+    under_boolean: Option<f64>,
+}
+
+impl WarpWalk {
+    fn visit(
+        &mut self,
+        graph: &GeometryGraph,
+        id: NodeId,
+        stretch: f64,
+        boolean: bool,
+    ) -> Result<(), String> {
+        if self.budget == 0 {
+            return Err(
+                "the geometry graph is too large to bound the warp of its authored faces".into(),
+            );
+        }
+        self.budget -= 1;
+        let warp = match graph.get(id) {
+            Some(GeometryNode::Instance(instance)) => {
+                return self.visit(
+                    graph,
+                    instance.source,
+                    stretch * largest_stretch(instance.transform),
+                    boolean,
+                );
+            }
+            Some(GeometryNode::Collection(children)) => {
+                for child in children {
+                    self.visit(graph, *child, stretch, boolean)?;
+                }
+                return Ok(());
+            }
+            Some(GeometryNode::SolidOperation(SolidOperation::Boolean { left, right, .. })) => {
+                self.visit(graph, *left, stretch, true)?;
+                return self.visit(graph, *right, stretch, true);
+            }
+            Some(GeometryNode::PolygonMesh(mesh)) => {
+                let mut worst = None;
+                for face in &mesh.faces {
+                    let rings = std::iter::once(&face.outer)
+                        .chain(&face.holes)
+                        .map(|ring| {
+                            ring.iter()
+                                .map(|index| mesh.positions.get(*index as usize).copied())
+                                .collect::<Option<Vec<_>>>()
+                        })
+                        .collect::<Option<Vec<_>>>()
+                        .ok_or(UNREADABLE_FACE)?;
+                    if let Some(warp) = face_warp(&rings) {
+                        max_warp(&mut worst, warp);
+                    }
+                }
+                worst
+            }
+            Some(GeometryNode::BRep(brep)) => {
+                let mut worst = None;
+                for face in brep.faces().iter().filter(|face| face.surface.is_none()) {
+                    // The outer bound first: the fit plane is the outer
+                    // ring's.
+                    let mut rings = Vec::with_capacity(face.bounds.len());
+                    for bound in face
+                        .bounds
+                        .iter()
+                        .filter(|bound| bound.outer)
+                        .chain(face.bounds.iter().filter(|bound| !bound.outer))
+                    {
+                        let wire = brep
+                            .loops()
+                            .get(bound.loop_id.index())
+                            .ok_or(UNREADABLE_FACE)?;
+                        // Each edge use's end shared with the next one's,
+                        // so no orientation flag is read.
+                        let ends = wire
+                            .edges
+                            .iter()
+                            .map(|edge_use| {
+                                let edge = brep.edges().get(edge_use.edge.index())?;
+                                Some((edge.start.index(), edge.end.index()))
+                            })
+                            .collect::<Option<Vec<_>>>()
+                            .ok_or(UNREADABLE_FACE)?;
+                        let mut corners = Vec::with_capacity(ends.len());
+                        for (index, &(start, end)) in ends.iter().enumerate() {
+                            let (next_start, next_end) = ends[(index + 1) % ends.len()];
+                            let shared = if start == next_start || start == next_end {
+                                start
+                            } else if end == next_start || end == next_end {
+                                end
+                            } else {
+                                return Err(UNREADABLE_FACE.into());
+                            };
+                            let vertex = brep.vertices().get(shared).ok_or(UNREADABLE_FACE)?;
+                            corners.push(vertex.position);
+                        }
+                        rings.push(corners);
+                    }
+                    if let Some(warp) = face_warp(&rings) {
+                        max_warp(&mut worst, warp);
+                    }
+                }
+                worst
+            }
+            _ => None,
+        };
+        if let Some(warp) = warp {
+            let declared = 2.0 * warp * stretch;
+            if boolean {
+                max_warp(&mut self.under_boolean, declared);
+            } else {
+                max_warp(&mut self.bound, declared);
+            }
+        }
+        Ok(())
+    }
+}
+
+fn max_warp(worst: &mut Option<f64>, warp: f64) {
+    *worst = Some(worst.map_or(warp, |worst| worst.max(warp)));
+}
+
+/// The largest distance of any corner of `rings` (the outer ring first)
+/// from the plane through the outer ring's centroid along its Newell
+/// normal, with the rounding of computing it, when it exceeds the
+/// tolerance; `None` for a face within it, or one whose outer ring
+/// encloses no area (the compiler's to refuse).
+fn face_warp(rings: &[Vec<axiolid_core::Vec3>]) -> Option<f64> {
+    let outer = rings.first().filter(|outer| outer.len() >= 3)?;
+    let mut normal = axiolid_core::Vec3::ZERO;
+    for (index, current) in outer.iter().enumerate() {
+        let next = outer[(index + 1) % outer.len()];
+        normal.x += (current.y - next.y) * (current.z + next.z);
+        normal.y += (current.z - next.z) * (current.x + next.x);
+        normal.z += (current.x - next.x) * (current.y + next.y);
+    }
+    let normal = normal.try_normalize()?;
+    #[allow(clippy::cast_precision_loss)]
+    let centroid = outer.iter().copied().sum::<axiolid_core::Vec3>() / outer.len() as f64;
+    let (mut worst, mut reach) = (0.0_f64, 0.0_f64);
+    for corner in rings.iter().flatten() {
+        let offset = *corner - centroid;
+        let distance = offset.dot(normal).abs();
+        if !distance.is_finite() {
+            return None;
+        }
+        worst = worst.max(distance);
+        reach = reach.max(offset.length());
+    }
+    (worst > TOLERANCE.linear()).then_some(worst + 16.0 * f64::EPSILON * reach)
+}
+
+/// An upper bound on how much `transform` stretches a length: the square
+/// root of the largest absolute row sum of `MᵀM` (Gershgorin), one for a
+/// rotation up to the rounding the margin covers.
+fn largest_stretch(transform: axiolid_core::Transform3) -> f64 {
+    let m = transform.matrix3;
+    let gram = m.transpose() * m;
+    let largest = [gram.row(0), gram.row(1), gram.row(2)]
+        .iter()
+        .map(|row| row.abs().element_sum())
+        .fold(0.0_f64, f64::max);
+    largest.sqrt() * (1.0 + 1e-12)
 }
 
 /// Why a curved mesh has no certified deviation: the paths the compiler
@@ -1630,6 +1852,7 @@ mod tests {
     };
     use axioval::ifc::import_ifc_session;
     use axioval::ir::ObjectId;
+    use ifc_geometry::lower::{LoweringSession, lower_product_net};
 
     /// Rooms `#16` (x 0..4) and `#26` (x 4.2..8.2) with a 0.9 m door body
     /// `#40` in the gap between them, and nothing else.
@@ -1754,5 +1977,284 @@ mod tests {
             y: 0.3,
             top_offset: -0.05,
         })));
+    }
+
+    /// A unit box `[0, 1]^3` whose corner `(1, 1, 1)` is lifted by `lift`
+    /// metres, as an `IfcFacetedBrep` (`faceted`) or an
+    /// `IfcPolygonalFaceSet`, the body of proxy `#90`. The three faces
+    /// meeting at the lifted corner are warped quads.
+    fn lifted_box(lift: f64, faceted: bool) -> String {
+        use std::fmt::Write as _;
+        let corners = [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [1.0, 0.0, 1.0],
+            [1.0, 1.0, 1.0 + lift],
+            [0.0, 1.0, 1.0],
+        ];
+        // Outward: bottom, top, front, right, back, left.
+        let faces: [[usize; 4]; 6] = [
+            [0, 3, 2, 1],
+            [4, 5, 6, 7],
+            [0, 1, 5, 4],
+            [1, 2, 6, 5],
+            [2, 3, 7, 6],
+            [3, 0, 4, 7],
+        ];
+        let mut data = String::new();
+        let item = if faceted {
+            for (index, [x, y, z]) in corners.iter().enumerate() {
+                writeln!(
+                    data,
+                    "#{}=IFCCARTESIANPOINT(({x:?},{y:?},{z:?}));",
+                    20 + index
+                )
+                .unwrap();
+            }
+            let mut face_ids = Vec::new();
+            for (index, face) in faces.iter().enumerate() {
+                let [poly, bound, id] = [0, 1, 2].map(|o| 30 + 3 * index + o);
+                let points: Vec<String> = face.iter().map(|c| format!("#{}", 20 + c)).collect();
+                writeln!(
+                    data,
+                    "#{poly}=IFCPOLYLOOP(({}));\n#{bound}=IFCFACEOUTERBOUND(#{poly},.T.);\n\
+                     #{id}=IFCFACE((#{bound}));",
+                    points.join(",")
+                )
+                .unwrap();
+                face_ids.push(format!("#{id}"));
+            }
+            writeln!(
+                data,
+                "#60=IFCCLOSEDSHELL(({}));\n#61=IFCFACETEDBREP(#60);",
+                face_ids.join(",")
+            )
+            .unwrap();
+            "#62=IFCSHAPEREPRESENTATION(#5,'Body','Brep',(#61));\n"
+        } else {
+            let points: Vec<String> = corners
+                .iter()
+                .map(|[x, y, z]| format!("({x:?},{y:?},{z:?})"))
+                .collect();
+            writeln!(
+                data,
+                "#20=IFCCARTESIANPOINTLIST3D(({}),$);",
+                points.join(",")
+            )
+            .unwrap();
+            let mut face_ids = Vec::new();
+            for (index, face) in faces.iter().enumerate() {
+                let indices: Vec<String> = face.iter().map(|c| (c + 1).to_string()).collect();
+                writeln!(
+                    data,
+                    "#{}=IFCINDEXEDPOLYGONALFACE(({}));",
+                    30 + index,
+                    indices.join(",")
+                )
+                .unwrap();
+                face_ids.push(format!("#{}", 30 + index));
+            }
+            writeln!(
+                data,
+                "#61=IFCPOLYGONALFACESET(#20,.T.,({}),$);",
+                face_ids.join(",")
+            )
+            .unwrap();
+            "#62=IFCSHAPEREPRESENTATION(#5,'Body','Tessellation',(#61));\n"
+        };
+        format!(
+            "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+             #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+             #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+             #3=IFCLOCALPLACEMENT($,#2);\n\
+             #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+             #6=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n\
+             #7=IFCUNITASSIGNMENT((#6));\n\
+             #8=IFCPROJECT('0000000000000000000008',$,'P',$,$,$,$,(#5),#7);\n\
+             {data}{item}#63=IFCPRODUCTDEFINITIONSHAPE($,$,(#62));\n\
+             #90=IFCBUILDINGELEMENTPROXY('0000000000000000000090',$,$,$,$,#3,#63,$,$);\n\
+             ENDSEC;\nEND-ISO-10303-21;\n"
+        )
+    }
+
+    /// How `lifted_box`'s body is meshed.
+    fn lifted_fit(lift: f64, faceted: bool) -> Result<super::Fit, String> {
+        let model = axioval::ifc::read_ifc_step(lifted_box(lift, faceted).as_bytes()).unwrap();
+        let units = ifc_geometry::units::resolve(&model);
+        let backend = ifc_geometry::compile::default_backend();
+        super::mesh(&backend, &model, &units, ifc_model::EntityId(90), false)
+            .map(|body| body.expect("a body").fit)
+    }
+
+    #[test]
+    fn a_warped_authored_face_is_declared_within_twice_its_warp() {
+        // axiolid/kernel#254: the top, front and side quads meeting at the
+        // lifted corner are warped by `w` (about 1.25 cm) about their fit
+        // planes. The polygon mesh compiles since axiolid-mesh-compile
+        // 0.3.13 and the faceted B-rep always did (its faces carry no
+        // surface, so the compiler reports them planar); either reading of
+        // a quad (its two diagonals) is a triangulation through the same
+        // corners, and they lie up to `2 w` apart across the plane.
+        let lift: f64 = 0.05;
+        // The top quad's two triangulations at its centre: the diagonal
+        // through the lifted corner passes `lift / 2` above the other's
+        // triangle `(1,0,1) (1,1,1+lift) (0,1,1)`, whose unit normal is
+        // `(-lift, -lift, 1)` normalised.
+        let apart = (lift / 2.0) / (1.0 + 2.0 * lift * lift).sqrt();
+        for faceted in [true, false] {
+            let Ok(super::Fit::Within(bound)) = lifted_fit(lift, faceted) else {
+                panic!("{faceted}: {:?}", lifted_fit(lift, faceted));
+            };
+            assert!(
+                apart <= bound && bound < lift,
+                "{faceted}: {apart} <= {bound}"
+            );
+            // Within the tolerance a face counts as planar, as the
+            // compiler counts it, and the body stays exact.
+            for lift in [0.0, 5e-4] {
+                assert_eq!(
+                    lifted_fit(lift, faceted),
+                    Ok(super::Fit::Exact),
+                    "{faceted}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_face_six_centimetres_out_of_plane_is_declared_within_twice_that() {
+        // engine#213: a corner lifted 25 cm puts the warped quads about
+        // 6 cm out of their fit planes (the compiler's own reading, which
+        // its report states for the polygon mesh); the body is declared
+        // within twice that, above 5 cm, the faceted B-rep alike.
+        use axiolid_mesh_compile::DeviationPath;
+        let lift = 0.25;
+        let model = axioval::ifc::read_ifc_step(lifted_box(lift, false).as_bytes()).unwrap();
+        let units = ifc_geometry::units::resolve(&model);
+        let mut session = LoweringSession::new(&model, &units);
+        let net = lower_product_net(&mut session, ifc_model::EntityId(90))
+            .unwrap()
+            .unwrap();
+        let lowered = session.finish(net.root).unwrap();
+        let (_, report) = ifc_geometry::compile::default_backend()
+            .compile_mesh_with_deviation(
+                &lowered.graph,
+                lowered.root,
+                &axiolid_contracts::ExecutionOptions::new(super::TOLERANCE),
+            )
+            .unwrap();
+        let reported = report
+            .contributions
+            .iter()
+            .filter(|contribution| contribution.path == DeviationPath::AuthoredMesh)
+            .filter_map(|contribution| contribution.bound.value())
+            .fold(0.0_f64, f64::max);
+        assert!(reported > 0.05, "{report:?}");
+        for faceted in [true, false] {
+            let Ok(super::Fit::Within(bound)) = lifted_fit(lift, faceted) else {
+                panic!("{faceted}: {:?}", lifted_fit(lift, faceted));
+            };
+            assert!(
+                (bound - 2.0 * reported).abs() <= 1e-12,
+                "{faceted}: {bound} is not twice {reported}"
+            );
+        }
+    }
+
+    /// A polygon-mesh unit box with its corner `(1, 1, 1)` lifted 5 cm,
+    /// placed by `transform`, in a graph with a block when `cut` names
+    /// which operand of a difference the box is.
+    fn warped_graph(
+        transform: axiolid_core::Transform3,
+        cut: Option<bool>,
+    ) -> (axiolid_model::GeometryGraph, axiolid_model::NodeId) {
+        use axiolid_core::Vec3;
+        use axiolid_mesh::{PolygonFace, PolygonMesh};
+        use axiolid_model::{GeometryGraphBuilder, GeometryNode, Instance, SolidOperation};
+        let mut corners = [Vec3::ZERO; 8];
+        for (index, corner) in corners.iter_mut().enumerate() {
+            #[allow(clippy::cast_precision_loss)]
+            let bit = |shift: usize| ((index >> shift) & 1) as f64;
+            *corner = Vec3::new(bit(0), bit(1), bit(2));
+        }
+        corners[7].z += 0.05;
+        let face = |outer: [u32; 4]| PolygonFace {
+            outer: outer.to_vec(),
+            holes: Vec::new(),
+        };
+        let mesh = PolygonMesh {
+            positions: corners.to_vec(),
+            faces: vec![
+                face([0, 2, 3, 1]),
+                face([4, 5, 7, 6]),
+                face([0, 1, 5, 4]),
+                face([1, 3, 7, 5]),
+                face([3, 2, 6, 7]),
+                face([2, 0, 4, 6]),
+            ],
+        };
+        let mut builder = GeometryGraphBuilder::new();
+        let mesh = builder.push(GeometryNode::PolygonMesh(mesh)).unwrap();
+        let mut root = builder
+            .push(GeometryNode::Instance(Instance {
+                source: mesh,
+                transform,
+            }))
+            .unwrap();
+        if let Some(subject) = cut {
+            let block = builder
+                .push(GeometryNode::Primitive(
+                    axiolid_primitive::Primitive::Block {
+                        x: 0.5,
+                        y: 0.5,
+                        z: 0.5,
+                    },
+                ))
+                .unwrap();
+            let (left, right) = if subject {
+                (root, block)
+            } else {
+                (block, root)
+            };
+            root = builder
+                .push(GeometryNode::SolidOperation(SolidOperation::Boolean {
+                    left,
+                    right,
+                    operator: axiolid_core::BooleanOperator::Difference,
+                }))
+                .unwrap();
+        }
+        (builder.finish(vec![root]).unwrap(), root)
+    }
+
+    #[test]
+    fn a_warp_grows_with_its_placement_and_refuses_a_boolean() {
+        use axiolid_core::{Transform3, Vec3};
+        let warp = |transform, cut| {
+            let (graph, root) = warped_graph(transform, cut);
+            super::warp(&graph, root)
+        };
+        let plain = warp(Transform3::IDENTITY, None).unwrap().unwrap();
+        // A rotation keeps it (up to the stretch bound's margin), a scale
+        // by two doubles it.
+        let turned = warp(Transform3::from_rotation_z(0.6), None)
+            .unwrap()
+            .unwrap();
+        assert!(
+            plain <= turned && turned <= plain * (1.0 + 1e-9),
+            "{plain} {turned}"
+        );
+        let scaled = warp(Transform3::from_scale(Vec3::splat(2.0)), None)
+            .unwrap()
+            .unwrap();
+        assert!(2.0 * plain <= scaled && scaled <= 2.0 * plain * (1.0 + 1e-9));
+        // Cutting or being cut, the warped box leaves the body unmeasured.
+        for subject in [true, false] {
+            let refusal = warp(Transform3::IDENTITY, Some(subject)).unwrap_err();
+            assert!(refusal.contains("operand of a boolean"), "{refusal}");
+        }
     }
 }

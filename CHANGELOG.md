@@ -130,6 +130,23 @@ All notable changes are documented here. This project follows Semantic Versionin
   (#248). A boolean body's rounding allowance is the kernel's reported
   rounding floor (`BooleanReport::rounding_floor`, #244) per boolean,
   instead of a mirrored copy of its private factor and extent reading.
+- Moved to `axiolid-mesh-compile` 0.3.13, `axiolid-construct` 0.3.14,
+  `axiolid-brep-boolean` 0.1.5, `axiolid-model` 0.3.5, `axiolid-evaluate`
+  0.3.5, `axiolid-reference` 0.3.6, `axiolid-contracts` 0.3.3 and
+  `axiolid-mesh-boolean-boolmesh` 0.3.4. A round hole touching a planar
+  face (a web hole touching an I-beam's flange, root fillets included, a
+  window touching a wall's top) is built by the exact compiler
+  (axiolid/kernel#243, #249): exact where the contact is exact, perturbed
+  by the reported `PlaneTouchesCylinder` reading under a general
+  placement, and its mesh certified, so such a beam is measured and the
+  openings in it are decided. I sections of decimal (IPE, HEA) sizes are
+  built at no tolerance (#250); the fallback to a positive tolerance stays
+  for contacts that hold only up to rounding, which the kernel now refuses
+  at no tolerance (#251). Any non-empty boolean report still marks a body
+  perturbed. Space boundaries whose curve-bounded plane is bounded by a
+  composite or trimmed curve are meshed and measured (#255, closes #214).
+  The engine sets no memory budget, so boolmesh's per-worker scratch bound
+  (#226) changes nothing here.
 
 - The IFC crates move to `openbim-ifc` 0.13, `ifc-geometry` 0.8,
   `ifc-alignment` 0.6, `ifc-spatial` 0.5, `ifc-properties` 0.8,
@@ -966,6 +983,16 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- A faceted B-rep or polygon face set whose authored faces leave their
+  plane by more than the 1 mm tolerance is no longer declared exact (#213).
+  The mesh compiler reports a faceted B-rep face planar however warped,
+  and since `axiolid-mesh-compile` 0.3.13 triangulates a warped polygon
+  mesh face instead of refusing it (axiolid/kernel#254). With `--geometry`
+  such a body is tessellated and declared within twice the largest warp of
+  its faces (a corner's distance from the face's fit plane, scaled by its
+  placement), since two readings of a warped face, such as a quad's two
+  diagonals, lie up to twice its warp apart; a body in which such a face is
+  an operand of a boolean is unmeasured, with the reason.
 - Clash and containment pairs between two meshed bodies are no longer left
   unmeasured when the plan overlay refuses a sliver of their footprints
   (#210), the most frequent not-evaluated case of the inventory. The

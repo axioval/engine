@@ -27,7 +27,11 @@
 //!   kernel's own [`ReferenceExactCompiler`] (axiolid/kernel#228, #234)
 //!   with the report of what its general boolean decided within its
 //!   tolerance (#236). A difference is first built with no tolerance at
-//!   all and only where that is refused with [`Tolerance::METRE`]. An
+//!   all and only where that is refused with [`Tolerance::METRE`]: a
+//!   contact that holds only up to rounding (a flush window in a turned
+//!   wall, a round hole touching a turned beam's flange, #243, #249) needs
+//!   a reading within tolerance, which the kernel refuses at no tolerance
+//!   (#251). An
 //!   empty report means the body is the exact boolean of the operands as
 //!   given, and it is exact; otherwise it is the exact boolean of operands
 //!   moved by at most the reported linear magnitude and turned by at most
@@ -36,8 +40,8 @@
 //!   over its extent, never less than its rounding allowance: every
 //!   distance measured on it is widened by that and never cited as exact.
 //!   Any report that is not empty marks the body perturbed, even one whose
-//!   magnitudes are zero (a decision at no tolerance may report none,
-//!   axiolid/kernel#251). Either way the boolean merges constructed
+//!   magnitudes are zero: its emptiness is the test, never a magnitude.
+//!   Either way the boolean merges constructed
 //!   points closer than its rounding floor (`2^-40` of its operands'
 //!   largest coordinate, which the report states:
 //!   `BooleanReport::rounding_floor`, axiolid/kernel#244) without a
@@ -101,8 +105,8 @@ pub struct ExactBody {
     items: Vec<ExactBRep>,
     placement: Transform3,
     /// Whether a boolean decided anything within its tolerance building
-    /// the body, whatever magnitude it reported for it (axiolid/kernel#251:
-    /// a decision at no tolerance may report zero).
+    /// the body, whatever magnitude it reported for it (a reading within
+    /// tolerance may report zero).
     perturbed: bool,
     perturbation: f64,
     rounding: f64,
@@ -448,8 +452,8 @@ struct Item {
 #[derive(Clone, Copy, Debug, Default)]
 struct Decided {
     /// Whether any within-tolerance decision fired: the report was not
-    /// empty. Never inferred from `moved` and `turned`, which a decision
-    /// at no tolerance may report as zero (axiolid/kernel#251).
+    /// empty. Never inferred from `moved` and `turned`, which a reading
+    /// within tolerance may report as zero.
     perturbed: bool,
     /// The furthest a within-tolerance decision moved an operand.
     moved: f64,
@@ -530,7 +534,7 @@ impl Decided {
     /// What a boolean's report states: an empty report (`perturbed`
     /// false) is the exact boolean of the operands as given; any other is
     /// of operands moved and turned by at most `moved` and `turned`, which
-    /// may be zero (axiolid/kernel#251) and still mark it perturbed.
+    /// may be zero and still mark it perturbed.
     fn reported(perturbed: bool, moved: f64, turned: f64, rounding: f64) -> Result<Self, String> {
         if !(moved.is_finite() && moved >= 0.0 && turned.is_finite() && turned >= 0.0) {
             return Err("the kernel reported no bound on what its boolean decided".into());
@@ -1146,9 +1150,11 @@ mod tests {
 
     #[test]
     fn a_decision_reported_with_no_magnitude_still_perturbs_the_body() {
-        // axiolid/kernel#251: at no tolerance a boolean may report a
-        // decision whose linear and angular magnitudes are both zero. The
-        // report is not empty, so the body is not the exact boolean.
+        // A reading within tolerance may report linear and angular
+        // magnitudes that are both zero. The report is not empty, so the
+        // body is not the exact boolean (at no tolerance the kernel
+        // refuses such a reading since axiolid/kernel#251; the rule holds
+        // either way).
         let floor = 1e-12;
         let decided = Decided::reported(true, 0.0, 0.0, floor).unwrap();
         assert!(decided.perturbed);

@@ -889,8 +889,8 @@ states:
 
 | State | Meaning | Effect on geometric rules |
 |---|---|---|
-| exact | every face is planar (polygonal extrusions, including steel sections without fillets or rounded edges, faceted B-reps, meshes, booleans of these and clips by half-spaces, bounded by a polygon or not), so the mesh is the shape; a whole measured through its parts when every part is exact | measured as exact |
-| tessellated | some face is curved; the mesh is within the deviation the mesh compiler certifies for it (the 1 mm chord budget, or the bound it computed); a whole measured through its parts when some part is tessellated, within the largest deviation of its parts | measured as approximate, never exact |
+| exact | every face is planar (polygonal extrusions, including steel sections without fillets or rounded edges, faceted B-reps and polygon meshes whose faces keep within 1 mm of their planes, booleans of these and clips by half-spaces, bounded by a polygon or not), so the mesh is the shape; a whole measured through its parts when every part is exact | measured as exact |
+| tessellated | some face is curved, or an authored polygon face is warped more than 1 mm off its plane; the mesh is within the deviation the mesh compiler certifies for it (the 1 mm chord budget, or the bound it computed), and within twice a warped face's warp; a whole measured through its parts when some part is tessellated, within the largest deviation of its parts | measured as approximate, never exact |
 | no body | the object occupies no material: spatial structure, openings, annotations, grids, ports, structural analysis items, non-products | ignored as an obstacle |
 | unmeasured | a physical product that could not be meshed: one without a Body representation and without parts (`no body representation`), a whole one of whose parts is unmeasured, or a curved one whose mesh the compiler certifies no deviation for | measurements it could affect are not evaluated; with a bound (below), space measurements it cannot reach are evaluated |
 
@@ -971,8 +971,33 @@ measuring its mesh against the kernel's exact result of the same boolean
 (axiolid/kernel#235); its bound reads close to the 1 mm asked. Where it
 certifies none, the body is unmeasured with the paths it names, never
 declared within a tolerance nothing proves: a boolean the exact compiler
-refuses (a union, a hole tangent to a flange's face: `exact boolean whose
-split face pieces do not close`), a tapered extrusion, a sectioned spine.
+refuses (a union; a hole a fraction of the tolerance off a turned beam's
+filleted flange: `… where the contact cannot be placed`), a tapered
+extrusion, a sectioned spine. A round hole touching a planar face (a web
+hole touching an I-beam's flange, with or without root fillets) is built
+and certified since axiolid-mesh-compile 0.3.13 (axiolid/kernel#243,
+#249). A space boundary whose curve-bounded plane is bounded by a
+composite or trimmed curve (segments used against their sense included)
+is meshed since the same release (axiolid/kernel#255) and measured.
+
+**Warped authored faces.** A face of an `IfcFacetedBrep` or an
+`IfcPolygonalFaceSet` whose corners leave its plane by more than the
+1 mm tolerance has no single true surface: the two triangulations of a
+warped quad, a bilinear patch and the face flattened onto its plane are
+all readings of it. The mesh compiler triangulates such a face
+(axiolid/kernel#254) and reports a polygon mesh face's warp `w`, the
+largest distance of a corner from the face's fit plane, but reports a
+faceted B-rep face planar whatever its corners. The bridge therefore
+computes `w` itself for both kinds, as the compiler does (the outer
+ring's centroid and Newell normal), scaled by each placement's stretch,
+and declares the body tessellated within `2 w`: every reading through
+the face's corners lies within their spread across the fit plane, which
+reaches `2 w` (a quad with one corner lifted 5 cm has `w` of 1.25 cm,
+and its two diagonals' triangulations lie 2.5 cm apart at its centre).
+A warped face never makes a body exact, and a body in which one is an
+operand of a boolean (a faceted wall with openings) is unmeasured, since
+nothing bounds how far the boolean's result lies from its mesh. Faces
+within 1 mm of their plane count as planar, as the compiler counts them.
 A disk swept round a
 polyline corner without a fillet radius is mitred at half angle, as
 `IfcSweptDiskSolid` defines it, and certified within the budget

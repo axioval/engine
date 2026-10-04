@@ -9857,6 +9857,9 @@ fn with_geometry_an_effect_continues_through_an_opening_into_the_next_room() {
 struct Boundaries {
     next: u32,
     data: String,
+    /// Whether outer boundaries are composite curves
+    /// (`Boundaries::composite_ring`) rather than polylines.
+    composite: bool,
 }
 
 /// Three coordinates as STEP writes them.
@@ -9894,6 +9897,43 @@ impl Boundaries {
         polyline
     }
 
+    /// A closed 2D ring through four `points` as an `IfcCompositeCurve` of
+    /// two polylines, the first from the first corner to the third, the
+    /// second from the first corner through the fourth to the third and
+    /// used against its sense (`SameSense` false), so it runs back.
+    fn composite_ring(&mut self, points: &[[f64; 2]; 4]) -> u32 {
+        let mut point = |p: [f64; 2]| {
+            let entity = self.id();
+            writeln!(
+                self.data,
+                "#{entity}=IFCCARTESIANPOINT(({:.1},{:.1}));",
+                p[0], p[1]
+            )
+            .unwrap();
+            entity
+        };
+        let [a, b, c, d] = points.map(&mut point);
+        let [forward, backward, first, second, composite] = [0; 5].map(|_| self.id());
+        writeln!(self.data, "#{forward}=IFCPOLYLINE((#{a},#{b},#{c}));").unwrap();
+        writeln!(self.data, "#{backward}=IFCPOLYLINE((#{a},#{d},#{c}));").unwrap();
+        writeln!(
+            self.data,
+            "#{first}=IFCCOMPOSITECURVESEGMENT(.CONTINUOUS.,.T.,#{forward});"
+        )
+        .unwrap();
+        writeln!(
+            self.data,
+            "#{second}=IFCCOMPOSITECURVESEGMENT(.CONTINUOUS.,.F.,#{backward});"
+        )
+        .unwrap();
+        writeln!(
+            self.data,
+            "#{composite}=IFCCOMPOSITECURVE((#{first},#{second}),.F.);"
+        )
+        .unwrap();
+        composite
+    }
+
     /// A boundary of `space` against wall #99: an `IfcCurveBoundedPlane`
     /// over the plane at `location` with normal `axis` and first axis
     /// `reference`, bounded by the `size` rectangle from its origin, less
@@ -9923,7 +9963,12 @@ impl Boundaries {
         .unwrap();
         writeln!(self.data, "#{plane}=IFCPLANE(#{frame});").unwrap();
         let [width, height] = size;
-        let outer = self.ring(&[[0.0, 0.0], [width, 0.0], [width, height], [0.0, height]]);
+        let corners = [[0.0, 0.0], [width, 0.0], [width, height], [0.0, height]];
+        let outer = if self.composite {
+            self.composite_ring(&corners)
+        } else {
+            self.ring(&corners)
+        };
         let inner = hole
             .map(|[left, bottom, right, top]| {
                 let ring = self.ring(&[[left, bottom], [right, bottom], [right, top], [left, top]]);
@@ -9988,6 +10033,7 @@ fn spaces_with_boundaries() -> String {
     let mut boundaries = Boundaries {
         next: 1000,
         data: String::new(),
+        composite: false,
     };
     let (up, south, west) = ([0.0, 0.0, 1.0], [0.0, -1.0, 0.0], [1.0, 0.0, 0.0]);
     let (east, north) = ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
@@ -10088,6 +10134,66 @@ fn with_geometry_space_boundaries_are_measured_against_the_space_surface() {
         "{result:#}"
     );
     assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+}
+
+/// Space #39's missing east wall bounded by an `IfcCurveBoundedPlane`
+/// whose outer boundary is an `IfcCompositeCurve` with a segment used
+/// against its sense: the mesh compiler resolves such curve relations as
+/// boundaries since axiolid-mesh-compile 0.3.13 (axiolid/kernel#255,
+/// engine#214), so the boundary is measured and covers the wall.
+#[test]
+fn with_geometry_a_composite_space_boundary_is_measured() {
+    let mut east = Boundaries {
+        next: 2000,
+        data: String::new(),
+        composite: true,
+    };
+    east.add(
+        39,
+        [4.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [3.0, 2.5],
+        None,
+    );
+    let model = spaces_with_boundaries().replace(
+        "ENDSEC;\nEND-ISO",
+        &format!("{}ENDSEC;\nEND-ISO", east.data),
+    );
+    let case = Case::new("geometry-space-boundary-composite");
+    let (output, result) = case.geometry_rule(
+        &model,
+        &[("space", "IfcSpace")],
+        "axioval:capability.space-boundary-coverage",
+        &registry_signature("axioval:capability.space-boundary-coverage"),
+        entity("space"),
+        json!({
+            "minimum_covered_share": {"type": "number", "value": 0.9},
+            "maximum_uncovered_area": {"type": "quantity", "value": 0.5, "unit": "m2"},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    // Only the 1 m² hole in the floor is left of #39's surface.
+    let messages = finding_messages(&result);
+    let space = messages
+        .iter()
+        .filter(|(id, _)| id == "#39")
+        .map(|(_, message)| message.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        space,
+        [
+            "declared boundaries leave 1 m² of the 59 m² surface uncovered; at most 0.5 m² \
+          allowed"
+        ],
+        "{result:#}"
+    );
+    assert!(
+        !result["report"]["not_evaluated"]
+            .to_string()
+            .contains("#39"),
+        "{result:#}"
+    );
 }
 
 /// Metres. Columns #10 (an HEA300, 290 mm deep) and #20 (named HEA300 but
@@ -11907,31 +12013,30 @@ fn beam_supports_are_found_by_contact_with_geometry() {
         }),
     );
     // Every body meshes, the tangent hole's host included. The HEB has no
-    // fillets, so its mesh is exact. The beam, cut by round holes, is
-    // curved: the mesh compiler certifies a boolean's mesh only against
-    // the exact compiler's result (axiolid/kernel#235), and that refuses
-    // the hole tangent to the flange's face (its split face pieces do not
-    // close). So the beam is unmeasured with that reason and the openings
-    // in it are not evaluated, never judged on an unbounded mesh.
-    assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+    // fillets, so its mesh is exact; only the beam, cut by round holes, is
+    // a tessellation. Its mesh is certified against the exact compiler's
+    // result (axiolid/kernel#235), which builds the hole tangent to the
+    // flange's face since axiolid/kernel#243 (axiolid-mesh-compile 0.3.13),
+    // so both openings are decided.
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
     let geometry = &result["geometry"];
-    let unmeasured = geometry["unmeasured"].as_array().unwrap();
-    assert_eq!(unmeasured.len(), 1, "{geometry:#}");
-    assert_eq!(unmeasured[0]["object"]["local_id"], "#50", "{geometry:#}");
-    assert!(
-        unmeasured[0]["reason"]
-            .as_str()
-            .unwrap()
-            .contains("split face pieces do not close"),
-        "{geometry:#}"
-    );
-    assert_eq!(geometry["tessellated"], 0, "{geometry:#}");
-    assert_eq!(finding_messages(&result), [], "{result:#}");
-    let not_evaluated = result["report"]["not_evaluated"].to_string();
-    assert!(
-        not_evaluated.contains("#500") && not_evaluated.contains("#900"),
+    assert_eq!(geometry["unmeasured"], json!([]), "{geometry:#}");
+    assert_eq!(geometry["tessellated"], 1, "{geometry:#}");
+    assert_eq!(
+        finding_messages(&result),
+        [
+            (
+                "#500".to_owned(),
+                "opening is 0.1 m from support #700 along its host #50; 0.5 m required".to_owned()
+            ),
+            (
+                "#900".to_owned(),
+                "opening is 0.3 m from support #800 along its host #50; 0.5 m required".to_owned()
+            ),
+        ],
         "{result:#}"
     );
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
 }
 
 /// Stair flight #108 (four 0.17 m risers, x 0 to 1.12, y -1.2 to 0) with
@@ -16012,6 +16117,82 @@ fn a_swept_disk_round_an_unfilleted_corner_is_certified() {
     );
     assert!(
         not_evaluated.contains("#88") && not_evaluated.contains("#98"),
+        "{result:#}"
+    );
+}
+
+/// A wall #69 as an `IfcFacetedBrep`, the unit box at x 10 with its
+/// corner (11, 1, 1) lifted 5 cm, so the three faces meeting there are
+/// warped quads (axiolid/kernel#254). The mesh compiler reports a faceted
+/// face planar whatever its corners, so the bridge measures the warp
+/// itself and declares the mesh within twice it: the wall is measured as
+/// tessellated, never exact, and never unmeasured.
+#[test]
+fn a_faceted_body_with_a_warped_face_is_tessellated() {
+    let case = Case::new("warped-faceted-face");
+    let corners = [
+        [10.0, 0.0, 0.0],
+        [11.0, 0.0, 0.0],
+        [11.0, 1.0, 0.0],
+        [10.0, 1.0, 0.0],
+        [10.0, 0.0, 1.0],
+        [11.0, 0.0, 1.0],
+        [11.0, 1.0, 1.05],
+        [10.0, 1.0, 1.0],
+    ];
+    // Outward: bottom, top, front, right, back, left.
+    let faces: [[usize; 4]; 6] = [
+        [0, 3, 2, 1],
+        [4, 5, 6, 7],
+        [0, 1, 5, 4],
+        [1, 2, 6, 5],
+        [2, 3, 7, 6],
+        [3, 0, 4, 7],
+    ];
+    let mut data = String::new();
+    for (index, [x, y, z]) in corners.iter().enumerate() {
+        writeln!(
+            data,
+            "#{}=IFCCARTESIANPOINT(({x:?},{y:?},{z:?}));",
+            100 + index
+        )
+        .unwrap();
+    }
+    let mut face_ids = Vec::new();
+    for (index, face) in faces.iter().enumerate() {
+        let [poly, bound, id] = [0, 1, 2].map(|offset| 110 + 3 * index + offset);
+        let points: Vec<String> = face.iter().map(|c| format!("#{}", 100 + c)).collect();
+        writeln!(
+            data,
+            "#{poly}=IFCPOLYLOOP(({}));\n#{bound}=IFCFACEOUTERBOUND(#{poly},.T.);\n\
+             #{id}=IFCFACE((#{bound}));",
+            points.join(",")
+        )
+        .unwrap();
+        face_ids.push(format!("#{id}"));
+    }
+    writeln!(
+        data,
+        "#140=IFCCLOSEDSHELL(({}));\n#141=IFCFACETEDBREP(#140);\n\
+         #142=IFCSHAPEREPRESENTATION(#5,'Body','Brep',(#141));\n\
+         #143=IFCPRODUCTDEFINITIONSHAPE($,$,(#142));\n\
+         #69=IFCWALL('0000000000000000000069',$,$,$,$,#3,#143,$,$);",
+        face_ids.join(",")
+    )
+    .unwrap();
+    let (output, result) = case.wall_clash(&crossing_walls_with(&data), &json!({}));
+    // The crossing walls still clash; the warped wall stands apart.
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let geometry = &result["geometry"];
+    assert!(
+        !geometry["unmeasured"].to_string().contains("#69"),
+        "{geometry:#}"
+    );
+    assert_eq!(geometry["tessellated"], 1, "{geometry:#}");
+    assert!(
+        !result["report"]["not_evaluated"]
+            .to_string()
+            .contains("#69"),
         "{result:#}"
     );
 }

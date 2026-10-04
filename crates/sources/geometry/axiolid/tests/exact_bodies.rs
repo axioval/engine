@@ -9,7 +9,7 @@
 
 use axiolid_brep::ExactBRep;
 use axiolid_contracts::ExecutionOptions;
-use axiolid_core::{BooleanOperator, Plane3, Point2, Point3, Tolerance, Transform3, Vec3};
+use axiolid_core::{BooleanOperator, Mat3, Plane3, Point2, Point3, Tolerance, Transform3, Vec3};
 use axiolid_curve::{Curve2, Curve3, Polyline, Polyline2};
 use axiolid_measure::exact_properties;
 use axiolid_mesh::TriMesh;
@@ -20,7 +20,7 @@ use axiolid_model::{
     GeometryGraph, GeometryGraphBuilder, GeometryNode, Instance, NodeId, SolidOperation,
 };
 use axiolid_primitive::HalfSpace;
-use axiolid_profile::{CircleProfile, Profile, RectangleProfile};
+use axiolid_profile::{CircleProfile, Profile, RectangleProfile, SectionProfile};
 use axioval_axiolid::proximity::CERTIFIED_ACCURACY_METRES;
 use axioval_axiolid::{AxiolidGeometry, AxiolidProximityService, ExactBoundary, exact_boundary};
 use axioval_engine::{
@@ -772,9 +772,10 @@ fn a_column_over_a_shafts_edge_overlaps_the_slab_in_plan() {
 
 #[test]
 fn a_body_perturbed_by_zero_certifies_neither_plan_overlap_nor_surface_distance() {
-    // axiolid/kernel#251: a boolean at no tolerance may report a decision
-    // whose magnitudes are zero. Such a body is perturbed all the same: it
-    // shows no plan overlap and feeds no exact surface distance.
+    // A boolean's report may name a reading within tolerance whose
+    // magnitudes are zero (at no tolerance the kernel refuses one since
+    // axiolid/kernel#251). Such a body is perturbed all the same: it shows
+    // no plan overlap and feeds no exact surface distance.
     let mut builder = GeometryGraphBuilder::new();
     let slab = slab_with_shaft(&mut builder);
     let column = extrusion(
@@ -890,4 +891,141 @@ fn a_whole_of_parts_with_exact_bodies_is_certified_as_their_union() {
         certified.upper_metres() - certified.lower_metres() <= 4.0 * CERTIFIED_ACCURACY_METRES,
         "{certified:?}"
     );
+}
+
+/// A dyadic I-beam (0.5 m deep, 0.25 m wide, 0.125 m web, 0.0625 m
+/// flanges, root fillets of 1/32 m) 2 m long along `z`, placed by
+/// `placement`, less a round web hole of radius 0.125 m along `x` past
+/// both flange tips, `gap` above touching the top flange's inner face.
+fn filleted_beam_with_a_web_hole(
+    builder: &mut GeometryGraphBuilder,
+    gap: f64,
+    placement: Transform3,
+) -> NodeId {
+    let section = Profile::Section(SectionProfile::I {
+        depth: 0.5,
+        width: 0.25,
+        web_thickness: 0.125,
+        flange_thickness: 0.0625,
+        fillet_radius: Some(0.031_25),
+        flange_edge_radius: None,
+        flange_slope: None,
+    });
+    let beam = extrusion(builder, section, 2.0, placement);
+    // The hole's +z onto +x by an axis matrix of zeros and ones; its axis
+    // at `0.25 - 0.0625 - 0.125` touches the flange's inner face.
+    let onto_x = Transform3::from_mat3(Mat3::from_cols(-Vec3::Z, Vec3::Y, Vec3::X));
+    let at = Transform3::from_translation(Vec3::new(-0.1875, 0.0625 + gap, 1.0));
+    let hole = extrusion(builder, circle(0.125), 0.375, placement * at * onto_x);
+    difference(builder, beam, hole)
+}
+
+/// The filleted beam's volume less the hole's whole cylinder across the
+/// flange width, and less the web hole alone: the true volume lies
+/// between (the hole also takes a sliver of each root fillet).
+fn filleted_beam_volume_bounds() -> (f64, f64) {
+    let fillets = 4.0 * 0.031_25_f64.powi(2) * (1.0 - std::f64::consts::FRAC_PI_4);
+    let area = 2.0 * 0.25 * 0.0625 + (0.5 - 2.0 * 0.0625) * 0.125 + fillets;
+    let disc = std::f64::consts::PI * 0.125 * 0.125;
+    (area * 2.0 - disc * 0.25, area * 2.0 - disc * 0.125)
+}
+
+#[test]
+fn a_web_hole_touching_the_flange_of_a_filleted_beam_is_exact() {
+    // axiolid/kernel#243, #249: the hole touches the flange's inner face,
+    // and each root fillet where the fillet meets it. Placed by axis
+    // matrices with dyadic sizes, the kernel decides the contact exactly
+    // at no tolerance: an empty report, so the body is exact.
+    let mut builder = GeometryGraphBuilder::new();
+    let beam = filleted_beam_with_a_web_hole(&mut builder, 0.0, Transform3::IDENTITY);
+    let graph = builder.finish(vec![beam]).unwrap();
+    let boundary = agreeing(&graph, beam);
+    assert!(boundary.body().is_exact());
+    let (lower, upper) = filleted_beam_volume_bounds();
+    let volume = volume(boundary.brep().unwrap());
+    assert!(
+        lower < volume && volume < upper,
+        "{volume} in ({lower}, {upper})"
+    );
+}
+
+#[test]
+fn a_turned_filleted_beam_with_a_web_hole_touching_its_flange_is_perturbed() {
+    // Under a building placement the contact holds only to rounding: an
+    // empty report at no tolerance would claim it exact, so the kernel
+    // refuses it there (#251) and reads the flange as touching the hole
+    // within its tolerance (`PlaneTouchesCylinder`). The body is built,
+    // perturbed by what it reports, never exact.
+    let placement =
+        Transform3::from_translation(Vec3::new(12.5, -4.0, 3.2)) * Transform3::from_rotation_z(0.6);
+    let mut builder = GeometryGraphBuilder::new();
+    let beam = filleted_beam_with_a_web_hole(&mut builder, 0.0, placement);
+    let graph = builder.finish(vec![beam]).unwrap();
+    let boundary = agreeing(&graph, beam);
+    assert!(!boundary.body().is_exact());
+    let perturbation = boundary.body().perturbation_metres();
+    assert!(perturbation < 1e-6, "{perturbation}");
+    let (lower, upper) = filleted_beam_volume_bounds();
+    let volume = volume(boundary.brep().unwrap());
+    assert!(
+        lower < volume && volume < upper,
+        "{volume} in ({lower}, {upper})"
+    );
+}
+
+#[test]
+fn a_web_hole_a_fraction_of_the_tolerance_off_a_filleted_flange_is_built_at_no_tolerance() {
+    // Read as touching the flange within the kernel's tolerance, a hole
+    // half a micrometre into or short of it would touch the fillets too,
+    // which it meets in two arcs instead, and the kernel refuses that
+    // reading by name (axiolid/kernel#249). The adapter asks for no
+    // tolerance first, where the exact predicates decide the crossing as
+    // given: the body is exact, and the hole reaching into the flange
+    // takes the more material.
+    let built = |gap: f64| {
+        let mut builder = GeometryGraphBuilder::new();
+        let beam = filleted_beam_with_a_web_hole(&mut builder, gap, Transform3::IDENTITY);
+        let graph = builder.finish(vec![beam]).unwrap();
+        let boundary = agreeing(&graph, beam);
+        assert!(boundary.body().is_exact(), "{gap}");
+        volume(boundary.brep().unwrap())
+    };
+    let (into, short) = (built(5e-7), built(-5e-7));
+    let (lower, upper) = filleted_beam_volume_bounds();
+    assert!(
+        lower < into && into < short && short < upper,
+        "{into} {short}"
+    );
+}
+
+#[test]
+fn an_ipe_beam_less_a_web_hole_is_exact() {
+    // axiolid/kernel#250: an I section of decimal (IPE 300) sizes, root
+    // fillets included, closes its contour at no tolerance since
+    // axiolid-construct 0.3.14, so a web hole clear of the fillets, placed
+    // by axis matrices, is cut exactly: an empty report, never a body
+    // perturbed by a run within the tolerance.
+    let (h, b, tw, tf, rf, r, len) = (0.3, 0.15, 0.0071, 0.0107, 0.015, 0.05, 2.0);
+    let mut builder = GeometryGraphBuilder::new();
+    let section = Profile::Section(SectionProfile::I {
+        depth: h,
+        width: b,
+        web_thickness: tw,
+        flange_thickness: tf,
+        fillet_radius: Some(rf),
+        flange_edge_radius: None,
+        flange_slope: None,
+    });
+    let beam = extrusion(&mut builder, section, len, Transform3::IDENTITY);
+    let onto_x = Transform3::from_mat3(Mat3::from_cols(-Vec3::Z, Vec3::Y, Vec3::X));
+    let at = Transform3::from_translation(Vec3::new(-b, 0.0, len / 2.0));
+    let hole = extrusion(&mut builder, circle(r), 2.0 * b, at * onto_x);
+    let beam = difference(&mut builder, beam, hole);
+    let graph = builder.finish(vec![beam]).unwrap();
+    let boundary = agreeing(&graph, beam);
+    assert!(boundary.body().is_exact());
+    let area =
+        2.0 * b * tf + (h - 2.0 * tf) * tw + 4.0 * rf * rf * (1.0 - std::f64::consts::FRAC_PI_4);
+    let expected = area * len - std::f64::consts::PI * r * r * tw;
+    assert_close(volume(boundary.brep().unwrap()), expected, 1e-12);
 }

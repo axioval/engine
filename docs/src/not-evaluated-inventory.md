@@ -112,6 +112,12 @@ the office model's findings rose from 874 to 1,333. A
 few pairs move on to case 8 (clash 12 to 20 there), which the plan overlay
 had hidden.
 
+Cases 3 and 5 are resolved upstream (`axiolid-mesh-compile` 0.3.13). A
+warped authored face is now meshed, and the body is tessellated within
+twice the face's warp (#213, axiolid/kernel#254), or unmeasured when the
+face is an operand of a boolean. A curve-bounded plane bounded by a
+composite or trimmed curve is meshed too (#214, axiolid/kernel#255).
+
 Cases not observed on this corpus are listed with their capability (see
 [Capabilities](./capabilities.md), [Clash](./clash.md),
 [Metric routing](./metric-routing.md) and the

@@ -43,13 +43,18 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   A difference (openings, `IfcBooleanResult`) or a clip by a half-space,
   bounded or not (`IfcBooleanClippingResult`, axiolid/kernel#234), is built
   by `ReferenceExactCompiler::compile_exact_with_report`
-  (axiolid-mesh-compile 0.3.12), first with `Tolerance::ZERO` and only on a
-  refusal with `Tolerance::METRE`. An empty `BooleanReport` (#236) is the exact boolean of the
+  (axiolid-mesh-compile 0.3.13), first with `Tolerance::ZERO` and only on a
+  refusal with `Tolerance::METRE`. Keep that fallback: a contact that holds
+  only up to rounding (a flush window in a turned wall, a round hole
+  touching a turned beam's flange, #243/#249) needs a reading within
+  tolerance, which the kernel refuses at `Tolerance::ZERO`
+  (`BooleanError::ToleranceExceeded`, axiolid-brep-boolean 0.1.5, #251).
+  An empty `BooleanReport` (#236) is the exact boolean of the
   operands as given: the body is exact. A non-empty one perturbs the
   `ExactBody` by the reported linear magnitude plus the angular one over
   its extent, never less than its rounding; non-empty is the test, never
-  a magnitude above zero (axiolid/kernel#251: a decision at
-  `Tolerance::ZERO` can report zero), so `Decided::perturbed` carries
+  a magnitude above zero (a reading within tolerance may report a zero
+  magnitude), so `Decided::perturbed` carries
   `!report.is_exact()` and `ExactBody::is_exact` reads that flag, not the
   perturbation. Never register such a body as exact, never drop the
   perturbation from a certified distance (`certified` adds it), never
@@ -76,7 +81,12 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   exact openings (a pipe through a window), a flush window in a turned
   wall (perturbed by its report), roof clips with a round window (a pipe
   over the slope), a bounded half-space, a column on its footing in space
-  and in plan, a column over a shaft's edge and the fallbacks.
+  and in plan, a column over a shaft's edge, an IPE beam less a web hole
+  (exact at no tolerance, #250), a root-filleted I-beam whose web hole
+  touches its flange (exact under axis matrices, perturbed when turned; a
+  hole half a micrometre off the flange is decided exactly at no
+  tolerance, where a reading within tolerance would be refused by name)
+  and the fallbacks.
 - `src/guard.rs` implements `GuardService`: barriers, landings and climbing
   aids around a walking surface's edge. Proximity is footprint-to-footprint,
   never vertex-to-vertex.
@@ -534,10 +544,10 @@ Depend only on what the registry publishes. The workspace pins `axiolid-*`
 space and in plan, and the plan measurements `plan_boundary_distance`,
 `plan_boundary_clearance` and `plan_overlap`, with `axiolid-brep` 0.3.3 for
 the `ExactBRep` hosts register, built by `exact_boundary` with
-`axiolid-construct` 0.3.13, `axiolid-curve`, `axiolid-model`,
-`axiolid-profile`, `axiolid-surface` and `axiolid-mesh-compile` 0.3.12's
+`axiolid-construct` 0.3.14, `axiolid-curve`, `axiolid-model`,
+`axiolid-profile`, `axiolid-surface` and `axiolid-mesh-compile` 0.3.13's
 `ReferenceExactCompiler` with its boolean reports and rounding floors
-(axiolid-brep-boolean 0.1.4); the tests compile meshes with
+(axiolid-brep-boolean 0.1.5); the tests compile meshes with
 `axiolid-mesh-compile` and `axiolid-mesh-boolean-boolmesh`), `axiolid-overlay` 0.3.10 (`minimum_area_rectangle`, the
 Minkowski and dilation family, settled `union_soup` output, fast on mesh
 soups, features within the caller's tolerance snapped before the exact
@@ -569,17 +579,19 @@ registry source, not the kernel checkout, before relying on an API.
   timeout or retry spacings.
 - Exact booleans (axiolid/kernel#228, #234, #236): unions, intersections
   other than a half-space clip, and operands that are no placed extrusions
-  keep the mesh alone; so do the general boolean's refusals (a hole
-  tangent to a flange's face: "split face pieces do not close", #243,
-  fixed upstream but not yet published as axiolid-brep-boolean 0.1.5 /
-  axiolid-mesh-compile 0.3.13; an I-beam with root fillets cut by such a
-  hole is #249).
-- A boolean at `Tolerance::ZERO` can report a decision with zero
-  magnitudes (axiolid/kernel#251); the adapter treats any non-empty
-  report as perturbed, never inferring exactness from a magnitude.
-- IPE-size profiles fail at `Tolerance::ZERO` and work at a positive
-  tolerance (axiolid/kernel#250); the ZERO-then-METRE fallback in
-  `boolean` covers it, perturbing the body by what the METRE run reports.
+  keep the mesh alone; so do the general boolean's refusals. Round holes
+  touching a planar face, an I-beam's root fillets included, are built
+  since axiolid-mesh-compile 0.3.13 (#243, #249); a hole a fraction of the
+  tolerance off a filleted flange is still refused by name when it needs
+  a reading within tolerance (under axis matrices the no-tolerance run
+  decides it exactly).
+- Since axiolid-brep-boolean 0.1.5 (#251) a report at `Tolerance::ZERO` is
+  empty or the boolean is refused (`ToleranceExceeded`). The adapter still
+  treats any non-empty report as perturbed, never inferring exactness from
+  a magnitude: a reading within tolerance may report a zero magnitude.
+- I sections of decimal (IPE, HEA) sizes build at `Tolerance::ZERO` since
+  axiolid-construct 0.3.14 (#250). The ZERO-then-METRE fallback in
+  `boolean` stays for contacts that hold only up to rounding (above).
 - Swept disks (axiolid/kernel#245, #248): sharp corners without a fillet
   radius are mitred again with a `Proven` bound (mesh-compile 0.3.12,
   construct 0.3.13), so such pipes are measured; still refused by name: a
@@ -589,6 +601,27 @@ registry source, not the kernel checkout, before relying on an API.
   corners.
 - Sweeps along an `IfcGradientCurve` (axiolid/kernel#252) are not yet
   built by the kernel.
+- Warped authored faces (axiolid/kernel#254, engine#213): the mesh compiler
+  triangulates a polygon mesh face off its plane and reports `w`, its
+  largest corner distance from the fit plane; two readings of such a face
+  can lie `2 w` apart, so hosts declare `2 w` until the kernel reports the
+  spread itself (asked upstream). A B-rep face given only by its loops is
+  still reported planar (`Proven(0)`) however warped, so the host computes
+  the warp of those faces too (`axioval-cli`'s `warp`).
+- Rings touching at a single vertex will be refused by the overlay
+  (axiolid/kernel#253, after axiolid-overlay 0.3.10). Sites built from
+  single triangles, convex pieces or fixed n-gons cannot build them; sites
+  that hand overlay output back as input can (two footprints meeting at a
+  corner, a hole touching the outer ring, eroded pieces): `space.rs`
+  (`measure_cap_coverage`, `measure_unallocated_regions`),
+  `free_space.rs` (`measure_free_area`), `plan_span.rs`
+  (`measure_section`), `envelope_membership.rs` (`covered_region`),
+  `linear_quantity.rs`, `elevation.rs` (`within`), `walkable.rs`'s `Plan`
+  operations and their callers (walkability, metric routing, weighted
+  travel, adjacent-across), and every `Region::new` over overlay output
+  (`placement.rs` `union`/`footprint`, `boundary_coverage.rs`,
+  `coverage.rs`, `circulation.rs` `piece` and `reached`,
+  `walkability.rs` `split_region`). Check each against the release.
 - Bodies of several items (axiolid/kernel#229): items under openings are
   cut part by part in world coordinates by the host's lowering, so a turned
   wall of several parts touches on planes no axis is normal to and keeps

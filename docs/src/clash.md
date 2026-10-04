@@ -395,7 +395,11 @@ operands that are no extrusions.
 A difference or clip is built by the kernel's own exact compiler, which
 reports what its general boolean decided within the tolerance it is given
 (axiolid/kernel#236). It is first built with no tolerance at all, and only
-where that is refused within a micrometre. An **empty report** means the
+where that is refused within a micrometre: a contact that holds only up
+to rounding (an opening flush with a turned wall's face, a round hole
+touching a turned beam's flange) needs a reading within tolerance, which
+the kernel never takes at no tolerance (axiolid/kernel#251, so an empty
+report at no tolerance always means exact). An **empty report** means the
 result is the exact boolean of the operands as given: openings placed by
 axis matrices (flush, through or blind) and openings crossing a turned
 wall's faces transversally are exact, and so are the roof clips above. The
@@ -407,9 +411,8 @@ magnitudes, and the body is **perturbed** by the linear one plus the
 angular one over its extent, never less than its rounding below (a few
 femtometres for that flush window, never more than the micrometre
 tolerance). Any report that is not empty perturbs the body, even one
-whose magnitudes are zero: a decision taken with no tolerance can report
-none (axiolid/kernel#251), and the body is not the exact boolean all the
-same. Every certified distance
+whose magnitudes are zero: the report's magnitudes are not the test of
+exactness, its emptiness is. Every certified distance
 measured on it is widened by that on both sides, it never certifies a plan
 overlap (a shared patch or a gap that narrow may not be the model's), and
 a comparison measures its meshes instead, since a surface distance must be
@@ -452,8 +455,18 @@ mesh is declared with the deviation the compiler certifies for it
 (axiolid/kernel#232). A curved boolean (a wall with a round window, a beam
 cut by round holes, a roof-clipped wall with one) is certified by
 measuring its mesh against the exact compiler's result (axiolid/kernel#235),
-and one the exact compiler refuses (a hole tangent to a flange's face, a
-union) is unmeasured rather than declared within the budget. `axioval check
+and one the exact compiler refuses (a union, a hole a fraction of the
+tolerance off a turned beam's filleted flange, which it reads as touching
+the flange and then cannot place on the fillets) is unmeasured rather than
+declared within the budget. A round hole touching a planar face (a web
+hole touching an I-beam's flange, root fillets included, a round window
+touching a wall's top) is built since axiolid-mesh-compile 0.3.13
+(axiolid/kernel#243, #249): exact with an empty report where the contact
+is exact (axis matrices, dyadic sizes), perturbed by the reported
+`PlaneTouchesCylinder` reading under a general placement, and its mesh
+certified either way. I sections of decimal (IPE, HEA) sizes are built at
+no tolerance since axiolid-construct 0.3.14 (axiolid/kernel#250).
+`axioval check
 --geometry` does all this by default (see [CLI](./cli.md)).
 
 **Certified plan relations.** The same pairs are certified in plan by

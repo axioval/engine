@@ -742,3 +742,505 @@ fn measured_angles_agree_with_the_wall_parallelism_judgement() {
         PropertyResolution::Absent(_)
     ));
 }
+
+/// Each capability's verdicts reached by an expression over the values and
+/// members measured as the capability measures them.
+#[allow(clippy::needless_pass_by_value)]
+mod as_expressions {
+    use std::collections::BTreeSet;
+
+    use axioval::engine::{
+        CapabilityRegistry, PropertyRequest, PropertyResolutionError, PropertyResolutionService,
+        PropertyResolutionServiceHandle,
+    };
+    use axioval::rules::ExpressionRequirement;
+    use serde_json::{Value, json};
+
+    use super::*;
+
+    fn measured(name: &str) -> Value {
+        json!({"kind": "property", "propertySet": "axioval:measured", "property": name})
+    }
+
+    fn field(name: &str) -> Value {
+        json!({"kind": "property", "propertySet": "axioval:member", "property": name})
+    }
+
+    fn literal(value: f64, unit: &str) -> Value {
+        json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": unit}})
+    }
+
+    fn plain(value: f64) -> Value {
+        json!({"kind": "literal", "value": {"type": "number", "value": value}})
+    }
+
+    /// `value` rounded to a micrometre (or square micrometre): a decimal
+    /// bound then compares as its literal does.
+    fn fine(value: Value, unit: &str) -> Value {
+        json!({"kind": "round", "operand": value, "step": literal(1e-6, unit)})
+    }
+
+    fn compare(operator: &str, left: Value, right: Value) -> Value {
+        json!({"kind": "compare", "operator": operator, "left": left, "right": right})
+    }
+
+    fn and(operands: Vec<Value>) -> Value {
+        json!({"kind": "and", "operands": operands})
+    }
+
+    fn implies(antecedent: Value, consequent: Value) -> Value {
+        json!({"kind": "implies", "antecedent": antecedent, "consequent": consequent})
+    }
+
+    fn over(function: &str, list: &str, value: Value) -> Value {
+        json!({"kind": "aggregate", "function": function,
+            "over": {"kind": "measured", "name": list}, "value": value})
+    }
+
+    /// The measured set answered through the registered measured values,
+    /// as a run answers it.
+    struct Measuring {
+        services: ServiceRegistry,
+        project: Project,
+    }
+
+    impl PropertyResolutionService for Measuring {
+        fn resolve(
+            &self,
+            request: &PropertyRequest,
+        ) -> Result<PropertyResolution, PropertyResolutionError> {
+            if request.property_set() == Some(axioval::ir::MEASURED_SET) {
+                return measured_value(
+                    &self.services,
+                    &self.project,
+                    request.object_id(),
+                    request.property(),
+                );
+            }
+            Err(PropertyResolutionError::Unavailable(
+                "this scene states no properties".into(),
+            ))
+        }
+    }
+
+    type Verdicts = (BTreeSet<String>, BTreeSet<String>);
+
+    /// The flagged and the open objects of an evaluation.
+    fn verdicts(evaluation: &CapabilityEvaluation) -> Verdicts {
+        let local =
+            |object: Option<&ObjectId>| object.map_or_else(String::new, |o| o.local_id.clone());
+        (
+            evaluation
+                .findings()
+                .iter()
+                .map(|finding| local(finding.object_id()))
+                .collect(),
+            evaluation
+                .not_evaluated_outcomes()
+                .iter()
+                .map(|outcome| local(outcome.object_id()))
+                .collect(),
+        )
+    }
+
+    /// The scene's services with the built-in measured values installed.
+    fn installed(scene: Scene) -> (Project, ServiceRegistry) {
+        let (project, mut services) = scene.services();
+        axioval::rules::register_builtins(CapabilityRegistry::new())
+            .unwrap()
+            .install_measured(&mut services, &project);
+        (project, services)
+    }
+
+    /// Evaluates `requirement` over the objects of `subjects` with the
+    /// measured values installed.
+    fn expression(scene: Scene, subjects: &str, requirement: &Value) -> CapabilityEvaluation {
+        let rule = CompiledRule {
+            id: RuleId::new("as-expression").unwrap(),
+            capability: "axioval:capability.expression".into(),
+            severity: Severity::Error,
+            selector: kind(subjects),
+            parameters: BTreeMap::from([(
+                "requirement".to_owned(),
+                ParameterValue::Expression {
+                    value: Box::new(serde_json::from_value(requirement.clone()).unwrap()),
+                },
+            )]),
+        };
+        let (project, mut services) = installed(scene);
+        let measuring = Measuring {
+            services: services.clone(),
+            project: project.clone(),
+        };
+        services
+            .register(PropertyResolutionServiceHandle::new(Arc::new(measuring)))
+            .unwrap();
+        ExpressionRequirement.evaluate(
+            &RuleContext {
+                project: &project,
+                services: &services,
+            },
+            &rule,
+        )
+    }
+
+    /// Checks that `requirement` reaches the capability's verdicts on
+    /// `scene` under `parameters`, and that those are `flagged` and `open`.
+    fn parity(
+        scene: fn() -> Scene,
+        capability: (&dyn RuleCapability, &str),
+        parameters: Vec<(&str, ParameterValue)>,
+        requirement: &Value,
+        (flagged, open): (&[&str], &[&str]),
+    ) {
+        let (check, subjects) = capability;
+        let expected = verdicts(&scene().check(check, subjects, parameters));
+        let set = |objects: &[&str]| -> BTreeSet<String> {
+            objects.iter().map(|object| (*object).to_owned()).collect()
+        };
+        assert_eq!(expected, (set(flagged), set(open)), "{requirement}");
+        let evaluation = expression(scene(), subjects, requirement);
+        assert_eq!(
+            verdicts(&evaluation),
+            expected,
+            "{requirement}: {:?}",
+            evaluation.not_evaluated_outcomes()
+        );
+    }
+
+    fn bay(
+        scene: fn() -> Scene,
+        parameters: Vec<(&str, ParameterValue)>,
+        requirement: &Value,
+        verdicts: (&[&str], &[&str]),
+    ) {
+        parity(
+            scene,
+            (&ParkingBay, "bay"),
+            parameters,
+            requirement,
+            verdicts,
+        );
+    }
+
+    fn side(side: &str) -> Value {
+        fine(measured(&format!("rectangle_side;side={side}")), "m")
+    }
+
+    fn metre(value: f64) -> Value {
+        literal(value, "m")
+    }
+
+    #[test]
+    fn the_size_along_the_bay_s_own_axes_reaches_the_verdicts() {
+        bay(
+            car_park,
+            vec![
+                ("min_width", metres(2.4)),
+                ("min_length", metres(5.0)),
+                ("min_height", metres(2.1)),
+            ],
+            &and(vec![
+                compare("greaterThanOrEquals", side("width"), metre(2.4)),
+                compare("greaterThanOrEquals", side("length"), metre(5.0)),
+                compare(
+                    "greaterThanOrEquals",
+                    fine(measured("extent_z"), "m"),
+                    metre(2.1),
+                ),
+            ]),
+            (&["b2"], &[]),
+        );
+        // A bound met exactly holds: both bays are 2.2 m high.
+        bay(
+            car_park,
+            vec![
+                ("max_width", metres(2.6)),
+                ("max_length", metres(4.9)),
+                ("max_height", metres(2.2)),
+            ],
+            &and(vec![
+                compare("lessThanOrEquals", side("width"), metre(2.6)),
+                compare("lessThanOrEquals", side("length"), metre(4.9)),
+                compare(
+                    "lessThanOrEquals",
+                    fine(measured("extent_z"), "m"),
+                    metre(2.2),
+                ),
+            ]),
+            (&["b1"], &[]),
+        );
+    }
+
+    const AISLES: &str = "axes_within;of=aisle";
+
+    /// The test of `alignment` within 5 degrees on a member's angle.
+    fn aligned(alignment: &str) -> Value {
+        let angle = field("angle");
+        match alignment {
+            "parallel" => compare("lessThanOrEquals", angle, literal(5.0, "deg")),
+            "perpendicular" => compare("greaterThanOrEquals", angle, literal(85.0, "deg")),
+            _ => and(vec![
+                compare("greaterThan", angle.clone(), literal(5.0, "deg")),
+                compare("lessThan", angle, literal(85.0, "deg")),
+            ]),
+        }
+    }
+
+    fn orientation(alignment: &str) -> Vec<(&'static str, ParameterValue)> {
+        vec![
+            ("aisles", selector(kind("aisle"))),
+            ("orientation", text(alignment)),
+            ("angle_tolerance", quantity(5.0, "deg")),
+        ]
+    }
+
+    /// A bay 0.5 m off its aisle.
+    fn set_back() -> Scene {
+        Scene::default()
+            .body("aisle", "aisle", &rect(-5.0, 0.0, 25.0, 6.0), 0.0, 2.5)
+            .body("b1", "bay", &rect(0.0, 6.5, 2.5, 11.5), 0.0, 2.2)
+    }
+
+    #[test]
+    fn the_angle_to_the_aisles_within_reach_reaches_the_orientation_verdicts() {
+        for (alignment, flagged) in [
+            ("perpendicular", &["b2"][..]),
+            ("angled", &["b1"]),
+            ("parallel", &["b1", "b2"]),
+        ] {
+            bay(
+                car_park,
+                orientation(alignment),
+                &over("any", AISLES, aligned(alignment)),
+                (flagged, &[]),
+            );
+        }
+        // An aisle out of reach is no aisle: none within 0.2 m, one within
+        // 0.6 m.
+        for (reach, flagged) in [(0.2, &["b1"][..]), (0.6, &[])] {
+            let mut parameters = orientation("perpendicular");
+            parameters.push(("aisle_reach", metres(reach)));
+            bay(
+                set_back,
+                parameters,
+                &over(
+                    "any",
+                    &format!("{AISLES};reach={reach}"),
+                    aligned("perpendicular"),
+                ),
+                (flagged, &[]),
+            );
+        }
+    }
+
+    fn count(at: &str, reach: f64, zone: Option<f64>) -> Value {
+        let zone = zone.map_or_else(String::new, |zone| format!(";side_zone={zone}"));
+        measured(&format!(
+            "obstruction_count;obstacles=column;reach={reach};at={at}{zone}"
+        ))
+    }
+
+    /// At most `ends` ends and `sides` sides obstructed, nothing within.
+    fn obstructed(reach: f64, zone: Option<f64>, (ends, sides): (f64, f64)) -> Value {
+        and(vec![
+            compare("lessThanOrEquals", count("within", reach, zone), plain(0.0)),
+            compare("lessThanOrEquals", count("ends", reach, zone), plain(ends)),
+            compare(
+                "lessThanOrEquals",
+                count("sides", reach, zone),
+                plain(sides),
+            ),
+        ])
+    }
+
+    fn obstructions(reach: f64, ends: &str, sides: &str) -> Vec<(&'static str, ParameterValue)> {
+        vec![
+            ("obstacles", selector(kind("column"))),
+            ("obstruction_reach", metres(reach)),
+            ("end_obstructions", text(ends)),
+            ("side_obstructions", text(sides)),
+        ]
+    }
+
+    /// The car park with a column standing within `b1`.
+    fn column_within() -> Scene {
+        car_park().body("c4", "column", &rect(1.0, 8.0, 1.4, 8.4), 0.0, 3.0)
+    }
+
+    /// A 3 m square bay with a column past one of its edges.
+    fn square() -> Scene {
+        Scene::default()
+            .body("aisle", "aisle", &rect(-5.0, 0.0, 25.0, 6.0), 0.0, 2.5)
+            .body("sq", "bay", &rect(0.0, 6.0, 3.0, 9.0), 0.0, 2.2)
+            .body("c1", "column", &rect(1.0, 9.05, 1.4, 9.45), 0.0, 3.0)
+    }
+
+    #[test]
+    fn the_obstructed_ends_and_sides_reach_the_verdicts() {
+        for (reach, (ends, sides), allowed, flagged) in [
+            (0.2, ("none", "one"), (0.0, 1.0), &["b1"][..]),
+            (0.2, ("one", "none"), (1.0, 0.0), &["b1"]),
+            (0.2, ("one", "one"), (1.0, 1.0), &[]),
+            (0.08, ("none", "none"), (0.0, 0.0), &["b1"]),
+        ] {
+            bay(
+                car_park,
+                obstructions(reach, ends, sides),
+                &obstructed(reach, None, allowed),
+                (flagged, &[]),
+            );
+        }
+        // A column standing within a bay is a finding, whatever is allowed.
+        bay(
+            column_within,
+            obstructions(0.2, "both", "both"),
+            &obstructed(0.2, None, (2.0, 2.0)),
+            (&["b1"], &[]),
+        );
+        // A square bay has no ends: its width is judged, its edges are not.
+        let mut parameters = obstructions(0.2, "none", "both");
+        parameters.push(("min_width", metres(2.5)));
+        bay(
+            square,
+            parameters,
+            &and(vec![
+                compare("greaterThanOrEquals", side("width"), metre(2.5)),
+                obstructed(0.2, None, (0.0, 2.0)),
+            ]),
+            (&[], &["sq"]),
+        );
+    }
+
+    #[test]
+    fn the_side_zone_reaches_the_verdicts() {
+        for (zone, flagged) in [(3.0, &[][..]), (4.8, &["p1"])] {
+            let mut parameters = obstructions(0.1, "both", "none");
+            parameters.push(("side_zone_length", metres(zone)));
+            bay(
+                mixed_bays,
+                parameters,
+                &obstructed(0.1, Some(zone), (2.0, 0.0)),
+                (flagged, &[]),
+            );
+        }
+    }
+
+    #[test]
+    fn size_bounds_filtered_by_state_reach_the_verdicts() {
+        // Orientation: the bound applies to bays at that angle to every
+        // aisle they meet.
+        for (alignment, flagged) in [
+            ("perpendicular", &["p1", "p2", "p3"][..]),
+            ("parallel", &[]),
+        ] {
+            bay(
+                mixed_bays,
+                vec![
+                    ("min_length", metres(5.0)),
+                    ("applies_when", text("filter")),
+                    ("orientations", path(&[alignment])),
+                    ("aisles", selector(kind("aisle"))),
+                    ("angle_tolerance", quantity(5.0, "deg")),
+                ],
+                &implies(
+                    over("all", AISLES, aligned(alignment)),
+                    compare("greaterThanOrEquals", side("length"), metre(5.0)),
+                ),
+                (flagged, &[]),
+            );
+        }
+        // Obstructed sides: the bound applies to bays with none obstructed.
+        for (zone, flagged) in [
+            (None, &["p2", "p3", "q"][..]),
+            (Some(3.0), &["p1", "p2", "p3", "q"]),
+        ] {
+            let mut parameters = vec![
+                ("min_width", metres(2.6)),
+                ("applies_when", text("filter")),
+                ("side_states", path(&["none"])),
+                ("obstacles", selector(kind("column"))),
+                ("obstruction_reach", metres(0.1)),
+            ];
+            if let Some(zone) = zone {
+                parameters.push(("side_zone_length", metres(zone)));
+            }
+            bay(
+                mixed_bays,
+                parameters,
+                &and(vec![
+                    compare("lessThanOrEquals", count("within", 0.1, zone), plain(0.0)),
+                    implies(
+                        compare("equals", count("sides", 0.1, zone), plain(0.0)),
+                        compare("greaterThanOrEquals", side("width"), metre(2.6)),
+                    ),
+                ]),
+                (flagged, &[]),
+            );
+        }
+    }
+
+    fn spaced(extra: Vec<(&'static str, ParameterValue)>, requirement: &Value, flagged: &[&str]) {
+        parity(
+            storey,
+            (&WallSpacing, "storey"),
+            spacing(extra),
+            requirement,
+            (flagged, &[]),
+        );
+    }
+
+    const MEMBERS: &str = "members=wall;member_path=contains;angle_tolerance=5";
+
+    #[test]
+    fn the_parallel_pairs_reach_the_minimum_spacing_verdicts() {
+        for (minimum, flagged) in [(1.0, &["st"][..]), (0.5, &["st"]), (0.3, &[])] {
+            let pairs = format!("parallel_pairs;{MEMBERS};reach={minimum}");
+            spaced(
+                vec![("minimum", metres(minimum))],
+                &over(
+                    "none",
+                    &pairs,
+                    compare("lessThan", fine(field("distance"), "m"), metre(minimum)),
+                ),
+                flagged,
+            );
+        }
+        // Within 6 m: `m` and `n`, `s` and `m`, `s` and `n`; `x` stands
+        // across them.
+        let (_, services) = installed(storey());
+        let pairs = axioval::engine::measured_members(
+            &services,
+            &id("st"),
+            &format!("parallel_pairs;{MEMBERS};reach=6"),
+        )
+        .unwrap();
+        assert_eq!(pairs.len(), 3, "{pairs:#?}");
+        assert!(pairs.iter().all(|pair| pair.certain));
+    }
+
+    #[test]
+    fn the_area_outside_the_bands_reaches_the_coverage_verdicts() {
+        for (maximum, above, flagged) in [
+            (6.0, 1.0, &["st"][..]),
+            (6.0, 23.0, &[]),
+            (5.0, 1.0, &["st"]),
+            (5.0, 34.0, &[]),
+        ] {
+            let area = measured(&format!(
+                "band_uncovered_area;{MEMBERS};maximum={maximum};footprints=slab;\
+                 footprint_path=contains"
+            ));
+            spaced(
+                vec![
+                    ("maximum", metres(maximum)),
+                    ("footprints", selector(kind("slab"))),
+                    ("footprint_path", path(&[CONTAINS])),
+                    ("uncovered_above", quantity(above, "m2")),
+                ],
+                &compare("lessThanOrEquals", fine(area, "m2"), literal(above, "m2")),
+                flagged,
+            );
+        }
+    }
+}

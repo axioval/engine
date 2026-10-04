@@ -21,6 +21,10 @@ use crate::plan_area::{Verdict, judge, shown};
 use crate::selection::select_objects;
 use crate::support::{Parameters, Unavailable, finding, invalid};
 
+mod measured;
+
+pub(crate) use measured::BayMeasures;
+
 const NAME: &str = "parking-bay";
 
 /// Requires each selected parking bay to have its size along its own axes,
@@ -206,6 +210,20 @@ struct Config<'a> {
 }
 
 impl Config<'_> {
+    /// No check at all: what a measured value reusing the bay's own
+    /// measurements needs.
+    fn bare() -> Self {
+        Config {
+            width: (None, None),
+            length: (None, None),
+            height: (None, None),
+            applies: Applies::Findings,
+            orientation: None,
+            obstructions: None,
+            filters: Filters::default(),
+        }
+    }
+
     fn sized(&self) -> bool {
         [self.width, self.length]
             .iter()
@@ -607,6 +625,17 @@ impl Nearby {
             .iter()
             .filter_map(|outcome| outcome.object_id().cloned())
             .collect();
+        Self::of(proximity, matched, &undecided, bays, reach)
+    }
+
+    /// The `matched` and `undecided` objects near each bay.
+    fn of(
+        proximity: &ProximityServiceHandle,
+        matched: BTreeSet<ObjectId>,
+        undecided: &BTreeSet<ObjectId>,
+        bays: &[&Object],
+        reach: f64,
+    ) -> Result<Self, Unavailable> {
         let read = |object: &ObjectId| match proximity.bounds(object) {
             Ok(extent) if extent.object() == object => Ok(extent),
             Ok(_) => Err((
@@ -635,7 +664,7 @@ impl Nearby {
             }
         }
         let mut others = Vec::new();
-        for object in found.matched.iter().chain(&undecided) {
+        for object in found.matched.iter().chain(undecided) {
             match read(object) {
                 Ok(extent) => {
                     found.bounds.insert(object.clone(), extent.clone());
@@ -700,6 +729,9 @@ impl Count {
 #[derive(Default)]
 struct Counted {
     inside: Option<Check>,
+    /// How many obstacles stand within the bay: surely, and at most (every
+    /// obstacle that cannot be placed counted).
+    within: (usize, usize),
     ends: Count,
     sides: Count,
     unknown: Vec<String>,
@@ -1187,6 +1219,8 @@ impl Bay<'_, '_> {
             return Ok(Counted::default());
         };
         let blind = obstacles.blind.len();
+        // Obstacles that cannot be placed: they may stand anywhere.
+        let mut unplaced = blind;
         let mut unknown = Vec::new();
         if blind > 0 {
             unknown.push(format!(
@@ -1204,6 +1238,7 @@ impl Bay<'_, '_> {
                     candidates.push((obstacle.clone(), within.and(selected)));
                 }
                 Err((_, message)) => {
+                    unplaced += 1;
                     unknown.push(format!("whether {obstacle} is near is unknown: {message}"));
                 }
             }
@@ -1264,6 +1299,7 @@ impl Bay<'_, '_> {
             let theirs = match positions(&obstacle) {
                 Ok(theirs) => theirs,
                 Err((_, message)) => {
+                    unplaced += 1;
                     unknown.push(format!("where {obstacle} stands is unknown: {message}"));
                     continue;
                 }
@@ -1287,6 +1323,7 @@ impl Bay<'_, '_> {
                 Tri::No => {}
             }
         }
+        let within = (inside.len(), inside.len() + maybe_inside.len() + unplaced);
         let inside = if !inside.is_empty() {
             Some(Ok(Some((
                 format!(
@@ -1338,6 +1375,7 @@ impl Bay<'_, '_> {
         };
         Ok(Counted {
             inside,
+            within,
             ends: count(0),
             sides: count(2),
             unknown,

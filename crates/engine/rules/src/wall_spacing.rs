@@ -20,6 +20,10 @@ use crate::plan_area::{shown, unavailable};
 use crate::selection::select_objects;
 use crate::support::{Parameters, Traversal, Unavailable, finding, invalid};
 
+mod measured;
+
+pub(crate) use measured::SpacingMeasures;
+
 const NAME: &str = "wall-spacing";
 
 /// Requires the parallel walls or beams on each selected storey to stand at
@@ -273,7 +277,12 @@ impl Storey<'_, '_> {
                 Ok(reached) => reached,
                 Err(unavailable) => return vec![Err(unavailable)],
             };
-        let (pairs, blind) = match self.pairs(&reached, members) {
+        let reach = self
+            .config
+            .minimum
+            .unwrap_or(0.0)
+            .max(self.config.coverage.as_ref().map_or(0.0, |c| c.maximum));
+        let (pairs, blind) = match self.pairs(&reached, members, reach) {
             Ok(pairs) => pairs,
             Err(unavailable) => return vec![Err(unavailable)],
         };
@@ -290,18 +299,14 @@ impl Storey<'_, '_> {
         checks
     }
 
-    /// Every pair near enough to matter, and the members whose extent cannot
-    /// be read.
+    /// Every pair within `reach` of each other in plan, and the members
+    /// whose extent cannot be read.
     fn pairs(
         &self,
         reached: &[ObjectId],
         members: &Members<'_>,
+        reach: f64,
     ) -> Result<(Vec<Pair>, Vec<String>), Unavailable> {
-        let reach = self
-            .config
-            .minimum
-            .unwrap_or(0.0)
-            .max(self.config.coverage.as_ref().map_or(0.0, |c| c.maximum));
         let mut bounds: BTreeMap<ObjectId, ObjectBounds> = BTreeMap::new();
         let mut blind = Vec::new();
         for member in reached {
@@ -551,36 +556,17 @@ impl Storey<'_, '_> {
         let threshold = coverage.threshold;
         let mut checks = Vec::new();
         for footprint in footprints {
-            let measure = |bands: &[PlanBand]| {
-                areas
-                    .measure_outside_bands(&footprint, bands)
-                    .map_err(unavailable)
-            };
-            let upper = match measure(&least) {
-                Ok(area) => {
-                    cited.push(area.evidence().clone());
-                    area.upper_square_metres()
-                }
-                Err(error) => {
-                    checks.push(Err(error));
-                    continue;
-                }
-            };
-            // Anything unknown may bound another band: nothing is surely left.
-            let lower = if unknown.is_empty() {
-                match measure(&most) {
-                    Ok(area) => {
-                        cited.push(area.evidence().clone());
-                        area.lower_square_metres()
+            let (lower, upper) =
+                match uncovered(areas, &footprint, (&least, &most), unknown.is_empty()) {
+                    Ok((area, measured)) => {
+                        cited.extend(measured);
+                        area
                     }
                     Err(error) => {
                         checks.push(Err(error));
                         continue;
                     }
-                }
-            } else {
-                0.0
-            };
+                };
             let what = format!(
                 "{} m² of {footprint} lies outside every band between parallel members at most \
                  {maximum} m apart",
@@ -605,6 +591,36 @@ impl Storey<'_, '_> {
         }
         checks
     }
+}
+
+/// The area of `footprint` outside the bands, `(lower, upper)` square
+/// metres, with the evidence measuring it: at most what the sure bands
+/// (`least`) leave, at least what every possible band (`most`) leaves when
+/// nothing is unknown (`known`), otherwise nothing, since anything unknown
+/// may bound another band.
+fn uncovered(
+    areas: &PlanAreaServiceHandle,
+    footprint: &ObjectId,
+    (least, most): (&[PlanBand], &[PlanBand]),
+    known: bool,
+) -> Result<((f64, f64), Vec<Evidence>), Unavailable> {
+    let measure = |bands: &[PlanBand]| {
+        areas
+            .measure_outside_bands(footprint, bands)
+            .map_err(unavailable)
+    };
+    let mut cited = Vec::new();
+    let area = measure(least)?;
+    cited.push(area.evidence().clone());
+    let upper = area.upper_square_metres();
+    let lower = if known {
+        let area = measure(most)?;
+        cited.push(area.evidence().clone());
+        area.lower_square_metres()
+    } else {
+        0.0
+    };
+    Ok(((lower, upper), cited))
 }
 
 /// The bands between parallel pairs at most a maximum apart.

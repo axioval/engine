@@ -399,6 +399,9 @@ ignoring ASCII case):
 | `angle_to;path=<steps>[;between=axis\|face_normal]` | the angle to the objects a path reaches, an angle | `PlanSpanService::measure_rectangle` or `VerticalExtentService::measure_face_normals`, `RelationshipSelectionService` |
 | `skew;path=<steps>` | how far the long axis is from square to the reached objects', an angle | `PlanSpanService::measure_rectangle`, `RelationshipSelectionService` |
 | `bearing;axis=own_x\|own_y\|long[;reference=project_north\|true_north]` | an axis's plan bearing clockwise from north, an angle | `ObjectFrameService` or `PlanSpanService`, `CoordinateSystemService` for true north |
+| `rectangle_side;side=width\|length` | the shorter or longer side of the footprint's least-area rectangle, a length | `PlanSpanService::measure_rectangle` |
+| `obstruction_count;obstacles=<kinds>;reach=<m>;at=ends\|sides\|within[;side_zone=<m>]` | how many ends or sides of that rectangle obstacles obstruct, or how many stand within it, a plain number | built in, over `PlanSpanService`, `ProximityService`, `VerticalExtentService` |
+| `band_uncovered_area;members=<kinds>;member_path=<steps>;angle_tolerance=<degrees>;maximum=<m>;footprints=<kinds>;footprint_path=<steps>` | the largest area of a reached footprint outside every band between parallel members at most `maximum` apart | built in, over `PlanSpanService`, `ProximityService`, `VerticalExtentService`, `PlanAreaService::measure_outside_bands` |
 
 ### Names with parameters
 
@@ -770,6 +773,8 @@ and declare their parameters and typed fields:
 | `exit_pairs` (`exits`, `kinds`, `between`) | every pair of a space's exits | `separation` |
 | `free_placements` (`shape`, `diameter`, `width`, `length`, `height`, `obstacles`, `band_from`, `band_to`, `merge`, `swings`, `entrance_width`, `access`, `doors`, `openings`) | a placement of the shape on a space's free floor: one found, none possible, or one undecided | none |
 | `guard_edges` (`barrier_gap`, `platform_gap`, `landing_gap`, `landing_width`, `climb_distance`, `climb_side`, `measure_from`, `barriers`, `landings`, `climbables`) | the exposed edges of a walking surface, as the guard service samples them | `guarded_height`, `tallest_barrier`, `barrier_share`, `landing_fall`, `climbable_height` |
+| `axes_within` (`of`, `reach`) | the objects of the kinds named within reach of the footprint in plan | `angle` |
+| `parallel_pairs` (`members`, `member_path`, `angle_tolerance`, `reach`) | the parallel pairs of members the object reaches, as `wall-spacing` pairs them | `distance` |
 
 Step `j` climbs riser `j` onto tread `j`; its `going`, `nosing` and
 `winder_angle` are measured from the tread below, so the first step and a
@@ -813,6 +818,63 @@ Expressions over these values reach `stair-geometry`'s and
 goings, step lengths, the riser count and spread, the rise, the width,
 landings, winders, open risers, ramp slope limits and spread, handrail
 heights, extensions, gaps and sides.
+
+### Parking bays
+
+A bay's own measurements are measured by `parking-bay`'s own code, so the
+values and the capability never disagree:
+
+- `rectangle_side;side=width|length` is the shorter or longer side of the
+  footprint's least-area rectangle; its height is `extent_z`. A footprint
+  with several least-area rectangles, or a tessellated one, is not
+  evaluated.
+- `obstruction_count;obstacles=<kinds>;reach=<m>;at=…` counts, among the
+  objects of the kinds within `reach` of the footprint in plan, how many of
+  the two `ends` (across the long axis) or the two `sides` (along it) they
+  obstruct, or how many obstacles stand `within` the rectangle, past none of
+  its edges. With `side_zone=<m>` a side counts only when an obstacle
+  overlaps its central stretch that long. The count is an interval from the
+  edges surely obstructed to those possibly obstructed; an obstacle that
+  cannot be placed may obstruct any edge. A rectangle without a long axis
+  (a square) has no ends or sides once an obstacle is near.
+- `axes_within;of=<kinds>[;reach=<m>]` lists the objects of the kinds within
+  `reach` of the footprint in plan (default 0, meeting it), each with the
+  acute `angle` between the long axes, an angle in `[0, π/2]`; one only
+  possibly within reach is an undecided member, and one without a readable
+  extent or long axis has an undecided angle.
+
+The orientation to an aisle is then an expression with a tolerance:
+"perpendicular to an aisle" is `any` over `axes_within;of=aisle` of
+`angle ≥ 85°`, parallel `angle ≤ 5°`, angled both strictly between; a size
+bound for perpendicular bays only is an `implies` whose antecedent is `all`
+over the same list. Expressions over these values reach `parking-bay`'s
+verdicts on its fixtures, check by check: width, length and height bounds,
+the orientation to the aisle within a reach, obstructed ends and sides
+with and without a side zone, an obstacle within a bay, and size bounds
+filtered by orientation or obstructed sides. A bay's orientation inferred
+from neighbouring bays (`neighbour_reach`) has no value.
+
+### Parallel members
+
+`parallel_pairs;members=<kinds>;member_path=<steps>;angle_tolerance=<degrees>;reach=<m>`
+lists the pairs of members a storey reaches along `member_path` whose long
+axes lie within `angle_tolerance` degrees (below 45) of parallel and that
+face each other, exactly as `wall-spacing` pairs them, among the pairs
+within `reach` of each other in plan (at least the widest spacing judged).
+Each pair's `distance` is its plan distance, closest points to closest
+points. A pair only possibly parallel or facing is an undecided member, and
+a member whose extent cannot be read is an undecided member of undecided
+distance, so `none` of the pairs closer than a minimum is a pass only when
+no undecided pair may be.
+
+`band_uncovered_area;…;maximum=<m>;footprints=<kinds>;footprint_path=<steps>`
+takes the same members and the bands between parallel pairs at most
+`maximum` apart, and measures the largest area of a footprint the storey
+reaches along `footprint_path` that lies outside every band: at most what
+the sure bands leave, at least what every possible band leaves, and at
+least nothing while a member is undecided. A storey reaching no footprint
+is not evaluated. Expressions over both reach `wall-spacing`'s minimum
+spacing and coverage verdicts on its fixtures.
 
 ### Levels
 

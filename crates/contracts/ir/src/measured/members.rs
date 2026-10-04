@@ -7,7 +7,7 @@
 
 use serde::Serialize;
 
-use super::registry::en_de;
+use super::registry::{ANGLE_TOLERANCE, MEMBER_PATH, PAIRED, SPACED_MEMBERS, en_de};
 use super::{
     LocalizedText, MeasuredCall, MeasuredDescriptor, MeasuredError, MeasuredExactness,
     MeasuredParameter, MeasuredParameterKind,
@@ -145,6 +145,67 @@ const fn guard_kinds(key: &'static str, help: &'static [LocalizedText]) -> Measu
 
 /// Every list of measured members, sorted by name.
 pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
+    MemberDescriptor {
+        list: MeasuredDescriptor {
+            name: "axes_within",
+            parameters: &[
+                MeasuredParameter {
+                    key: "of",
+                    kind: MeasuredParameterKind::SourceKind,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The source kinds of the objects measured against, such as \
+                         aisles, `,`-separated.",
+                        "Die Quellarten der Objekte, gegen die gemessen wird, etwa \
+                         Fahrgassen, durch `,` getrennt.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "reach",
+                    kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                    required: false,
+                    default: Some("0"),
+                    help: &en_de(
+                        "How far from the footprint in plan an object counts, in metres; \
+                         0, the default, is touching it.",
+                        "Wie weit vom Grundriss entfernt ein Objekt zählt, in Metern; 0, \
+                         die Vorgabe, ist berührend.",
+                    ),
+                },
+            ],
+            dimension: None,
+            services: &["plan-span", "proximity", "type-hierarchy"],
+            exactness: MeasuredExactness::Measured,
+            not_evaluated: &[
+                "the object has no body the service can measure",
+                "an object near it has no readable extent",
+            ],
+            label: &en_de("Axes within reach", "Achsen in Reichweite"),
+            help: &en_de(
+                "The objects of the kinds named within reach of the footprint in plan, \
+                 each with the angle between the long axes, as `parking-bay` reads a \
+                 bay's orientation to its aisles; one only possibly within reach is an \
+                 undecided member.",
+                "Die Objekte der genannten Arten in Reichweite des Grundrisses, jedes mit \
+                 dem Winkel zwischen den Längsachsen, wie `parking-bay` die Ausrichtung \
+                 zur Fahrgasse liest; ein nur möglicherweise erreichtes ist ein \
+                 unentschiedenes Element.",
+            ),
+        },
+        fields: &[field(
+            "angle",
+            ANGLE,
+            &en_de("Angle", "Winkel"),
+            &en_de(
+                "The acute angle between the long axes of both footprints' least-area \
+                 rectangles, in `[0, π/2]`; undecided where either has no long axis.",
+                "Der spitze Winkel zwischen den Längsachsen der flächenkleinsten \
+                 Rechtecke beider Grundrisse, in `[0, π/2]`; unentschieden, wo eines \
+                 keine Längsachse hat.",
+            ),
+        )],
+    },
     MemberDescriptor {
         list: MeasuredDescriptor {
             name: "end_walls",
@@ -767,6 +828,50 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
                 ),
             ),
         ],
+    },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
+            name: "parallel_pairs",
+            parameters: &[
+                SPACED_MEMBERS,
+                MEMBER_PATH,
+                ANGLE_TOLERANCE,
+                required_length(
+                    "reach",
+                    &en_de(
+                        "How far apart in plan a pair is still listed, in metres: at \
+                         least the widest spacing judged.",
+                        "Bis zu welchem Abstand im Grundriss ein Paar aufgeführt wird, in \
+                         Metern: mindestens der größte geprüfte Abstand.",
+                    ),
+                ),
+            ],
+            dimension: None,
+            services: PAIRED,
+            exactness: MeasuredExactness::Measured,
+            not_evaluated: &[
+                "a member's extent cannot be read",
+                "whether two members are parallel and face each other is unknown",
+            ],
+            label: &en_de("Parallel pairs", "Parallele Paare"),
+            help: &en_de(
+                "The pairs of members the object reaches that are parallel and face each \
+                 other along the first one's long axis, as `wall-spacing` pairs them; a \
+                 pair only possibly parallel or facing is an undecided member.",
+                "Die Paare erreichter Bauteile, die parallel sind und sich entlang der \
+                 Längsachse des ersten gegenüberstehen, wie `wall-spacing` sie bildet; \
+                 ein nur möglicherweise paralleles Paar ist ein unentschiedenes Element.",
+            ),
+        },
+        fields: &[field(
+            "distance",
+            LENGTH,
+            &en_de("Distance", "Abstand"),
+            &en_de(
+                "The pair's plan distance, closest points to closest points.",
+                "Der Abstand des Paars im Grundriss, nächste Punkte zueinander.",
+            ),
+        )],
     },
     MemberDescriptor {
         list: MeasuredDescriptor {

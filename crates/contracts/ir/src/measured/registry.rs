@@ -390,6 +390,60 @@ const PLAN_AXIS: MeasuredParameterKind = MeasuredParameterKind::Choice {
 };
 const NO_GEOMETRY: &str = "the object has no body the service can measure";
 
+/// The members paired as `wall-spacing` pairs them.
+pub(super) const SPACED_MEMBERS: MeasuredParameter = MeasuredParameter {
+    key: "members",
+    kind: MeasuredParameterKind::SourceKind,
+    required: true,
+    default: None,
+    help: &en_de(
+        "The source kinds of the members paired, such as walls or beams, `,`-separated.",
+        "Die Quellarten der gepaarten Bauteile, etwa Wände oder Träger, durch `,` getrennt.",
+    ),
+};
+
+pub(super) const MEMBER_PATH: MeasuredParameter = MeasuredParameter {
+    key: "member_path",
+    kind: MeasuredParameterKind::Path,
+    required: true,
+    default: None,
+    help: &en_de(
+        "The relationship steps from the object to its members.",
+        "Die Beziehungsschritte vom Objekt zu seinen Bauteilen.",
+    ),
+};
+
+/// An angle in degrees, written as a plain number.
+pub(super) const ANGLE_TOLERANCE: MeasuredParameter = MeasuredParameter {
+    key: "angle_tolerance",
+    kind: MeasuredParameterKind::Length { minimum: 0.0 },
+    required: true,
+    default: None,
+    help: &en_de(
+        "How far from parallel two long axes may be and still pair, in degrees, \
+         below 45.",
+        "Wie weit zwei Längsachsen von parallel abweichen dürfen, um ein Paar zu \
+         bilden, in Grad, unter 45.",
+    ),
+};
+
+pub(super) const PAIRED: &[&str] = &[
+    "plan-span",
+    "proximity",
+    "vertical-extent",
+    "relationship-selection",
+    "type-hierarchy",
+];
+
+const PAIRED_PLAN_AREA: &[&str] = &[
+    "plan-span",
+    "proximity",
+    "vertical-extent",
+    "plan-area",
+    "relationship-selection",
+    "type-hierarchy",
+];
+
 macro_rules! plain {
     ($name:expr, $dimension:expr, $services:expr, $exactness:expr, $not:expr,
      $label:expr, $help:expr) => {
@@ -449,6 +503,62 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             "Die Fläche des Grundrisses des Objekts, Überlappungen einmal gezählt."
         )
     ),
+    MeasuredDescriptor {
+        name: "band_uncovered_area",
+        parameters: &[
+            SPACED_MEMBERS,
+            MEMBER_PATH,
+            ANGLE_TOLERANCE,
+            MeasuredParameter {
+                key: "maximum",
+                kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The farthest apart a parallel pair may stand and still bound a \
+                     band, in metres.",
+                    "Der größte Abstand, mit dem ein paralleles Paar noch ein Band \
+                     begrenzt, in Metern.",
+                ),
+            },
+            objects(
+                "footprints",
+                true,
+                &en_de(
+                    "The source kinds of the footprint objects, such as slabs, \
+                     `,`-separated.",
+                    "Die Quellarten der Grundrissobjekte, etwa Decken, durch `,` getrennt.",
+                ),
+            ),
+            MeasuredParameter {
+                key: "footprint_path",
+                kind: MeasuredParameterKind::Path,
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The relationship steps from the object to its footprint objects.",
+                    "Die Beziehungsschritte vom Objekt zu seinen Grundrissobjekten.",
+                ),
+            },
+        ],
+        dimension: Some(QuantityDimension::Area),
+        services: PAIRED_PLAN_AREA,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[
+            NO_GEOMETRY,
+            "the path reaches no footprint object",
+            "a member's extent cannot be read",
+        ],
+        label: &en_de("Area outside bands", "Fläche außerhalb der Bänder"),
+        help: &en_de(
+            "The largest area of a footprint the object reaches that lies outside every \
+             band between parallel members at most `maximum` apart, as `wall-spacing` \
+             measures its coverage.",
+            "Die größte Fläche eines erreichten Grundrissobjekts außerhalb aller Bänder \
+             zwischen parallelen Bauteilen mit höchstens `maximum` Abstand, wie \
+             `wall-spacing` die Abdeckung misst.",
+        ),
+    },
     MeasuredDescriptor {
         name: BEARING,
         parameters: &[
@@ -1562,6 +1672,79 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ),
     },
     MeasuredDescriptor {
+        name: "obstruction_count",
+        parameters: &[
+            objects(
+                "obstacles",
+                true,
+                &en_de(
+                    "The source kinds that may obstruct, `,`-separated.",
+                    "Die Quellarten, die versperren können, durch `,` getrennt.",
+                ),
+            ),
+            MeasuredParameter {
+                key: "reach",
+                kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                required: true,
+                default: None,
+                help: &en_de(
+                    "How far from the footprint in plan an obstacle counts, in metres.",
+                    "Wie weit vom Grundriss entfernt ein Hindernis zählt, in Metern.",
+                ),
+            },
+            MeasuredParameter {
+                key: "at",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["ends", "sides", "within"],
+                },
+                required: true,
+                default: None,
+                help: &en_de(
+                    "How many of the two `ends` (across the long axis) or the two \
+                     `sides` (along it) are obstructed, or how many obstacles stand \
+                     `within` the rectangle, past none of its edges.",
+                    "Wie viele der zwei Enden (`ends`, quer zur Längsachse) oder der \
+                     zwei Seiten (`sides`, entlang) versperrt sind, oder wie viele \
+                     Hindernisse innerhalb (`within`) des Rechtecks stehen.",
+                ),
+            },
+            MeasuredParameter {
+                key: "side_zone",
+                kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                required: false,
+                default: None,
+                help: &en_de(
+                    "The length of the central stretch of a side an obstacle must \
+                     overlap, in metres; without it, the whole side.",
+                    "Die Länge des mittleren Abschnitts einer Seite, den ein Hindernis \
+                     überdecken muss, in Metern; ohne sie die ganze Seite.",
+                ),
+            },
+        ],
+        dimension: None,
+        services: &[
+            "plan-span",
+            "proximity",
+            "vertical-extent",
+            "type-hierarchy",
+        ],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[
+            NO_GEOMETRY,
+            NO_LONG_AXIS,
+            "an obstacle near it cannot be placed",
+        ],
+        label: &en_de("Obstruction count", "Anzahl Versperrungen"),
+        help: &en_de(
+            "How many ends or sides of the footprint's least-area rectangle obstacles \
+             within reach obstruct, or how many stand within it, as `parking-bay` counts \
+             them: a plain number, an interval when an obstacle only may obstruct.",
+            "Wie viele Enden oder Seiten des flächenkleinsten Rechtecks Hindernisse in \
+             Reichweite versperren oder wie viele darin stehen, wie `parking-bay` sie \
+             zählt: eine Zahl, ein Intervall, wenn ein Hindernis nur versperren kann.",
+        ),
+    },
+    MeasuredDescriptor {
         name: "opening_area",
         parameters: &[
             MeasuredParameter {
@@ -1806,6 +1989,35 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         help: &en_de(
             "A slope of the member's swept profile, an angle.",
             "Eine Neigung des Profils des Bauteils, ein Winkel.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "rectangle_side",
+        parameters: &[MeasuredParameter {
+            key: "side",
+            kind: MeasuredParameterKind::Choice {
+                options: &["width", "length"],
+            },
+            required: true,
+            default: None,
+            help: &en_de(
+                "The shorter side (`width`) or the longer (`length`).",
+                "Die kürzere Seite (`width`) oder die längere (`length`).",
+            ),
+        }],
+        dimension: Some(QuantityDimension::Length),
+        services: &["plan-span"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[
+            NO_GEOMETRY,
+            "the footprint has several least-area rectangles, or a tessellated one",
+        ],
+        label: &en_de("Rectangle side", "Rechteckseite"),
+        help: &en_de(
+            "A side of the footprint's least-area rectangle: its size along its own \
+             axes, as `parking-bay` judges a bay's width and length.",
+            "Eine Seite des flächenkleinsten Rechtecks um den Grundriss: seine Größe \
+             entlang der eigenen Achsen, wie `parking-bay` Breite und Länge prüft.",
         ),
     },
     plain!(

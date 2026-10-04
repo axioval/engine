@@ -376,6 +376,10 @@ ignoring ASCII case):
 | `length[;axis=own_x\|own_y\|own_z]` | a member's extent along its own sweep axis (`own_x` by default), a length | as `extent` |
 | `thickness;direction=…` or `thickness;face=top\|bottom` | every local thickness along an axis or square to a planar face, a length | `VerticalExtentService::measure_thickness` |
 | `perimeter` | the length of the footprint's boundary, holes included | `PlanAreaService::measure_footprint_perimeter` |
+| `headroom;obstacles=<kinds>` | the least vertical clearance above a walking surface | `WalkingSurfaceService::measure_headroom` |
+| `clearance_below;spaces=<kinds>` | the least clearance below a flight or ramp over the floors beneath | `WalkingSurfaceService::measure_clearance_below` |
+| `clear_width;obstacles=<kinds>;band_to=<m>[;band_from=<m>][;along=flight\|runs]` | the narrowest clear width along a flight or a ramp's runs | `WalkingSurfaceService::measure_clear_width` |
+| `clear_height` | a space's clear height | `SpaceService::measure_clear_height` |
 | `angle_to;path=<steps>[;between=axis\|face_normal]` | the angle to the objects a path reaches, an angle | `PlanSpanService::measure_rectangle` or `VerticalExtentService::measure_face_normals`, `RelationshipSelectionService` |
 | `skew;path=<steps>` | how far the long axis is from square to the reached objects', an angle | `PlanSpanService::measure_rectangle`, `RelationshipSelectionService` |
 | `bearing;axis=own_x\|own_y\|long[;reference=project_north\|true_north]` | an axis's plan bearing clockwise from north, an angle | `ObjectFrameService` or `PlanSpanService`, `CoordinateSystemService` for true north |
@@ -491,6 +495,25 @@ is stated.
 
 `perimeter` is the length of the footprint's boundary in plan, holes
 included.
+
+### Clearances
+
+`headroom`, `clearance_below` and `clear_width` ask the walking-surface
+service exactly what `stair-geometry` and `ramp-geometry` ask it, so the
+value is the one they judge. `clear_height` asks the space service what
+`space-validation` asks it.
+
+The obstacles (or, for `clearance_below`, the spaces whose floors lie
+below) are the project's objects of the source kinds named,
+`,`-separated: `obstacles=IfcBeam,IfcDuctSegment`. Subtypes are included
+where the source declares a type hierarchy; a source without one has no
+subtypes, and its kinds match exactly. Headroom with nothing selected
+above is an exact absence, and so is a flight standing above no selected
+floor.
+
+`clear_width` is measured between two heights above the pitch line
+(`band_from`, default 0, and `band_to`, in metres) along a stair flight,
+or with `along=runs` along each of a ramp's runs, the least over them.
 
 ### Measured by built-in code
 

@@ -1,9 +1,10 @@
 //! Every measured value's descriptor, sorted by name.
 
 use super::{
-    ANGLE_TO, BEARING, CROSS_FALL, EXTENT, GRADIENT_DIRECTION, INCLINATION, LENGTH, LocalizedText,
-    MeasuredDescriptor, MeasuredExactness, MeasuredParameter, MeasuredParameterKind, PERIMETER,
-    SKEW, SLOPE, SLOPE_ALONG, THICKNESS,
+    ANGLE_TO, BEARING, CLEAR_HEIGHT, CLEAR_WIDTH, CLEARANCE_BELOW, CROSS_FALL, EXTENT,
+    GRADIENT_DIRECTION, HEADROOM, INCLINATION, LENGTH, LocalizedText, MeasuredDescriptor,
+    MeasuredExactness, MeasuredParameter, MeasuredParameterKind, PERIMETER, SKEW, SLOPE,
+    SLOPE_ALONG, THICKNESS,
 };
 use crate::{
     MEASURED_AREA, MEASURED_BOTTOM, MEASURED_BOTTOM_ABOVE_LEVEL, MEASURED_BOUNDARY_AREA,
@@ -61,6 +62,20 @@ const REFERENCE_PATH: MeasuredParameter = MeasuredParameter {
          der Winkel ist die Hülle über alle erreichten, keiner, wenn keines erreicht wird.",
     ),
 };
+
+const WALKING: &[&str] = &["walking-surface", "type-hierarchy"];
+const NO_WALKING_SURFACE: &str = "the object has no walking surface the service can measure";
+const UNDECIDED_KIND: &str = "an object's kind cannot be decided";
+
+const fn kinds(key: &'static str, help: &'static [LocalizedText]) -> MeasuredParameter {
+    MeasuredParameter {
+        key,
+        kind: MeasuredParameterKind::SourceKind,
+        required: true,
+        default: None,
+        help,
+    }
+}
 
 const OWN_AXIS: MeasuredParameterKind = MeasuredParameterKind::Choice {
     options: &["own_x", "own_y", "own_z", "x", "y", "z"],
@@ -256,6 +271,103 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             "Die summierte Raumbegrenzungsfläche eines Raums gegen Bauteile einer Art.",
         ),
     },
+    plain!(
+        CLEAR_HEIGHT,
+        QuantityDimension::Length,
+        &["space"],
+        MeasuredExactness::Measured,
+        &[NO_GEOMETRY, "the space's floor or ceiling cannot be found"],
+        en_de("Clear height", "Lichte Höhe"),
+        en_de(
+            "A space's clear height, as the space service measures it for \
+             `space-validation`.",
+            "Die lichte Höhe eines Raums, wie der Raumdienst sie für \
+             `space-validation` misst."
+        )
+    ),
+    MeasuredDescriptor {
+        name: CLEAR_WIDTH,
+        parameters: &[
+            kinds(
+                "obstacles",
+                &en_de(
+                    "The source kinds that narrow it, `,`-separated, subtypes included: \
+                     walls, handrails, anything beside or over it.",
+                    "Die Quellarten, die sie einengen, durch `,` getrennt, Untertypen \
+                     eingeschlossen: Wände, Handläufe, alles daneben oder darüber.",
+                ),
+            ),
+            MeasuredParameter {
+                key: "band_from",
+                kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                required: false,
+                default: Some("0"),
+                help: &en_de(
+                    "The band's bottom above the pitch line, in metres.",
+                    "Die Unterkante des Bands über der Steigungslinie, in Metern.",
+                ),
+            },
+            MeasuredParameter {
+                key: "band_to",
+                kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The band's top above the pitch line, in metres.",
+                    "Die Oberkante des Bands über der Steigungslinie, in Metern.",
+                ),
+            },
+            MeasuredParameter {
+                key: "along",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["flight", "runs"],
+                },
+                required: false,
+                default: Some("flight"),
+                help: &en_de(
+                    "A stair `flight`, or a ramp's `runs` (the least over them).",
+                    "Ein Treppenlauf (`flight`) oder die Läufe einer Rampe (`runs`, der \
+                     kleinste).",
+                ),
+            },
+        ],
+        dimension: QuantityDimension::Length,
+        services: WALKING,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_WALKING_SURFACE, UNDECIDED_KIND],
+        label: &en_de("Clear width", "Lichte Breite"),
+        help: &en_de(
+            "The narrowest free width across a flight or a ramp's runs between two \
+             heights above its pitch line, as `stair-geometry` measures it.",
+            "Die kleinste freie Breite quer über einen Lauf oder die Läufe einer Rampe \
+             zwischen zwei Höhen über der Steigungslinie, wie `stair-geometry` sie misst.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: CLEARANCE_BELOW,
+        parameters: &[kinds(
+            "spaces",
+            &en_de(
+                "The source kinds of the spaces whose floors are below, `,`-separated.",
+                "Die Quellarten der Räume, deren Böden darunter liegen, durch `,` getrennt.",
+            ),
+        )],
+        dimension: QuantityDimension::Length,
+        services: WALKING,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[
+            NO_WALKING_SURFACE,
+            UNDECIDED_KIND,
+            "the object crosses a floor",
+        ],
+        label: &en_de("Clearance below", "Durchgangshöhe darunter"),
+        help: &en_de(
+            "The least height between a flight's or ramp's underside and the floors \
+             of the spaces below; none when it stands above none.",
+            "Die kleinste Höhe zwischen der Unterseite eines Laufs oder einer Rampe und \
+             den Böden der Räume darunter; keine, wenn sie über keinem steht.",
+        ),
+    },
     MeasuredDescriptor {
         name: CROSS_FALL,
         parameters: &[
@@ -378,6 +490,32 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              north (the y axis).",
             "Die Grundrissrichtung des steilsten Gefälles der Fläche, im Uhrzeigersinn \
              von Plannord (der y-Achse).",
+        ),
+    },
+    MeasuredDescriptor {
+        name: HEADROOM,
+        parameters: &[kinds(
+            "obstacles",
+            &en_de(
+                "The source kinds that may stand above, `,`-separated, subtypes included.",
+                "Die Quellarten, die darüber stehen können, durch `,` getrennt, \
+                 Untertypen eingeschlossen.",
+            ),
+        )],
+        dimension: QuantityDimension::Length,
+        services: WALKING,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[
+            NO_WALKING_SURFACE,
+            UNDECIDED_KIND,
+            "an obstacle crosses the surface",
+        ],
+        label: &en_de("Headroom", "Kopfhöhe"),
+        help: &en_de(
+            "The least vertical clearance above a walking surface; none when nothing \
+             selected stands above.",
+            "Der kleinste lichte Abstand über einer Lauffläche; keiner, wenn nichts \
+             Ausgewähltes darüber steht.",
         ),
     },
     MeasuredDescriptor {

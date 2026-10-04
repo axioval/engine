@@ -961,3 +961,30 @@ fn a_mistyped_element_selector_is_an_invalid_declaration() {
         );
     }
 }
+
+/// The measured `clear_height` reads the height `space-validation` judges.
+#[test]
+fn the_measured_clear_height_is_the_one_judged() {
+    use axioval_engine::{PropertyResolution, measured_value};
+    use axioval_ir::{PropertyValue, QuantityDimension};
+    let project = Project::new(vec![Object::new(oid("space-1"), "space")]).unwrap();
+    let mut services = ServiceRegistry::new();
+    services
+        .register(SpaceServiceHandle::new(Arc::new(Stub {
+            height: Some(Ok(2.0)),
+            ..Stub::default()
+        })))
+        .unwrap();
+    let PropertyResolution::Present(height) =
+        measured_value(&services, &project, &oid("space-1"), "clear_height").unwrap()
+    else {
+        panic!("no clear height");
+    };
+    assert_eq!(
+        height.property().value(),
+        &PropertyValue::Quantity {
+            value: 2.0,
+            dimension: QuantityDimension::Length
+        }
+    );
+}

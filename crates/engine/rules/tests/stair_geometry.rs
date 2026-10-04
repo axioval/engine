@@ -3737,3 +3737,62 @@ fn computed_bounds_judge_as_the_literals_they_compute() {
     assert_eq!(findings(&computed).len(), findings(&literal).len());
     assert!(!findings(&computed).is_empty());
 }
+
+/// The measured clearances read what `stair-geometry` and `ramp-geometry`
+/// judge: headroom under the lowest obstacle, the clearance over the floor
+/// below, and the narrowest clear width, on the same fixtures.
+#[test]
+fn measured_clearances_reproduce_the_capabilities_measurements() {
+    use axioval_engine::{
+        PropertyResolution, ServiceRegistry, WalkingSurfaceService, measured_value,
+    };
+    let project = model().project();
+    let measured = |service: Arc<dyn WalkingSurfaceService>, object: &str, name: &str| {
+        let mut services = ServiceRegistry::new();
+        services
+            .register(WalkingSurfaceServiceHandle::new(service))
+            .unwrap();
+        match measured_value(&services, &project, &id(object), name).unwrap() {
+            PropertyResolution::Present(resolved) => match resolved.property().value() {
+                PropertyValue::Measured { lower, upper, .. } => Some((*lower, *upper)),
+                other => panic!("{object} {name}: {other:?}"),
+            },
+            PropertyResolution::Absent(_) => None,
+        }
+    };
+    let near = |value: Option<(f64, f64)>, expected: f64| {
+        value.is_some_and(|(lower, upper)| lower <= expected && expected <= upper)
+    };
+    let surfaces: Arc<dyn WalkingSurfaceService> = Arc::new(
+        stairs()
+            .above("regular", "beam", 1.95)
+            .above("regular", "duct", 2.3)
+            .above("irregular", "duct", 2.3)
+            .below("regular", "hall", 1.5)
+            .below("irregular", "hall", 2.4),
+    );
+    let read = |object: &str, name: &str| measured(surfaces.clone(), object, name);
+    assert!(near(read("regular", "headroom;obstacles=beam"), 1.95));
+    assert!(near(read("irregular", "headroom;obstacles=beam"), 2.3));
+    assert_eq!(read("winder", "headroom;obstacles=beam"), None);
+    assert!(near(read("regular", "clearance_below;spaces=space"), 1.5));
+    assert!(near(read("irregular", "clearance_below;spaces=space"), 2.4));
+    let narrowed: Arc<dyn WalkingSurfaceService> = Arc::new(
+        Narrowed {
+            stairs: stairs(),
+            ..Narrowed::default()
+        }
+        .width(
+            "regular",
+            WalkingStretch::Flight,
+            1.0,
+            &["left_rail", "low_rail"],
+        )
+        .width("gentle", WalkingStretch::Run(1), 1.3, &["ramp_rail"]),
+    );
+    let width = "clear_width;obstacles=railing;band_from=0.5;band_to=1.5";
+    assert!(near(measured(narrowed.clone(), "regular", width), 1.0));
+    // A ramp's least over its runs: run 0 is 1.2 m clear, run 1 1.3 m.
+    let runs = format!("{width};along=runs");
+    assert!(near(measured(narrowed, "gentle", &runs), 1.2));
+}

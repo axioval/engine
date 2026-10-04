@@ -15,6 +15,14 @@ use serde::Serialize;
 
 mod registry;
 
+/// The least vertical clearance above a walking surface.
+pub const HEADROOM: &str = "headroom";
+/// The least clearance below a flight or ramp over the floors beneath.
+pub const CLEARANCE_BELOW: &str = "clearance_below";
+/// The narrowest clear width along a flight or ramp.
+pub const CLEAR_WIDTH: &str = "clear_width";
+/// A space's clear height.
+pub const CLEAR_HEIGHT: &str = "clear_height";
 /// The body's extent along an own axis or a direction.
 pub const EXTENT: &str = "extent";
 /// A member's length along its own axis.

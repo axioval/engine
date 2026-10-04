@@ -22,6 +22,7 @@ use axioval_ir::{
 };
 
 mod angles;
+mod clearance;
 pub(crate) mod provider;
 mod surface;
 
@@ -49,7 +50,9 @@ use crate::proximity::ProximityServiceHandle;
 use crate::relationships::{
     AbsentEndPolicy, RelationshipSelectionError, RelationshipSelectionServiceHandle,
 };
+use crate::space::SpaceServiceHandle;
 use crate::vertical_extent::{SurfaceFace, VerticalExtentServiceHandle};
+use crate::walking_surface::WalkingSurfaceServiceHandle;
 
 /// A measured name, parsed.
 #[derive(Clone, Debug, PartialEq)]
@@ -64,6 +67,8 @@ pub(crate) enum MeasuredName {
     Surface(MeasuredCall),
     /// An angle to other objects or a bearing, with the path's steps.
     Angle(MeasuredCall, Vec<PathSegment>),
+    /// A clearance: headroom, clearance below, clear width or height.
+    Clearance(MeasuredCall),
     /// A dimension of the body: an extent, length, thickness or perimeter.
     Dimension(MeasuredCall),
     /// A value a registered provider measures.
@@ -105,6 +110,7 @@ pub(crate) fn measured_by_core(name: &str) -> bool {
             PERIMETER,
         ]
         .contains(&name)
+        || clearance::NAMES.contains(&name)
 }
 
 /// Parses a name in the measured set through the registry
@@ -153,6 +159,7 @@ pub(crate) fn parse(name: &str) -> Result<MeasuredName, String> {
             MeasuredName::Dimension(call)
         }
         LENGTH | PERIMETER => MeasuredName::Dimension(call),
+        name if clearance::NAMES.contains(&name) => MeasuredName::Clearance(call),
         ANGLE_TO | BEARING | SKEW => {
             let steps = match call.argument("path") {
                 Some(MeasuredArgument::Path(steps)) => steps
@@ -206,6 +213,8 @@ pub(crate) struct Measures {
     boundaries: Option<BoundaryCoverageServiceHandle>,
     hierarchy: Option<TypeHierarchyServiceHandle>,
     rectangles: Option<PlanSpanServiceHandle>,
+    walking: Option<WalkingSurfaceServiceHandle>,
+    spaces: Option<SpaceServiceHandle>,
     coordinates: Option<CoordinateSystemServiceHandle>,
     host: Option<PropertyResolutionServiceHandle>,
     providers: Option<(provider::Providers, ServiceRegistry)>,
@@ -229,6 +238,8 @@ impl Measures {
             boundaries: services.get::<BoundaryCoverageServiceHandle>().cloned(),
             hierarchy: services.get::<TypeHierarchyServiceHandle>().cloned(),
             rectangles: services.get::<PlanSpanServiceHandle>().cloned(),
+            walking: services.get::<WalkingSurfaceServiceHandle>().cloned(),
+            spaces: services.get::<SpaceServiceHandle>().cloned(),
             coordinates: services.get::<CoordinateSystemServiceHandle>().cloned(),
             host: host.cloned(),
             providers: services
@@ -329,6 +340,7 @@ impl Measures {
             MeasuredName::Surface(call) => self.surface(call, object),
             MeasuredName::Angle(call, steps) => self.angle(call, steps, object),
             MeasuredName::Dimension(call) => self.dimension(call, object),
+            MeasuredName::Clearance(call) => self.clearance(call, object),
             MeasuredName::Provided(call) => self.provided(call, object),
         }
     }

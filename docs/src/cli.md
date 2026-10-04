@@ -1145,10 +1145,23 @@ tolerance. A station given as `IfcParameterValue`, one on a tangent
 discontinuity of its basis or a run of sections across one, and one on a
 plain `IfcCompositeCurve` basis are refused by name (openbimrs/ifc#346), as
 is an `IfcSegmentedReferenceCurve`. A product placed by an
-`IfcLinearPlacement` is placed only at the `CartesianPosition` the file
-caches: the bridge derives no frame from the basis curve, so without it the
-product is unmeasured by name, whatever the distance (an `IfcParameterValue`
-along an alignment would be refused by name there too, openbimrs/ifc#347).
+`IfcLinearPlacement` is placed where its linear expression puts it: every
+lowering derives the frame from the basis curve with the Axiolid reference
+curve evaluator (`ifc-geometry` 0.10, `LoweringSession::with_curve_evaluator`
+and `product_world_transform_with_evaluator`, openbimrs/ifc#353), in IFC4.3's
+(tangent, left, up) frame, so a positive `OffsetLateral` lies to the left of
+the curve's direction and the product's Z is up (#355). A cached
+`CartesianPosition` is checked against the derived position
+(`CachedPositionPolicy::Verify`, #354): within the model's precision the
+derived frame is used, and farther apart the product is unmeasured with
+both positions named, never placed by the cache. An `IfcParameterValue`
+along an alignment is refused by name (openbimrs/ifc#347). The derivation
+does not yet compose the placement's `PlacementRelTo` or the placement of
+the alignment holding the basis curve (openbimrs/ifc#357), so where either
+is not the identity, or the curve is held by no representation while an
+alignment of the model is placed off the identity, the product is
+unmeasured with that reason, never placed where the curve alone would put
+it.
 The bridge reads
 the bytes with the session's own STEP reader (`read_ifc_step`), so a REAL
 written without its decimal point is measured too and reported once, as an

@@ -1872,10 +1872,11 @@ fn with_geometry_ifc4x3_families_are_measured_or_unmeasured_by_name() {
     assert_eq!(unmeasured.len(), 3, "{geometry:#}");
 }
 
-/// Three 1 m cubes placed along the gradient curve (#79) by
+/// Four 1 m cubes placed along the gradient curve (#79) by
 /// `IfcLinearPlacement`, 5 along it: #133 by `IfcParameterValue`, #143 by
-/// `IfcLengthMeasure`, and #153 by `IfcLengthMeasure` with the
-/// `CartesianPosition` authoring tools cache.
+/// `IfcLengthMeasure`, #153 by `IfcLengthMeasure` with a cached
+/// `CartesianPosition` 12.5 mm below the curve, and #163 the same with the
+/// cache where the curve is.
 fn linearly_placed_cubes() -> String {
     crossing_walls_with(&format!(
         "{GRADIENT_CURVE}\
@@ -1897,45 +1898,58 @@ fn linearly_placed_cubes() -> String {
          #152=IFCLINEARPLACEMENT($,#151,#155);\n\
          #153=IFCBUILDINGELEMENTPROXY('0000000000000000000153',$,$,$,$,#152,#124,$,$);\n\
          #154=IFCCARTESIANPOINT((5.,0.,9.9));\n\
-         #155=IFCAXIS2PLACEMENT3D(#154,$,$);\n"
+         #155=IFCAXIS2PLACEMENT3D(#154,$,$);\n\
+         #160=IFCPOINTBYDISTANCEEXPRESSION(IFCLENGTHMEASURE(5.),$,$,$,#79);\n\
+         #161=IFCAXIS2PLACEMENTLINEAR(#160,$,$);\n\
+         #162=IFCLINEARPLACEMENT($,#161,#165);\n\
+         #163=IFCBUILDINGELEMENTPROXY('0000000000000000000163',$,$,$,$,#162,#124,$,$);\n\
+         #164=IFCCARTESIANPOINT((5.,0.,9.912506328));\n\
+         #165=IFCAXIS2PLACEMENT3D(#164,$,$);\n"
     ))
     .replace("FILE_SCHEMA(('IFC4'))", "FILE_SCHEMA(('IFC4X3_ADD2'))")
 }
 
-/// openbimrs/ifc#347, fixed in ifc-geometry 0.8.2: a distance along an
-/// alignment centreline given as `IfcParameterValue` is undefined in IFC4.3
-/// ADD2, and from axiolid-evaluate 0.3.6 the reference evaluator would read
-/// it as plan distance. Deriving the frame refuses it by name, naming the
-/// gradient curve, before any evaluator sees it; the same distance as
-/// `IfcLengthMeasure` is placed on the centreline.
+/// The height of the gradient curve (#79) 5 m along it: on the sag arc of
+/// radius 1000 m entering at 10 m with a grade of -0.02 (its centre lies
+/// 1000 m along the left normal of the entry tangent).
+fn gradient_height_at_5() -> f64 {
+    let (cx, cy): (f64, f64) = (
+        1000.0 * 0.019_996_001_199_600_14,
+        10.0 + 1000.0 * 0.999_800_059_980_007_1,
+    );
+    cy - (1000.0_f64.powi(2) - (5.0 - cx).powi(2)).sqrt()
+}
+
+/// engine#224 through ifc-geometry 0.10 (openbimrs/ifc#353, #354, #355): a
+/// product's world frame is derived from its linear placement with the
+/// reference evaluator. An `IfcParameterValue` along an alignment is
+/// undefined in IFC4.3 ADD2 and refused by name, naming the gradient curve
+/// (openbimrs/ifc#347); the same distance as `IfcLengthMeasure` is placed
+/// on the centreline in the (tangent, left, up) frame; a cache 12.5 mm off
+/// the curve is refused with both positions, and one on it is placed where
+/// the curve is.
 #[test]
 fn an_alignment_parameter_is_refused_by_name_and_a_length_is_placed() {
     use axiolid_evaluate::ReferenceCurveEvaluator;
-    use ifc_alignment::{AlignmentUnits, resolve_linear_placement};
-    use ifc_geometry::GeometryError;
-    use ifc_geometry::constraint::placement::derive::derive_placement_transform;
+    use ifc_geometry::{
+        CachedPositionPolicy, GeometryError, product_world_transform_with_evaluator,
+    };
     use ifc_model::EntityId;
 
     let model = axioval::ifc::read_ifc_step(linearly_placed_cubes().as_bytes()).unwrap();
     let units = ifc_geometry::units::resolve(&model);
-    let alignment_units = AlignmentUnits {
-        length_to_metres: units.length_to_metres,
-        angle_to_radians: units.angle_to_radians,
-    };
     let evaluator = ReferenceCurveEvaluator::new();
-    let derive = |placement: u64| {
-        let linear = resolve_linear_placement(&model, EntityId(placement), alignment_units)
-            .expect("a well-formed linear placement");
-        derive_placement_transform(
+    let place = |product: u64| {
+        product_world_transform_with_evaluator(
             &model,
             &units,
-            EntityId(placement),
-            &linear.relative_placement,
+            EntityId(product),
             &evaluator,
+            CachedPositionPolicy::Verify,
         )
     };
 
-    match derive(132) {
+    match place(133) {
         Err(GeometryError::Unsupported {
             entity,
             type_name,
@@ -1948,51 +1962,53 @@ fn an_alignment_parameter_is_refused_by_name_and_a_length_is_placed() {
         other => panic!("an alignment parameter must be refused by name: {other:?}"),
     }
 
-    // 5 m along the straight plan; the height is on the sag arc of radius
-    // 1000 m entering at 10 m with a grade of -0.02 (its centre lies 1000 m
-    // along the left normal of the entry tangent).
-    let placed = derive(142).expect("a length along the centreline is placed");
-    let (cx, cy): (f64, f64) = (
-        1000.0 * 0.019_996_001_199_600_14,
-        10.0 + 1000.0 * 0.999_800_059_980_007_1,
-    );
-    let height = cy - (1000.0_f64.powi(2) - (5.0 - cx).powi(2)).sqrt();
-    for (axis, expected) in [5.0, 0.0, height].into_iter().enumerate() {
-        assert!(
-            (placed.origin[axis] - expected).abs() < 1e-6,
-            "origin {:?} != (5, 0, {height})",
-            placed.origin
-        );
+    let height = gradient_height_at_5();
+    for product in [143, 163] {
+        let placed = place(product).expect("a length along the centreline is placed");
+        for (axis, expected) in [5.0, 0.0, height].into_iter().enumerate() {
+            assert!(
+                (placed.origin[axis] - expected).abs() < 1e-6,
+                "#{product}: origin {:?} != (5, 0, {height})",
+                placed.origin
+            );
+        }
+        // Local Y is left of the plan direction (+X), local Z up.
+        let [_, left, up] = placed.basis;
+        assert!((left[1] - 1.0).abs() < 1e-9, "#{product}: left {left:?}");
+        assert!(up[2] > 0.99, "#{product}: up {up:?}");
+    }
+
+    match place(153) {
+        Err(GeometryError::CachedPlacementMismatch {
+            placement,
+            cached,
+            derived,
+            distance,
+            ..
+        }) => {
+            assert_eq!(placement, EntityId(152));
+            assert!((cached[2] - 9.9).abs() < 1e-12, "{cached:?}");
+            assert!((derived[2] - height).abs() < 1e-6, "{derived:?}");
+            assert!((distance - (height - 9.9)).abs() < 1e-6, "{distance}");
+        }
+        other => panic!("a cache off the curve must be refused: {other:?}"),
     }
 }
 
-/// End to end, a product whose `IfcLinearPlacement` states only the
-/// distance along the alignment is never placed, whether the distance is a
-/// parameter or a length: the bridge derives no frame, so both are
-/// unmeasured by name. The cached `CartesianPosition` places the third.
+/// End to end, a product placed along an alignment by distance alone is
+/// placed where its linear expression puts it (engine#224): the cube by
+/// `IfcLengthMeasure` and the one whose cache agrees are measured; the
+/// parameter is refused by name, and the cube whose cache disagrees with
+/// the curve is never placed by the cache.
 #[test]
-fn with_geometry_a_linear_placement_without_a_cached_position_is_never_placed() {
+fn with_geometry_a_linear_placement_is_placed_along_its_basis_curve() {
     let case = Case::new("geometry-linear-placement");
-    let model = case.write("model.ifc", &linearly_placed_cubes());
-    let saved = case.path("result.json");
-    let (definitions, ruleset) = case.clash_packages();
-    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
-        .arg("check")
-        .arg("--model")
-        .arg(model)
-        .arg("--definitions")
-        .arg(definitions)
-        .arg("--ruleset")
-        .arg(ruleset)
-        .args(["--geometry", "--report", saved.to_str().unwrap()])
-        .output()
-        .unwrap();
+    let (output, result) = geometry_clash(&case, &linearly_placed_cubes());
     assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
 
-    let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
     let geometry = &result["geometry"];
-    // Both walls and the cube at its cached position.
-    assert_eq!(geometry["exact"], 3, "{geometry:#}");
+    // Both walls, the cube by length and the cube whose cache agrees.
+    assert_eq!(geometry["exact"], 4, "{geometry:#}");
     let unmeasured = geometry["unmeasured"].as_array().unwrap();
     let reason = |local: &str| {
         unmeasured
@@ -2001,15 +2017,97 @@ fn with_geometry_a_linear_placement_without_a_cached_position_is_never_placed() 
             .and_then(|entry| entry["reason"].as_str())
             .unwrap_or_else(|| panic!("{local} must be unmeasured: {geometry:#}"))
     };
-    for cube in ["#133", "#143"] {
-        let why = reason(cube);
+    let parameter = reason("#133");
+    assert!(
+        parameter.contains("IFCGRADIENTCURVE") && parameter.contains("IfcParameterValue"),
+        "{parameter}"
+    );
+    let stale = reason("#153");
+    assert!(
+        stale.contains("#152") && stale.contains("cached CartesianPosition"),
+        "{stale}"
+    );
+    assert_eq!(reason("#30"), "no body representation");
+    assert_eq!(unmeasured.len(), 3, "{geometry:#}");
+}
+
+/// openbimrs/ifc#357: deriving a linear placement composes neither its
+/// `PlacementRelTo` nor the placement of the alignment holding its basis
+/// curve. Where either is not the identity the product is unmeasured
+/// with that reason, never placed where the curve alone puts it; at the
+/// identity it is placed.
+#[test]
+fn with_geometry_a_linear_placement_off_an_unplaced_frame_is_never_placed() {
+    // The gradient curve as the `Axis` of an alignment at `x`, and the
+    // cube by length (#143) placed relative to `relative_to`.
+    let model = |x: f64, relative_to: &str| {
+        linearly_placed_cubes()
+            .replace(
+                "#142=IFCLINEARPLACEMENT($,#141,$);",
+                &format!("#142=IFCLINEARPLACEMENT({relative_to},#141,$);"),
+            )
+            .replace(
+                "ENDSEC;\nEND-ISO",
+                &format!(
+                    "#170=IFCCARTESIANPOINT(({x},0.,0.));\n\
+                     #171=IFCAXIS2PLACEMENT3D(#170,$,$);\n\
+                     #172=IFCLOCALPLACEMENT($,#171);\n\
+                     #173=IFCSHAPEREPRESENTATION(#5,'Axis','Curve3D',(#79));\n\
+                     #174=IFCPRODUCTDEFINITIONSHAPE($,$,(#173));\n\
+                     #175=IFCALIGNMENT('0000000000000000000175',$,$,$,$,#172,#174,$);\n\
+                     #176=IFCCARTESIANPOINT((0.,0.,1.));\n\
+                     #177=IFCAXIS2PLACEMENT3D(#176,$,$);\n\
+                     #178=IFCLOCALPLACEMENT($,#177);\n\
+                     ENDSEC;\nEND-ISO"
+                ),
+            )
+    };
+    let unmeasured = |result: &Value| -> std::collections::BTreeMap<String, String> {
+        result["geometry"]["unmeasured"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|entry| {
+                (
+                    entry["object"]["local_id"].as_str().unwrap().to_owned(),
+                    entry["reason"].as_str().unwrap().to_owned(),
+                )
+            })
+            .collect()
+    };
+
+    // The alignment 100 m along x: every cube on its curve is refused,
+    // naming the alignment, whatever its distance or cache says.
+    let case = Case::new("geometry-linear-placement-offset-alignment");
+    let (output, result) = geometry_clash(&case, &model(100.0, "$"));
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let refused = unmeasured(&result);
+    for cube in ["#133", "#143", "#153", "#163"] {
+        let why = &refused[cube];
         assert!(
-            why.contains("IFCLINEARPLACEMENT") && why.contains("no CartesianPosition"),
+            why.contains("openbimrs/ifc#357") && why.contains("#175"),
             "{cube}: {why}"
         );
     }
-    assert_eq!(reason("#30"), "no body representation");
-    assert_eq!(unmeasured.len(), 3, "{geometry:#}");
+    assert_eq!(result["geometry"]["exact"], 2, "{result:#}");
+
+    // The alignment at the origin composes as none; a `PlacementRelTo` 1 m
+    // up does not, and only that cube is refused.
+    let case = Case::new("geometry-linear-placement-relative");
+    let (output, result) = geometry_clash(&case, &model(0.0, "#178"));
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let refused = unmeasured(&result);
+    let why = &refused["#143"];
+    assert!(
+        why.contains("openbimrs/ifc#357") && why.contains("PlacementRelTo #178"),
+        "{why}"
+    );
+    assert!(!refused.contains_key("#163"), "{refused:#?}");
+    assert!(
+        refused["#133"].contains("IfcParameterValue"),
+        "{refused:#?}"
+    );
+    assert_eq!(result["geometry"]["exact"], 3, "{result:#}");
 }
 
 /// The crossing walls with an `IfcOpeningElement` (#208) voiding the first

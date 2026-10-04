@@ -6,6 +6,20 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- Products along alignments are placed by their linear placement (#224).
+  With `--geometry`, an `IfcLinearPlacement` is derived from its basis
+  curve through `ifc-geometry` 0.10's evaluator-taking lowering
+  (openbimrs/ifc#353) with the Axiolid reference curve evaluator, so a
+  product placed by distance alone is measured instead of unmeasured as
+  having no `CartesianPosition`. A cached `CartesianPosition` is checked
+  against the derived position (`CachedPositionPolicy::Verify`, #354): one
+  farther than the model's precision leaves the product unmeasured with
+  both positions named, never placed by the cache. An `IfcParameterValue`
+  along an alignment stays refused by name (#347). Where the derivation
+  would ignore a stated frame, a `PlacementRelTo` or an alignment placed
+  off the identity (openbimrs/ifc#357), the product is unmeasured with that
+  reason, never misplaced.
+
 - Hosts of Reference View openings are measured (#218). With `--geometry`,
   an `IfcOpeningElement` whose every representation is `Reference` is taken
   as already applied to its host in an IFC4 or IFC4X3 file
@@ -129,6 +143,12 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Behaviour:** derived linear placements follow IFC4.3 (`ifc-geometry`
+  0.10, openbimrs/ifc#355): a positive `OffsetLateral` lies to the left of
+  the basis curve's direction and the product's local Z is up, with an
+  explicit `Axis`/`RefDirection` composed in that frame. Products placed by
+  a cached `CartesianPosition` are now placed at the derived position when
+  the two agree and unmeasured when they do not.
 - The IFC crates move to `ifc-geometry` 0.10, `openbim-ifc` 0.16,
   `ifc-properties` 0.8.1 and `ifc-schema` 0.3.2. The IFC adapter's property
   service resolves through `ifc-properties`' `PropertyIndex`
@@ -149,9 +169,8 @@ All notable changes are documented here. This project follows Semantic Versionin
   plain `IfcCompositeCurve` basis is refused by name (openbimrs/ifc#346). A
   test pins the 0.8.2 fix (openbimrs/ifc#347): deriving a linear
   placement's frame refuses an `IfcParameterValue` along an alignment by
-  name and places an `IfcLengthMeasure`; with geometry, a product on an
-  `IfcLinearPlacement` without a cached `CartesianPosition` stays
-  unmeasured by name, never placed.
+  name and places an `IfcLengthMeasure` (with geometry such products are
+  placed since #224).
 - **Breaking:** IDS documents are audited against the IFC schemas of their
   listed releases on import and export (`openbim-ids` 0.2.1 with its
   `audit-schema` feature; no template data, `cargo deny` unchanged).

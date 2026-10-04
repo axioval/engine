@@ -56,6 +56,20 @@
 //! has one: two exact meshes are never certified, so boundaries of planar
 //! bodies alone would be built for nothing.
 //!
+//! A product on an IFC4X3 `IfcLinearPlacement` is placed where its linear
+//! expression puts it: every lowering derives the frame from the basis
+//! curve through `ifc-geometry`'s evaluator-taking entry points
+//! (`LoweringSession::with_curve_evaluator`,
+//! `product_world_transform_with_evaluator`, openbimrs/ifc#353) with the
+//! Axiolid reference evaluator, in IFC4.3's (tangent, left, up) frame
+//! (#355). A cached `CartesianPosition` is checked against the derived one
+//! (`CachedPositionPolicy::Verify`, #354): farther apart than the model's
+//! tolerance leaves the product unmeasured with both positions named. An
+//! `IfcParameterValue` along an alignment is refused by name (#347). Where
+//! the derivation would ignore a frame the file states (a `PlacementRelTo`
+//! or a basis curve placed off the identity, openbimrs/ifc#357), the
+//! product is unmeasured with that reason ([`Linear`]), never misplaced.
+//!
 //! Relationships derived from geometry (`axioval:derived.*`) need to know
 //! which objects are spaces and which are doors, windows or openings. An
 //! opening occupies no material, so its void is meshed separately and handed
@@ -80,6 +94,7 @@ use std::error::Error;
 use axiolid_contracts::{ExecutionOptions, GeomError};
 use axiolid_core::Tolerance;
 use axiolid_curve::{Curve2, Curve3};
+use axiolid_evaluate::ReferenceCurveEvaluator;
 use axiolid_mesh_boolean_boolmesh::BoolmeshBoolean;
 use axiolid_mesh_compile::{DeviationBound, DeviationReport, ReferenceMeshCompiler};
 use axiolid_mesh_compile_contract::MeshCompiler;
@@ -111,11 +126,12 @@ use axioval::engine::{
 use axioval::ir::{ObjectId, PropertyValue, Report, SourceId};
 use axioval::rules::{CoordinateTolerance, compare_coordinate_systems};
 use axioval::{bcf, bcf_snapshot};
+use ifc_geometry::constraint::local::PlacementResolver;
 use ifc_geometry::lower::{
     AppliedReason, LoweringSession, NetOptions, ReferenceOnlyOpenings, lower_connection_surface,
     lower_product_net_with, lower_representation_item,
 };
-use ifc_geometry::{RepresentationPurpose, Transform};
+use ifc_geometry::{CachedPositionPolicy, GeometryError, RepresentationPurpose, Transform};
 use ifc_model::{EntityId, Model};
 use ifc_spatial::relation::boundary::{ConnectionGeometryAnomaly, SpaceBoundary};
 use ifc_spatial::{SpatialAnomaly, SpatialKind, SpatialTree};
@@ -210,6 +226,273 @@ struct Parsed {
     /// How the host's openings are subtracted: `Reference`-only openings
     /// taken as applied in an IFC4 or IFC4X3 file ([`net_options`]).
     net: NetOptions,
+    /// Linear placements whose derivation would ignore a stated frame.
+    linear: Linear,
+}
+
+/// The curve evaluator every `IfcLinearPlacement` is derived with: the
+/// Axiolid reference evaluator, global `+Z` up.
+static EVALUATOR: ReferenceCurveEvaluator = ReferenceCurveEvaluator::new();
+
+/// What a cached `CartesianPosition` is: checked against the position the
+/// linear expression derives, and a mismatch beyond the model's tolerance
+/// refused (`GeometryError::CachedPlacementMismatch`), never placed.
+const CACHED_POSITIONS: CachedPositionPolicy = CachedPositionPolicy::Verify;
+
+/// A lowering session deriving linear placements through [`EVALUATOR`].
+fn session<'a>(model: &'a Model, units: &'a ifc_geometry::units::UnitScale) -> LoweringSession<'a> {
+    LoweringSession::new(model, units)
+        .with_curve_evaluator(&EVALUATOR)
+        .with_cached_position_policy(CACHED_POSITIONS)
+}
+
+/// `product`'s world transform in metres, a linear placement derived
+/// through [`EVALUATOR`].
+fn world_transform(
+    model: &Model,
+    units: &ifc_geometry::units::UnitScale,
+    product: EntityId,
+) -> Result<Transform, GeometryError> {
+    ifc_geometry::product_world_transform_with_evaluator(
+        model,
+        units,
+        product,
+        &EVALUATOR,
+        CACHED_POSITIONS,
+    )
+}
+
+/// `IfcObjectPlacement.PlacementRelTo`, `IfcLinearPlacement.RelativePlacement`,
+/// `IfcAxis2PlacementLinear.Location` and
+/// `IfcPointByDistanceExpression.BasisCurve`.
+const PLACEMENT_REL_TO: usize = 0;
+const RELATIVE_PLACEMENT: usize = 1;
+const LINEAR_LOCATION: usize = 0;
+const BASIS_CURVE: usize = 4;
+
+/// `IfcProduct.ObjectPlacement`.
+const OBJECT_PLACEMENT: usize = 5;
+
+/// IFC4X3 positioning elements whose representations hold alignment curves.
+const ALIGNMENTS: &[&str] = &[
+    "IFCALIGNMENT",
+    "IFCALIGNMENTHORIZONTAL",
+    "IFCALIGNMENTVERTICAL",
+    "IFCALIGNMENTCANT",
+    "IFCALIGNMENTSEGMENT",
+    "IFCLINEARPOSITIONINGELEMENT",
+];
+
+/// How far, in metres and in each axis component, a frame may lie from the
+/// identity and still be the identity: floating-point rounding.
+const IDENTITY: f64 = 1e-9;
+
+/// The `IfcLinearPlacement`s of one model whose derivation would ignore a
+/// frame the file states, each with the reason.
+///
+/// `ifc-geometry` 0.10 evaluates the basis curve in world coordinates and
+/// ignores the placement's `PlacementRelTo` (openbimrs/ifc#357). Both are
+/// harmless at the identity, so only these refuse: a `PlacementRelTo` whose
+/// world frame is not the identity or cannot be resolved; a basis curve
+/// held by a representation of a product placed off the identity (the
+/// representation context's world coordinate system above the product's
+/// placement); and a basis curve held by no representation (an alignment's
+/// curve nested under another one) while some alignment of the model is
+/// placed off the identity, since its frame is then not known. A product
+/// on such a placement, or voided by an opening on one, is unmeasured with
+/// the reason, never placed where the derivation alone puts it.
+#[derive(Debug, Default)]
+struct Linear {
+    refused: BTreeMap<EntityId, String>,
+}
+
+impl Linear {
+    /// Every linear placement of `model` refused, with the reason.
+    fn scan(model: &Model, units: &ifc_geometry::units::UnitScale) -> Self {
+        let placements = model.ids_of_type("IFCLINEARPLACEMENT");
+        if placements.is_empty() {
+            return Self::default();
+        }
+        let curves: BTreeMap<EntityId, EntityId> = placements
+            .iter()
+            .filter_map(|&placement| Some((placement, basis_curve(model, placement)?)))
+            .collect();
+        let owners = curve_owners(model, &curves.values().copied().collect());
+        let refused = placements
+            .iter()
+            .filter_map(|&placement| {
+                let reason = relative_to(model, units, placement).err().or_else(|| {
+                    let curve = curves.get(&placement)?;
+                    curve_frame(model, units, *curve, owners.get(curve)).err()
+                })?;
+                Some((
+                    placement,
+                    format!(
+                        "{placement} (IFCLINEARPLACEMENT): {reason}, which deriving the \
+                         placement does not compose (openbimrs/ifc#357), so the product is not \
+                         placed"
+                    ),
+                ))
+            })
+            .collect();
+        Self { refused }
+    }
+
+    /// Why `product` cannot be placed: its own placement, or that of an
+    /// opening voiding it, is refused. `None` otherwise.
+    fn refusal(&self, model: &Model, product: EntityId) -> Option<String> {
+        if self.refused.is_empty() {
+            return None;
+        }
+        std::iter::once(product)
+            .chain(ifc_geometry::openings_of(model, product))
+            .find_map(|object| {
+                let placement = ifc_geometry::Slots::new(object, model.get(object)?)
+                    .opt_ref(OBJECT_PLACEMENT)?;
+                let reason = self.refused.get(&placement)?;
+                Some(if object == product {
+                    reason.clone()
+                } else {
+                    format!("its opening {object} is not placed: {reason}")
+                })
+            })
+    }
+}
+
+/// The basis curve of a linear placement's `IfcPointByDistanceExpression`,
+/// if it states one; anything else is the lowering's to refuse.
+fn basis_curve(model: &Model, placement: EntityId) -> Option<EntityId> {
+    let relative =
+        ifc_geometry::Slots::new(placement, model.get(placement)?).opt_ref(RELATIVE_PLACEMENT)?;
+    let location =
+        ifc_geometry::Slots::new(relative, model.get(relative)?).opt_ref(LINEAR_LOCATION)?;
+    let point = model.get(location)?;
+    point
+        .is_type("IFCPOINTBYDISTANCEEXPRESSION")
+        .then(|| ifc_geometry::Slots::new(location, point).opt_ref(BASIS_CURVE))
+        .flatten()
+}
+
+/// Whether a linear placement's `PlacementRelTo`, if any, is the identity.
+fn relative_to(
+    model: &Model,
+    units: &ifc_geometry::units::UnitScale,
+    placement: EntityId,
+) -> Result<(), String> {
+    let entity = model
+        .get(placement)
+        .ok_or_else(|| format!("{placement} does not exist"))?;
+    let Some(relative) = ifc_geometry::Slots::new(placement, entity).opt_ref(PLACEMENT_REL_TO)
+    else {
+        return Ok(());
+    };
+    let frame = PlacementResolver::new()
+        .world_transform(model, relative)
+        .map_err(|error| format!("its PlacementRelTo {relative} cannot be resolved ({error})"))?
+        .to_metres(units);
+    if frame.is_identity(IDENTITY) {
+        Ok(())
+    } else {
+        Err(format!(
+            "its PlacementRelTo {relative} places it off the identity"
+        ))
+    }
+}
+
+/// For each of `curves`, the products and representations holding it as
+/// an item.
+fn curve_owners(
+    model: &Model,
+    curves: &BTreeSet<EntityId>,
+) -> BTreeMap<EntityId, Vec<(EntityId, EntityId)>> {
+    let mut holding: BTreeMap<EntityId, Vec<EntityId>> = BTreeMap::new();
+    for type_name in ["IFCSHAPEREPRESENTATION", "IFCTOPOLOGYREPRESENTATION"] {
+        for (id, entity) in model.of_type(type_name) {
+            let items = ifc_geometry::Representation::new(id, entity)
+                .items()
+                .unwrap_or_default();
+            let held: Vec<EntityId> = items
+                .into_iter()
+                .filter(|item| curves.contains(item))
+                .collect();
+            if !held.is_empty() {
+                holding.insert(id, held);
+            }
+        }
+    }
+    let mut owners: BTreeMap<EntityId, Vec<(EntityId, EntityId)>> = BTreeMap::new();
+    if holding.is_empty() {
+        return owners;
+    }
+    for product in ifc_geometry::geometric_products(model) {
+        let Some(shape) = model.get(product).and_then(|entity| {
+            ifc_geometry::Slots::new(product, entity).opt_ref(PRODUCT_REPRESENTATION)
+        }) else {
+            continue;
+        };
+        let Some(representations) = model.get(shape).and_then(|entity| {
+            ifc_geometry::ProductShape::new(shape, entity)
+                .representations()
+                .ok()
+        }) else {
+            continue;
+        };
+        for representation in representations {
+            for curve in holding.get(&representation).into_iter().flatten() {
+                owners
+                    .entry(*curve)
+                    .or_default()
+                    .push((product, representation));
+            }
+        }
+    }
+    owners
+}
+
+/// Whether `curve` lies in world coordinates: every product holding it is
+/// placed at the identity, or, held by none, every alignment of the model.
+fn curve_frame(
+    model: &Model,
+    units: &ifc_geometry::units::UnitScale,
+    curve: EntityId,
+    owners: Option<&Vec<(EntityId, EntityId)>>,
+) -> Result<(), String> {
+    if let Some(owners) = owners.filter(|owners| !owners.is_empty()) {
+        for &(product, representation) in owners {
+            let placement = ifc_geometry::product_world_transform(model, units, product)
+                .map_err(|error| {
+                    format!("the placement of {product}, which holds its basis curve {curve}, cannot be resolved ({error})")
+                })?;
+            let frame = context_frame(model, units, representation).ok_or_else(|| {
+                format!("the context of {representation}, which holds its basis curve {curve}, cannot be read")
+            })?;
+            if !frame.compose(&placement).is_identity(IDENTITY) {
+                return Err(format!(
+                    "its basis curve {curve} is held by {product}, which is placed off the identity"
+                ));
+            }
+        }
+        return Ok(());
+    }
+    for type_name in ALIGNMENTS {
+        for (alignment, entity) in model.of_type(type_name) {
+            if ifc_geometry::Slots::new(alignment, entity)
+                .opt_ref(OBJECT_PLACEMENT)
+                .is_none()
+            {
+                continue;
+            }
+            let placed = ifc_geometry::product_world_transform(model, units, alignment)
+                .is_ok_and(|placement| placement.is_identity(IDENTITY));
+            if !placed {
+                return Err(format!(
+                    "its basis curve {curve} is held by no representation, and the alignment \
+                     {alignment} is placed off the identity, so the curve's frame is not known"
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// The net lowering options for a file of `schema`: an
@@ -311,7 +594,16 @@ fn parse(
         .map_err(|error| format!("{}: {error}", source.document))?;
         let units = ifc_geometry::units::resolve(&model);
         let net = net_options(snapshot.schema());
-        parsed.insert(source.clone(), Parsed { model, units, net });
+        let linear = Linear::scan(&model, &units);
+        parsed.insert(
+            source.clone(),
+            Parsed {
+                model,
+                units,
+                net,
+                linear,
+            },
+        );
     }
     Ok(parsed)
 }
@@ -379,7 +671,13 @@ pub fn attach(
 
     for object in session.project().objects() {
         let id = object.id.clone();
-        let Some(Parsed { model, units, net }) = parsed.get(&id.source) else {
+        let Some(Parsed {
+            model,
+            units,
+            net,
+            linear,
+        }) = parsed.get(&id.source)
+        else {
             return Err(format!("no model for source `{}`", id.source).into());
         };
         let is_space = is_a(&id, "IfcSpace");
@@ -393,7 +691,15 @@ pub fn attach(
                 let void = entity_id(&id)
                     .ok_or_else(|| "not a STEP instance id".to_owned())
                     .and_then(|entity| {
-                        mesh(&backend, model, units, entity, false, NetOptions::default())
+                        mesh(
+                            &backend,
+                            model,
+                            units,
+                            linear,
+                            entity,
+                            false,
+                            NetOptions::default(),
+                        )
                     })
                     .and_then(|meshed| {
                         meshed
@@ -422,6 +728,7 @@ pub fn attach(
             &backend,
             model,
             units,
+            linear,
             entity,
             options.exact_boundaries,
             *net,
@@ -463,7 +770,7 @@ pub fn attach(
             }
             Ok(None) => {
                 // Kept for the whole in case its parts cannot measure it.
-                if let Some(bound) = stated_box(model, units, entity) {
+                if let Some(bound) = stated_box(model, units, linear, entity) {
                     stated.insert(id.clone(), bound);
                 }
                 wholes.push(id);
@@ -471,7 +778,7 @@ pub fn attach(
             Err(error) => {
                 report.unmeasured.push((id.clone(), error.clone()));
                 geometry = geometry.with_unmeasured(id.clone(), error);
-                if let Some((min, max)) = stated_box(model, units, entity) {
+                if let Some((min, max)) = stated_box(model, units, linear, entity) {
                     geometry = geometry.with_unmeasured_bound(id, min, max);
                 }
             }
@@ -487,7 +794,13 @@ pub fn attach(
             && applied_openings.contains(id)
             && let (Some(parsed), Some(entity)) = (parsed.get(&id.source), entity_id(id))
         {
-            *void = reference_void(&backend, &parsed.model, &parsed.units, entity);
+            *void = reference_void(
+                &backend,
+                &parsed.model,
+                &parsed.units,
+                &parsed.linear,
+                entity,
+            );
         }
     }
 
@@ -928,8 +1241,15 @@ fn with_levels(
         .collect();
     let mut siblings: BTreeMap<Parent, Vec<(ObjectId, Height)>> = BTreeMap::new();
     for id in kinds.keys().filter(|id| is_a(id, "IfcBuildingStorey")) {
-        let (Some(entity), Some(Parsed { model, units, .. })) =
-            (entity_id(id), parsed.get(&id.source))
+        let (
+            Some(entity),
+            Some(Parsed {
+                model,
+                units,
+                linear,
+                ..
+            }),
+        ) = (entity_id(id), parsed.get(&id.source))
         else {
             continue;
         };
@@ -937,8 +1257,10 @@ fn with_levels(
             .get(&id.source)
             .and_then(|tree| tree.node(entity))
             .and_then(|node| node.parent);
-        let height = ifc_geometry::product_world_transform(model, units, entity)
-            .map_err(|error| error.to_string())
+        let height = linear
+            .refusal(model, entity)
+            .map_or_else(|| Ok(()), Err)
+            .and_then(|()| world_transform(model, units, entity).map_err(|e| e.to_string()))
             .and_then(|frame| {
                 let up = frame.basis[2];
                 if up[0].abs() > 1e-12 || up[1].abs() > 1e-12 || (up[2] - 1.0).abs() > 1e-12 {
@@ -1123,7 +1445,16 @@ fn boundary_service(
     for id in kinds.keys().filter(|id| is_a(id, "IfcSpace")) {
         service = service.with_space(id.clone());
     }
-    for (source, Parsed { model, units, .. }) in parsed {
+    for (
+        source,
+        Parsed {
+            model,
+            units,
+            linear,
+            ..
+        },
+    ) in parsed
+    {
         let object = |entity: EntityId| ObjectId {
             source: source.clone(),
             local_id: entity.to_string(),
@@ -1137,7 +1468,7 @@ fn boundary_service(
                 .map(object)
                 .filter(|id| kinds.contains_key(id));
             let id = object(boundary.id);
-            service = match boundary_surface(backend, model, units, &boundary, &space) {
+            service = match boundary_surface(backend, model, units, linear, &boundary, &space) {
                 Ok((mesh, Fit::Exact)) => service.with_boundary(space, id, element, mesh),
                 Ok((mesh, Fit::Within(deviation))) => {
                     service.with_tessellated_boundary(space, id, element, mesh, deviation)
@@ -1165,6 +1496,7 @@ fn boundary_surface(
     backend: &Compiler,
     model: &Model,
     units: &ifc_geometry::units::UnitScale,
+    linear: &Linear,
     boundary: &SpaceBoundary,
     space: &ObjectId,
 ) -> Result<(axiolid_mesh::TriMesh, Fit), String> {
@@ -1183,8 +1515,8 @@ fn boundary_surface(
         }
         Err(anomaly) => return Err(format!("unreadable connection geometry: {anomaly:?}")),
     };
-    let frame = space_frame(model, units, space)?;
-    let mut session = LoweringSession::new(model, units);
+    let frame = space_frame(model, units, linear, space)?;
+    let mut session = session(model, units);
     let root = lower_connection_surface(&mut session, connection, frame)
         .map_err(|error| error.to_string())?;
     let lowered = session.finish(root).map_err(|error| error.to_string())?;
@@ -1427,18 +1759,23 @@ fn compilation_refused(error: &GeomError) -> String {
 fn space_frame(
     model: &Model,
     units: &ifc_geometry::units::UnitScale,
+    linear: &Linear,
     space: &ObjectId,
 ) -> Result<Transform, String> {
     let entity = entity_id(space).ok_or("the space is not a STEP instance")?;
-    match ifc_geometry::product_representation_frame(
+    if let Some(reason) = linear.refusal(model, entity) {
+        return Err(reason);
+    }
+    match ifc_geometry::product_representation_frame_with_evaluator(
         model,
         units,
         entity,
         RepresentationPurpose::Body,
+        &EVALUATOR,
+        CACHED_POSITIONS,
     ) {
         Ok(Some(frame)) => Ok(frame),
-        Ok(None) => ifc_geometry::product_world_transform(model, units, entity)
-            .map_err(|error| error.to_string()),
+        Ok(None) => world_transform(model, units, entity).map_err(|error| error.to_string()),
         Err(error) => Err(error.to_string()),
     }
 }
@@ -1522,14 +1859,18 @@ const PRODUCT_REPRESENTATION: usize = 6;
 fn stated_box(
     model: &Model,
     units: &ifc_geometry::units::UnitScale,
+    linear: &Linear,
     product: EntityId,
 ) -> Option<([f64; 3], [f64; 3])> {
+    if linear.refusal(model, product).is_some() {
+        return None;
+    }
     let shape =
         ifc_geometry::Slots::new(product, model.get(product)?).opt_ref(PRODUCT_REPRESENTATION)?;
     let representations = ifc_geometry::ProductShape::new(shape, model.get(shape)?)
         .representations()
         .ok()?;
-    let placement = ifc_geometry::product_world_transform(model, units, product).ok()?;
+    let placement = world_transform(model, units, product).ok()?;
     let mut bound: Option<([f64; 3], [f64; 3])> = None;
     for id in representations {
         let representation = ifc_geometry::Representation::new(id, model.get(id)?);
@@ -1577,11 +1918,15 @@ fn mesh(
     backend: &Compiler,
     model: &Model,
     units: &ifc_geometry::units::UnitScale,
+    linear: &Linear,
     product: EntityId,
     boundary: bool,
     net: NetOptions,
 ) -> Meshed {
-    let mut session = LoweringSession::new(model, units);
+    if let Some(reason) = linear.refusal(model, product) {
+        return Err(reason);
+    }
+    let mut session = session(model, units);
     let Some(net) =
         lower_product_net_with(&mut session, product, net).map_err(|e| e.to_string())?
     else {
@@ -1613,8 +1958,12 @@ fn reference_void(
     backend: &Compiler,
     model: &Model,
     units: &ifc_geometry::units::UnitScale,
+    linear: &Linear,
     opening: EntityId,
 ) -> Void {
+    if let Some(reason) = linear.refusal(model, opening) {
+        return Err(reason);
+    }
     let entity = model
         .get(opening)
         .ok_or_else(|| format!("the opening {opening} does not exist"))?;
@@ -1629,9 +1978,8 @@ fn reference_void(
     )
     .representations()
     .map_err(|error| error.to_string())?;
-    let placement = ifc_geometry::product_world_transform(model, units, opening)
-        .map_err(|error| error.to_string())?;
-    let mut session = LoweringSession::new(model, units);
+    let placement = world_transform(model, units, opening).map_err(|error| error.to_string())?;
+    let mut session = session(model, units);
     let mut roots = Vec::new();
     for id in representations {
         let representation = ifc_geometry::Representation::new(
@@ -2196,6 +2544,7 @@ mod tests {
             &backend,
             &model,
             &units,
+            &super::Linear::default(),
             ifc_model::EntityId(90),
             false,
             super::NetOptions::default(),
@@ -2369,6 +2718,7 @@ mod tests {
                 &backend,
                 &model,
                 &units,
+                &super::Linear::default(),
                 ifc_model::EntityId(90),
                 false,
                 super::NetOptions::default(),
@@ -2496,6 +2846,64 @@ mod tests {
         }
     }
 
+    /// engine#224, openbimrs/ifc#355: a product on a linear placement with
+    /// a positive `OffsetLateral` lies to the LEFT of the basis curve's
+    /// direction, and its local Z is up. The curve runs along +Y, so left
+    /// is -X: a 1 m square column 3 m tall, 5 m along and 2 m left, spans
+    /// x -2.5..-1.5, y 4.5..5.5 and z 0..3. Before 0.10 it moved right and
+    /// its Z lay along the lateral.
+    #[test]
+    fn a_lateral_offset_places_a_product_left_of_its_curve_and_upright() {
+        let model = "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4X3_ADD2'));\nENDSEC;\nDATA;\n\
+             #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+             #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+             #4=IFCDIRECTION((0.,0.,1.));\n\
+             #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+             #90=IFCPOLYLINE((#1,#91));\n\
+             #91=IFCCARTESIANPOINT((0.,20.,0.));\n\
+             #92=IFCPOINTBYDISTANCEEXPRESSION(IFCLENGTHMEASURE(5.),2.,$,$,#90);\n\
+             #93=IFCAXIS2PLACEMENTLINEAR(#92,$,$);\n\
+             #94=IFCLINEARPLACEMENT($,#93,$);\n\
+             #95=IFCCARTESIANPOINT((0.,0.));\n\
+             #96=IFCAXIS2PLACEMENT2D(#95,$);\n\
+             #97=IFCRECTANGLEPROFILEDEF(.AREA.,$,#96,1.,1.);\n\
+             #98=IFCEXTRUDEDAREASOLID(#97,#2,#4,3.);\n\
+             #99=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#98));\n\
+             #100=IFCPRODUCTDEFINITIONSHAPE($,$,(#99));\n\
+             #101=IFCBUILDINGELEMENTPROXY('0000000000000000000101',$,$,$,$,#94,#100,$,$);\n\
+             ENDSEC;\nEND-ISO-10303-21;\n";
+        let model = axioval::ifc::read_ifc_step(model.as_bytes()).unwrap();
+        let units = ifc_geometry::units::resolve(&model);
+        let linear = super::Linear::scan(&model, &units);
+        assert!(linear.refused.is_empty(), "{linear:?}");
+        let backend = ifc_geometry::compile::default_backend();
+        let body = super::mesh(
+            &backend,
+            &model,
+            &units,
+            &linear,
+            ifc_model::EntityId(101),
+            false,
+            super::NetOptions::default(),
+        )
+        .unwrap()
+        .expect("a body");
+        let (mut min, mut max) = ([f64::MAX; 3], [f64::MIN; 3]);
+        for point in &body.mesh.positions {
+            for (axis, value) in [point.x, point.y, point.z].into_iter().enumerate() {
+                min[axis] = min[axis].min(value);
+                max[axis] = max[axis].max(value);
+            }
+        }
+        for (got, want) in min
+            .into_iter()
+            .chain(max)
+            .zip([-2.5, 4.5, 0.0, -1.5, 5.5, 3.0])
+        {
+            assert!((got - want).abs() < 1e-9, "{min:?} {max:?}");
+        }
+    }
+
     /// engine#218: only IFC4 and IFC4X3 state that a `Reference`
     /// representation of an opening is not subtracted.
     #[test]
@@ -2543,8 +2951,14 @@ mod tests {
         let model = axioval::ifc::read_ifc_step(model.as_bytes()).unwrap();
         let units = ifc_geometry::units::resolve(&model);
         let backend = ifc_geometry::compile::default_backend();
-        let (mesh, fit) =
-            super::reference_void(&backend, &model, &units, ifc_model::EntityId(208)).unwrap();
+        let (mesh, fit) = super::reference_void(
+            &backend,
+            &model,
+            &units,
+            &super::Linear::default(),
+            ifc_model::EntityId(208),
+        )
+        .unwrap();
         assert_eq!(fit, super::Fit::Exact);
         let (mut min, mut max) = ([f64::MAX; 3], [f64::MIN; 3]);
         for point in &mesh.positions {
@@ -2562,8 +2976,14 @@ mod tests {
         }
         // An opening with a `Body` beside its `Reference` was never taken
         // as applied; its void is refused here.
-        let refusal =
-            super::reference_void(&backend, &model, &units, ifc_model::EntityId(212)).unwrap_err();
+        let refusal = super::reference_void(
+            &backend,
+            &model,
+            &units,
+            &super::Linear::default(),
+            ifc_model::EntityId(212),
+        )
+        .unwrap_err();
         assert!(refusal.contains("not 'Reference'"), "{refusal}");
     }
 }

@@ -36,6 +36,9 @@ axiolid-primitive.workspace = true
 axiolid-profile.workspace = true
 axiolid-surface.workspace = true
 ifc-geometry = { workspace = true, features = ["compile-reference-backend"] }
+# Derives each `IfcLinearPlacement` from its basis curve, as
+# `LoweringSession::with_curve_evaluator` asks of the caller (engine#224).
+axiolid-evaluate.workspace = true
 ifc-model.workspace = true
 ifc-spatial.workspace = true
 # `check --ids` and `ids translate`: IDS documents read and translated
@@ -49,11 +52,6 @@ serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
-# Derive a linear placement's frame from its basis curve with the reference
-# evaluator, as `ifc-geometry`'s `constraint::placement::derive` asks, to pin
-# that an alignment parameter is refused (openbimrs/ifc#347).
-axiolid-evaluate.workspace = true
-ifc-alignment.workspace = true
 # Write the ifcXML form of a test model with IFC4's attribute names.
 ifc-schema.workspace = true
 # Parse test models exactly as written, without the adapter's tolerance.

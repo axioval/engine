@@ -84,6 +84,8 @@ axiolid-contracts = "0.3.3"
 # 0.3.3 and model 0.3.4 carry the exact alignment relations (CUBIC
 # transitions, vertical arcs and clothoids, cant) `ifc-geometry` 0.8 lowers to.
 axiolid-curve = "0.3.3"
+# The CLI derives IFC4X3 linear placements with its reference evaluator
+# (`ReferenceCurveEvaluator`, through `ifc-geometry` 0.10, engine#224).
 axiolid-evaluate = "0.3.6"
 # 0.3.9 subtracts placed extrusions exactly (axiolid/kernel#228, through
 # axiolid-brep-boolean 0.1.2) and reports a certified deviation per mesh
@@ -121,9 +123,6 @@ openbim-ids = { version = "0.2.1", features = ["audit-schema"] }
 # 0.16 re-exports `ifc-geometry` 0.10; its `authoring` feature stays off.
 openbim_ifc = { package = "openbim-ifc", version = "0.16.0", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
 ifc-classification = "0.4.0"
-# Test-only: reads a linear placement's `IfcPointByDistanceExpression` to
-# pin that `ifc-geometry` refuses an alignment parameter (openbimrs/ifc#347).
-ifc-alignment = "0.6.0"
 # 0.9 lowers IFC4X3 stations, offset curves by distances and sectioned
 # solids and surfaces (openbimrs/ifc#307) and, since 0.8.2, refuses an
 # `IfcParameterValue` along an alignment by name (openbimrs/ifc#347). 0.10

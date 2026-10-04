@@ -75,42 +75,49 @@ objects, then by models affected.
 Corpus: 15 real models, IFC2X3, IFC4 and IFC4X3, from 0.05 MB to 76 MB.
 They include architectural, structural, MEP and electrical models of houses,
 multi-family and office buildings, a bridge, a generated facade and small
-samples. One 29 MB archive did not finish meshing within an hour and is
-left out. The 14 that ran recorded 28,631 outcomes and 2,535 unmeasured
-objects under 23 causes. The run used `main` after 0.3.0, with
-`ifc-geometry` 0.7 and `axiolid-mesh-compile` 0.3.10.
+samples.
 
-| # | Case | Outcomes | Unmeasured objects | Models | Cause | Upstream dependency | Issue |
-|---|---|---:|---:|---:|---|---|---|
-| 1 | Clash pair: proximity "unavailable for the requested object" between two meshed bodies | 19,177 | 0 | 10 | The plan overlap of the pair's projected triangles is refused by the overlay (`RepeatedVertex`) because sliver triangles are not filtered at its tolerance | none | #210 |
-| 2 | `no body representation` | 6,937 | 2,079 | 11 | 78 % are wholes decomposed into parts (`IfcRelAggregates`) whose parts carry the body; such wholes are now measured as the union of their parts (#211) | none | #211 |
-| 3 | Authored polygon face not planar | 689 | 346 | 2 | The mesh compiler refuses a faceted face whose corners leave its plane | `axiolid-mesh-compile`: triangulate with a certified bound | #213 |
-| 4 | Space measurement "unavailable for the requested aspect" | 547 | 0 | 5 | Any unmeasured role object or storey anywhere refuses every space (`complete()`) | none | #212 |
-| 5 | Space boundary "is not a curve node" | 388 | 0 | 3 | A curve-bounded plane bounded by a composite curve lowers to a curve relation the compiler does not accept | `axiolid-mesh-compile`: resolve curve relations as boundaries | #214 |
-| 6 | Opening without a body cannot be subtracted | 216 | 36 | 3 | The model's opening has no `Body`; the host is refused rather than measured without it | none (model quality) | — |
-| 7 | Mesh compilation produced no triangles | 204 | 58 | 1 | Walls and proxies of one model whose body compiles to nothing; not yet triaged | to triage | — |
-| 8 | Clash: neither body is a closed solid | 122 | 0 | 6 | Surfaces meet but neither mesh is closed, often a body of several faceted items | to triage | — |
-| 9 | Containment: shared volume not measured | 97 | 0 | 3 | Furniture whose shared volume with its space is not certified | to triage | — |
-| 10 | Free floor: plan union `SelfIntersection` | 71 | 0 | 2 | The overlay refuses a self-intersecting obstacle footprint | `axiolid-overlay` | — |
-| 11 | Containment: proximity unavailable | 47 | 0 | 3 | As case 1, for containment pairs | none | #210 |
-| 12 | Free floor: placement evidence not exact | 41 | 0 | 1 | A space's placement evidence is not exact | to triage | — |
-| 13 | `IfcIndexedPolyCurve` profile boundary | 28 | 9 | 1 | Profile boundaries lower `IfcPolyline` and `IfcCompositeCurve` only | `ifc-geometry`: lower indexed poly curves | — |
-| 14 | Clash: proximity not finite and coherent | 22 | 0 | 1 | A measured proximity is rejected as incoherent | to triage | — |
-| 15–23 | Rings that cross, a free-floor obstacle that is not closed, storeys sharing an elevation, free-floor footprint `RepeatedVertex`, a self-touching difference, uncertified curved bodies (non-forward extrusion, unsewn boolean), an uncomputable storey footprint, an undecided duplicate | 45 | 7 | ≤ 2 | | | — |
+The first ranking (#186) ran on `main` after 0.3.0, with `ifc-geometry` 0.7
+and `axiolid-mesh-compile` 0.3.10. A 29 MB archive did not finish within an
+hour; the 14 others recorded 28,631 outcomes and 2,535 unmeasured objects
+under 23 causes.
 
-Cases 1, 2 and 4 alone account for 93 % of the outcomes, and none of them
-waits on an upstream kernel. Case 2 also feeds case 4: a slab made of parts
-leaves every space of its model refused.
+The second ranking ran after #210, #211, #212, #213 and #214, with
+`ifc-geometry` 0.8.1 and `axiolid-mesh-compile` 0.3.13. The same archive
+and the 76 MB model did not finish within 30 minutes (nor within an hour);
+#220 says where their time goes. The 13 others recorded **3,424 outcomes
+and 577 unmeasured objects** under 21 causes: 88 % fewer outcomes and 77 %
+fewer unmeasured objects than before, over one model less.
 
-Cases 1 and 11 are fixed (#210). A clash or containment pair no longer
-needs the plan overlap, which no clash class reads, and the footprint
-relation leaves the overlay's slivers out with their area as a bound; an
-overlay refusal that remains names its error in the outcome. Re-run on two
-of the models (the office model behind most of case 1 and a small sample),
-case 1 went from 10,060 outcomes to none: those pairs are now decided, and
-the office model's findings rose from 874 to 1,333. A
-few pairs move on to case 8 (clash 12 to 20 there), which the plan overlay
-had hidden.
+Before is the first ranking, after the second; a dash is a cause not
+observed, or hidden behind another, in that run.
+
+| # | Case | Outcomes before | Outcomes after | Unmeasured before | Unmeasured after | Models after | Cause (after) | Upstream dependency | Issue |
+|---|---|---:|---:|---:|---:|---:|---|---|---|
+| 1 | `no body representation` | 6,937 | 771 | 2,079 | 467 | 5 | Wholes made of parts are measured through them (#211); every remaining object has no representation at all, which is model data | none | #219 |
+| 2 | Opening without a `Body` cannot be subtracted | 216 | 691 | 36 | 36 | 3 | Reference View exports author openings as a `Reference` representation over hosts already voided; the hosts are refused, and since #212 so is every space they reach | `ifc-geometry`: take reference-only openings as applied | #218 |
+| 3 | Space measurement "unavailable for the requested aspect" | 547 | 611 | 0 | 0 | 2 | Before: any unmeasured object refused every space (fixed, #212). Now: the space adapter's plan overlay refuses sliver triangles (`RepeatedVertex`) | none | #217 |
+| 4 | Clash pair: proximity "unavailable for the requested object" | 19,177 | 293 | 0 | 0 | 3 | Before: the plan overlap refused slivers (fixed, #210). Now: a mesh with a zero-area triangle, mostly bodies with warped faces measured since #213 | none | #221 |
+| 5 | Free floor: plan union `SelfIntersection` | 71 | 240 | 0 | 0 | 2 | An obstacle's footprint in the headroom band is refused by the overlay | none | #222 |
+| 6 | Mesh compilation produced no triangles | 204 | 227 | 58 | 58 | 1 | Walls and proxies of one model whose body compiles to nothing; not yet triaged | to triage | — |
+| 7 | Clash: neither body is a closed solid | 122 | 178 | 0 | 0 | 7 | Surfaces meet but neither mesh is closed, often a body of several faceted items | to triage | — |
+| 8 | Containment: shared volume not measured | 97 | 144 | 0 | 0 | 4 | Furniture whose shared volume with its space is not certified | to triage | — |
+| 9 | Space evidence not exact and reviewable | — | 62 | — | 0 | 1 | Spaces of one model now reach the exactness check | to triage | — |
+| 10 | Space boundary: curve-bounded plane | 388 | 61 | 0 | 0 | 2 | Composite-curve boundaries are meshed (#214); the rest have too few distinct points, or rings that cross | none (model data) | — |
+| 11 | Authored polygon face: rings cross | ≤ 45 | 45 | ≤ 7 | 1 | 1 | A face whose rings cross or whose hole lies outside it | none (model data) | — |
+| 12 | Free floor: placement evidence not exact | 41 | 41 | 0 | 0 | 1 | A space's placement evidence is not exact | to triage | — |
+| 13 | `IfcIndexedPolyCurve` profile boundary | 28 | 28 | 9 | 9 | 1 | Profile boundaries lower `IfcPolyline` and `IfcCompositeCurve` only | `ifc-geometry`: lower indexed poly curves | — |
+| 14 | Space quantities "must be finite and non-negative" | — | 10 | — | 0 | 2 | The overlay refusal of case 3, read as a zero plan area | none | #217 |
+| 15 | Authored polygon face not planar | 689 | — | 346 | — | — | Warped faces are tessellated within a certified bound (#213) | — | #213 |
+| 16 | Containment: proximity unavailable | 47 | — | 0 | — | — | As case 4 before (#210) | — | #210 |
+| 17 | Clash: proximity not finite and coherent | 22 | — | 0 | — | — | Not observed again | — | — |
+| 18–23 | A free-floor obstacle that is not closed, a self-touching difference, uncertified curved bodies (non-forward extrusion, unsewn boolean), an uncomputable storey footprint, a free-floor footprint `RepeatedVertex` | ≤ 45 | 22 | ≤ 7 | 6 | ≤ 2 | | | — |
+
+The first five cases now account for 76 % of the outcomes, and only case
+2 waits on an upstream crate. Two corrections to the first ranking: case
+2 is not model quality but a valid exchange the adapter does not read,
+and the space refusals of case 3 now have a cause of their own, which
+also turns overlay refusals into zero plan areas (case 14).
 
 Cases 3 and 5 are resolved upstream (`axiolid-mesh-compile` 0.3.13). A
 warped authored face is now meshed, and the body is tessellated within

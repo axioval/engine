@@ -863,6 +863,15 @@ fn geometry_record(report: geometry::GeometryReport) -> digest::GeometryRecord {
             .into_iter()
             .map(|(object, reason)| digest::Unmeasured { object, reason })
             .collect(),
+        openings_taken_as_applied: report
+            .applied_openings
+            .into_iter()
+            .map(|(host, opening, reason)| digest::AppliedOpening {
+                host,
+                opening,
+                reason,
+            })
+            .collect(),
     }
 }
 
@@ -1355,7 +1364,7 @@ fn warn(output: &CheckOutput, summarized: bool, unanchored: &[&ObjectId], unfram
         if let Some(geometry) = &output.geometry {
             eprintln!(
                 "geometry: {} exact, {} tessellated, {} without body, {} unmeasured, \
-                 {} with an exact boundary{}",
+                 {} with an exact boundary{}{}",
                 geometry.exact,
                 geometry.tessellated,
                 geometry.no_body,
@@ -1365,6 +1374,14 @@ fn warn(output: &CheckOutput, summarized: bool, unanchored: &[&ObjectId], unfram
                     String::new()
                 } else {
                     format!(", {} measured through their parts", geometry.composed)
+                },
+                if geometry.openings_taken_as_applied.is_empty() {
+                    String::new()
+                } else {
+                    format!(
+                        ", {} opening(s) taken as already applied",
+                        geometry.openings_taken_as_applied.len()
+                    )
                 }
             );
             for unmeasured in &geometry.unmeasured {

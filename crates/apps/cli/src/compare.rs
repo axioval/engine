@@ -23,9 +23,9 @@ use axioval::rules::{
 use clap::Args;
 
 use crate::digest::{
-    AmbiguousRecord, ChangeRecord, CheckOutput, ComparedRecord, ComparisonCounts, ComparisonRecord,
-    GapRecord, GeometryRecord, SideObject, SourceRecord, ToleranceRecord, Unmeasured,
-    WitnessRecord,
+    AmbiguousRecord, AppliedOpening, ChangeRecord, CheckOutput, ComparedRecord, ComparisonCounts,
+    ComparisonRecord, GapRecord, GeometryRecord, SideObject, SourceRecord, ToleranceRecord,
+    Unmeasured, WitnessRecord,
 };
 use crate::{Outcome, OutputArgs, emit, geometry, integrity};
 
@@ -104,6 +104,17 @@ fn combined(
         .map(|(object, reason)| Unmeasured { object, reason })
         .collect();
     unmeasured.sort_by(|a, b| a.object.cmp(&b.object));
+    let mut applied: Vec<AppliedOpening> = before
+        .applied_openings
+        .into_iter()
+        .chain(after.applied_openings)
+        .map(|(host, opening, reason)| AppliedOpening {
+            host,
+            opening,
+            reason,
+        })
+        .collect();
+    applied.sort_by(|a, b| (&a.host, &a.opening).cmp(&(&b.host, &b.opening)));
     let mut bodies = before.meshes;
     bodies.extend(after.meshes);
     let record = GeometryRecord {
@@ -113,6 +124,7 @@ fn combined(
         exact_boundaries: before.exact_boundaries + after.exact_boundaries,
         composed: before.composed + after.composed,
         unmeasured,
+        openings_taken_as_applied: applied,
     };
     (record, bodies)
 }

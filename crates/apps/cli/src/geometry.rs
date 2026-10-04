@@ -60,6 +60,19 @@
 //! which objects are spaces and which are doors, windows or openings. An
 //! opening occupies no material, so its void is meshed separately and handed
 //! to the derivation alone.
+//!
+//! A host is meshed net of its openings (`lower_product_net_with`). In an
+//! IFC4 or IFC4X3 file, an `IfcOpeningElement` whose every representation is
+//! `Reference` is taken as already applied (`ReferenceOnlyOpenings::
+//! TakeAsApplied`, openbimrs/ifc#351): IFC4 states that such a
+//! representation "is not subtracted, it is provided in addition to the hole
+//! in the Body shape representation of the voided element", as Reference
+//! View exports author it. The host is measured from its `Body` as authored,
+//! its evidence names the openings (`;applied-openings:`), and the result
+//! lists each with the reason. Such an opening's void is its `Reference`
+//! solid. An opening with no representation, or with any other
+//! representation, is refused as before and leaves its host unmeasured; an
+//! IFC2X3 file states no such reading, so none is taken there.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
@@ -98,7 +111,10 @@ use axioval::engine::{
 use axioval::ir::{ObjectId, PropertyValue, Report, SourceId};
 use axioval::rules::{CoordinateTolerance, compare_coordinate_systems};
 use axioval::{bcf, bcf_snapshot};
-use ifc_geometry::lower::{LoweringSession, lower_connection_surface, lower_product_net};
+use ifc_geometry::lower::{
+    AppliedReason, LoweringSession, NetOptions, ReferenceOnlyOpenings, lower_connection_surface,
+    lower_product_net_with, lower_representation_item,
+};
 use ifc_geometry::{RepresentationPurpose, Transform};
 use ifc_model::{EntityId, Model};
 use ifc_spatial::relation::boundary::{ConnectionGeometryAnomaly, SpaceBoundary};
@@ -147,6 +163,9 @@ pub struct GeometryReport {
     pub composed: usize,
     /// Physical objects that could not be meshed, with the reason.
     pub unmeasured: Vec<(ObjectId, String)>,
+    /// Openings taken as already applied to a measured host's `Body`:
+    /// host, opening and the reason, in identity order.
+    pub applied_openings: Vec<(ObjectId, ObjectId, String)>,
     /// Every meshed object's triangles, kept only when asked for, to draw
     /// BCF snapshots from.
     pub meshes: BTreeMap<ObjectId, bcf_snapshot::Mesh>,
@@ -188,6 +207,36 @@ pub type ModelBytes = BTreeMap<SourceId, Vec<u8>>;
 struct Parsed {
     model: Model,
     units: ifc_geometry::units::UnitScale,
+    /// How the host's openings are subtracted: `Reference`-only openings
+    /// taken as applied in an IFC4 or IFC4X3 file ([`net_options`]).
+    net: NetOptions,
+}
+
+/// The net lowering options for a file of `schema`: an
+/// `IfcOpeningElement` whose every representation is `Reference` is taken
+/// as already applied to its host's `Body` where the release states that
+/// such a representation is not subtracted (IFC4 ADD2 TC1 and IFC4X3,
+/// `IfcOpeningElement`; openbimrs/ifc#351). IFC2X3 states no such reading,
+/// and an unknown release none either, so there it is refused as before.
+fn net_options(schema: Option<&str>) -> NetOptions {
+    let states_reference_openings = matches!(schema, Some("IFC4" | "IFC4X3"));
+    NetOptions::default().with_reference_only_openings(if states_reference_openings {
+        ReferenceOnlyOpenings::TakeAsApplied
+    } else {
+        ReferenceOnlyOpenings::Refuse
+    })
+}
+
+/// Why `reason` lets an opening be taken as applied, as the result states
+/// it; `None` for a reason this bridge does not know, which is refused.
+fn applied_reason(reason: AppliedReason) -> Option<&'static str> {
+    match reason {
+        AppliedReason::ReferenceRepresentationOnly => Some(
+            "every representation of the opening is 'Reference', which IFC4 states is \
+             provided in addition to the hole in the host's Body, not subtracted",
+        ),
+        _ => None,
+    }
 }
 
 /// The sources whose geometry is not in the first source's frame, with
@@ -261,7 +310,8 @@ fn parse(
         }
         .map_err(|error| format!("{}: {error}", source.document))?;
         let units = ifc_geometry::units::resolve(&model);
-        parsed.insert(source.clone(), Parsed { model, units });
+        let net = net_options(snapshot.schema());
+        parsed.insert(source.clone(), Parsed { model, units, net });
     }
     Ok(parsed)
 }
@@ -324,10 +374,12 @@ pub fn attach(
     let mut wholes: Vec<ObjectId> = Vec::new();
     // The box each whole's `Box` representation states, if any.
     let mut stated: BTreeMap<ObjectId, ([f64; 3], [f64; 3])> = BTreeMap::new();
+    // Openings some measured host's `Body` already carries.
+    let mut applied_openings: BTreeSet<ObjectId> = BTreeSet::new();
 
     for object in session.project().objects() {
         let id = object.id.clone();
-        let Some(Parsed { model, units }) = parsed.get(&id.source) else {
+        let Some(Parsed { model, units, net }) = parsed.get(&id.source) else {
             return Err(format!("no model for source `{}`", id.source).into());
         };
         let is_space = is_a(&id, "IfcSpace");
@@ -340,7 +392,9 @@ pub fn attach(
             } else if is_a(&id, "IfcOpeningElement") {
                 let void = entity_id(&id)
                     .ok_or_else(|| "not a STEP instance id".to_owned())
-                    .and_then(|entity| mesh(&backend, model, units, entity, false))
+                    .and_then(|entity| {
+                        mesh(&backend, model, units, entity, false, NetOptions::default())
+                    })
                     .and_then(|meshed| {
                         meshed
                             .map(|body| (body.mesh, body.fit))
@@ -364,9 +418,29 @@ pub fn attach(
             geometry = geometry.with_unmeasured(id, "not a STEP instance id");
             continue;
         };
-        let meshed = mesh(&backend, model, units, entity, options.exact_boundaries);
+        let meshed = mesh(
+            &backend,
+            model,
+            units,
+            entity,
+            options.exact_boundaries,
+            *net,
+        )
+        .and_then(|body| applied(&id, body));
         match keep(&mut report, options.keep_meshes.then_some(&id), meshed) {
             Ok(Some(body)) => {
+                if !body.applied.is_empty() {
+                    let openings = body.applied.iter().map(|(opening, _)| opening.clone());
+                    geometry = geometry.with_applied_openings(id.clone(), openings.collect());
+                    for (opening, reason) in &body.applied {
+                        applied_openings.insert(opening.clone());
+                        report.applied_openings.push((
+                            id.clone(),
+                            opening.clone(),
+                            (*reason).to_owned(),
+                        ));
+                    }
+                }
                 if let Some(boundary) = body.boundary {
                     boundaries.push((id.clone(), boundary, body.fit != Fit::Exact));
                 }
@@ -405,6 +479,17 @@ pub fn attach(
     }
 
     geometry = with_boundaries(geometry, boundaries, &mut report);
+    report.applied_openings.sort();
+    // An opening taken as applied has no `Body` to mesh its void from; its
+    // `Reference` solid is the void the file authors.
+    for (id, void) in &mut voids {
+        if void.is_err()
+            && applied_openings.contains(id)
+            && let (Some(parsed), Some(entity)) = (parsed.get(&id.source), entity_id(id))
+        {
+            *void = reference_void(&backend, &parsed.model, &parsed.units, entity);
+        }
+    }
 
     let relationships = session.service::<RelationshipSelectionServiceHandle>();
     geometry = Composer {
@@ -843,7 +928,8 @@ fn with_levels(
         .collect();
     let mut siblings: BTreeMap<Parent, Vec<(ObjectId, Height)>> = BTreeMap::new();
     for id in kinds.keys().filter(|id| is_a(id, "IfcBuildingStorey")) {
-        let (Some(entity), Some(Parsed { model, units })) = (entity_id(id), parsed.get(&id.source))
+        let (Some(entity), Some(Parsed { model, units, .. })) =
+            (entity_id(id), parsed.get(&id.source))
         else {
             continue;
         };
@@ -1037,7 +1123,7 @@ fn boundary_service(
     for id in kinds.keys().filter(|id| is_a(id, "IfcSpace")) {
         service = service.with_space(id.clone());
     }
-    for (source, Parsed { model, units }) in parsed {
+    for (source, Parsed { model, units, .. }) in parsed {
         let object = |entity: EntityId| ObjectId {
             source: source.clone(),
             local_id: entity.to_string(),
@@ -1375,6 +1461,35 @@ struct Body {
     /// The exact boundary built from the same graph, when asked for and
     /// exactly constructible.
     boundary: Option<ExactBoundary>,
+    /// Openings taken as already applied to the body, with the reason
+    /// ([`applied`]); empty when every opening was subtracted.
+    applied: Vec<(ObjectId, &'static str)>,
+    /// What lowering reported as taken as applied, before [`applied`]
+    /// names it.
+    taken: Vec<ifc_geometry::lower::TakenAsApplied>,
+}
+
+/// `body` with the openings taken as applied named under the source of
+/// `host`, each with its reason. An opening taken for a reason this bridge
+/// does not know leaves the host unmeasured, naming it.
+fn applied(host: &ObjectId, body: Option<Body>) -> Meshed {
+    let Some(mut body) = body else {
+        return Ok(None);
+    };
+    for taken in std::mem::take(&mut body.taken) {
+        let opening = format!("#{}", taken.opening.0);
+        let Some(reason) = applied_reason(taken.reason) else {
+            return Err(format!(
+                "the opening {opening} is taken as already applied for a reason this \
+                 bridge does not know: {:?}",
+                taken.reason
+            ));
+        };
+        let opening = ObjectId::new(host.source.clone(), opening)
+            .map_err(|error| format!("the opening #{}: {error}", taken.opening.0))?;
+        body.applied.push((opening, reason));
+    }
+    Ok(Some(body))
 }
 
 /// One product's body, as [`mesh`] returns it.
@@ -1424,19 +1539,7 @@ fn stated_box(
         {
             continue;
         }
-        let context = match ifc_geometry::context_of(model, id)
-            .and_then(|context| context.world_coordinate_system(model))
-        {
-            Some(system) => ifc_geometry::resource::placement::axis_placement_transform(
-                model,
-                system,
-                model.get(system)?,
-            )
-            .ok()?
-            .to_metres(units),
-            None => Transform::identity(),
-        };
-        let frame = context.compose(&placement);
+        let frame = context_frame(model, units, id)?.compose(&placement);
         for item in representation.items().ok()? {
             let entity = model.get(item)?;
             if !entity.type_name.eq_ignore_ascii_case("IFCBOUNDINGBOX") {
@@ -1467,17 +1570,21 @@ fn stated_box(
     bound
 }
 
-/// One product's net body (openings subtracted), whether it is exact, and
-/// with `boundary` its exact boundary where the lowered graph has one.
+/// One product's net body (openings subtracted, or taken as applied as
+/// `net` says), whether it is exact, and with `boundary` its exact boundary
+/// where the lowered graph has one.
 fn mesh(
     backend: &Compiler,
     model: &Model,
     units: &ifc_geometry::units::UnitScale,
     product: EntityId,
     boundary: bool,
+    net: NetOptions,
 ) -> Meshed {
     let mut session = LoweringSession::new(model, units);
-    let Some(net) = lower_product_net(&mut session, product).map_err(|e| e.to_string())? else {
+    let Some(net) =
+        lower_product_net_with(&mut session, product, net).map_err(|e| e.to_string())?
+    else {
         return Ok(None);
     };
     let lowered = session.finish(net.root).map_err(|e| e.to_string())?;
@@ -1492,7 +1599,95 @@ fn mesh(
         mesh,
         fit,
         boundary,
+        applied: Vec::new(),
+        taken: net.taken_as_applied,
     }))
+}
+
+/// The void of an opening taken as already applied: its `Reference`
+/// solid, every item of every `Reference` representation placed as its
+/// representations are (the context's world coordinate system above the
+/// placement chain) and compiled as a body is. An opening with any other
+/// representation was never taken as applied, so one here is refused.
+fn reference_void(
+    backend: &Compiler,
+    model: &Model,
+    units: &ifc_geometry::units::UnitScale,
+    opening: EntityId,
+) -> Void {
+    let entity = model
+        .get(opening)
+        .ok_or_else(|| format!("the opening {opening} does not exist"))?;
+    let shape = ifc_geometry::Slots::new(opening, entity)
+        .opt_ref(PRODUCT_REPRESENTATION)
+        .ok_or("the opening has no representation")?;
+    let representations = ifc_geometry::ProductShape::new(
+        shape,
+        model
+            .get(shape)
+            .ok_or_else(|| format!("the representation {shape} does not exist"))?,
+    )
+    .representations()
+    .map_err(|error| error.to_string())?;
+    let placement = ifc_geometry::product_world_transform(model, units, opening)
+        .map_err(|error| error.to_string())?;
+    let mut session = LoweringSession::new(model, units);
+    let mut roots = Vec::new();
+    for id in representations {
+        let representation = ifc_geometry::Representation::new(
+            id,
+            model
+                .get(id)
+                .ok_or_else(|| format!("the representation {id} does not exist"))?,
+        );
+        if representation.identifier().as_deref() != Some("Reference") {
+            return Err(format!(
+                "the representation {id} of the opening is not 'Reference'"
+            ));
+        }
+        let frame = context_frame(model, units, id)
+            .ok_or_else(|| format!("the context of the representation {id} is unreadable"))?
+            .compose(&placement);
+        for item in representation.items().map_err(|error| error.to_string())? {
+            roots.push(
+                lower_representation_item(&mut session, item, frame)
+                    .map_err(|error| error.to_string())?,
+            );
+        }
+    }
+    let root = match roots.as_slice() {
+        [] => return Err("the opening's Reference representation holds no item".into()),
+        [root] => *root,
+        _ => session
+            .node_for(opening, GeometryNode::Collection(roots))
+            .map_err(|error| error.to_string())?,
+    };
+    let lowered = session.finish(root).map_err(|error| error.to_string())?;
+    compile(backend, &lowered.graph, lowered.root)
+}
+
+/// The frame a representation's context places it in: the context's
+/// `WorldCoordinateSystem` in metres, the identity when it states none;
+/// `None` when it cannot be read.
+fn context_frame(
+    model: &Model,
+    units: &ifc_geometry::units::UnitScale,
+    representation: EntityId,
+) -> Option<Transform> {
+    match ifc_geometry::context_of(model, representation)
+        .and_then(|context| context.world_coordinate_system(model))
+    {
+        Some(system) => Some(
+            ifc_geometry::resource::placement::axis_placement_transform(
+                model,
+                system,
+                model.get(system)?,
+            )
+            .ok()?
+            .to_metres(units),
+        ),
+        None => Some(Transform::identity()),
+    }
 }
 
 /// Whether every face under `id` is planar, so its mesh is its exact shape.
@@ -1997,8 +2192,15 @@ mod tests {
         let model = axioval::ifc::read_ifc_step(top_box(top, faceted).as_bytes()).unwrap();
         let units = ifc_geometry::units::resolve(&model);
         let backend = ifc_geometry::compile::default_backend();
-        super::mesh(&backend, &model, &units, ifc_model::EntityId(90), false)
-            .map(|body| body.expect("a body").fit)
+        super::mesh(
+            &backend,
+            &model,
+            &units,
+            ifc_model::EntityId(90),
+            false,
+            super::NetOptions::default(),
+        )
+        .map(|body| body.expect("a body").fit)
     }
 
     /// The box's top with its corner `(1, 1)` lifted by `lift`.
@@ -2163,9 +2365,16 @@ mod tests {
             let model = axioval::ifc::read_ifc_step(pocket_box(rim).as_bytes()).unwrap();
             let units = ifc_geometry::units::resolve(&model);
             let backend = ifc_geometry::compile::default_backend();
-            let body = super::mesh(&backend, &model, &units, ifc_model::EntityId(90), false)
-                .unwrap()
-                .expect("a body");
+            let body = super::mesh(
+                &backend,
+                &model,
+                &units,
+                ifc_model::EntityId(90),
+                false,
+                super::NetOptions::default(),
+            )
+            .unwrap()
+            .expect("a body");
             assert_eq!(body.fit, super::Fit::Exact);
             axiolid_mesh::audit_mesh(&body.mesh, super::TOLERANCE)
         };
@@ -2285,5 +2494,76 @@ mod tests {
             let refusal = fit(Transform3::IDENTITY, Some(subject)).unwrap_err();
             assert!(refusal.contains("operand of a boolean"), "{refusal}");
         }
+    }
+
+    /// engine#218: only IFC4 and IFC4X3 state that a `Reference`
+    /// representation of an opening is not subtracted.
+    #[test]
+    fn reference_openings_are_taken_as_applied_only_where_the_release_says_so() {
+        use ifc_geometry::lower::ReferenceOnlyOpenings;
+        for (schema, policy) in [
+            (Some("IFC4"), ReferenceOnlyOpenings::TakeAsApplied),
+            (Some("IFC4X3"), ReferenceOnlyOpenings::TakeAsApplied),
+            (Some("IFC2X3"), ReferenceOnlyOpenings::Refuse),
+            (Some("IFC4X1"), ReferenceOnlyOpenings::Refuse),
+            (None, ReferenceOnlyOpenings::Refuse),
+        ] {
+            assert_eq!(
+                super::net_options(schema).reference_only_openings,
+                policy,
+                "{schema:?}"
+            );
+        }
+    }
+
+    /// An opening taken as applied has its `Reference` solid as its void,
+    /// placed as its representation is: a 1 m prism at x 1.5..2.5 lifted
+    /// 2 m by the opening's placement.
+    #[test]
+    fn an_applied_openings_void_is_its_reference_solid() {
+        let model = "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+             #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+             #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+             #4=IFCDIRECTION((0.,0.,1.));\n\
+             #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+             #6=IFCCARTESIANPOINT((0.,0.,2.));\n\
+             #7=IFCAXIS2PLACEMENT3D(#6,$,$);\n\
+             #8=IFCLOCALPLACEMENT($,#7);\n\
+             #200=IFCRECTANGLEPROFILEDEF(.AREA.,$,#201,1.,1.);\n\
+             #201=IFCAXIS2PLACEMENT2D(#202,$);\n\
+             #202=IFCCARTESIANPOINT((2.,0.));\n\
+             #205=IFCEXTRUDEDAREASOLID(#200,#2,#4,1.);\n\
+             #206=IFCSHAPEREPRESENTATION(#5,'Reference','SweptSolid',(#205));\n\
+             #207=IFCPRODUCTDEFINITIONSHAPE($,$,(#206));\n\
+             #208=IFCOPENINGELEMENT('0000000000000000000208',$,$,$,$,#8,#207,$,.OPENING.);\n\
+             #210=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#205));\n\
+             #211=IFCPRODUCTDEFINITIONSHAPE($,$,(#206,#210));\n\
+             #212=IFCOPENINGELEMENT('0000000000000000000212',$,$,$,$,#8,#211,$,.OPENING.);\n\
+             ENDSEC;\nEND-ISO-10303-21;\n";
+        let model = axioval::ifc::read_ifc_step(model.as_bytes()).unwrap();
+        let units = ifc_geometry::units::resolve(&model);
+        let backend = ifc_geometry::compile::default_backend();
+        let (mesh, fit) =
+            super::reference_void(&backend, &model, &units, ifc_model::EntityId(208)).unwrap();
+        assert_eq!(fit, super::Fit::Exact);
+        let (mut min, mut max) = ([f64::MAX; 3], [f64::MIN; 3]);
+        for point in &mesh.positions {
+            for (axis, value) in [point.x, point.y, point.z].into_iter().enumerate() {
+                min[axis] = min[axis].min(value);
+                max[axis] = max[axis].max(value);
+            }
+        }
+        for (got, want) in min
+            .into_iter()
+            .chain(max)
+            .zip([1.5, -0.5, 2.0, 2.5, 0.5, 3.0])
+        {
+            assert!((got - want).abs() < 1e-9, "{min:?} {max:?}");
+        }
+        // An opening with a `Body` beside its `Reference` was never taken
+        // as applied; its void is refused here.
+        let refusal =
+            super::reference_void(&backend, &model, &units, ifc_model::EntityId(212)).unwrap_err();
+        assert!(refusal.contains("not 'Reference'"), "{refusal}");
     }
 }

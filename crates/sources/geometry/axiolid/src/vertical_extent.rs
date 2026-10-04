@@ -127,7 +127,7 @@ impl VerticalExtentService for AxiolidVerticalExtentService {
             source: object.source.clone(),
             locator: format!(
                 "vertical-extent:{object}{}",
-                self.geometry.union_note(&[object])
+                self.geometry.body_note(&[object])
             ),
             exact: tessellation.is_none(),
         };

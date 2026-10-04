@@ -119,6 +119,13 @@ The first five cases now account for 76 % of the outcomes, and only case
 and the space refusals of case 3 now have a cause of their own, which
 also turns overlay refusals into zero plan areas (case 14).
 
+Case 2's upstream entry point is published (`ifc-geometry` 0.10,
+openbimrs/ifc#351), and since #218 `--geometry` takes an IFC4 or IFC4X3
+opening whose every representation is `Reference` as already applied, so
+its host is measured from its `Body` as authored. The rankings above
+predate it; the next run shows whether the cause is gone from the three
+models.
+
 Cases 3 and 5 are resolved upstream (`axiolid-mesh-compile` 0.3.13). A
 warped authored face is now meshed, and the body is tessellated within
 the width of the slab the face's corners span about its fit plane, which

@@ -2012,6 +2012,154 @@ fn with_geometry_a_linear_placement_without_a_cached_position_is_never_placed() 
     assert_eq!(unmeasured.len(), 3, "{geometry:#}");
 }
 
+/// The crossing walls with an `IfcOpeningElement` (#208) voiding the first
+/// wall (#16) where the second crosses it: a 1 m square prism from below
+/// the floor to above the walls, under the representation `identifier`, or
+/// with no representation at all when `identifier` is `None`.
+fn crossing_walls_with_opening(identifier: Option<&str>) -> String {
+    let representation = match identifier {
+        Some(identifier) => format!(
+            "#200=IFCRECTANGLEPROFILEDEF(.AREA.,$,#201,1.,1.);\n\
+             #201=IFCAXIS2PLACEMENT2D(#202,$);\n\
+             #202=IFCCARTESIANPOINT((2.,0.));\n\
+             #203=IFCCARTESIANPOINT((0.,0.,-0.5));\n\
+             #204=IFCAXIS2PLACEMENT3D(#203,$,$);\n\
+             #205=IFCEXTRUDEDAREASOLID(#200,#204,#4,4.);\n\
+             #206=IFCSHAPEREPRESENTATION(#5,'{identifier}','SweptSolid',(#205));\n\
+             #207=IFCPRODUCTDEFINITIONSHAPE($,$,(#206));\n"
+        ),
+        None => String::new(),
+    };
+    let shape = if identifier.is_some() { "#207" } else { "$" };
+    crossing_walls_with(&format!(
+        "{representation}\
+         #208=IFCOPENINGELEMENT('0000000000000000000208',$,$,$,$,#3,{shape},$,.OPENING.);\n\
+         #209=IFCRELVOIDSELEMENT('0000000000000000000209',$,$,$,#16,#208);\n"
+    ))
+}
+
+/// A wall/wall clash over `model` with geometry: the exit status and the
+/// saved result.
+fn geometry_clash(case: &Case, model: &str) -> (Output, Value) {
+    let model = case.write("model.ifc", model);
+    let saved = case.path("result.json");
+    let (definitions, ruleset) = case.clash_packages();
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .arg("check")
+        .arg("--model")
+        .arg(model)
+        .arg("--definitions")
+        .arg(definitions)
+        .arg("--ruleset")
+        .arg(ruleset)
+        .args(["--geometry", "--report", saved.to_str().unwrap()])
+        .output()
+        .unwrap();
+    let result = std::fs::read_to_string(&saved)
+        .map(|text| serde_json::from_str(&text).unwrap())
+        .unwrap_or(Value::Null);
+    (output, result)
+}
+
+/// engine#218: an IFC4 Reference View authors each opening with only a
+/// `Reference` representation against a host whose `Body` already has the
+/// hole. IFC4 states that such a representation "is not subtracted", so
+/// the host is measured from its `Body` as authored, the opening is listed
+/// as taken as applied with the reason, and the evidence of every
+/// measurement of the host names it.
+#[test]
+fn with_geometry_a_reference_view_host_is_measured_with_its_opening_taken_as_applied() {
+    let case = Case::new("geometry-reference-opening");
+    let (output, result) = geometry_clash(&case, &crossing_walls_with_opening(Some("Reference")));
+    // The file's Body is stated as already voided, so its crossing with the
+    // other wall is a clash as authored.
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let geometry = &result["geometry"];
+    assert_eq!(geometry["exact"], 2, "{geometry:#}");
+    assert!(
+        !geometry["unmeasured"].to_string().contains("\"#16\""),
+        "{geometry:#}"
+    );
+    let applied = geometry["openings_taken_as_applied"].as_array().unwrap();
+    assert_eq!(applied.len(), 1, "{geometry:#}");
+    assert_eq!(applied[0]["host"]["local_id"], "#16");
+    assert_eq!(applied[0]["opening"]["local_id"], "#208");
+    assert!(
+        applied[0]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("'Reference'"),
+        "{applied:#?}"
+    );
+    let locators: Vec<&str> = result["report"]["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|finding| finding["evidence"].as_array().unwrap())
+        .filter_map(|item| item["locator"].as_str())
+        .collect();
+    assert!(
+        locators
+            .iter()
+            .any(|locator| locator.contains(";applied-openings:")
+                && locator.contains("/#16=")
+                && locator.ends_with("/#208")),
+        "{locators:#?}"
+    );
+    assert!(
+        stderr(&output).contains("1 opening(s) taken as already applied"),
+        "{}",
+        stderr(&output)
+    );
+}
+
+/// The same opening as a `Body` is subtracted: the host is voided where
+/// the other wall passes, so the walls no longer clash, and nothing is
+/// taken as applied.
+#[test]
+fn with_geometry_a_host_of_a_body_opening_is_still_voided() {
+    let case = Case::new("geometry-body-opening");
+    let (output, result) = geometry_clash(&case, &crossing_walls_with_opening(Some("Body")));
+    let geometry = &result["geometry"];
+    assert_eq!(geometry["exact"], 2, "{geometry:#}");
+    assert!(
+        geometry.get("openings_taken_as_applied").is_none(),
+        "{geometry:#}"
+    );
+    assert_eq!(
+        result["report"]["findings"].as_array().map(Vec::len),
+        Some(0),
+        "{}\n{result:#}",
+        stderr(&output)
+    );
+    assert!(
+        !result["report"].to_string().contains("applied-openings"),
+        "{result:#}"
+    );
+}
+
+/// An opening with no representation states neither a void to subtract
+/// nor that the host already has it: the host stays unmeasured, naming it.
+#[test]
+fn with_geometry_an_opening_without_representation_leaves_its_host_unmeasured() {
+    let case = Case::new("geometry-bare-opening");
+    let (output, result) = geometry_clash(&case, &crossing_walls_with_opening(None));
+    assert_ne!(output.status.code(), Some(0), "{}", stderr(&output));
+    let geometry = &result["geometry"];
+    let reason = geometry["unmeasured"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["object"]["local_id"] == "#16")
+        .and_then(|entry| entry["reason"].as_str())
+        .unwrap_or_else(|| panic!("#16 must be unmeasured: {geometry:#}"));
+    assert!(reason.contains("#208"), "{reason}");
+    assert!(
+        geometry.get("openings_taken_as_applied").is_none(),
+        "{geometry:#}"
+    );
+}
+
 /// The crossing walls with `extra` entities added to the model.
 fn crossing_walls_with(extra: &str) -> String {
     crossing_walls().replace("ENDSEC;\nEND-ISO", &format!("{extra}ENDSEC;\nEND-ISO"))

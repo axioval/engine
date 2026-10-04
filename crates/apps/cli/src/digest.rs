@@ -374,6 +374,19 @@ pub struct GeometryRecord {
     /// Physical objects that could not be meshed. Geometric measurements
     /// they could affect are not evaluated.
     pub unmeasured: Vec<Unmeasured>,
+    /// Openings taken as already applied to their measured host's body,
+    /// with the reason the file gives, in identity order. Additive: absent
+    /// in results saved before it existed, and when there is none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub openings_taken_as_applied: Vec<AppliedOpening>,
+}
+
+/// An opening whose void its host's measured body already carries.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AppliedOpening {
+    pub host: ObjectId,
+    pub opening: ObjectId,
+    pub reason: String,
 }
 
 #[allow(clippy::trivially_copy_pass_by_ref)] // serde's signature

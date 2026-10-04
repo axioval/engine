@@ -6,6 +6,20 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- Hosts of Reference View openings are measured (#218). With `--geometry`,
+  an `IfcOpeningElement` whose every representation is `Reference` is taken
+  as already applied to its host in an IFC4 or IFC4X3 file
+  (`ifc-geometry` 0.10, openbimrs/ifc#351), as IFC4 states such a
+  representation "is not subtracted": the host is measured from its `Body`
+  as authored instead of being unmeasured, and the opening's `Reference`
+  solid is its void. The result's additive
+  `geometry.openings_taken_as_applied` lists each host, opening and reason,
+  and the evidence of every measurement of the host names the openings
+  (`;applied-openings:<host>=<opening>+...`, `AxiolidGeometry::
+  with_applied_openings`). An opening with no representation or another
+  representation beside `Reference`, and any such opening in an IFC2X3
+  file, still leaves its host unmeasured.
+
 - JSON Schemas of the package contract (#262): `definitions.schema.json`
   and `ruleset.schema.json` (draft 2020-12), generated from the
   `axioval-ir` types by `axioval_ir::schema` behind the new opt-in

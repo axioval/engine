@@ -10,13 +10,16 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   `ExactBody::union` where every meshed part has an exact body. It fails
   closed on the first unmeasured or stateless part in identity order and
   never treats an unknown part as bodiless. `shares_body` (a common piece)
-  is what `AxiolidProximityService::shares_body` answers, and `union_note`
-  is the `;union:<whole>=<n>-parts` locator suffix proximity, distance,
-  volume, triangle-count and vertical-extent evidence carry. Volumes of a
+  is what `AxiolidProximityService::shares_body` answers, and `body_note`
+  is the locator suffix proximity, distance, volume, triangle-count and
+  vertical-extent evidence carry: `;union:<whole>=<n>-parts` for a whole,
+  and `;applied-openings:<host>=<opening>+...` for a host whose registered
+  body already carries those openings' voids (`with_applied_openings`; the
+  host states which and why, nothing is subtracted here). Volumes of a
   whole are bounded piece by piece in `proximity.rs` (`union_volume`,
   `composed_intersection`), never on the concatenated mesh, which would
-  count overlaps twice. `tests/composed_bodies.rs` and
-  `tests/exact_bodies.rs` pin it.
+  count overlaps twice. `tests/composed_bodies.rs`,
+  `tests/applied_openings.rs` and `tests/exact_bodies.rs` pin it.
 - `src/exact_boundary.rs` builds a body's exact solid from the Axiolid
   geometry graph a host meshes (`exact_boundary`), and
   `AxiolidGeometry::check_exact_boundary` compares its extent with the

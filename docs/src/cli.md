@@ -954,6 +954,27 @@ The planarity check is conservative. Anything it does not recognise counts as
 tessellated, which only loses exactness, never presents an approximation as
 exact.
 
+**Openings taken as already applied.** IFC4 Reference View exports author
+each `IfcOpeningElement` with only a `Reference` representation (usually
+tessellated) against a host whose `Body` already has the hole, and the IFC4
+schema states that such a representation "is not subtracted, it is
+provided in addition to the hole in the Body shape representation of the
+voided element". In an IFC4 or IFC4X3 file, an opening whose every
+representation is `Reference` is therefore taken as already applied
+(`ifc-geometry` 0.10, `ReferenceOnlyOpenings::TakeAsApplied`,
+openbimrs/ifc#351): its host is measured from its `Body` as authored and
+nothing is subtracted for it. The decision is the representation
+identifiers' alone, never a guess: an opening with no representation, or
+with any other representation beside `Reference`, is refused as before and
+leaves its host unmeasured naming it, and an IFC2X3 file states no such
+reading, so none is taken there. The result's additive
+`geometry.openings_taken_as_applied` lists each host, opening and reason,
+the stderr line adds `N opening(s) taken as already applied`, and the
+evidence of every measurement of the host names the openings: its locator
+carries `;applied-openings:<host>=<opening>+...`. Such an opening's void,
+which shelf, plan-area, routing and derived-relationship services read for
+bodiless openings, is its `Reference` solid.
+
 **Wholes measured through their parts.** A physical product with no `Body`
 of its own that is decomposed into parts (`IfcRelAggregates`, read through
 the IFC session's relationship edges, at any depth) is measured as the

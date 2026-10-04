@@ -41,7 +41,7 @@ impl TriangleCountService for AxiolidTriangleCountService {
             source: object.source.clone(),
             locator: format!(
                 "triangle-count:{object}{}",
-                self.geometry.union_note(&[object])
+                self.geometry.body_note(&[object])
             ),
             exact,
         };

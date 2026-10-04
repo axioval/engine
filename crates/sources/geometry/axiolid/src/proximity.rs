@@ -2042,7 +2042,7 @@ impl ProximityService for AxiolidProximityService {
                     request.subject(),
                     request.counterpart(),
                     self.geometry
-                        .union_note(&[request.subject(), request.counterpart()])
+                        .body_note(&[request.subject(), request.counterpart()])
                 ),
                 exact: fidelity.is_exact(),
             },
@@ -2135,7 +2135,7 @@ impl ProximityService for AxiolidProximityService {
                 source: object.source.clone(),
                 locator: format!(
                     "axiolid:volume:{object}{}",
-                    self.geometry.union_note(&[object])
+                    self.geometry.body_note(&[object])
                 ),
                 exact: fidelity.is_exact(),
             },
@@ -2223,7 +2223,7 @@ impl ProximityService for AxiolidProximityService {
                     ),
                 } + &self
                     .geometry
-                    .union_note(&[request.subject(), request.counterpart()]),
+                    .body_note(&[request.subject(), request.counterpart()]),
                 exact: fidelity.is_exact(),
             },
         )

@@ -38,6 +38,9 @@ pub struct AxiolidGeometry {
     boundaries: BTreeMap<ObjectId, Arc<ExactBody>>,
     /// Wholes measured through their parts ([`Self::with_composed_body`]).
     compositions: BTreeMap<ObjectId, Arc<Composition>>,
+    /// Hosts whose registered body already carries some openings' voids
+    /// ([`Self::with_applied_openings`]).
+    applied_openings: BTreeMap<ObjectId, Vec<ObjectId>>,
 }
 
 /// How a whole's body is built from its parts.
@@ -537,18 +540,52 @@ impl AxiolidGeometry {
         }
     }
 
-    /// The suffix an evidence locator carries for every object among
-    /// `objects` measured through its parts, so the evidence states that
-    /// its body is the union of them: `;union:<object>=<n>-parts` each;
-    /// empty when none is.
-    pub(crate) fn union_note(&self, objects: &[&ObjectId]) -> String {
-        objects
-            .iter()
-            .filter_map(|object| {
-                self.parts_of(object)
-                    .map(|parts| format!(";union:{object}={}-parts", parts.len()))
-            })
-            .collect()
+    /// Declares that `host`'s registered body already carries the voids of
+    /// `openings`, as the source states, so nothing was subtracted for them.
+    ///
+    /// The body is measured as registered; this records only how it was
+    /// obtained, for the evidence of every measurement of it (the locator
+    /// suffix `;applied-openings:<host>=<opening>+...`). The source's
+    /// reason is the host's to report. An empty list records nothing.
+    #[must_use]
+    pub fn with_applied_openings(mut self, host: ObjectId, mut openings: Vec<ObjectId>) -> Self {
+        openings.sort();
+        openings.dedup();
+        if openings.is_empty() {
+            self.applied_openings.remove(&host);
+        } else {
+            self.applied_openings.insert(host, openings);
+        }
+        self
+    }
+
+    /// The openings whose voids `host`'s body already carries, in identity
+    /// order ([`Self::with_applied_openings`]); `None` when none was
+    /// declared.
+    #[must_use]
+    pub fn applied_openings(&self, host: &ObjectId) -> Option<&[ObjectId]> {
+        self.applied_openings.get(host).map(Vec::as_slice)
+    }
+
+    /// The suffix an evidence locator carries about how the bodies of
+    /// `objects` were obtained, empty when there is nothing to state: for
+    /// each object measured through its parts `;union:<object>=<n>-parts`,
+    /// so the evidence states that its body is the union of them, and for
+    /// each host whose body already carries openings
+    /// `;applied-openings:<host>=<opening>+<opening>`.
+    pub(crate) fn body_note(&self, objects: &[&ObjectId]) -> String {
+        use std::fmt::Write as _;
+        let mut note = String::new();
+        for object in objects {
+            if let Some(parts) = self.parts_of(object) {
+                let _ = write!(note, ";union:{object}={}-parts", parts.len());
+            }
+            if let Some(openings) = self.applied_openings(object) {
+                let openings: Vec<String> = openings.iter().map(ToString::to_string).collect();
+                let _ = write!(note, ";applied-openings:{object}={}", openings.join("+"));
+            }
+        }
+        note
     }
 
     /// Whether two distinct objects' bodies share material: one is a whole

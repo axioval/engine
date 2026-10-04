@@ -12,9 +12,10 @@ use std::{
 
 use axioval_engine::{
     BoundaryGap, BoundaryRequest, Cap, CapCoverage, CapRequest, ClearHeightEvidence, CompiledRule,
-    Containment, NotEvaluatedReason, OverlapRequest, RuleCapability, RuleContext, ServiceRegistry,
-    SpaceAspect, SpaceError, SpaceOverlap, SpaceService, SpaceServiceHandle, SupportCounts,
-    UnallocatedRegion,
+    Containment, NotEvaluatedReason, OverlapRequest, PropertyRequest, PropertyResolution,
+    PropertyResolutionError, PropertyResolutionService, PropertyResolutionServiceHandle,
+    RuleCapability, RuleContext, ServiceRegistry, SpaceAspect, SpaceError, SpaceOverlap,
+    SpaceService, SpaceServiceHandle, SupportCounts, UnallocatedRegion,
 };
 use axioval_ir::contract::{ParameterValue, Selector, Severity as RuleSeverity};
 use axioval_ir::{Evidence, Object, ObjectId, Project, RuleId, Severity, SourceId};
@@ -1157,5 +1158,386 @@ fn every_aspect_is_a_measured_value_and_a_comparison() {
             .any(|finding| finding.object_id() == Some(&oid(object)));
         let value = measured(stub(), object, name);
         assert_eq!(!holds(value), found, "{case}: `{name}` is {value}");
+    }
+}
+
+/// Every aspect as expression rules over the measured values, one rule per
+/// severity the capability grades with (a cap shortfall is an error below
+/// 1 %, a warning up to 15 % and informational below 98 %), the storey's
+/// unallocated floor one rule over the storeys. Held to the parity harness
+/// over the capability's fixtures, refusals included.
+#[test]
+#[allow(clippy::too_many_lines, clippy::type_complexity)]
+fn the_aspects_as_expression_rules_hold_to_the_parity_harness() {
+    use serde_json::{Value, json};
+    let measured = |name: &str| json!({"kind": "property", "propertySet": "axioval:measured", "property": name});
+    let number =
+        |value: f64| json!({"kind": "literal", "value": {"type": "number", "value": value}});
+    let quantity = |value: f64, unit: &str| json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": unit}});
+    let compare = |operator: &str, left: Value, right: Value| json!({"kind": "compare", "operator": operator, "left": left, "right": right});
+    let all = |operands: Vec<Value>| json!({"kind": "and", "operands": operands});
+    // The top cap where a slab or a roof may form it, at least `share`.
+    let top = |share: f64, operator: &str| {
+        json!({"kind": "implies",
+            "antecedent": {"kind": "or", "operands": [
+                compare("greaterThan", measured("support_count"), number(0.0)),
+                compare("greaterThan", measured("support_count;of=roofs"), number(0.0))]},
+            "consequent": compare(operator, measured("cap_coverage;cap=top"), number(share))})
+    };
+    let truth = json!({"kind": "literal", "value": {"type": "boolean", "value": true}});
+    let space_rules = |cap: bool| {
+        let mut error = vec![
+            compare("equals", measured("duplicate_count"), number(0.0)),
+            compare(
+                "equals",
+                measured("intersection_count;tolerance=0.005"),
+                number(0.0),
+            ),
+        ];
+        let mut warning = vec![
+            compare(
+                "greaterThanOrEquals",
+                measured("clear_height"),
+                quantity(2.495, "m"),
+            ),
+            compare(
+                "equals",
+                measured("boundary_gap;at_least=1"),
+                quantity(0.0, "m"),
+            ),
+        ];
+        let mut info = vec![truth.clone()];
+        if cap {
+            error.push(top(0.01, "greaterThanOrEquals"));
+            warning.push(top(0.15, "greaterThan"));
+            info.push(top(0.98, "greaterThanOrEquals"));
+        }
+        vec![
+            (Severity::Error, all(error)),
+            (Severity::Warning, all(warning)),
+            (Severity::Info, all(info)),
+        ]
+    };
+    let storey_rule = |share: Option<f64>| {
+        let mut checks = vec![compare(
+            "lessThanOrEquals",
+            measured("largest_unallocated_region"),
+            quantity(if share.is_some() { 1000.0 } else { 1.0 }, "m2"),
+        )];
+        if let Some(share) = share {
+            checks.push(compare(
+                "lessThanOrEquals",
+                measured("unallocated_share"),
+                number(share),
+            ));
+        }
+        all(checks)
+    };
+    let enabled = |name: &str| (name.to_owned(), ParameterValue::Boolean { value: true });
+    let residuals = |regions: &[f64], floor: Option<f64>| Stub {
+        residuals: Some(Ok(regions
+            .iter()
+            .map(|area| (oid("storey-1"), *area, Vec::new()))
+            .collect())),
+        floor,
+        ..Stub::default()
+    };
+    let shares = vec![
+        enabled("check_unallocated_area"),
+        (
+            "maximum_unallocated_area_square_metres".to_owned(),
+            ParameterValue::Number { value: 1000.0 },
+        ),
+        (
+            "maximum_unallocated_share".to_owned(),
+            ParameterValue::Number { value: 0.03 },
+        ),
+    ];
+    let cases: Vec<(&str, Stub, Vec<(String, ParameterValue)>)> = vec![
+        ("clean", Stub::default(), vec![]),
+        (
+            "duplicate",
+            Stub {
+                duplicates: Some(Ok(vec![oid("space-2")])),
+                ..Stub::default()
+            },
+            vec![],
+        ),
+        (
+            "low",
+            Stub {
+                height: Some(Ok(2.0)),
+                ..Stub::default()
+            },
+            vec![],
+        ),
+        (
+            "low within the tolerance",
+            Stub {
+                height: Some(Ok(2.4995)),
+                ..Stub::default()
+            },
+            vec![],
+        ),
+        (
+            "unavailable height beside a duplicate",
+            Stub {
+                height: Some(Err(SpaceError::Unavailable)),
+                duplicates: Some(Ok(vec![oid("space-2")])),
+                ..Stub::default()
+            },
+            vec![],
+        ),
+        (
+            "unavailable height",
+            Stub {
+                height: Some(Err(SpaceError::Unavailable)),
+                ..Stub::default()
+            },
+            vec![],
+        ),
+        (
+            "short gap",
+            Stub {
+                gaps: Some(Ok(vec![(0.4, vec![oid("w1")])])),
+                ..Stub::default()
+            },
+            vec![],
+        ),
+        (
+            "long gap",
+            Stub {
+                gaps: Some(Ok(vec![(0.5, vec![]), (2.0, vec![oid("w1")])])),
+                ..Stub::default()
+            },
+            vec![],
+        ),
+        (
+            "contained",
+            Stub {
+                overlaps: Some(Ok(vec![(false, 0.0, 0.0, Containment::SubjectInsideOther)])),
+                ..Stub::default()
+            },
+            vec![],
+        ),
+        (
+            "intersecting",
+            Stub {
+                overlaps: Some(Ok(vec![(true, 2.0, 1.0, Containment::Partial)])),
+                ..Stub::default()
+            },
+            vec![],
+        ),
+        (
+            "touching",
+            Stub {
+                overlaps: Some(Ok(vec![(false, 1.0, 0.001, Containment::Partial)])),
+                ..Stub::default()
+            },
+            vec![],
+        ),
+        (
+            "nearly covered top",
+            Stub {
+                cap: Some(Ok((10.0, 9.9))),
+                ..Stub::default()
+            },
+            vec![enabled("check_top_cap")],
+        ),
+        (
+            "bare top",
+            Stub {
+                cap: Some(Ok((10.0, 0.05))),
+                ..Stub::default()
+            },
+            vec![enabled("check_top_cap")],
+        ),
+        (
+            "barely covered top",
+            Stub {
+                cap: Some(Ok((10.0, 1.0))),
+                ..Stub::default()
+            },
+            vec![enabled("check_top_cap")],
+        ),
+        (
+            "half-covered top",
+            Stub {
+                cap: Some(Ok((10.0, 5.0))),
+                ..Stub::default()
+            },
+            vec![enabled("check_top_cap")],
+        ),
+        (
+            "nothing to form the top",
+            Stub {
+                support: Some(Ok((0, 0))),
+                cap: Some(Ok((10.0, 0.0))),
+                ..Stub::default()
+            },
+            vec![enabled("check_top_cap")],
+        ),
+        (
+            "unmeasured top",
+            Stub {
+                cap: Some(Err(SpaceError::unmeasured(
+                    SpaceAspect::CapCoverage(Cap::Top),
+                    vec![oid("roof")],
+                ))),
+                ..Stub::default()
+            },
+            vec![enabled("check_top_cap")],
+        ),
+        (
+            "large region",
+            residuals(&[5.0], None),
+            vec![enabled("check_unallocated_area")],
+        ),
+        (
+            "small region",
+            residuals(&[0.5], None),
+            vec![enabled("check_unallocated_area")],
+        ),
+        (
+            "5 % unallocated",
+            residuals(&[5.0], Some(100.0)),
+            shares.clone(),
+        ),
+        (
+            "2 % unallocated",
+            residuals(&[2.0], Some(100.0)),
+            shares.clone(),
+        ),
+        (
+            "4 % in two regions",
+            residuals(&[2.0, 2.0], Some(100.0)),
+            shares.clone(),
+        ),
+        ("no gross area", residuals(&[5.0], None), shares.clone()),
+    ];
+    let project = Project::new(vec![
+        Object::new(oid("space-1"), "space"),
+        Object::new(oid("ceiling"), "covering"),
+        Object::new(oid("slab"), "slab"),
+        Object::new(oid("storey-1"), "storey"),
+    ])
+    .unwrap();
+    let registry =
+        axioval_rules::register_builtins(axioval_engine::CapabilityRegistry::new()).unwrap();
+    for (case, stub, overrides) in cases {
+        let overrides: Vec<(&str, ParameterValue)> = overrides
+            .iter()
+            .map(|(name, value)| (name.as_str(), value.clone()))
+            .collect();
+        let declared = rule_with(&overrides);
+        let cap = overrides.iter().any(|(name, _)| *name == "check_top_cap");
+        let share = overrides
+            .iter()
+            .any(|(name, _)| *name == "maximum_unallocated_share");
+        let unallocated = overrides
+            .iter()
+            .any(|(name, _)| *name == "check_unallocated_area");
+        let stub = Arc::new(stub);
+        let mut services = ServiceRegistry::new();
+        services
+            .register(SpaceServiceHandle::new(stub.clone()))
+            .unwrap();
+        let expected = SpaceValidation.evaluate(
+            &RuleContext {
+                project: &project,
+                services: &services,
+            },
+            &declared,
+        );
+        registry.install_measured(&mut services, &project);
+        // The expression reads the measured set as a run answers it.
+        services
+            .register(PropertyResolutionServiceHandle::new(Arc::new(
+                MeasuredOnly {
+                    services: {
+                        let mut inner = ServiceRegistry::new();
+                        inner.register(SpaceServiceHandle::new(stub)).unwrap();
+                        registry.install_measured(&mut inner, &project);
+                        inner
+                    },
+                    project: project.clone(),
+                },
+            )))
+            .unwrap();
+        let mut rules: Vec<(Severity, &str, Value)> = space_rules(cap)
+            .into_iter()
+            .map(|(severity, requirement)| (severity, "space", requirement))
+            .collect();
+        if unallocated {
+            rules.push((
+                Severity::Warning,
+                "storey",
+                storey_rule(share.then_some(0.03)),
+            ));
+        }
+        let mut rewritten = axioval_engine::CapabilityEvaluation::default();
+        for (severity, of, requirement) in rules {
+            let expression = CompiledRule {
+                capability: "axioval:capability.expression".into(),
+                severity: match severity {
+                    Severity::Error => RuleSeverity::Error,
+                    Severity::Warning => RuleSeverity::Warning,
+                    Severity::Info => RuleSeverity::Info,
+                },
+                selector: Selector::EntityType {
+                    object_type: of.into(),
+                    include_subtypes: false,
+                },
+                parameters: BTreeMap::from([(
+                    "requirement".to_owned(),
+                    ParameterValue::Expression {
+                        value: serde_json::from_value(requirement).unwrap(),
+                    },
+                )]),
+                ..declared.clone()
+            };
+            rewritten.absorb(axioval_rules::ExpressionRequirement.evaluate(
+                &RuleContext {
+                    project: &project,
+                    services: &services,
+                },
+                &expression,
+            ));
+        }
+        let parity = axioval_rules::parity::compare_evaluations(
+            ("space-validation", &expected),
+            ("expression", &rewritten),
+        );
+        assert!(
+            parity.holds(),
+            "{case}:\n{}\n{:?}",
+            parity.diff(),
+            rewritten.not_evaluated_outcomes()
+        );
+    }
+}
+
+/// The measured set answered as a run answers it, and nothing else.
+struct MeasuredOnly {
+    services: ServiceRegistry,
+    project: Project,
+}
+
+impl PropertyResolutionService for MeasuredOnly {
+    fn resolve(
+        &self,
+        request: &PropertyRequest,
+    ) -> Result<PropertyResolution, PropertyResolutionError> {
+        if request.property_set() != Some(axioval_ir::MEASURED_SET) {
+            return Err(PropertyResolutionError::Unavailable(
+                "only the measured set is answered".into(),
+            ));
+        }
+        axioval_engine::measured_value(
+            &self.services,
+            &self.project,
+            request.object_id(),
+            request.property(),
+        )
     }
 }

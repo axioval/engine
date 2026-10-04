@@ -363,3 +363,67 @@ fn the_measured_coverage_reaches_the_verdicts() {
         );
     }
 }
+
+/// Each check as an expression rule over the measured share, uncovered
+/// and overlapping areas, and no boundary off the surface, held to the
+/// parity harness on every space of the fixture.
+#[test]
+fn the_checks_as_expressions_hold_to_the_parity_harness() {
+    use serde_json::{Value, json};
+    let measured = |name: &str| json!({"kind": "property", "propertySet": "axioval:measured", "property": name});
+    let bound = |operator: &str, name: &str, value: Value| json!({"kind": "compare", "operator": operator, "left": measured(name), "right": value});
+    let quantity = |value: f64, unit: &str| json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": unit}});
+    let checks = [
+        (
+            vec![("minimum_covered_share", number(0.999))],
+            bound(
+                "greaterThanOrEquals",
+                "boundary_covered_share",
+                json!({"kind": "literal", "value": {"type": "number", "value": 0.999}}),
+            ),
+        ),
+        (
+            vec![("maximum_uncovered_area", area(1.0))],
+            bound(
+                "lessThanOrEquals",
+                "boundary_uncovered_area",
+                quantity(1.0, "m2"),
+            ),
+        ),
+        (
+            vec![("maximum_overlap_area", area(0.5))],
+            bound(
+                "lessThanOrEquals",
+                "boundary_overlap_area",
+                quantity(0.5, "m2"),
+            ),
+        ),
+    ];
+    // An off-surface boundary is a finding whatever the check.
+    let on_surface = bound(
+        "equals",
+        "boundary_off_surface_count",
+        json!({"kind": "literal", "value": {"type": "number", "value": 0.0}}),
+    );
+    for (parameters, check) in checks {
+        let requirement = json!({"kind": "and", "operands": [on_surface.clone(), check]});
+        let expected = run(coverages(), parameters.clone());
+        let expression = rule(
+            "axioval:capability.expression",
+            kind("space"),
+            vec![("requirement", common::expression(requirement.clone()))],
+        );
+        let outcome = model().evaluate_measured(
+            &axioval_rules::ExpressionRequirement,
+            &expression,
+            |services| {
+                services
+                    .register(BoundaryCoverageServiceHandle::new(Arc::new(coverages())))
+                    .unwrap();
+            },
+        );
+        let parity =
+            axioval_rules::parity::compare_evaluations((ID, &expected), ("expression", &outcome));
+        assert!(parity.holds(), "{requirement}:\n{}", parity.diff());
+    }
+}

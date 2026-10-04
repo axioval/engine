@@ -21,6 +21,10 @@ use crate::plan_area::{footprint, shown, unavailable};
 use crate::selection::select_objects;
 use crate::support::{Parameters, Unavailable, finding, invalid};
 
+mod measured;
+
+pub(crate) use measured::CoverageMeasures;
+
 const NAME: &str = "counterpart-coverage";
 
 /// Requires each selected element to be covered by its counterparts, in plan
@@ -465,6 +469,15 @@ struct Graded {
 /// The finding of one check, or `None` when it passes.
 type Check = Result<Option<Graded>, Unavailable>;
 
+/// An uncovered share as measured for one check, before it is graded.
+struct Share {
+    /// The share, from the most cover's to the least cover's.
+    interval: (f64, f64),
+    /// What was measured, for the finding's message.
+    what: String,
+    evidence: Vec<Evidence>,
+}
+
 /// Counterparts that surely cover part of the subject, and those that may.
 struct Cover {
     /// Selected and surely overlapping: the least the cover can be.
@@ -607,6 +620,18 @@ impl Subject<'_, '_> {
     }
 
     fn plan(&self, area: &PlanArea, cover: &Cover, growth: f64) -> Check {
+        let share = self.plan_share(area, cover, growth)?;
+        self.grade(share, cover)
+    }
+
+    /// The share of the footprint outside every counterpart grown by
+    /// `growth`.
+    fn plan_share(
+        &self,
+        area: &PlanArea,
+        cover: &Cover,
+        growth: f64,
+    ) -> Result<Share, Unavailable> {
         let measure = |objects: &[ObjectId]| {
             self.services
                 .areas
@@ -637,10 +662,26 @@ impl Subject<'_, '_> {
             shown(lower, upper),
             shown(area.lower_square_metres(), area.upper_square_metres()),
         );
-        self.grade(share, what, evidence, cover)
+        Ok(Share {
+            interval: share,
+            what,
+            evidence,
+        })
     }
 
     fn height(&self, extents: &VerticalExtentServiceHandle, cover: &Cover, growth: f64) -> Check {
+        let share = self.height_share(extents, cover, growth)?;
+        self.grade(share, cover)
+    }
+
+    /// The share of the height outside every counterpart overlapping the
+    /// element in plan, grown by `growth`.
+    fn height_share(
+        &self,
+        extents: &VerticalExtentServiceHandle,
+        cover: &Cover,
+        growth: f64,
+    ) -> Result<Share, Unavailable> {
         let measure = |object: &ObjectId| {
             extents
                 .measure_vertical_extent(object)
@@ -683,17 +724,20 @@ impl Subject<'_, '_> {
             shown(lower, upper),
             shown(height.0, height.1),
         );
-        self.grade(share, what, evidence, cover)
+        Ok(Share {
+            interval: share,
+            what,
+            evidence,
+        })
     }
 
     /// Grades an uncovered share against the declared bands.
-    fn grade(
-        &self,
-        (lower, upper): (f64, f64),
-        what: String,
-        evidence: Vec<Evidence>,
-        cover: &Cover,
-    ) -> Check {
+    fn grade(&self, measured: Share, cover: &Cover) -> Check {
+        let Share {
+            interval: (lower, upper),
+            what,
+            evidence,
+        } = measured;
         let bands = &self.config.bands;
         let lowest = bands[0].0;
         let reached = |share: f64| {
@@ -781,8 +825,15 @@ impl Subject<'_, '_> {
         cover
     }
 
-    /// The uncovered share of the element's elevation.
+    /// The uncovered share of the element's elevation, graded.
     fn elevation(&self) -> Check {
+        let (share, cover) = self.elevation_share()?;
+        self.grade(share, &cover)
+    }
+
+    /// The uncovered share of the element's elevation, and the cover it
+    /// was measured against.
+    fn elevation_share(&self) -> Result<(Share, Cover), Unavailable> {
         let (Some(rectangles), Some(along), Some(vertical)) = (
             self.services.rectangles,
             self.config.horizontal,
@@ -877,7 +928,14 @@ impl Subject<'_, '_> {
             shown(area.0, area.1),
         );
         let evidence = cover.evidence.clone();
-        self.grade(shares, what, evidence, &cover)
+        Ok((
+            Share {
+                interval: shares,
+                what,
+                evidence,
+            },
+            cover,
+        ))
     }
 }
 

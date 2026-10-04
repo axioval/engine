@@ -350,7 +350,9 @@ impl Scene {
 
 /// The centre-line distance as a measured value reaches the capability's
 /// verdicts: the nearer side for `nearest`, and for `both` the nearer side
-/// against the minimum and the farther against the maximum.
+/// against the minimum and the farther against the maximum. Held to the
+/// parity harness, which differs only in the exactness of a missing wall's
+/// finding.
 #[test]
 #[allow(clippy::type_complexity, clippy::too_many_lines)]
 fn the_centre_line_distance_as_a_value_reaches_the_verdicts() {
@@ -371,12 +373,6 @@ fn the_centre_line_distance_as_a_value_reaches_the_verdicts() {
             {"kind": "isDefined", "operand": far.clone()},
             {"kind": "compare", "operator": "greaterThanOrEquals", "left": near, "right": m(0.405)},
             {"kind": "compare", "operator": "lessThanOrEquals", "left": far, "right": m(0.455)}]})
-    };
-    let verdict = |outcome: &CapabilityEvaluation| {
-        (
-            outcome.findings().len().min(1),
-            outcome.not_evaluated_outcomes().len().min(1),
-        )
     };
     let east = || cuboid([0.86, -0.2, 0.0], [1.06, 3.2, 2.5]);
     let cases: Vec<(Box<dyn Fn() -> Scene>, Vec<(&str, ParameterValue)>, Value)> = vec![
@@ -425,8 +421,33 @@ fn the_centre_line_distance_as_a_value_reaches_the_verdicts() {
         ),
     ];
     for (index, (scene, parameters, requirement)) in cases.into_iter().enumerate() {
-        let expected = verdict(&scene().check(&parameters));
+        let expected = scene().check(&parameters);
         let outcome = scene().express(&requirement);
-        assert_eq!(verdict(&outcome), expected, "case {index}: {outcome:#?}");
+        let parity = axioval::rules::parity::compare_evaluations(
+            ("centre-line-distance", &expected),
+            ("expression", &outcome),
+        );
+        if index == 4 || index == 6 {
+            // No wall within reach (on one side): the capability cites the
+            // inexact side measurements, the expression the exact absence
+            // of a distance within reach.
+            assert_eq!(
+                parity.differences,
+                vec![axioval::rules::parity::Difference {
+                    object: id("wc"),
+                    capability: Some(axioval::rules::parity::Outcome::Finding {
+                        severity: axioval::ir::Severity::Error,
+                        exact: false,
+                    }),
+                    expression: Some(axioval::rules::parity::Outcome::Finding {
+                        severity: axioval::ir::Severity::Error,
+                        exact: true,
+                    }),
+                }],
+                "case {index}"
+            );
+        } else {
+            assert!(parity.holds(), "case {index}:\n{}", parity.diff());
+        }
     }
 }

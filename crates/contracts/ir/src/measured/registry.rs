@@ -839,6 +839,24 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ),
     },
     MeasuredDescriptor {
+        name: "boundary_off_surface_count",
+        parameters: &[PLANE],
+        dimension: None,
+        services: &["boundary-coverage"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_GEOMETRY],
+        label: &en_de(
+            "Boundaries off the surface",
+            "Begrenzungen neben der Oberfläche",
+        ),
+        help: &en_de(
+            "How many of a space's declared boundaries lie on no face of its body, so \
+             cover nothing.",
+            "Wie viele Raumbegrenzungen eines Raums auf keiner Fläche seines Körpers \
+             liegen und daher nichts bedecken.",
+        ),
+    },
+    MeasuredDescriptor {
         name: "boundary_overlap_area",
         parameters: &[PLANE],
         dimension: Some(QuantityDimension::Area),
@@ -1135,6 +1153,117 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              within to those possibly within, a point when every one is decided.",
             "Wie viele Gegenstücke im Umkreis liegen: ein Intervall von den sicher bis zu \
              den möglicherweise darin liegenden, ein Punkt, wenn alle entschieden sind.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "counterpart_uncovered_share",
+        parameters: &[
+            objects(
+                "by",
+                true,
+                &en_de(
+                    "The source kinds of the counterparts, such as structural walls and \
+                     columns, `,`-separated, subtypes included.",
+                    "Die Quellarten der Gegenstücke, etwa tragende Wände und Stützen, durch \
+                     `,` getrennt, Untertypen eingeschlossen.",
+                ),
+            ),
+            MeasuredParameter {
+                key: "measure",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["plan", "height", "elevation"],
+                },
+                required: false,
+                default: Some("plan"),
+                help: &en_de(
+                    "The share of the footprint (`plan`), of the height (`height`), or of \
+                     the elevation along the footprint's long axis (`elevation`).",
+                    "Der Anteil der Grundfläche (`plan`), der Höhe (`height`) oder der \
+                     Ansicht entlang der Längsachse des Grundrisses (`elevation`).",
+                ),
+            },
+            MeasuredParameter {
+                key: "horizontal",
+                kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                required: false,
+                default: Some("0"),
+                help: &en_de(
+                    "How far each counterpart grows in plan, or along the axis in the \
+                     elevation, in metres; for `height`, how far it grows to overlap in plan.",
+                    "Wie weit jedes Gegenstück im Grundriss wächst, in der Ansicht entlang \
+                     der Achse, in Metern; für `height`, wie weit es wächst, um im Grundriss \
+                     zu überlappen.",
+                ),
+            },
+            MeasuredParameter {
+                key: "vertical",
+                kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                required: false,
+                default: Some("0"),
+                help: &en_de(
+                    "How far each counterpart grows in height, in metres; unused in plan.",
+                    "Wie weit jedes Gegenstück in der Höhe wächst, in Metern; im Grundriss \
+                     ungenutzt.",
+                ),
+            },
+            MeasuredParameter {
+                key: "axis_tolerance",
+                kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                required: false,
+                default: None,
+                help: &en_de(
+                    "Only counterparts whose long axis lies within this many degrees of \
+                     parallel count, below 45; any angle without it.",
+                    "Nur Gegenstücke, deren Längsachse höchstens so viele Grad von parallel \
+                     abweicht, zählen, unter 45; ohne Angabe jeder Winkel.",
+                ),
+            },
+            objects(
+                "frame",
+                false,
+                &en_de(
+                    "The source kinds of a frame's members whose infill covers too, in the \
+                     elevation only, `,`-separated.",
+                    "Die Quellarten der Rahmenbauteile, deren Ausfachung ebenfalls bedeckt, \
+                     nur in der Ansicht, durch `,` getrennt.",
+                ),
+            ),
+            MeasuredParameter {
+                key: "infill_above",
+                kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                required: false,
+                default: Some("0.5"),
+                help: &en_de(
+                    "The share, below 1, above which the frame's infill covers.",
+                    "Der Anteil, unter 1, ab dem die Ausfachung des Rahmens bedeckt.",
+                ),
+            },
+        ],
+        dimension: None,
+        services: &[
+            "plan-area",
+            "proximity",
+            "vertical-extent",
+            "plan-span",
+            "type-hierarchy",
+        ],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[
+            NO_GEOMETRY,
+            UNDECIDED_KIND,
+            "the element has no long axis for its elevation",
+        ],
+        label: &en_de(
+            "Share left uncovered by counterparts",
+            "Von Gegenstücken unbedeckter Anteil",
+        ),
+        help: &en_de(
+            "The share of the element's footprint, height or elevation outside every \
+             counterpart, from 0 to 1, as `counterpart-coverage` measures it: from the most \
+             cover counterparts may give to the least they surely give.",
+            "Der Anteil der Grundfläche, Höhe oder Ansicht des Bauteils außerhalb aller \
+             Gegenstücke, von 0 bis 1, wie `counterpart-coverage` ihn misst: von der größten \
+             möglichen bis zur sicheren Bedeckung.",
         ),
     },
     MeasuredDescriptor {

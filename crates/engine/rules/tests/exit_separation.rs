@@ -925,22 +925,183 @@ fn exit_pairs_and_the_diagonal_reach_the_verdicts() {
                     .register(ProximityServiceHandle::new(Arc::new(plan())))
                     .unwrap();
             });
-        let flagged = |evaluation: &CapabilityEvaluation| {
-            findings(evaluation)
-                .into_iter()
-                .map(|(object, _)| object)
-                .collect::<Vec<_>>()
-        };
-        assert_eq!(
-            flagged(&outcome),
-            flagged(&expected),
-            "case {index}: {:?}",
-            outcome.not_evaluated_outcomes()
+        let parity = axioval_rules::parity::compare_evaluations(
+            (CAPABILITY, &expected),
+            ("expression", &outcome),
         );
-        assert_eq!(
-            unevaluated(&outcome),
-            unevaluated(&expected),
-            "case {index}"
-        );
+        assert!(parity.holds(), "case {index}:\n{}", parity.diff());
     }
+}
+
+/// The rule `requirement` states as an expression.
+fn as_expression(requirement: serde_json::Value) -> axioval_engine::CompiledRule {
+    rule(
+        "axioval:capability.expression",
+        kind("space"),
+        vec![(
+            "requirement",
+            ParameterValue::Expression {
+                value: serde_json::from_value(requirement).unwrap(),
+            },
+        )],
+    )
+}
+
+/// Runs the capability and `requirement` on one fixture and returns the
+/// harness's comparison.
+fn parity(
+    model: &dyn Fn() -> Model,
+    spans: &dyn Fn() -> Spans,
+    plan: &dyn Fn() -> Plan,
+    extra: Vec<(&'static str, ParameterValue)>,
+    requirement: serde_json::Value,
+) -> axioval_rules::parity::ParityEvidence {
+    let expected = evaluate(model(), spans(), plan(), extra);
+    let outcome = model().evaluate_measured(
+        &axioval_rules::ExpressionRequirement,
+        &as_expression(requirement),
+        |services| {
+            services
+                .register(PlanSpanServiceHandle::new(Arc::new(spans())))
+                .unwrap();
+            services
+                .register(ProximityServiceHandle::new(Arc::new(plan())))
+                .unwrap();
+        },
+    );
+    axioval_rules::parity::compare_evaluations((CAPABILITY, &expected), ("expression", &outcome))
+}
+
+/// Straddling separations and diagonals, an unmeasured diagonal, a minimum
+/// number of exits and an unknown flag, held to the harness: the
+/// expression reaches every verdict but the one an unknown flag leaves open
+/// between both fractions.
+#[test]
+#[allow(clippy::too_many_lines, clippy::type_complexity)]
+fn intervals_counts_and_unknown_flags_reach_the_verdicts() {
+    use axioval_rules::parity::{Difference, Outcome};
+    use serde_json::{Value, json};
+    let number =
+        |value: f64| json!({"kind": "literal", "value": {"type": "number", "value": value}});
+    let pairs = "exit_pairs;exits=bounds:backward;kinds=door";
+    // A third where the storey says sprinklered, else a half.
+    let fraction = json!({"kind": "if", "branches": [{
+        "when": {"kind": "aggregate", "function": "any",
+            "over": {"kind": "path", "path": ["contains:backward"]},
+            "value": {"kind": "compare", "operator": "equals",
+                "left": {"kind": "property", "propertySet": "Fire", "property": "Sprinklered"},
+                "right": {"kind": "literal", "value": {"type": "boolean", "value": true}}}},
+        "then": number(1.0 / 3.0)}],
+        "else": number(0.5)});
+    let some = |fraction: Value| {
+        json!({"kind": "or", "operands": [
+            {"kind": "compare", "operator": "lessThan",
+             "left": {"kind": "aggregate", "function": "count", "over": {"kind": "measured", "name": pairs}},
+             "right": {"kind": "literal", "value": {"type": "integer", "value": 1}}},
+            {"kind": "aggregate", "function": "any", "over": {"kind": "measured", "name": pairs},
+             "value": {"kind": "compare", "operator": "greaterThanOrEquals",
+                 "left": {"kind": "property", "propertySet": "axioval:member", "property": "separation"},
+                 "right": {"kind": "multiply", "left": fraction,
+                     "right": {"kind": "property", "propertySet": "axioval:measured", "property": "plan_diameter"}}}}]})
+    };
+    let at_least_two = json!({"kind": "and", "operands": [
+        {"kind": "compare", "operator": "greaterThanOrEquals",
+         "left": {"kind": "aggregate", "function": "count",
+             "over": {"kind": "path", "path": ["bounds:backward"]},
+             "where": {"kind": "entityType", "objectType": "door", "includeSubtypes": false}},
+         "right": {"kind": "literal", "value": {"type": "integer", "value": 2}}},
+        some(number(0.5))]});
+    let single = || {
+        Model::default()
+            .object("hall", "space")
+            .object("d1", "door")
+            .object("w1", "window")
+            .edge("bounds", "d1", "hall")
+            .edge("bounds", "w1", "hall")
+    };
+    let close = || Plan::default().apart("d1", "d2", 2.0, 2.0);
+    let far = || Plan::default().apart("d1", "d2", 12.0, 12.0);
+    let straddling = || Plan::default().apart("d1", "d2", 11.0, 11.4);
+    let wide = || Spans::default().diameter("hall", diagonal() - 0.1, diagonal() + 0.1);
+    let below = || Plan::default().apart("d1", "d2", 2.0, 2.2);
+    // A separation straddling the requirement, one wholly below it under a
+    // straddling diagonal, and a room without a diagonal.
+    let fixtures: [(&dyn Fn() -> Spans, &dyn Fn() -> Plan); 3] = [
+        (&hall, &straddling),
+        (&wide, &below),
+        (&Spans::default, &close),
+    ];
+    for (spans, plan) in fixtures {
+        let parity = parity(&model, spans, plan, vec![], some(number(0.5)));
+        assert!(parity.holds(), "{}", parity.diff());
+        assert_eq!(parity.found + parity.open, 1);
+    }
+    // One exit: nothing to check, unless two are required.
+    let alone = parity(&single, &hall, &Plan::default, vec![], some(number(0.5)));
+    assert!(alone.holds(), "{}", alone.diff());
+    for (model, found) in [(&single as &dyn Fn() -> Model, 1), (&model, 0)] {
+        let parity = parity(
+            model,
+            &hall,
+            &far,
+            vec![("minimum_exits", integer(2))],
+            at_least_two.clone(),
+        );
+        assert!(parity.holds(), "{}", parity.diff());
+        assert_eq!(parity.found, found);
+    }
+    // An unknown flag: both fractions agree on twelve and on two metres.
+    let agreeing: [(&dyn Fn() -> Plan, usize); 2] = [(&far, 0), (&close, 1)];
+    for (plan, found) in agreeing {
+        let parity = parity(&model, &hall, plan, sprinklered(), some(fraction.clone()));
+        assert!(parity.holds(), "{}", parity.diff());
+        assert_eq!(parity.found, found);
+    }
+    // Nine metres passes a third but not a half: `exit-separation` leaves
+    // the hall open, while an expression has no value between the two
+    // fractions and reads an unstated flag as unsprinklered.
+    let unknown = parity(
+        &model,
+        &hall,
+        &|| Plan::default().apart("d1", "d2", 9.0, 9.0),
+        sprinklered(),
+        some(fraction),
+    );
+    assert_eq!(
+        unknown.differences,
+        vec![Difference {
+            object: id("hall"),
+            capability: Some(Outcome::NotEvaluated {
+                reason: NotEvaluatedReason::IncompleteEvidence
+            }),
+            expression: Some(Outcome::Finding {
+                severity: axioval_ir::Severity::Error,
+                exact: true
+            }),
+        }]
+    );
+}
+
+/// Without the plan-span and proximity services, both leave the hall open
+/// for the same reason.
+#[test]
+fn missing_services_leave_the_expression_open_too() {
+    let requirement = serde_json::json!({"kind": "compare", "operator": "greaterThan",
+        "left": {"kind": "property", "propertySet": "axioval:measured", "property": "plan_diameter"},
+        "right": {"kind": "literal", "value": {"type": "quantity", "value": 0.0, "unit": "m"}}});
+    let expected = model().evaluate(
+        &ExitSeparation,
+        &rule(CAPABILITY, kind("space"), parameters(vec![])),
+    );
+    let outcome = model().evaluate_measured(
+        &axioval_rules::ExpressionRequirement,
+        &as_expression(requirement),
+        |_| {},
+    );
+    let parity = axioval_rules::parity::compare_evaluations(
+        (CAPABILITY, &expected),
+        ("expression", &outcome),
+    );
+    assert!(parity.holds(), "{}", parity.diff());
+    assert_eq!(parity.open, 1);
 }

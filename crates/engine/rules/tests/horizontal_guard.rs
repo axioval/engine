@@ -777,12 +777,6 @@ fn the_guard_decision_as_an_expression_over_edges_reaches_the_verdicts() {
                 "branches": [{"when": covered, "then": {"kind": "not", "operand": climbed}}],
                 "else": {"kind": "and", "operands": [{"kind": "not", "operand": present}, landed]}}})
     };
-    let verdict = |evaluation: &axioval_engine::CapabilityEvaluation| {
-        (
-            !evaluation.findings().is_empty(),
-            !evaluation.not_evaluated_outcomes().is_empty(),
-        )
-    };
     let fixtures: Vec<(Vec<GuardEdge>, bool)> = vec![
         (
             vec![edge(
@@ -934,7 +928,7 @@ fn the_guard_decision_as_an_expression_over_edges_reaches_the_verdicts() {
             project: &project,
             services: &services,
         };
-        let expected = verdict(&HorizontalGuard.evaluate(&context, &curb_rule));
+        let expected = HorizontalGuard.evaluate(&context, &curb_rule);
         registry.install_measured(&mut services, &project);
         let expression = CompiledRule {
             capability: "axioval:capability.expression".into(),
@@ -953,12 +947,61 @@ fn the_guard_decision_as_an_expression_over_edges_reaches_the_verdicts() {
             },
             &expression,
         );
+        let parity = axioval_rules::parity::compare_evaluations(
+            ("guard", &expected),
+            ("expression", &evaluation),
+        );
+        assert!(parity.holds(), "fixture {index}:\n{}", parity.diff());
+    }
+    // An unavailable measurement and a missing service leave both open.
+    for unavailable in [true, false] {
+        let mut services = ServiceRegistry::new();
+        if unavailable {
+            services
+                .register(GuardServiceHandle::new(Arc::new(Stub(Err(
+                    GuardError::Unavailable,
+                )))))
+                .unwrap();
+        }
+        let context = RuleContext {
+            project: &project,
+            services: &services,
+        };
+        let expected = HorizontalGuard.evaluate(&context, &rule());
+        registry.install_measured(&mut services, &project);
+        let expression = CompiledRule {
+            capability: "axioval:capability.expression".into(),
+            parameters: BTreeMap::from([(
+                "requirement".to_owned(),
+                ParameterValue::Expression {
+                    value: serde_json::from_value(requirement(false)).unwrap(),
+                },
+            )]),
+            ..rule()
+        };
+        let evaluation = ExpressionRequirement.evaluate(
+            &RuleContext {
+                project: &project,
+                services: &services,
+            },
+            &expression,
+        );
+        let parity = axioval_rules::parity::compare_evaluations(
+            ("guard", &expected),
+            ("expression", &evaluation),
+        );
+        // The capability leaves the whole rule open, which the harness
+        // reads per object as passed; the expression leaves the slab open
+        // for the same reason.
+        let reason = expected.not_evaluated_outcomes()[0].reason().clone();
+        assert_eq!(expected.not_evaluated_outcomes()[0].object_id(), None);
         assert_eq!(
-            verdict(&evaluation),
-            expected,
-            "fixture {index}: {:?} {:?}",
-            evaluation.findings(),
-            evaluation.not_evaluated_outcomes()
+            parity.differences,
+            vec![axioval_rules::parity::Difference {
+                object: oid("slab-1"),
+                capability: None,
+                expression: Some(axioval_rules::parity::Outcome::NotEvaluated { reason }),
+            }]
         );
     }
 }

@@ -8,11 +8,13 @@
 //! for it.
 
 use axioval_ir::measured::{MeasuredArgument, MeasuredCall};
-use axioval_ir::{ObjectId, QuantityDimension};
+use axioval_ir::{MEASURED_SET, ObjectId, QuantityDimension};
 
 use super::{Answer, Measures};
 use crate::properties::PropertyResolutionError;
-use crate::space::{BoundaryRequest, Cap, CapRequest, Containment, OverlapRequest, SpaceService};
+use crate::space::{
+    BoundaryRequest, Cap, CapRequest, Containment, OverlapRequest, SpaceError, SpaceService,
+};
 
 /// The names measured here.
 pub(super) const NAMES: &[&str] = &[
@@ -43,6 +45,26 @@ fn count(value: usize, locator: String) -> Answer {
 }
 
 impl Measures {
+    /// Why the space service refused `name` of `object`, as
+    /// `space-validation` reads the refusal: an unavailable or unmeasured
+    /// aspect is incomplete evidence, an inexact or incoherent answer
+    /// conflicting evidence.
+    pub(super) fn space_refused(
+        name: &str,
+        object: &ObjectId,
+        error: &SpaceError,
+    ) -> PropertyResolutionError {
+        let message = format!("`{MEASURED_SET}` value `{name}` of {object}: {error}");
+        match error {
+            SpaceError::Unavailable | SpaceError::Unmeasured(_) => {
+                PropertyResolutionError::Incomplete(message)
+            }
+            SpaceError::InexactEvidence | SpaceError::InvalidQuantity => {
+                PropertyResolutionError::Conflicting(message)
+            }
+        }
+    }
+
     /// The elements `elements` names, if it is stated.
     fn elements(
         &self,
@@ -62,7 +84,7 @@ impl Measures {
         object: &ObjectId,
     ) -> Result<Answer, PropertyResolutionError> {
         let name = call.name();
-        let unavailable = |error: String| Self::unavailable(name, object, &error);
+        let unavailable = |error: SpaceError| Self::space_refused(name, object, &error);
         let service: &dyn SpaceService = self
             .spaces
             .as_ref()
@@ -72,9 +94,7 @@ impl Measures {
         let elements = self.elements(call, object)?;
         match name {
             "duplicate_count" => {
-                let duplicates = service
-                    .measure_duplicates(object)
-                    .map_err(|error| unavailable(error.to_string()))?;
+                let duplicates = service.measure_duplicates(object).map_err(unavailable)?;
                 Ok(count(duplicates.len(), locator))
             }
             "boundary_gap" => {
@@ -84,7 +104,7 @@ impl Measures {
                 }
                 let gaps = service
                     .measure_boundary_gaps(object, &request)
-                    .map_err(|error| unavailable(error.to_string()))?;
+                    .map_err(unavailable)?;
                 let longest = call.choice("measure") == Some("longest");
                 let at_least = length(call, "at_least").unwrap_or(0.0);
                 let counted = gaps
@@ -111,7 +131,7 @@ impl Measures {
                 let tolerance = length(call, "tolerance").unwrap_or(0.0);
                 let overlaps = service
                     .measure_overlaps(object, &request)
-                    .map_err(|error| unavailable(error.to_string()))?;
+                    .map_err(unavailable)?;
                 let intersecting = overlaps
                     .iter()
                     .filter(|overlap| match overlap.containment() {
@@ -141,14 +161,12 @@ impl Measures {
                 }
                 let coverage = service
                     .measure_cap_coverage(object, &request)
-                    .map_err(|error| unavailable(error.to_string()))?;
+                    .map_err(unavailable)?;
                 let share = coverage.covered_ratio();
                 Ok(Answer::Number(share, share, locator))
             }
             "support_count" => {
-                let counts = service
-                    .measure_support_counts()
-                    .map_err(|error| unavailable(error.to_string()))?;
+                let counts = service.measure_support_counts().map_err(unavailable)?;
                 Ok(count(
                     if call.choice("of") == Some("roofs") {
                         counts.roofs()
@@ -158,7 +176,7 @@ impl Measures {
                     locator,
                 ))
             }
-            _ => unallocated(service, name, object, locator).map_err(unavailable),
+            _ => unallocated(service, name, object, locator),
         }
     }
 }
@@ -170,10 +188,10 @@ fn unallocated(
     name: &str,
     object: &ObjectId,
     locator: String,
-) -> Result<Answer, String> {
+) -> Result<Answer, PropertyResolutionError> {
     let regions = service
         .measure_unallocated_regions()
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| Measures::space_refused(name, object, &error))?;
     let regions: Vec<_> = regions
         .iter()
         .filter(|region| region.storey() == object)
@@ -202,9 +220,10 @@ fn unallocated(
                     .all(|region| region.floor_area_square_metres() == Some(*gross))
         })
         .ok_or_else(|| {
-            "the storey's gross floor area is not measured, so its unallocated share is \
-             undefined"
-                .to_owned()
+            PropertyResolutionError::Incomplete(format!(
+                "`{MEASURED_SET}` value `{name}` of {object}: the storey's gross floor area is \
+                 not measured, so its unallocated share is undefined"
+            ))
         })?;
     let area: f64 = regions
         .iter()

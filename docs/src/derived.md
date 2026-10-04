@@ -389,6 +389,8 @@ ignoring ASCII case):
 | `contact_area`, `contact_share` `;with=<kinds>[;side=below\|above][;gap=…;intersection=…;polygon=…]` | a face's contact with objects of kinds, or its share | `ContactService` |
 | `effect_covered_area`, `effect_covered_share` `;sources=<kinds>[;blockers=<kinds>][;reach=grown\|travel\|visible][;range=<m>]` | the part of the footprint the sources' effect areas cover, or its share | `PlanAreaService::measure_coverage` |
 | `boundary_covered_share`, `boundary_uncovered_area`, `boundary_overlap_area` `[;plane=<m>]` | a space's declared boundaries over its body's surface | `BoundaryCoverageService` |
+| `boundary_off_surface_count[;plane=<m>]` | how many of a space's declared boundaries lie on no face of its body, a plain number | `BoundaryCoverageService` |
+| `counterpart_uncovered_share;by=<kinds>[;measure=plan\|height\|elevation][;horizontal=<m>][;vertical=<m>][;axis_tolerance=<degrees>][;frame=<kinds>][;infill_above=<share>]` | the share of the footprint, height or elevation outside every counterpart, as `counterpart-coverage` measures it | built in, over `PlanAreaService`, `ProximityService`, `VerticalExtentService`, `PlanSpanService` |
 | `opening_area;path=<steps>[;length_axis=…;height_axis=…][;minimum=<m²>]` | the summed section areas of a host's openings on its middle plane | built in, over the body facts |
 | `opening_section_area;host_path=<steps>[;length_axis=…;height_axis=…]` | one opening's section area on its host's middle plane | built in, over the body facts |
 | `door_clear_width[;stated=<set/name>][;from_leaves=passage\|widest-leaf][;overall=<set/name>;deduction=<m>]`, `door_clear_height[;stated=…][;overall=…][;lining=…][;threshold=…]` | a door's clear width or height, as `keyed-limit` reads it | built in, over the door's properties and leaves |
@@ -588,14 +590,38 @@ the same request, so its verdict is an expression ratio:
 | `plan-coverage` | `plan_overlap;with=<kinds>` over `area` |
 | `opening-area` | `opening_area;path=…` against the stated gross less net area, or an `aggregate` `sum` of each opening's `opening_section_area` over the path |
 | `slab-contact` | `contact_share;with=<kinds>;side=…` against the minimum ratio |
-| `counterpart-coverage` (plan) | `uncovered_area;by=<kinds>;growth=<tolerance>` over `area`, graded by the bands |
+| `counterpart-coverage` | `counterpart_uncovered_share;by=<kinds>;measure=…` at most each band's threshold, one rule per band at its severity (in plan alone, also `uncovered_area;by=<kinds>;growth=<tolerance>` over `area`) |
 | `effective-coverage` | `effect_covered_share;sources=<kinds>;reach=…;range=…` against the minimum |
-| `space-boundary-coverage` | `boundary_covered_share`, `boundary_uncovered_area` and `boundary_overlap_area` against their bounds |
+| `space-boundary-coverage` | `boundary_covered_share`, `boundary_uncovered_area` and `boundary_overlap_area` against their bounds, and `boundary_off_surface_count = 0` |
 
 The objects a capability selects are named here by source kind. A
 capability's undecided members widen or leave open what a measured value
 over the kinds' objects decides; an off-surface space boundary, which
-`space-boundary-coverage` always reports, is no area.
+`space-boundary-coverage` always reports, is no area but is counted by
+`boundary_off_surface_count`.
+
+`counterpart_uncovered_share` is measured by the built-in code of
+`counterpart-coverage`: the cover from the plan broad phase, the least
+cover (sure counterparts surely overlapping) bounding the share from above
+and the most (possible ones too) from below, a counterpart without a
+readable extent dropping the lower bound to zero, only axis-compatible
+counterparts with `axis_tolerance`, and in the elevation a frame's infill
+above `infill_above`. For `height`, `horizontal` is the growth by which a
+counterpart overlaps in plan (zero where the rule's plan check is off).
+Measured from exact evidence, it is cited exact, as the capability cites
+it. One expression rule per band, `share <= threshold` at the band's
+severity, reaches the capability's grades on its fixtures, except where a
+share above the lowest threshold straddles a higher one: the capability
+grades it by the band its upper bound reaches, the band rules by the band
+it surely exceeds.
+
+`space-validation` grades its aspects with fixed severities (a duplicate
+or an intersection is an error, a low or uncovered boundary a warning, a
+cap shortfall an error below 1 %, a warning up to 15 % and informational
+below 98 %), so its rewrite is one expression rule per severity, each the
+conjunction of the aspects graded at it. Its values read a refusal of the
+space service as the capability does: unavailable or unmeasured is
+incomplete evidence.
 
 ### Space aspects
 
@@ -639,7 +665,9 @@ bound it could move: one whose distance could not be read, or whose
 interval straddles. The nearest distance's lower bound is the least any
 counterpart may come, and its upper bound the least of those surely
 counted. `count_within` runs from those surely within to those possibly
-within, and a decided count is an integer.
+within, and a decided count is an integer; it is cited exact when every
+counterpart that may count was measured exactly, as `distance` cites a
+shortfall.
 
 A measured value without a dimension, such as a count, is a plain
 number. Known only to an interval, it is a `measured` value without a
@@ -758,7 +786,8 @@ nearest exit (the `exits` path, of the `kinds`), along a walking profile
 (`walking_height`, `walking_step`), walked exactly as `escape-route` walks
 it: from the sure starts' least walk to every start's greatest, at most
 `f64::MAX` where a walk is unbounded, and none where the space has no exit
-or a start reaches none. "At most 20 m for offices, 35 m for labs" is one
+or a start reaches none; walked with exact evidence, it is cited exact, as
+`escape-route` cites it. "At most 20 m for offices, 35 m for labs" is one
 expression rule per use row (or one `if`), and reaches `escape-route`'s
 verdicts on its fixtures. Multiplied sections, common paths, compartments
 and passages stay in the capability.

@@ -884,8 +884,9 @@ mod as_expressions {
         )
     }
 
-    /// Checks that `requirement` reaches the capability's verdicts on
-    /// `scene` under `parameters`, and that those are `flagged` and `open`.
+    /// Checks that the capability's verdicts on `scene` under `parameters`
+    /// are `flagged` and `open`, and that `requirement` reaches them under
+    /// the parity harness.
     fn parity(
         scene: fn() -> Scene,
         capability: (&dyn RuleCapability, &str),
@@ -894,18 +895,21 @@ mod as_expressions {
         (flagged, open): (&[&str], &[&str]),
     ) {
         let (check, subjects) = capability;
-        let expected = verdicts(&scene().check(check, subjects, parameters));
+        let evaluated = scene().check(check, subjects, parameters);
         let set = |objects: &[&str]| -> BTreeSet<String> {
             objects.iter().map(|object| (*object).to_owned()).collect()
         };
-        assert_eq!(expected, (set(flagged), set(open)), "{requirement}");
-        let evaluation = expression(scene(), subjects, requirement);
         assert_eq!(
-            verdicts(&evaluation),
-            expected,
-            "{requirement}: {:?}",
-            evaluation.not_evaluated_outcomes()
+            verdicts(&evaluated),
+            (set(flagged), set(open)),
+            "{requirement}"
         );
+        let evaluation = expression(scene(), subjects, requirement);
+        let parity = axioval::rules::parity::compare_evaluations(
+            (check.id(), &evaluated),
+            ("expression", &evaluation),
+        );
+        assert!(parity.holds(), "{requirement}:\n{}", parity.diff());
     }
 
     fn bay(

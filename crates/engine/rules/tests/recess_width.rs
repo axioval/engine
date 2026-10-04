@@ -234,8 +234,9 @@ fn a_row_without_a_width_or_with_an_empty_range_is_invalid() {
 }
 
 /// Each fixture's recesses judged by an expression over the measured
-/// recesses: no recess narrower than its row requires. It flags and leaves
-/// open what `recess-width` does.
+/// recesses: no recess narrower than its row requires. The parity harness
+/// holds on every fixture but one, where the expression decides a recess
+/// whose row the capability leaves open.
 #[test]
 #[allow(clippy::too_many_lines, clippy::type_complexity)]
 fn the_rows_as_an_expression_over_recesses_reach_the_verdicts() {
@@ -321,26 +322,24 @@ fn the_rows_as_an_expression_over_recesses_reach_the_verdicts() {
                     .register(PlanSpanServiceHandle::new(Arc::new(service)))
                     .unwrap();
             });
-        let flagged = |evaluation: &axioval_engine::CapabilityEvaluation| {
-            let mut found: Vec<String> = findings(evaluation)
-                .into_iter()
-                .map(|(object, _)| object)
-                .collect();
-            found.dedup();
-            found
-        };
-        assert_eq!(flagged(&outcome), flagged(&expected), "case {index}");
-        let mut open = unevaluated(&expected);
+        let parity =
+            axioval_rules::parity::compare_evaluations((ID, &expected), ("expression", &outcome));
         if index == 2 {
             // A depth either side of the row boundary leaves the row open,
             // but 5 m is wide enough under either: the expression decides.
-            open.retain(|(object, _)| object != "a");
+            assert_eq!(
+                parity.differences,
+                vec![axioval_rules::parity::Difference {
+                    object: id("a"),
+                    capability: Some(axioval_rules::parity::Outcome::NotEvaluated {
+                        reason: NotEvaluatedReason::IncompleteEvidence,
+                    }),
+                    expression: None,
+                }],
+                "case {index}"
+            );
+        } else {
+            assert!(parity.holds(), "case {index}:\n{}", parity.diff());
         }
-        assert_eq!(
-            unevaluated(&outcome),
-            open,
-            "case {index}: {:?}",
-            outcome.not_evaluated_outcomes()
-        );
     }
 }

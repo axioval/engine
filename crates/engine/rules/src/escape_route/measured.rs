@@ -135,7 +135,15 @@ impl MeasuredProvider for TravelMeasures {
         };
         let locator = format!("{name}:{object}");
         Ok(match judge.plain_travel(object, start).map_err(refused)? {
-            Some((lower, upper)) => Measurement::Value {
+            // Walked with exact evidence, the interval holds only the
+            // walk's rounding, and the capability cites it as exact.
+            Some((lower, upper, true)) => Measurement::Rounded {
+                lower,
+                upper,
+                dimension: Some(QuantityDimension::Length),
+                locator,
+            },
+            Some((lower, upper, false)) => Measurement::Value {
                 lower,
                 upper,
                 dimension: Some(QuantityDimension::Length),

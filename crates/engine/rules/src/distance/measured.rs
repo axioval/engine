@@ -144,9 +144,13 @@ fn extreme(all: &[&Candidate], farthest: bool) -> Result<Measurement, String> {
 }
 
 /// How many counterparts surely and possibly lie within `[from, radius]`.
+/// Cited as exact where every possible one measured was measured exactly,
+/// as `distance` cites a shortfall: an unmeasurable counterpart widens the
+/// count without evidence of its own.
 fn count(all: &[&Candidate], from: f64, radius: f64) -> Measurement {
     let mut sure = 0_u32;
     let mut possible = 0_u32;
+    let mut exact = true;
     for candidate in all {
         let (lower, upper) = interval(candidate);
         if !lower.is_finite() || !candidate.possibly_in_scope() {
@@ -161,13 +165,26 @@ fn count(all: &[&Candidate], from: f64, radius: f64) -> Measurement {
         }
         if upper >= from && lower <= radius {
             possible += 1;
+            exact &= candidate.measured.as_ref().map_or(true, |measured| {
+                measured.evidence.iter().all(|evidence| evidence.exact)
+            });
         }
     }
-    Measurement::Value {
-        lower: f64::from(sure),
-        upper: f64::from(possible),
-        dimension: None,
-        locator: String::new(),
+    let (lower, upper) = (f64::from(sure), f64::from(possible));
+    if exact {
+        Measurement::Rounded {
+            lower,
+            upper,
+            dimension: None,
+            locator: String::new(),
+        }
+    } else {
+        Measurement::Value {
+            lower,
+            upper,
+            dimension: None,
+            locator: String::new(),
+        }
     }
 }
 

@@ -249,11 +249,9 @@ fn a_well_without_members_or_with_an_unmeasured_one_is_not_evaluated() {
     );
 }
 
-/// The well's judgement as an expression over its measured section, height
-/// and gaps flags and leaves open the same wells as `light-well`.
-#[test]
-#[allow(clippy::type_complexity, clippy::too_many_lines)]
-fn the_well_as_an_expression_over_its_values_reaches_the_verdicts() {
+/// The well's judgement under [`requirements`] as an expression rule over
+/// its measured gap, section and height, with gaps up to `tolerance`.
+fn as_expression(tolerance: f64) -> axioval_engine::CompiledRule {
     use serde_json::{Value, json};
     let measured = |name: &str| {
         json!({"kind": "property", "propertySet": "axioval:measured",
@@ -268,15 +266,69 @@ fn the_well_as_an_expression_over_its_values_reaches_the_verdicts() {
              "antecedent": {"kind": "isDefined", "operand": measured("well_section_width")},
              "consequent": compare("greaterThanOrEquals", measured("well_section_width"), quantity(width, "m"))}]})
     };
-    let requirement = |tolerance: f64| {
-        json!({"kind": "and", "operands": [
-            compare("lessThanOrEquals", measured("well_gap"), quantity(tolerance, "m")),
-            compare("greaterThan", measured("well_section_area"), quantity(0.0, "m2")),
-            {"kind": "if", "branches": [{
-                "when": compare("lessThanOrEquals", measured("well_height"), quantity(7.0, "m")),
-                "then": row(4.0, 1.5)}],
-             "else": row(8.0, 2.5)}]})
+    let requirement = json!({"kind": "and", "operands": [
+        compare("lessThanOrEquals", measured("well_gap"), quantity(tolerance, "m")),
+        compare("greaterThan", measured("well_section_area"), quantity(0.0, "m2")),
+        {"kind": "if", "branches": [{
+            "when": compare("lessThanOrEquals", measured("well_height"), quantity(7.0, "m")),
+            "then": row(4.0, 1.5)}],
+         "else": row(8.0, 2.5)}]});
+    rule(
+        "axioval:capability.expression",
+        kind("zone"),
+        vec![(
+            "requirement",
+            ParameterValue::Expression {
+                value: serde_json::from_value(requirement).unwrap(),
+            },
+        )],
+    )
+}
+
+/// A well grouping nothing, or measured without the services, is left open
+/// by the expression for the same reason as by `light-well`.
+#[test]
+fn an_empty_or_unmeasured_well_is_open_to_the_expression_too() {
+    let empty = || {
+        Model::default()
+            .object("well", "zone")
+            .object("other", "court")
+            .object("g", "space")
+            .edge("groups", "other", "g")
     };
+    let unmeasured = || {
+        Model::default()
+            .object("well", "zone")
+            .object("g", "space")
+            .edge("groups", "well", "g")
+    };
+    let capability = rule(
+        ID,
+        kind("zone"),
+        vec![
+            ("member_path", strings(&["groups:forward"])),
+            ("requirements", requirements()),
+        ],
+    );
+    for model in [empty, unmeasured] {
+        let expected = model().evaluate(&LightWell, &capability);
+        let outcome = model().evaluate_measured(
+            &axioval_rules::ExpressionRequirement,
+            &as_expression(0.0),
+            |_| {},
+        );
+        let parity =
+            axioval_rules::parity::compare_evaluations((ID, &expected), ("expression", &outcome));
+        assert!(parity.holds(), "{}", parity.diff());
+        assert_eq!(parity.open, 1);
+    }
+}
+
+/// The well's judgement as an expression over its measured section, height
+/// and gaps flags and leaves open the same wells as `light-well`.
+#[test]
+#[allow(clippy::type_complexity)]
+fn the_well_as_an_expression_over_its_values_reaches_the_verdicts() {
     let slight: &[(&str, f64, f64)] = &[("g", 0.0, 3.0), ("f1", 3.02, 6.0)];
     let gap: &[(&str, f64, f64)] = &[("g", 0.0, 3.0), ("f2", 6.0, 9.0)];
     let cases: Vec<(&[(&str, f64, f64)], (Span, Span), Option<f64>)> = vec![
@@ -298,16 +350,7 @@ fn the_well_as_an_expression_over_its_values_reaches_the_verdicts() {
             extents.insert(id(local), ((*bottom, *bottom), (*top, *top)));
         }
         let service = Arc::new(Well { extents, section });
-        let rule = rule(
-            "axioval:capability.expression",
-            kind("zone"),
-            vec![(
-                "requirement",
-                ParameterValue::Expression {
-                    value: serde_json::from_value(requirement(tolerance.unwrap_or(0.0))).unwrap(),
-                },
-            )],
-        );
+        let rule = as_expression(tolerance.unwrap_or(0.0));
         let outcome =
             model.evaluate_measured(&axioval_rules::ExpressionRequirement, &rule, |services| {
                 services
@@ -317,25 +360,8 @@ fn the_well_as_an_expression_over_its_values_reaches_the_verdicts() {
                     .register(PlanSpanServiceHandle::new(service.clone()))
                     .unwrap();
             });
-        let flagged = |evaluation: &axioval_engine::CapabilityEvaluation| {
-            let mut found: Vec<String> = findings(evaluation)
-                .into_iter()
-                .map(|(object, _)| object)
-                .collect();
-            found.dedup();
-            found
-        };
-        let open = |evaluation: &axioval_engine::CapabilityEvaluation| {
-            let mut open = unevaluated(evaluation);
-            open.dedup();
-            open
-        };
-        assert_eq!(flagged(&outcome), flagged(&expected), "case {index}");
-        assert_eq!(
-            open(&outcome),
-            open(&expected),
-            "case {index}: {:?}",
-            outcome.not_evaluated_outcomes()
-        );
+        let parity =
+            axioval_rules::parity::compare_evaluations((ID, &expected), ("expression", &outcome));
+        assert!(parity.holds(), "case {index}:\n{}", parity.diff());
     }
 }

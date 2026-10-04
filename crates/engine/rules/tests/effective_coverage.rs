@@ -798,3 +798,152 @@ fn the_measured_covered_share_reaches_the_verdicts() {
         assert_eq!(common::at_least(share, 0.9), verdict, "{case}: {share:?}");
     }
 }
+
+/// The share check as an expression rule over `effect_covered_share`, or
+/// over `effect_covered_area` against a stated area, held to the parity
+/// harness on the fixtures whose sources, blockers and reach a measured
+/// value names by kind.
+mod as_expressions {
+    use axioval_rules::parity::ParityEvidence;
+    use serde_json::{Value, json};
+
+    use super::*;
+
+    fn at_least_share(mode: &str, blockers: &str) -> Value {
+        json!({"kind": "compare", "operator": "greaterThanOrEquals",
+            "left": {"kind": "property", "propertySet": "axioval:measured",
+                "property": format!("effect_covered_share;sources=device;reach={mode};range=3{blockers}")},
+            "right": {"kind": "literal", "value": {"type": "number", "value": 0.9}}})
+    }
+
+    fn parity(
+        plan: &dyn Fn() -> Plan,
+        model: &dyn Fn() -> Model,
+        declared: &CompiledRule,
+        requirement: Value,
+    ) -> ParityEvidence {
+        let expected = run_with(model(), Arc::new(plan()), declared);
+        let rule = rule(
+            "axioval:capability.expression",
+            kind("room"),
+            vec![("requirement", common::expression(requirement))],
+        );
+        let rewritten =
+            model().evaluate_measured(&axioval_rules::ExpressionRequirement, &rule, |services| {
+                let shared = Arc::new(plan());
+                services
+                    .register(PlanAreaServiceHandle::new(shared.clone()))
+                    .unwrap();
+                services
+                    .register(ProximityServiceHandle::new(shared))
+                    .unwrap();
+            });
+        axioval_rules::parity::compare_evaluations((ID, &expected), ("expression", &rewritten))
+    }
+
+    fn of(plan: &dyn Fn() -> Plan, declared: &CompiledRule, requirement: Value) -> ParityEvidence {
+        parity(plan, &|| model(&plan()), declared, requirement)
+    }
+
+    fn holds(parity: &ParityEvidence) {
+        assert!(parity.holds(), "{}", parity.diff());
+    }
+
+    #[test]
+    fn covered_shares_reach_the_verdicts_in_each_reach() {
+        let evidence = of(
+            &plan,
+            &coverage("grown", vec![]),
+            at_least_share("grown", ""),
+        );
+        holds(&evidence);
+        assert_eq!(evidence.objects, 0);
+        let half = || without(plan(), "b");
+        let evidence = of(
+            &half,
+            &coverage("grown", vec![]),
+            at_least_share("grown", ""),
+        );
+        holds(&evidence);
+        assert_eq!(evidence.found, 1);
+        let straddling = || {
+            without(plan(), "b").source(
+                "a",
+                [2.4, 1.9, 2.6, 2.1],
+                [0.0, 0.0, 5.0, 4.0],
+                [0.0, 0.0, 10.0, 4.0],
+            )
+        };
+        let evidence = of(
+            &straddling,
+            &coverage("visible", vec![]),
+            at_least_share("visible", ""),
+        );
+        holds(&evidence);
+        assert_eq!(evidence.open, 1);
+        // Blockers in travel; `x` is a wall far away.
+        let blocked = || plan().with("x", [30.0, 0.0, 31.0, 1.0]);
+        let evidence = of(
+            &blocked,
+            &coverage(
+                "travel",
+                vec![
+                    ("blockers", selector(kind("wall"))),
+                    ("sources", selector(kind("device"))),
+                ],
+            ),
+            at_least_share("travel", ";blockers=wall"),
+        );
+        holds(&evidence);
+        assert_eq!(evidence.objects, 0);
+        // Next door, without its connections, the room holds no source.
+        let evidence = parity(
+            &|| next_door().0,
+            &|| next_door().1,
+            &coverage("travel", vec![]),
+            at_least_share("travel", ""),
+        );
+        holds(&evidence);
+        assert_eq!(evidence.found, 1);
+    }
+
+    #[test]
+    fn a_stated_area_reaches_the_verdicts() {
+        let declared = coverage(
+            "grown",
+            vec![("area_property", property(Some("Pset"), "Area"))],
+        );
+        let stated = json!({"kind": "property", "propertySet": "Pset", "property": "Area"});
+        let requirement = json!({"kind": "compare", "operator": "greaterThanOrEquals",
+            "left": {"kind": "property", "propertySet": "axioval:measured",
+                "property": "effect_covered_area;sources=device;reach=grown;range=3"},
+            "right": {"kind": "multiply", "left": stated,
+                "right": {"kind": "literal", "value": {"type": "number", "value": 0.9}}}});
+        let half = || without(plan(), "b");
+        let area = |value: f64| PropertyValue::Quantity {
+            value,
+            dimension: axioval_ir::QuantityDimension::Area,
+        };
+        let cases: [(&dyn Fn() -> Model, usize, usize); 3] = [
+            // All 20 m² the room states are covered.
+            (
+                &|| model(&half()).value("r", "Pset", "Area", area(20.0)),
+                0,
+                0,
+            ),
+            // Half of 40 m² stated.
+            (
+                &|| model(&half()).value("r", "Pset", "Area", area(40.0)),
+                1,
+                0,
+            ),
+            // Not stated: a missing value.
+            (&|| model(&half()), 1, 0),
+        ];
+        for (model, found, open) in cases {
+            let evidence = parity(&half, model, &declared, requirement.clone());
+            holds(&evidence);
+            assert_eq!((evidence.found, evidence.open), (found, open));
+        }
+    }
+}

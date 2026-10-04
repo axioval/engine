@@ -17,6 +17,7 @@ use crate::properties::PropertyResolutionError;
 /// The names measured here.
 pub(super) const NAMES: &[&str] = &[
     "boundary_covered_share",
+    "boundary_off_surface_count",
     "boundary_overlap_area",
     "boundary_uncovered_area",
     "contact_area",
@@ -106,6 +107,11 @@ impl Measures {
                     "boundary_covered_share" => {
                         let share = coverage.covered_share();
                         Answer::Number(share.lower(), share.upper(), locator)
+                    }
+                    "boundary_off_surface_count" => {
+                        #[allow(clippy::cast_precision_loss)]
+                        let count = coverage.off_surface().count() as f64;
+                        Answer::Number(count, count, locator)
                     }
                     "boundary_uncovered_area" => {
                         let area = coverage.uncovered_area();

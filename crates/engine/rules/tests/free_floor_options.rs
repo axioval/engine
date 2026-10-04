@@ -474,6 +474,14 @@ fn model_with_door() -> Model {
 #[allow(clippy::type_complexity, clippy::too_many_lines)]
 fn a_fit_as_a_count_of_placements_reaches_the_verdicts() {
     use serde_json::json;
+    type Case<'a> = (
+        &'a dyn RuleCapability,
+        CompiledRule,
+        fn() -> Model,
+        fn() -> Doors,
+        &'a [&'a str],
+        String,
+    );
     let fits = |list: &str| {
         json!({"kind": "compare", "operator": "greaterThanOrEquals",
             "left": {"kind": "aggregate", "function": "count",
@@ -548,8 +556,92 @@ fn a_fit_as_a_count_of_placements_reaches_the_verdicts() {
             rectangle_list.to_owned(),
         ),
     ];
-    for (index, (capability, declared, blocking, list)) in cases.into_iter().enumerate() {
-        let (expected, _) = run(model(), capability, &declared, blocking);
+    let swinging = || {
+        circle(vec![
+            ("obstacles", selector(kind("furniture"))),
+            ("subtract_door_swings", selector(kind("door"))),
+        ])
+    };
+    let swings_list = format!("{circle_list};obstacles=furniture;swings=door");
+    let entering = || {
+        circle(vec![
+            ("obstacles", selector(kind("furniture"))),
+            ("entrance_path_width", number(1.2)),
+            ("access_path", strings(&["Opens:forward"])),
+            ("door_selector", selector(kind("door"))),
+        ])
+    };
+    let entrance_list = format!(
+        "{circle_list};obstacles=furniture;entrance_width=1.2;access=Opens:forward;doors=door"
+    );
+    let unknown_hatch = || {
+        doors().unknown(
+            "hatch",
+            axioval_engine::DoorLeavesError::NotStated("no operation".into()),
+        )
+    };
+    let entrances = || model_with_door().object("hatch", "door");
+    let mut cases: Vec<Case> = cases
+        .into_iter()
+        .map(|(capability, declared, blocking, list)| {
+            (
+                capability,
+                declared,
+                model as fn() -> Model,
+                Doors::default as fn() -> Doors,
+                blocking,
+                list,
+            )
+        })
+        .collect();
+    cases.extend([
+        // An unknown swing may cover a fit; a proof stands whatever it covers.
+        (
+            &FreeFloorCircle as &dyn RuleCapability,
+            swinging(),
+            with_doors as fn() -> Model,
+            unknown_hatch as fn() -> Doors,
+            &[][..],
+            swings_list.clone(),
+        ),
+        (
+            &FreeFloorCircle,
+            swinging(),
+            with_doors,
+            unknown_hatch,
+            &["door"][..],
+            swings_list.clone(),
+        ),
+        (
+            &FreeFloorCircle,
+            swinging(),
+            with_doors,
+            doors,
+            &[][..],
+            swings_list,
+        ),
+        // A fit reached from the entrances, and one no path reaches.
+        (
+            &FreeFloorCircle,
+            entering(),
+            entrances,
+            Doors::default,
+            &[][..],
+            entrance_list.clone(),
+        ),
+        (
+            &FreeFloorCircle,
+            entering(),
+            entrances,
+            Doors::default,
+            &["path"][..],
+            entrance_list,
+        ),
+    ]);
+    for (index, (capability, declared, model, doors, blocking, list)) in
+        cases.into_iter().enumerate()
+    {
+        let (expected, _) = run_with_doors(model(), capability, &declared, blocking, doors());
         let expression = rule(
             "axioval:capability.expression",
             kind("room"),
@@ -571,19 +663,13 @@ fn a_fit_as_a_count_of_placements_reaches_the_verdicts() {
                 services
                     .register(FreeSpaceServiceHandle::new(service))
                     .unwrap();
-                services.register(Doors::default().handle()).unwrap();
+                services.register(doors().handle()).unwrap();
             },
         );
-        assert_eq!(
-            outcome.findings().len().min(1),
-            expected.findings().len().min(1),
-            "case {index}: {:?}",
-            outcome.not_evaluated_outcomes()
+        let parity = axioval_rules::parity::compare_evaluations(
+            (&declared.capability, &expected),
+            ("expression", &outcome),
         );
-        assert_eq!(
-            unevaluated(&outcome),
-            unevaluated(&expected),
-            "case {index}"
-        );
+        assert!(parity.holds(), "case {index}:\n{}", parity.diff());
     }
 }

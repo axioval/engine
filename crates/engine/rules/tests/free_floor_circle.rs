@@ -208,3 +208,69 @@ fn unusable_proofs_remain_not_evaluated() {
         assert_eq!(outcome.not_evaluated_outcomes()[0].reason(), &expected);
     }
 }
+
+/// Whether the shape fits as an expression over the measured placements
+/// (at least one), held to the parity harness on every answer of the
+/// service and without it.
+#[test]
+fn a_fit_as_a_count_of_placements_reaches_the_verdicts() {
+    let fits = serde_json::json!({"kind": "compare", "operator": "greaterThanOrEquals",
+        "left": {"kind": "aggregate", "function": "count",
+            "over": {"kind": "measured", "name": "free_placements;shape=circle;diameter=1.5;height=2"}},
+        "right": {"kind": "literal", "value": {"type": "integer", "value": 1}}});
+    let expression = CompiledRule {
+        capability: "axioval:capability.expression".into(),
+        parameters: BTreeMap::from([(
+            "requirement".to_owned(),
+            ParameterValue::Expression {
+                value: serde_json::from_value(fits).unwrap(),
+            },
+        )]),
+        ..rule()
+    };
+    let project = Project::new(vec![
+        Object::new(ObjectId::new(source(), "room").unwrap(), "space"),
+        Object::new(ObjectId::new(source(), "chair").unwrap(), "furniture"),
+    ])
+    .unwrap();
+    let registry =
+        axioval_rules::register_builtins(axioval_engine::CapabilityRegistry::new()).unwrap();
+    let answers = [
+        Some(Answer::Found),
+        Some(Answer::NoPlacement),
+        Some(Answer::Unavailable),
+        Some(Answer::Incomplete),
+        Some(Answer::Invalid),
+        None,
+    ];
+    for answer in answers {
+        let mut services = ServiceRegistry::new();
+        if let Some(answer) = answer {
+            services
+                .register(FreeSpaceServiceHandle::new(Arc::new(FakeService(answer))))
+                .unwrap();
+        }
+        let context = RuleContext {
+            project: &project,
+            services: &services,
+        };
+        let expected = FreeFloorCircle.evaluate(&context, &rule());
+        registry.install_measured(&mut services, &project);
+        let evaluation = axioval_rules::ExpressionRequirement.evaluate(
+            &RuleContext {
+                project: &project,
+                services: &services,
+            },
+            &expression,
+        );
+        let parity = axioval_rules::parity::compare_evaluations(
+            ("free-floor", &expected),
+            ("expression", &evaluation),
+        );
+        assert!(parity.holds(), "{}", parity.diff());
+        assert_eq!(
+            parity.objects,
+            usize::from(answer.is_none_or(|answer| !matches!(answer, Answer::Found)))
+        );
+    }
+}

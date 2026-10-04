@@ -3685,13 +3685,14 @@ impl Judge<'_, '_> {
     /// The longest walk from a start (the space's farthest point, or each
     /// of its doors) to the nearest exit, unmultiplied: from the sure
     /// starts' least walks to every start's greatest, `f64::MAX` where one
-    /// is unbounded. `None` where the space has no exit, or a sure start
+    /// is unbounded, and whether every walk bounding it was measured with
+    /// exact evidence. `None` where the space has no exit, or a sure start
     /// surely reaches none.
     fn plain_travel(
         &self,
         space: &ObjectId,
         start: Start,
-    ) -> Result<Option<(f64, f64)>, Unavailable> {
+    ) -> Result<Option<(f64, f64, bool)>, Unavailable> {
         let escape = self.escape(space)?;
         if escape.known && escape.targets.sure.is_empty() && escape.targets.maybe.is_empty() {
             return Ok(None);
@@ -3723,8 +3724,13 @@ impl Judge<'_, '_> {
             }
         };
         let (mut least, mut most) = (0.0_f64, 0.0_f64);
+        let mut exact = true;
+        let cited = |travel: &Travel| {
+            !travel.evidence.is_empty() && travel.evidence.iter().all(|cited| cited.exact)
+        };
         for (door, sure_start) in starts {
             let [lower, upper] = self.start_bounds(routes, profile, space, &escape, door.as_ref());
+            exact &= upper.as_ref().is_ok_and(cited) && lower.as_ref().is_ok_and(cited);
             most = most.max(upper.map_or(f64::INFINITY, |upper| upper.upper));
             if sure_start && let Ok(lower) = lower {
                 least = least.max(lower.lower);
@@ -3740,6 +3746,7 @@ impl Judge<'_, '_> {
             } else {
                 f64::MAX
             },
+            exact && most.is_finite(),
         )))
     }
 

@@ -432,20 +432,10 @@ fn end_walls_as_members_reach_the_verdicts() {
                     .register(PlanSpanServiceHandle::new(Arc::new(ends())))
                     .unwrap();
             });
-        let flagged = |evaluation: &CapabilityEvaluation| {
-            let mut found: Vec<String> = findings(evaluation)
-                .into_iter()
-                .map(|(object, _)| object)
-                .collect();
-            found.sort();
-            found
-        };
-        assert_eq!(flagged(&outcome), flagged(&expected), "case {index}");
-        assert_eq!(
-            unevaluated(&outcome),
-            unevaluated(&expected),
-            "case {index}: {:?}",
-            outcome.not_evaluated_outcomes()
+        let parity = axioval_rules::parity::compare_evaluations(
+            (CAPABILITY, &expected),
+            ("expression", &outcome),
         );
+        assert!(parity.holds(), "case {index}:\n{}", parity.diff());
     }
 }

@@ -264,5 +264,6 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(free_floor::PlacementMeasures))
         .and_then(|registry| registry.register_measured(parking_bay::BayMeasures))
         .and_then(|registry| registry.register_measured(wall_spacing::SpacingMeasures))
+        .and_then(|registry| registry.register_measured(counterpart_coverage::CoverageMeasures))
         .map(|registry| registry.with_refiner(Refiner))
 }

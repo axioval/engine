@@ -1203,3 +1203,211 @@ fn measured_distances_reach_the_capabilitys_verdicts_in_every_mode() {
         assert_eq!(measured, expected, "{case}: `{name}` at least {bound}");
     }
 }
+
+/// The capability under `parameters` and the expression rule
+/// `requirement` over the pipes, both measuring through `stub`, compared
+/// by the parity harness.
+fn expression_parity(
+    stub: &dyn Fn() -> Stub,
+    parameters: Vec<(&str, ParameterValue)>,
+    requirement: &serde_json::Value,
+) -> axioval_rules::parity::ParityEvidence {
+    let expected = run(model(), stub(), parameters);
+    let rule = rule(
+        "axioval:capability.expression",
+        kind("pipe"),
+        vec![("requirement", common::expression(requirement.clone()))],
+    );
+    let outcome =
+        model().evaluate_measured(&axioval_rules::ExpressionRequirement, &rule, |services| {
+            services
+                .register(ProximityServiceHandle::new(Arc::new(stub())))
+                .unwrap();
+        });
+    axioval_rules::parity::compare_evaluations((CAPABILITY, &expected), ("expression", &outcome))
+}
+
+/// Every mode's fixtures as expression rules over `count_within` and
+/// `distance`, held to the parity harness: `at_least` as the count within
+/// at least the count, `none_closer_than` as the nearest distance, where
+/// one is within, at least the minimum, `nearest` as the nearest distance
+/// at most the maximum. The capability also leaves an unmeasurable
+/// counterpart open, which an expression over the subjects never reports.
+#[test]
+#[allow(clippy::too_many_lines, clippy::type_complexity)]
+fn distance_expressions_hold_to_the_parity_harness_in_every_mode() {
+    use axioval_rules::parity::{Difference, Outcome};
+    use serde_json::{Value, json};
+    let measured = |name: &str| json!({"kind": "property", "propertySet": "axioval:measured", "property": name});
+    let at_least_count = |radius: &str, count: f64| {
+        json!({"kind": "compare", "operator": "greaterThanOrEquals",
+            "left": measured(&format!("count_within;to=wall;radius={radius}")),
+            "right": {"kind": "literal", "value": {"type": "number", "value": count}}})
+    };
+    let m = |value: f64| json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": "m"}});
+    let none_closer = |minimum: f64| {
+        let nearest = measured(&format!("distance;to=wall;within={minimum}"));
+        json!({"kind": "implies", "antecedent": {"kind": "isDefined", "operand": nearest.clone()},
+            "consequent": {"kind": "compare", "operator": "greaterThanOrEquals",
+                "left": nearest, "right": m(minimum)}})
+    };
+    let nearest_within = |maximum: f64| {
+        json!({"kind": "compare", "operator": "lessThanOrEquals",
+            "left": measured(&format!("distance;to=wall;within={maximum}")), "right": m(maximum)})
+    };
+    let undecided = || {
+        Stub::default()
+            .at("pipe", 0.0, 0.0)
+            .at("near", 1.5, 0.0)
+            .curved("mid", 1.8, 0.0)
+            .at("far", 4.0, 0.0)
+            .distance("pipe", "near", "Minimum3d", (0.5, 0.5))
+            .distance("pipe", "mid", "Minimum3d", (0.95, 1.05))
+            .distance("pipe", "far", "Minimum3d", (3.0, 3.0))
+    };
+    let unmeasured = || {
+        Stub::default()
+            .at("pipe", 0.0, 0.0)
+            .at("near", 1.5, 0.0)
+            .without_geometry("mid")
+            .at("far", 4.0, 0.0)
+            .distance("pipe", "near", "Minimum3d", (0.5, 0.5))
+    };
+    let straddling = |near: (f64, f64)| {
+        move || {
+            Stub::default()
+                .at("pipe", 0.0, 0.0)
+                .at("near", 1.5, 0.0)
+                .curved("mid", 1.5, 0.0)
+                .at("far", 4.0, 0.0)
+                .distance("pipe", "near", "Minimum3d", near)
+                .distance("pipe", "mid", "Minimum3d", (0.58, 0.62))
+        }
+    };
+    let planar = || {
+        Stub::default()
+            .at("pipe", 0.0, 0.0)
+            .at("near", 1.5, 10.0)
+            .at("mid", 9.0, 10.0)
+            .at("far", 20.0, 0.0)
+            .distance("pipe", "near", "Horizontal", (0.5, 0.5))
+    };
+    let mode = |mode: &str, bound: (&'static str, f64)| {
+        vec![("mode", string(mode)), (bound.0, number(bound.1))]
+    };
+    let ranged = {
+        let mut parameters = at_least(2, 1.0);
+        parameters.push(("minimum_metres", number(0.6)));
+        parameters
+    };
+    let horizontal = {
+        let mut parameters = at_least(1, 1.0);
+        parameters.push(("projection", string("horizontal")));
+        parameters
+    };
+    let in_plan = json!({"kind": "compare", "operator": "greaterThanOrEquals",
+        "left": measured("count_within;to=wall;radius=1;projection=horizontal"),
+        "right": {"kind": "literal", "value": {"type": "number", "value": 1.0}}});
+    let straddled_near = straddling((0.7, 0.7));
+    let surely_near = straddling((0.5, 0.5));
+    let cases: Vec<(&str, &dyn Fn() -> Stub, Vec<(&str, ParameterValue)>, Value)> = vec![
+        (
+            "2 within 1 m",
+            &walls,
+            at_least(2, 1.0),
+            at_least_count("1", 2.0),
+        ),
+        (
+            "3 within 1 m",
+            &walls,
+            at_least(3, 1.0),
+            at_least_count("1", 3.0),
+        ),
+        (
+            "2 within 0.6 to 1 m",
+            &walls,
+            ranged,
+            at_least_count("1;from=0.6", 2.0),
+        ),
+        (
+            "1 of undecided",
+            &undecided,
+            at_least(1, 1.0),
+            at_least_count("1", 1.0),
+        ),
+        (
+            "2 of undecided",
+            &undecided,
+            at_least(2, 1.0),
+            at_least_count("1", 2.0),
+        ),
+        (
+            "3 of undecided",
+            &undecided,
+            at_least(3, 1.0),
+            at_least_count("1", 3.0),
+        ),
+        ("1 in plan", &planar, horizontal, in_plan),
+        (
+            "none within 1 m",
+            &walls,
+            mode("none_closer_than", ("minimum_metres", 1.0)),
+            none_closer(1.0),
+        ),
+        (
+            "none within 0.4 m",
+            &walls,
+            mode("none_closer_than", ("minimum_metres", 0.4)),
+            none_closer(0.4),
+        ),
+        (
+            "none within a straddle",
+            &straddled_near,
+            mode("none_closer_than", ("minimum_metres", 0.6)),
+            none_closer(0.6),
+        ),
+        (
+            "certainly one within",
+            &surely_near,
+            mode("none_closer_than", ("minimum_metres", 0.6)),
+            none_closer(0.6),
+        ),
+        (
+            "nearest within 1 m",
+            &walls,
+            vec![("maximum_metres", number(1.0))],
+            nearest_within(1.0),
+        ),
+        (
+            "nearest within 0.4 m",
+            &walls,
+            vec![("maximum_metres", number(0.4))],
+            nearest_within(0.4),
+        ),
+    ];
+    for (case, stub, parameters, requirement) in cases {
+        let parity = expression_parity(stub, parameters, &requirement);
+        assert!(parity.holds(), "{case}:\n{}", parity.diff());
+    }
+    // An unmeasurable counterpart: the pipe alike, the counterpart itself
+    // left open by the capability alone.
+    for (count, open) in [(2, true), (3, false)] {
+        let parity = expression_parity(
+            &unmeasured,
+            at_least(count, 1.0),
+            &at_least_count("1", f64::from(u8::try_from(count).unwrap())),
+        );
+        assert_eq!(
+            parity.differences,
+            vec![Difference {
+                object: id("mid"),
+                capability: Some(Outcome::NotEvaluated {
+                    reason: NotEvaluatedReason::IncompleteEvidence
+                }),
+                expression: None,
+            }],
+            "{count} of unmeasured"
+        );
+        assert_eq!(parity.open, 1 + usize::from(open));
+    }
+}

@@ -73,7 +73,7 @@ impl Measures {
                 .ok_or_else(|| Self::missing(name, "space"))?
                 .get()
                 .measure_clear_height(object)
-                .map_err(|error| unavailable(error.to_string()))?;
+                .map_err(|error| Self::space_refused(name, object, &error))?;
             return Ok(Answer::Value(
                 height.metres(),
                 height.metres(),

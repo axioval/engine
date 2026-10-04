@@ -3175,21 +3175,16 @@ fn travel_distance_reaches_the_verdicts_per_use_row() {
         ),
     ];
     for (index, (model, geometry, parameters, per_row)) in cases.into_iter().enumerate() {
-        let expected = {
-            let selected = Selector::AnyOf {
-                operands: per_row.iter().map(|(of, _)| kind(of)).collect(),
-            };
-            model().evaluate_with(
+        // Each row's spaces, checked by the capability under every row and
+        // by the row's expression alone.
+        for (of, requirement) in per_row {
+            let expected = model().evaluate_with(
                 &EscapeRoute,
-                &rule(CAPABILITY, selected, parameters),
+                &rule(CAPABILITY, kind(of), parameters.clone()),
                 |services| {
                     geometry().register(services);
                 },
-            )
-        };
-        let mut found = Vec::new();
-        let mut open = Vec::new();
-        for (of, requirement) in per_row {
+            );
             let rule = rule(
                 "axioval:capability.expression",
                 kind(of),
@@ -3205,21 +3200,11 @@ fn travel_distance_reaches_the_verdicts_per_use_row() {
                 &rule,
                 |services| geometry().register(services),
             );
-            found.extend(findings(&outcome).into_iter().map(|(object, _)| object));
-            open.extend(unevaluated(&outcome));
+            let parity = axioval_rules::parity::compare_evaluations(
+                (CAPABILITY, &expected),
+                ("expression", &outcome),
+            );
+            assert!(parity.holds(), "case {index}, {of}:\n{}", parity.diff());
         }
-        let mut expected_found: Vec<String> = findings(&expected)
-            .into_iter()
-            .map(|(object, _)| object)
-            .collect();
-        let mut expected_open = unevaluated(&expected);
-        for list in [&mut found, &mut expected_found] {
-            list.sort();
-            list.dedup();
-        }
-        open.sort();
-        expected_open.sort();
-        assert_eq!(found, expected_found, "case {index}: {open:?}");
-        assert_eq!(open, expected_open, "case {index}");
     }
 }

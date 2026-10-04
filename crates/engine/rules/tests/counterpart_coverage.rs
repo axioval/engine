@@ -965,3 +965,292 @@ fn the_measured_uncovered_share_reaches_the_plan_grades() {
         assert_eq!(band(share.0), graded, "{wall}: {share:?}");
     }
 }
+
+/// Each band as an expression rule over the measured uncovered shares, at
+/// the band's severity: an element passes a band where every check's share
+/// is at most its threshold. Absorbed together, they grade an element by
+/// the most severe band it surely exceeds.
+mod as_expressions {
+    use axioval_rules::parity::{Difference, Outcome, ParityEvidence};
+    use serde_json::{Value, json};
+
+    use super::*;
+
+    fn share(check: &str) -> Value {
+        json!({"kind": "property", "propertySet": "axioval:measured",
+            "property": format!("counterpart_uncovered_share;by=structure;{check}")})
+    }
+
+    /// The capability under `declared` and the band rules over `checks`,
+    /// both on `boxes`, compared by the parity harness.
+    fn parity(
+        boxes: &dyn Fn() -> Boxes,
+        model: &dyn Fn() -> Model,
+        declared: &CompiledRule,
+        checks: &[&str],
+    ) -> ParityEvidence {
+        let expected = run_with(model(), boxes(), declared);
+        let register = |services: &mut axioval_engine::ServiceRegistry| {
+            let shared = Arc::new(boxes());
+            services
+                .register(PlanAreaServiceHandle::new(shared.clone()))
+                .unwrap();
+            services
+                .register(ProximityServiceHandle::new(shared.clone()))
+                .unwrap();
+            services
+                .register(VerticalExtentServiceHandle::new(shared.clone()))
+                .unwrap();
+            services
+                .register(PlanSpanServiceHandle::new(shared))
+                .unwrap();
+        };
+        let mut rewritten = CapabilityEvaluation::default();
+        for (threshold, severity) in [
+            (0.75, axioval_ir::contract::Severity::Error),
+            (0.25, axioval_ir::contract::Severity::Warning),
+            (0.01, axioval_ir::contract::Severity::Info),
+        ] {
+            let requirement = json!({"kind": "and", "operands": checks.iter().map(|check| {
+                json!({"kind": "compare", "operator": "lessThanOrEquals", "left": share(check),
+                    "right": {"kind": "literal", "value": {"type": "number", "value": threshold}}})
+            }).collect::<Vec<_>>()});
+            let mut band = rule(
+                "axioval:capability.expression",
+                kind("wall"),
+                vec![("requirement", common::expression(requirement))],
+            );
+            band.severity = severity;
+            rewritten.absorb(model().evaluate_measured(
+                &axioval_rules::ExpressionRequirement,
+                &band,
+                register,
+            ));
+        }
+        axioval_rules::parity::compare_evaluations((ID, &expected), ("expression", &rewritten))
+    }
+
+    /// [`parity`] over `boxes` and their own model.
+    fn of(boxes: &dyn Fn() -> Boxes, declared: &CompiledRule, checks: &[&str]) -> ParityEvidence {
+        parity(boxes, &|| model(&boxes()), declared, checks)
+    }
+
+    fn holds(parity: &ParityEvidence) {
+        assert!(parity.holds(), "{}", parity.diff());
+    }
+
+    #[test]
+    fn plan_and_height_shares_reach_the_grades() {
+        let both = |growth: &str| {
+            [
+                format!("horizontal={growth}"),
+                format!("measure=height;horizontal={growth};vertical={growth}"),
+            ]
+        };
+        let [plan, height] = both("0.02");
+        let evidence = of(
+            &three_walls,
+            &coverage_rule(vec![("tolerance", metres(0.02))]),
+            &[&plan, &height],
+        );
+        holds(&evidence);
+        assert_eq!(evidence.found, 2);
+        let shifted = || {
+            Boxes::default()
+                .with("w1", [0.0, 0.0, 4.0, 0.2], 0.0, 3.0)
+                .with("s1", [0.0, 0.03, 4.0, 0.23], 0.0, 2.5)
+        };
+        for (horizontal, found) in [(0.05, 0), (0.01, 1)] {
+            let evidence = of(
+                &shifted,
+                &coverage_rule(vec![
+                    ("horizontal_tolerance", metres(horizontal)),
+                    ("vertical_tolerance", metres(-1.0)),
+                ]),
+                &[&format!("horizontal={horizontal}")],
+            );
+            holds(&evidence);
+            assert_eq!(evidence.found, found);
+        }
+        for vertical in [0.0, 0.1] {
+            let evidence = of(
+                &shifted,
+                &coverage_rule(vec![
+                    ("horizontal_tolerance", metres(-1.0)),
+                    ("vertical_tolerance", metres(vertical)),
+                ]),
+                &[&format!("measure=height;vertical={vertical}")],
+            );
+            holds(&evidence);
+            assert_eq!(evidence.found, 1);
+        }
+        let short = || {
+            Boxes::default()
+                .with("w1", [0.0, 0.0, 4.0, 0.2], 0.0, 3.0)
+                .with("s1", [0.0, 0.03, 4.0, 0.23], 0.0, 2.95)
+        };
+        let [plan, height] = both("0.05");
+        let evidence = of(
+            &short,
+            &coverage_rule(vec![("tolerance", metres(0.05))]),
+            &[&plan, &height],
+        );
+        holds(&evidence);
+        assert_eq!(evidence.objects, 0);
+    }
+
+    #[test]
+    fn blind_counterparts_and_missing_services_leave_the_same_walls_open() {
+        let [plan, height] = [
+            "horizontal=0.02",
+            "measure=height;horizontal=0.02;vertical=0.02",
+        ];
+        let declared = coverage_rule(vec![("tolerance", metres(0.02))]);
+        // `s9` is selected but has no geometry: it may stand anywhere.
+        let evidence = parity(
+            &three_walls,
+            &|| model(&three_walls()).object("s9", "structure"),
+            &declared,
+            &[plan, height],
+        );
+        holds(&evidence);
+        assert_eq!((evidence.found, evidence.open), (0, 2));
+        // Without any service every wall is open.
+        let expected = model(&three_walls()).evaluate(&CounterpartCoverage, &declared);
+        let mut band = rule(
+            "axioval:capability.expression",
+            kind("wall"),
+            vec![(
+                "requirement",
+                common::expression(json!({"kind": "compare", "operator": "lessThanOrEquals",
+                    "left": share(plan),
+                    "right": {"kind": "literal", "value": {"type": "number", "value": 0.01}}})),
+            )],
+        );
+        band.severity = axioval_ir::contract::Severity::Info;
+        let rewritten = model(&three_walls()).evaluate_measured(
+            &axioval_rules::ExpressionRequirement,
+            &band,
+            |_| {},
+        );
+        let evidence =
+            axioval_rules::parity::compare_evaluations((ID, &expected), ("expression", &rewritten));
+        holds(&evidence);
+        assert_eq!(evidence.open, 3);
+    }
+
+    #[test]
+    fn axis_tolerances_reach_the_grades() {
+        let both = |growth: &str, axis: &str| {
+            [
+                format!("horizontal={growth}{axis}"),
+                format!("measure=height;horizontal={growth};vertical={growth}{axis}"),
+            ]
+        };
+        let [plan, height] = both("0", "");
+        holds(&of(
+            &crossed,
+            &coverage_rule(vec![("tolerance", metres(0.0))]),
+            &[&plan, &height],
+        ));
+        let [plan, height] = both("0", ";axis_tolerance=5");
+        let parallel = coverage_rule(vec![
+            ("tolerance", metres(0.0)),
+            ("axis_tolerance", degrees(5.0)),
+        ]);
+        let evidence = of(&crossed, &parallel, &[&plan, &height]);
+        holds(&evidence);
+        assert_eq!(evidence.found, 1);
+        // A square column may or may not share the wall's axis.
+        let square = || {
+            Boxes::default()
+                .with("w1", [0.0, 0.0, 4.0, 0.2], 0.0, 3.0)
+                .with("q1", [0.0, -1.9, 4.0, 2.1], 0.0, 3.0)
+        };
+        let evidence = of(&square, &parallel, &[&plan, &height]);
+        holds(&evidence);
+        assert_eq!(evidence.open, 1);
+        let [plan, height] = both("0.02", ";axis_tolerance=5");
+        let parallel = coverage_rule(vec![
+            ("tolerance", metres(0.02)),
+            ("axis_tolerance", degrees(5.0)),
+        ]);
+        let evidence = of(&three_walls, &parallel, &[&plan, &height]);
+        holds(&evidence);
+        assert_eq!(evidence.found, 2);
+        // A tessellated wall has no proven axes.
+        let unproven = || three_walls().tessellated("w1", 0.001);
+        let evidence = of(&unproven, &parallel, &[&plan, &height]);
+        holds(&evidence);
+        assert_eq!(evidence.open, 1);
+    }
+
+    #[test]
+    fn elevation_shares_and_frames_reach_the_grades() {
+        let elevation = "measure=elevation;horizontal=0.02;vertical=0.02";
+        let evidence = of(&two_heights, &elevation_rule(vec![]), &[elevation]);
+        holds(&evidence);
+        assert_eq!(evidence.found, 1);
+        holds(&of(&bay, &elevation_rule(vec![]), &[elevation]));
+        let framed = format!("{elevation};frame=beam");
+        let infill = elevation_rule(vec![("infill_counterparts", selector(kind("beam")))]);
+        let evidence = of(&bay, &infill, &[&framed]);
+        holds(&evidence);
+        assert_eq!(evidence.objects, 0);
+        let partly = || bay().with("s1", [0.0, 0.0, 2.4, 0.2], 0.0, 3.0);
+        let evidence = of(&partly, &infill, &[&framed]);
+        holds(&evidence);
+        assert_eq!(evidence.found, 1);
+        let evidence = of(
+            &partly,
+            &elevation_rule(vec![
+                ("infill_counterparts", selector(kind("beam"))),
+                ("infill_above", number(0.3)),
+            ]),
+            &[&format!("{framed};infill_above=0.3")],
+        );
+        holds(&evidence);
+        assert_eq!(evidence.objects, 0);
+        let square = || {
+            Boxes::default()
+                .with("w1", [0.0, 0.0, 1.0, 1.0], 0.0, 3.0)
+                .with("s1", [0.0, 0.0, 1.0, 1.0], 0.0, 3.0)
+        };
+        let evidence = of(&square, &elevation_rule(vec![]), &[elevation]);
+        holds(&evidence);
+        assert_eq!(evidence.open, 1);
+    }
+
+    /// A share above the lowest threshold straddling a higher one: the
+    /// capability grades it by the band its upper bound reaches, while the
+    /// band rules find it only in the band it surely exceeds and leave the
+    /// higher band open, which the harness reads as the milder finding.
+    #[test]
+    fn a_share_straddling_a_higher_band_is_graded_milder() {
+        let boxes = || {
+            Boxes::default()
+                .with("w1", [0.0, 0.0, 4.0, 0.2], 0.0, 3.0)
+                .with("s1", [0.0, 0.0, 2.8, 0.2], 0.0, 3.0)
+                .tessellated("s1", 0.05)
+        };
+        let declared = coverage_rule(vec![
+            ("horizontal_tolerance", metres(0.0)),
+            ("vertical_tolerance", metres(-1.0)),
+        ]);
+        let evidence = of(&boxes, &declared, &["horizontal=0"]);
+        assert_eq!(
+            evidence.differences,
+            vec![Difference {
+                object: id("w1"),
+                capability: Some(Outcome::Finding {
+                    severity: Severity::Warning,
+                    exact: false
+                }),
+                expression: Some(Outcome::Finding {
+                    severity: Severity::Info,
+                    exact: false
+                }),
+            }]
+        );
+    }
+}

@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 use std::error::Error;
 use std::path::{Path, PathBuf};
 
+use axioval::bcf_snapshot;
 use axioval::engine::EvidenceSession;
 use axioval::ifc::IFC_GLOBAL_ID;
 use axioval::ir::{Object, ObjectId, Project, RuleId, Severity};
@@ -91,6 +92,31 @@ pub struct CompareArgs {
     output: OutputArgs,
 }
 
+/// Both revisions' geometry as one record, and their kept meshes.
+fn combined(
+    before: geometry::GeometryReport,
+    after: geometry::GeometryReport,
+) -> (GeometryRecord, BTreeMap<ObjectId, bcf_snapshot::Mesh>) {
+    let mut unmeasured: Vec<Unmeasured> = before
+        .unmeasured
+        .into_iter()
+        .chain(after.unmeasured)
+        .map(|(object, reason)| Unmeasured { object, reason })
+        .collect();
+    unmeasured.sort_by(|a, b| a.object.cmp(&b.object));
+    let mut bodies = before.meshes;
+    bodies.extend(after.meshes);
+    let record = GeometryRecord {
+        exact: before.exact + after.exact,
+        tessellated: before.tessellated + after.tessellated,
+        no_body: before.no_body + after.no_body,
+        exact_boundaries: before.exact_boundaries + after.exact_boundaries,
+        composed: before.composed + after.composed,
+        unmeasured,
+    };
+    (record, bodies)
+}
+
 pub fn compare(mut args: CompareArgs) -> Result<Outcome, Box<dyn Error>> {
     args.output.prepare()?;
     let tolerance =
@@ -150,23 +176,7 @@ pub fn compare(mut args: CompareArgs) -> Result<Outcome, Box<dyn Error>> {
             .map_err(|error| format!("geometry of {}: {error}", args.base.display()))?;
         let (revised, after) = geometry::attach(revised, &revised_bytes, keep)
             .map_err(|error| format!("geometry of {}: {error}", args.revised.display()))?;
-        let mut unmeasured: Vec<Unmeasured> = before
-            .unmeasured
-            .into_iter()
-            .chain(after.unmeasured)
-            .map(|(object, reason)| Unmeasured { object, reason })
-            .collect();
-        unmeasured.sort_by(|a, b| a.object.cmp(&b.object));
-        let mut bodies = before.meshes;
-        bodies.extend(after.meshes);
-        let record = GeometryRecord {
-            exact: before.exact + after.exact,
-            tessellated: before.tessellated + after.tessellated,
-            no_body: before.no_body + after.no_body,
-            exact_boundaries: before.exact_boundaries + after.exact_boundaries,
-            unmeasured,
-        };
-        (base, revised, Some((record, bodies)))
+        (base, revised, Some(combined(before, after)))
     } else {
         (base, revised, None)
     };

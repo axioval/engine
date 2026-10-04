@@ -79,6 +79,14 @@ impl Scene {
         self.geometry = self.geometry.with_mesh(id(local), mesh);
         self
     }
+    /// A whole with no body of its own, measured through its `parts`.
+    fn whole(mut self, local: &str, kind: &str, parts: &[&str]) -> Self {
+        self.objects.push(Object::new(id(local), kind));
+        let parts: Vec<ObjectId> = parts.iter().map(|part| id(part)).collect();
+        let body = self.geometry.compose(&parts).unwrap();
+        self.geometry = self.geometry.with_composed_body(id(local), body);
+        self
+    }
     /// An object without geometry: a system, an assembly, a port.
     fn node(mut self, local: &str, kind: &str) -> Self {
         self.objects.push(Object::new(id(local), kind));
@@ -437,6 +445,53 @@ fn parts_of_the_same_element_are_excluded() {
         .edge("IfcRelAggregates", "assembly", "wall");
     let outcome = scene.check(&[("exclude_paths", paths(&["IfcRelAggregates:backward"]))]);
     assert!(findings(&outcome).is_empty() && open(&outcome).is_empty());
+}
+
+/// A pipe run measured through its two segments clashes with the wall as
+/// each segment does, and never with its own segments: one body is not two.
+#[test]
+fn a_whole_is_never_paired_with_its_own_parts() {
+    let scene = Scene::default()
+        .body("wall", "pipe", wall())
+        .body(
+            "segment-a",
+            "pipe",
+            cuboid([1.0, -1.0, 1.0], [1.1, 0.1, 1.1]),
+        )
+        .body(
+            "segment-b",
+            "pipe",
+            cuboid([1.0, 0.1, 1.0], [1.1, 1.2, 1.1]),
+        )
+        .whole("run", "pipe", &["segment-a", "segment-b"]);
+    let outcome = scene.check(&[(
+        "counterparts",
+        ParameterValue::Selector {
+            value: Box::new(kind("pipe")),
+        },
+    )]);
+    let mut pairs: Vec<(String, String)> = findings(&outcome)
+        .into_iter()
+        .map(|(subject, counterpart, _)| {
+            if subject < counterpart {
+                (subject, counterpart)
+            } else {
+                (counterpart, subject)
+            }
+        })
+        .collect();
+    pairs.sort();
+    pairs.dedup();
+    assert_eq!(
+        pairs,
+        [
+            ("run".to_owned(), "wall".to_owned()),
+            ("segment-a".to_owned(), "wall".to_owned()),
+            ("segment-b".to_owned(), "wall".to_owned()),
+        ],
+        "{outcome:#?}"
+    );
+    assert!(open(&outcome).is_empty(), "{:?}", open(&outcome));
 }
 
 /// Pipe to its port, across the port connection, to the wall's port and on

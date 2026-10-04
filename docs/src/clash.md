@@ -45,6 +45,14 @@ itself. It is never paired with itself, and each unordered pair is reported
 once, with the lesser identity as subject whenever that orientation is allowed.
 If one object is supplied twice with different extents, the search is refused.
 
+A pair whose bodies share material is left out before the narrow phase:
+`ProximityService::shares_body` says when one is a whole measured as the
+union of its parts and the other one of those parts, at any depth, or two
+wholes hold a part in common (see [CLI](./cli.md)). Such a pair is one body
+counted twice, so no clash, containment or distance capability ever reports
+or refuses it. The default answers `false`, right for a service that
+measures no body through its parts.
+
 ## Narrow phase: `ProximityService`
 
 A `ProximityService` answers two questions:

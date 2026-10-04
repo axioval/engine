@@ -49,7 +49,7 @@ pub use envelope_membership::AxiolidEnvelopeMembershipService;
 pub use exact_boundary::{ExactBody, ExactBoundary, exact_boundary};
 pub use facade_area::AxiolidFacadeAreaService;
 pub use free_space::AxiolidFreeSpaceService;
-pub use geometry::AxiolidGeometry;
+pub use geometry::{AxiolidGeometry, ComposedBody};
 pub use guard::AxiolidGuardService;
 pub use linear_quantity::AxiolidLinearQuantityService;
 pub use metric_routing::AxiolidMetricRoutingService;

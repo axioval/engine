@@ -816,6 +816,7 @@ fn geometry_record(report: geometry::GeometryReport) -> digest::GeometryRecord {
         tessellated: report.tessellated,
         no_body: report.no_body,
         exact_boundaries: report.exact_boundaries,
+        composed: report.composed,
         unmeasured: report
             .unmeasured
             .into_iter()
@@ -1313,12 +1314,17 @@ fn warn(output: &CheckOutput, summarized: bool, unanchored: &[&ObjectId], unfram
         if let Some(geometry) = &output.geometry {
             eprintln!(
                 "geometry: {} exact, {} tessellated, {} without body, {} unmeasured, \
-                 {} with an exact boundary",
+                 {} with an exact boundary{}",
                 geometry.exact,
                 geometry.tessellated,
                 geometry.no_body,
                 geometry.unmeasured.len(),
-                geometry.exact_boundaries
+                geometry.exact_boundaries,
+                if geometry.composed == 0 {
+                    String::new()
+                } else {
+                    format!(", {} measured through their parts", geometry.composed)
+                }
             );
             for unmeasured in &geometry.unmeasured {
                 eprintln!(

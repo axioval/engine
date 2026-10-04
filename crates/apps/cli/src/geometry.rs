@@ -32,6 +32,17 @@
 //! A group (a zone) has no body, but its plan footprint is the union of its
 //! members', so the bridge also declares every group's membership.
 //!
+//! A physical product with no body of its own that is decomposed into parts
+//! (`IfcRelAggregates`, at any depth: a stair into flights and landings, a
+//! roof into slabs, a wall into layers) is measured as the union of its
+//! parts' bodies (`AxiolidGeometry::compose`): exact when every part is,
+//! tessellated within the largest deviation of its parts otherwise, with an
+//! exact body where every part has one. If any part is unmeasured, the whole
+//! is too, with a reason naming the first such part; a product with no body
+//! and no parts stays unmeasured as `no body representation`. The whole
+//! keeps its own identity, and a whole and its own parts share material, so
+//! no pairwise rule ever pairs them (`ProximityService::shares_body`).
+//!
 //! With [`Options::exact_boundaries`], a body whose lowered graph has an
 //! exact construction (a rigidly placed extrusion, revolution or swept disk,
 //! one less its extruded openings or clipped by half-spaces, or several
@@ -78,10 +89,11 @@ use axioval::engine::{
     FacadeAreaServiceHandle, FreeSpaceServiceHandle, GuardServiceHandle,
     LinearQuantityServiceHandle, MetricRoutingServiceHandle, PlanAreaServiceHandle,
     PlanSpanServiceHandle, PropertyRequest, PropertyResolution, PropertyResolutionServiceHandle,
-    ProximityServiceHandle, RelationshipQuery, RelationshipSelectionRequest,
-    RelationshipSelectionServiceHandle, SemanticRelationship, SightServiceHandle, SourceSnapshot,
-    SpaceServiceHandle, TraversalDirection, TriangleCountServiceHandle, TypeHierarchyServiceHandle,
-    VerticalExtentServiceHandle, WalkabilityServiceHandle, WalkingSurfaceServiceHandle,
+    ProximityServiceHandle, RelationshipEdgesRequest, RelationshipQuery,
+    RelationshipSelectionRequest, RelationshipSelectionServiceHandle, SemanticRelationship,
+    SightServiceHandle, SourceSnapshot, SpaceServiceHandle, TraversalDirection,
+    TriangleCountServiceHandle, TypeHierarchyServiceHandle, VerticalExtentServiceHandle,
+    WalkabilityServiceHandle, WalkingSurfaceServiceHandle,
 };
 use axioval::ir::{ObjectId, PropertyValue, Report, SourceId};
 use axioval::rules::{CoordinateTolerance, compare_coordinate_systems};
@@ -130,6 +142,9 @@ pub struct GeometryReport {
     pub no_body: usize,
     /// Meshed objects registered with their exact boundary as well.
     pub exact_boundaries: usize,
+    /// Wholes with no body of their own measured as the union of their
+    /// parts; each is counted as exact or tessellated as well.
+    pub composed: usize,
     /// Physical objects that could not be meshed, with the reason.
     pub unmeasured: Vec<(ObjectId, String)>,
     /// Every meshed object's triangles, kept only when asked for, to draw
@@ -304,6 +319,9 @@ pub fn attach(
     let mut voids: Vec<(ObjectId, Void)> = Vec::new();
     // Each built boundary, and whether its object's mesh is tessellated.
     let mut boundaries: Vec<(ObjectId, ExactBoundary, bool)> = Vec::new();
+    // Physical products with no body of their own, measured through their
+    // parts once every part is.
+    let mut wholes: Vec<ObjectId> = Vec::new();
 
     for object in session.project().objects() {
         let id = object.id.clone();
@@ -367,11 +385,7 @@ pub fn attach(
                 geometry = geometry.with_no_body(id);
                 report.no_body += 1;
             }
-            Ok(None) => {
-                let reason = "no body representation";
-                report.unmeasured.push((id.clone(), reason.into()));
-                geometry = geometry.with_unmeasured(id, reason);
-            }
+            Ok(None) => wholes.push(id),
             Err(error) => {
                 report.unmeasured.push((id.clone(), error.clone()));
                 geometry = geometry.with_unmeasured(id, error);
@@ -382,6 +396,16 @@ pub fn attach(
     geometry = with_boundaries(geometry, boundaries, &mut report);
 
     let relationships = session.service::<RelationshipSelectionServiceHandle>();
+    geometry = Composer {
+        geometry,
+        parts: decompositions(relationships, &kinds),
+        wholes: wholes.iter().cloned().collect(),
+        decided: BTreeSet::new(),
+        report: &mut report,
+        keep_meshes: options.keep_meshes,
+    }
+    .compose_all(&wholes);
+    report.unmeasured.sort_by(|a, b| a.0.cmp(&b.0));
     for (group, members) in groups(relationships, &kinds, &is_a) {
         geometry = match members {
             Ok(members) => geometry.with_group(group, members),
@@ -405,6 +429,115 @@ pub fn attach(
             &snapshots,
         )?;
     Ok((session, report))
+}
+
+/// Every whole's parts, from the session's `IfcRelAggregates` edges, or
+/// why they cannot be read.
+fn decompositions(
+    relationships: Option<&RelationshipSelectionServiceHandle>,
+    kinds: &BTreeMap<ObjectId, String>,
+) -> Result<BTreeMap<ObjectId, Vec<ObjectId>>, String> {
+    let relationships = relationships
+        .ok_or("the session has no relationship service to read decompositions with")?;
+    let request = RelationshipEdgesRequest::try_new(
+        kinds.keys().cloned().collect(),
+        SemanticRelationship::try_new("IfcRelAggregates").map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| error.to_string())?;
+    let listing = relationships
+        .edges(&request)
+        .map_err(|error| error.to_string())?;
+    let mut parts: BTreeMap<ObjectId, Vec<ObjectId>> = BTreeMap::new();
+    for edge in listing.edges() {
+        parts
+            .entry(edge.relating.clone())
+            .or_default()
+            .push(edge.related.clone());
+    }
+    Ok(parts)
+}
+
+/// Measures every physical product with no body of its own through its
+/// parts, innermost wholes first.
+struct Composer<'r> {
+    geometry: AxiolidGeometry,
+    /// Every whole's parts, or why decompositions cannot be read.
+    parts: Result<BTreeMap<ObjectId, Vec<ObjectId>>, String>,
+    /// The products with no body of their own.
+    wholes: BTreeSet<ObjectId>,
+    /// Wholes measured or left unmeasured, and those being decided.
+    decided: BTreeSet<ObjectId>,
+    report: &'r mut GeometryReport,
+    keep_meshes: bool,
+}
+
+impl Composer<'_> {
+    fn compose_all(mut self, wholes: &[ObjectId]) -> AxiolidGeometry {
+        for whole in wholes {
+            self.compose(whole);
+        }
+        self.geometry
+    }
+
+    /// Decides `whole` after every part of it that is a whole itself. A
+    /// part still being decided (a decomposition cycle) has no body yet, so
+    /// the compose refuses it by name.
+    fn compose(&mut self, whole: &ObjectId) {
+        if !self.decided.insert(whole.clone()) {
+            return;
+        }
+        let parts = match &self.parts {
+            Ok(decompositions) => decompositions.get(whole).cloned().unwrap_or_default(),
+            Err(error) => {
+                let reason = format!(
+                    "no body representation, and whether it decomposes into parts that                      carry its body cannot be read: {error}"
+                );
+                self.unmeasured(whole, reason);
+                return;
+            }
+        };
+        if parts.is_empty() {
+            self.unmeasured(whole, "no body representation".to_owned());
+            return;
+        }
+        for part in &parts {
+            if self.wholes.contains(part) {
+                self.compose(part);
+            }
+        }
+        match self.geometry.compose(&parts) {
+            Ok(body) => {
+                if body.is_exact() {
+                    self.report.exact += 1;
+                } else {
+                    self.report.tessellated += 1;
+                }
+                if body.has_exact_body() {
+                    self.report.exact_boundaries += 1;
+                }
+                if self.keep_meshes
+                    && let Some(kept) = snapshot_mesh(body.mesh())
+                {
+                    self.report.meshes.insert(whole.clone(), kept);
+                }
+                self.report.composed += 1;
+                let geometry = std::mem::take(&mut self.geometry);
+                self.geometry = geometry.with_composed_body(whole.clone(), body);
+            }
+            Err(error) => {
+                self.unmeasured(
+                    whole,
+                    format!("no body representation of its own, and {error}"),
+                );
+            }
+        }
+    }
+
+    fn unmeasured(&mut self, whole: &ObjectId, reason: String) {
+        let geometry = std::mem::take(&mut self.geometry);
+        self.geometry = geometry.with_unmeasured(whole.clone(), reason.clone());
+        self.report.unmeasured.push((whole.clone(), reason));
+    }
 }
 
 /// Registers the boundaries that agree with their meshes, when one of them

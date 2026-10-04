@@ -116,7 +116,10 @@ impl VerticalExtentService for AxiolidVerticalExtentService {
                 });
         let evidence = Evidence {
             source: object.source.clone(),
-            locator: format!("vertical-extent:{object}"),
+            locator: format!(
+                "vertical-extent:{object}{}",
+                self.geometry.union_note(&[object])
+            ),
             exact: tessellation.is_none(),
         };
         VerticalExtent::try_new(

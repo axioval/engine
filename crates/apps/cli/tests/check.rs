@@ -1515,6 +1515,175 @@ fn with_geometry_a_clash_between_real_ifc_bodies_is_found() {
     );
 }
 
+/// A box `lx` by `ly` centred on `(cx, cy)`, 3 m high, as instances
+/// `first..first + 5`; `product` is the product line with `REP` for its
+/// shape.
+fn part(first: u32, (cx, cy): (f64, f64), (lx, ly): (f64, f64), product: &str) -> String {
+    let [p, pos, profile, solid, shape, definition, object] =
+        [0, 1, 2, 3, 4, 5, 6].map(|offset| first + offset);
+    format!(
+        "#{p}=IFCCARTESIANPOINT(({cx},{cy}));\n\
+         #{pos}=IFCAXIS2PLACEMENT2D(#{p},$);\n\
+         #{profile}=IFCRECTANGLEPROFILEDEF(.AREA.,$,#{pos},{lx},{ly});\n\
+         #{solid}=IFCEXTRUDEDAREASOLID(#{profile},#2,#4,3.);\n\
+         #{shape}=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#{solid}));\n\
+         #{definition}=IFCPRODUCTDEFINITIONSHAPE($,$,(#{shape}));\n\
+         #{object}={};\n",
+        product.replace("REP", &format!("#{definition}")),
+    )
+}
+
+/// Wholes with no body of their own, decomposed into parts that have one:
+/// wall #100 into layers #116 and #126 (y -0.1..0 and 0..0.1), crossed by
+/// wall #26; stair #200 into flight #216 and landing #226; roof #300 into
+/// slab #316 and slab #330, which has no body. Proxy #30 has no body and no
+/// parts.
+fn wholes_of_parts() -> String {
+    let model = [
+        part(
+            110,
+            (2.0, -0.05),
+            (4.0, 0.1),
+            "IFCBUILDINGELEMENTPART('0000000000000000000116',$,$,$,$,#3,REP,$,$)",
+        ),
+        part(
+            120,
+            (2.0, 0.05),
+            (4.0, 0.1),
+            "IFCBUILDINGELEMENTPART('0000000000000000000126',$,$,$,$,#3,REP,$,$)",
+        ),
+        part(
+            20,
+            (2.0, 0.0),
+            (0.2, 4.0),
+            "IFCWALL('0000000000000000000026',$,$,$,$,#3,REP,$,$)",
+        ),
+        part(
+            210,
+            (11.0, 0.0),
+            (2.0, 1.0),
+            "IFCSTAIRFLIGHT('0000000000000000000216',$,$,$,$,#3,REP,$,$,$,$,$,$)",
+        ),
+        part(
+            220,
+            (12.5, 0.0),
+            (1.0, 1.0),
+            "IFCSLAB('0000000000000000000226',$,$,$,$,#3,REP,$,.LANDING.)",
+        ),
+        part(
+            310,
+            (21.0, 0.0),
+            (2.0, 2.0),
+            "IFCSLAB('0000000000000000000316',$,$,$,$,#3,REP,$,.ROOF.)",
+        ),
+    ]
+    .concat();
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         {model}\
+         #30=IFCBUILDINGELEMENTPROXY('0000000000000000000030',$,$,$,$,#3,$,$,$);\n\
+         #100=IFCWALL('0000000000000000000100',$,$,$,$,#3,$,$,$);\n\
+         #101=IFCRELAGGREGATES('0000000000000000000101',$,$,$,#100,(#116,#126));\n\
+         #200=IFCSTAIR('0000000000000000000200',$,$,$,$,#3,$,$,$);\n\
+         #201=IFCRELAGGREGATES('0000000000000000000201',$,$,$,#200,(#216,#226));\n\
+         #300=IFCROOF('0000000000000000000300',$,$,$,$,#3,$,$,$);\n\
+         #330=IFCSLAB('0000000000000000000330',$,$,$,$,#3,$,$,.ROOF.);\n\
+         #301=IFCRELAGGREGATES('0000000000000000000301',$,$,$,#300,(#316,#330));\n\
+         ENDSEC;\nEND-ISO-10303-21;\n"
+    )
+}
+
+/// A whole with no body of its own is measured as the union of its parts:
+/// a wall of two layers clashes with the wall crossing it, a stair of a
+/// flight and a landing is measured, and neither is ever paired with its
+/// own parts. A roof with an unmeasured part stays unmeasured, naming the
+/// part; a proxy with no body and no parts stays as it was.
+#[test]
+fn with_geometry_a_whole_is_measured_through_its_parts_and_never_paired_with_them() {
+    use std::collections::BTreeSet;
+
+    let case = Case::new("geometry-wholes");
+    let (output, result) = case.geometry_rule(
+        &wholes_of_parts(),
+        &[("element", "IfcElement")],
+        "axioval:capability.clash",
+        &registry_signature("axioval:capability.clash"),
+        entity("element"),
+        json!({
+            "counterparts": {"type": "selector", "value": entity("element")},
+            "penetration_tolerance_metres": {"type": "number", "value": 0.01},
+        }),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+
+    let geometry = &result["geometry"];
+    // Five parts, the crossing wall and the wall and stair as wholes.
+    assert_eq!(geometry["exact"], 8, "{geometry:#}");
+    assert_eq!(geometry["composed"], 2, "{geometry:#}");
+    let unmeasured: Vec<(&str, &str)> = geometry["unmeasured"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| {
+            (
+                entry["object"]["local_id"].as_str().unwrap(),
+                entry["reason"].as_str().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(unmeasured.len(), 3, "{unmeasured:?}");
+    assert_eq!(unmeasured[0], ("#30", "no body representation"));
+    assert_eq!(unmeasured[1].0, "#300");
+    assert!(
+        unmeasured[1].1.starts_with(
+            "no body representation of its own, and its body is the union of its 2 parts, and part "
+        ) && unmeasured[1]
+            .1
+            .ends_with("/#330 is unmeasured: no body representation"),
+        "{}",
+        unmeasured[1].1
+    );
+    assert_eq!(unmeasured[2], ("#330", "no body representation"));
+    assert!(
+        stderr(&output).contains("2 measured through their parts"),
+        "{}",
+        stderr(&output)
+    );
+
+    // The crossing wall clashes with the wall and with each of its layers;
+    // the wall never clashes with its layers, nor the stair with its flight
+    // or landing.
+    let pairs: BTreeSet<(String, String)> = result["report"]["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|finding| {
+            let mut pair = [
+                finding["object_id"]["local_id"]
+                    .as_str()
+                    .unwrap()
+                    .to_owned(),
+                finding["related"][0]["local_id"]
+                    .as_str()
+                    .unwrap()
+                    .to_owned(),
+            ];
+            pair.sort();
+            (pair[0].clone(), pair[1].clone())
+        })
+        .collect();
+    let expected: BTreeSet<(String, String)> = [("#100", "#26"), ("#116", "#26"), ("#126", "#26")]
+        .into_iter()
+        .map(|(a, b)| (a.to_owned(), b.to_owned()))
+        .collect();
+    assert_eq!(pairs, expected, "{result:#}");
+}
+
 /// Exporters often write a REAL without its decimal point (`1E-05`). The
 /// model is read, semantically and for geometry, with every such token
 /// reported as an integrity warning; nothing is skipped.

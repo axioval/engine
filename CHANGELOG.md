@@ -6,6 +6,24 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- Wholes measured through their parts (#211): with `--geometry`, a
+  physical product with no `Body` of its own that is decomposed into parts
+  (`IfcRelAggregates`, at any depth: stairs into flights and landings,
+  roofs into slabs, curtain walls into members and plates, walls into
+  layers, element assemblies) is measured as the union of its parts'
+  bodies instead of being unmeasured as `no body representation`. It is
+  exact when every part is, tessellated within the largest deviation of
+  its parts otherwise, and has an exact body where every part has one
+  (`AxiolidGeometry::compose`, `ComposedBody`, `with_composed_body`,
+  `ExactBody::union`). Any unmeasured part leaves the whole unmeasured
+  with a reason naming that part; a product with neither body nor parts
+  stays `no body representation`. Evidence about such a whole states it
+  (`;union:<whole>=<n>-parts`), its volumes are bounded piece by piece so
+  overlapping parts are never counted twice, and the result's additive
+  `geometry.composed` counts the wholes. A whole and its own parts share
+  material (`ProximityService::shares_body`, default `false`), so
+  `clash`, `clash-matrix`, `containment` and `distance` never pair them.
+
 - Not-evaluated inventory (#186): `scripts/not_evaluated_inventory.py`
   ranks the causes of not-evaluated outcomes and unmeasured objects across
   saved check results. It attributes an outcome to the unmeasured object it

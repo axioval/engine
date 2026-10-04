@@ -35,6 +35,72 @@ pub struct AxiolidGeometry {
     unmeasured: BTreeMap<ObjectId, String>,
     groups: BTreeMap<ObjectId, Result<Vec<ObjectId>, String>>,
     boundaries: BTreeMap<ObjectId, Arc<ExactBody>>,
+    /// Wholes measured through their parts ([`Self::with_composed_body`]).
+    compositions: BTreeMap<ObjectId, Arc<Composition>>,
+}
+
+/// How a whole's body is built from its parts.
+#[derive(Debug)]
+struct Composition {
+    /// The parts stated for the whole, in identity order.
+    parts: Vec<ObjectId>,
+    /// The objects whose own bodies make up the whole: its parts, and the
+    /// parts of any part measured through its parts in turn.
+    pieces: BTreeSet<ObjectId>,
+}
+
+/// A whole's body as the union of its parts' bodies, built by
+/// [`AxiolidGeometry::compose`] from the parts already registered, and
+/// registered with [`AxiolidGeometry::with_composed_body`].
+///
+/// The mesh is the parts' meshes side by side, unwelded, so each stays the
+/// closed solid it was. Its surface therefore includes the faces where parts
+/// meet, and a point inside the whole near such a face measures its depth to
+/// that face: a lower bound, as every witnessed depth is. A distance from
+/// outside the whole is the least distance to any part, which is exactly the
+/// distance to their union.
+#[derive(Clone, Debug)]
+pub struct ComposedBody {
+    parts: Vec<ObjectId>,
+    pieces: BTreeSet<ObjectId>,
+    mesh: TriMesh,
+    /// The largest chord deviation of a tessellated part; `None` when every
+    /// part is exact.
+    deviation: Option<f64>,
+    exact: Option<ExactBody>,
+}
+
+impl ComposedBody {
+    /// The parts stated for the whole, in identity order.
+    #[must_use]
+    pub fn parts(&self) -> &[ObjectId] {
+        &self.parts
+    }
+
+    /// The union's mesh.
+    #[must_use]
+    pub fn mesh(&self) -> &TriMesh {
+        &self.mesh
+    }
+
+    /// Whether every part is exact, so the union is too.
+    #[must_use]
+    pub fn is_exact(&self) -> bool {
+        self.deviation.is_none()
+    }
+
+    /// The deviation the union is declared within: the largest of its
+    /// tessellated parts', zero when every part is exact.
+    #[must_use]
+    pub fn deviation_metres(&self) -> f64 {
+        self.deviation.unwrap_or(0.0)
+    }
+
+    /// Whether every part had an exact body, so the union has one too.
+    #[must_use]
+    pub fn has_exact_body(&self) -> bool {
+        self.exact.is_some()
+    }
 }
 
 impl AxiolidGeometry {
@@ -262,6 +328,177 @@ impl AxiolidGeometry {
                     .enclosing_extent(object)
                     .is_none_or(|extent| extent_gap(probe, &extent, plan) <= reach)
         })
+    }
+
+    /// The body of a whole with no body of its own, built from its parts'
+    /// registered bodies, or why it cannot be.
+    ///
+    /// Fails closed. The parts are taken in identity order, and the first
+    /// that is unmeasured, or has neither a mesh nor a declared lack of body,
+    /// leaves the whole unmeasured with a reason naming it. A part declared
+    /// bodiless ([`Self::with_no_body`]) occupies no material and adds
+    /// nothing; a whole none of whose parts occupies material has no body to
+    /// measure either. The union is exact when every part is, and otherwise
+    /// tessellated within the largest deviation its parts carry (an invalid
+    /// one kept, so it is refused when measured). It has an exact body when
+    /// every part with a mesh has one registered ([`Self::with_exact_body`]):
+    /// their items side by side in the world, perturbed and rounded as the
+    /// most perturbed and rounded part.
+    ///
+    /// A part may itself be a whole measured through its parts: register
+    /// the inner whole first.
+    ///
+    /// # Errors
+    ///
+    /// Returns the reason the whole stays unmeasured.
+    pub fn compose(&self, parts: &[ObjectId]) -> Result<ComposedBody, String> {
+        let mut parts = parts.to_vec();
+        parts.sort();
+        parts.dedup();
+        let stated = parts.len();
+        let union = |rest: String| {
+            format!(
+                "its body is the union of its {stated} part{}, and {rest}",
+                if stated == 1 { "" } else { "s" }
+            )
+        };
+        if parts.is_empty() {
+            return Err("it states no parts to measure it by".to_owned());
+        }
+        let mut meshed: Vec<&ObjectId> = Vec::new();
+        for part in &parts {
+            if let Some(reason) = self.unmeasured.get(part) {
+                return Err(union(format!("part {part} is unmeasured: {reason}")));
+            }
+            if self.meshes.contains_key(part) {
+                meshed.push(part);
+            } else if !self.bodiless.contains(part) {
+                return Err(union(format!("part {part} has no measured body")));
+            }
+        }
+        if meshed.is_empty() {
+            return Err(union("none of them occupies material".to_owned()));
+        }
+
+        let mut positions = Vec::new();
+        let mut indices = Vec::new();
+        let mut deviation: Option<f64> = None;
+        let mut pieces = BTreeSet::new();
+        for part in &meshed {
+            let mesh = &self.meshes[*part];
+            let offset = u32::try_from(positions.len())
+                .map_err(|_| union("their meshes hold too many positions".to_owned()))?;
+            positions.extend(mesh.positions.iter().copied());
+            for index in &mesh.indices {
+                indices.push(
+                    index
+                        .checked_add(offset)
+                        .ok_or_else(|| union("their meshes hold too many positions".to_owned()))?,
+                );
+            }
+            if let Some(part_deviation) = self.chord_deviations.get(*part) {
+                // An invalid (NaN) deviation is kept, so it is refused when
+                // measured rather than lost to a comparison.
+                deviation = Some(match deviation {
+                    Some(held) if held.is_nan() || held >= *part_deviation => held,
+                    _ => *part_deviation,
+                });
+            }
+            match self.compositions.get(*part) {
+                Some(inner) => pieces.extend(inner.pieces.iter().cloned()),
+                None => {
+                    pieces.insert((*part).clone());
+                }
+            }
+        }
+        let exact = meshed
+            .iter()
+            .map(|part| self.boundaries.get(*part).map(Arc::as_ref))
+            .collect::<Option<Vec<&ExactBody>>>()
+            .and_then(|bodies| ExactBody::union(bodies).ok());
+        Ok(ComposedBody {
+            parts,
+            pieces,
+            mesh: TriMesh::new(positions, indices),
+            deviation,
+            exact,
+        })
+    }
+
+    /// Registers a whole with no body of its own, measured as the union of
+    /// its parts ([`Self::compose`]): its mesh, exactness and exact body are
+    /// the union's, and its identity stays its own.
+    ///
+    /// The whole and each of its parts (at any depth) then share material,
+    /// so they never form a pair ([`Self::shares_body`]).
+    #[must_use]
+    pub fn with_composed_body(mut self, whole: ObjectId, body: ComposedBody) -> Self {
+        self.unmeasured.remove(&whole);
+        self.bodiless.remove(&whole);
+        self = match body.deviation {
+            None => self.with_mesh(whole.clone(), body.mesh),
+            Some(deviation) => self.with_tessellated_mesh(whole.clone(), body.mesh, deviation),
+        };
+        if let Some(exact) = body.exact {
+            self = self.with_exact_body(whole.clone(), exact);
+        }
+        self.compositions.insert(
+            whole,
+            Arc::new(Composition {
+                parts: body.parts,
+                pieces: body.pieces,
+            }),
+        );
+        self
+    }
+
+    /// The parts a whole measured through its parts was registered with,
+    /// in identity order; `None` for any other object.
+    #[must_use]
+    pub fn parts_of(&self, whole: &ObjectId) -> Option<&[ObjectId]> {
+        self.compositions
+            .get(whole)
+            .map(|composition| composition.parts.as_slice())
+    }
+
+    /// The objects whose own bodies make up `object`: its pieces when it is
+    /// measured through its parts, the object itself otherwise.
+    pub(crate) fn pieces<'a>(&'a self, object: &'a ObjectId) -> Vec<&'a ObjectId> {
+        match self.compositions.get(object) {
+            Some(composition) => composition.pieces.iter().collect(),
+            None => vec![object],
+        }
+    }
+
+    /// The suffix an evidence locator carries for every object among
+    /// `objects` measured through its parts, so the evidence states that
+    /// its body is the union of them: `;union:<object>=<n>-parts` each;
+    /// empty when none is.
+    pub(crate) fn union_note(&self, objects: &[&ObjectId]) -> String {
+        objects
+            .iter()
+            .filter_map(|object| {
+                self.parts_of(object)
+                    .map(|parts| format!(";union:{object}={}-parts", parts.len()))
+            })
+            .collect()
+    }
+
+    /// Whether two distinct objects' bodies share material: one is a whole
+    /// measured through its parts and the other one of those parts, at any
+    /// depth, or both are wholes holding a part in common.
+    #[must_use]
+    pub fn shares_body(&self, first: &ObjectId, second: &ObjectId) -> bool {
+        if first == second {
+            return false;
+        }
+        let first_pieces = self.pieces(first);
+        let second_pieces: BTreeSet<&ObjectId> = self.pieces(second).into_iter().collect();
+        // A part is its own only piece and an inner whole's pieces are among
+        // the outer whole's, so one common piece decides every case.
+        first_pieces
+            .iter()
+            .any(|piece| second_pieces.contains(piece))
     }
 
     /// Every registered object and its mesh, in identity order.

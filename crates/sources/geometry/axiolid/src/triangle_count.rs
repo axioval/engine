@@ -39,7 +39,10 @@ impl TriangleCountService for AxiolidTriangleCountService {
     fn count_triangles(&self, object: &ObjectId) -> Result<TriangleCount, TriangleCountError> {
         let evidence = |exact: bool| Evidence {
             source: object.source.clone(),
-            locator: format!("triangle-count:{object}"),
+            locator: format!(
+                "triangle-count:{object}{}",
+                self.geometry.union_note(&[object])
+            ),
             exact,
         };
         // A bodiless object has no mesh, so none of its triangles; an

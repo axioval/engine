@@ -205,6 +205,44 @@ impl ExactBody {
         !self.perturbed
     }
 
+    /// The union of several bodies (a whole's parts) as one body: every
+    /// item placed in the world by its own body's placement
+    /// ([`ExactBRep::transformed`]), the union perturbed where any body is,
+    /// by the largest perturbation, and rounded by the largest rounding.
+    ///
+    /// # Errors
+    ///
+    /// Returns why an item has no exact rigid copy in the world, or that
+    /// there is nothing to unite.
+    pub fn union<'b>(bodies: impl IntoIterator<Item = &'b ExactBody>) -> Result<Self, String> {
+        let mut items = Vec::new();
+        let mut perturbed = false;
+        let mut perturbation: f64 = 0.0;
+        let mut rounding: f64 = 0.0;
+        for body in bodies {
+            for item in &body.items {
+                items.push(place(item.clone(), &body.placement)?);
+            }
+            perturbed |= body.perturbed;
+            // Not `max`: an unbounded (NaN-free infinite) value must stay.
+            if body.perturbation > perturbation || body.perturbation.is_nan() {
+                perturbation = body.perturbation;
+            }
+            if body.rounding > rounding || body.rounding.is_nan() {
+                rounding = body.rounding;
+            }
+        }
+        if items.is_empty() {
+            return Err("a union of no bodies has no boundary".to_owned());
+        }
+        let union = Self::placed(items, Transform3::IDENTITY).with_rounding(rounding);
+        Ok(if perturbed {
+            union.with_perturbation(perturbation)
+        } else {
+            union
+        })
+    }
+
     /// The single item in world coordinates, which the kernel's one-solid
     /// measurements (plan distances and overlap) take; `None` for several
     /// items or a body kept in its own frame.

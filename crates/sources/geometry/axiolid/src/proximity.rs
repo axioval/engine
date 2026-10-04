@@ -182,6 +182,112 @@ impl AxiolidProximityService {
         Self { geometry }
     }
 
+    /// One closed body's enclosed volume, widened by its tessellation band,
+    /// as `(lower, upper)`.
+    fn piece_volume(&self, object: &ObjectId) -> Result<(f64, f64), ProximityError> {
+        let body = self.body(object)?;
+        // Only a closed two-manifold encloses a volume.
+        if !body.solid {
+            return Err(ProximityError::Unavailable);
+        }
+        let deviation = self.geometry.fidelity(object)?.deviation_metres();
+        let enclosed = enclosed_volume(body.mesh).map_err(|_| ProximityError::Unavailable)?;
+        let band = tube_volume(&body, deviation);
+        Ok(((enclosed.lower - band).max(0.0), enclosed.upper + band))
+    }
+
+    /// The volume two closed pieces share, widened by both tessellation
+    /// bands, as `(lower, upper)`; nothing where their boxes lie apart.
+    fn shared_volume(
+        &self,
+        first: &ObjectId,
+        second: &ObjectId,
+    ) -> Result<(f64, f64), ProximityError> {
+        let (one, other) = (self.body(first)?, self.body(second)?);
+        if !one.solid || !other.solid {
+            return Err(ProximityError::Unavailable);
+        }
+        let apart = (0..3).any(|axis| {
+            one.soup.bounds.max()[axis] < other.soup.bounds.min()[axis]
+                || other.soup.bounds.max()[axis] < one.soup.bounds.min()[axis]
+        });
+        if apart {
+            return Ok((0.0, 0.0));
+        }
+        let shared =
+            intersection_volume(one.mesh, other.mesh).map_err(|_| ProximityError::Unavailable)?;
+        let band = tube_volume(&one, self.geometry.fidelity(first)?.deviation_metres())
+            + tube_volume(&other, self.geometry.fidelity(second)?.deviation_metres());
+        Ok(((shared.lower - band).max(0.0), shared.upper + band))
+    }
+
+    /// The volume an object encloses, as `(lower, upper)`. A whole measured
+    /// through its parts encloses the union of its pieces, whose meshes may
+    /// overlap: at most the sum of their volumes, at least that sum less
+    /// every volume two of them share, and at least its largest piece.
+    fn union_volume(&self, object: &ObjectId) -> Result<(f64, f64), ProximityError> {
+        let pieces = self.geometry.pieces(object);
+        if let [single] = pieces.as_slice() {
+            return self.piece_volume(single);
+        }
+        let mut sum = (0.0, 0.0);
+        let mut largest: f64 = 0.0;
+        for piece in &pieces {
+            let (lower, upper) = self.piece_volume(piece)?;
+            sum = (sum.0 + lower, sum.1 + upper);
+            largest = largest.max(lower);
+        }
+        let mut overlap = 0.0;
+        for (index, first) in pieces.iter().enumerate() {
+            for second in &pieces[index + 1..] {
+                overlap += self.shared_volume(first, second)?.1;
+            }
+        }
+        Ok(((sum.0 - overlap).max(largest), sum.1))
+    }
+
+    /// The certified volume a pair shares when either is a whole measured
+    /// through its parts, with each one's own volume (`union_volume`).
+    ///
+    /// Concatenated meshes would count a region two pieces share twice, so
+    /// the shared volume is bounded piece by piece: at most the sum over
+    /// every pair of pieces, at least the largest of them. `None` where a
+    /// piece is not a closed solid, the kernel refuses one, or the two
+    /// share a piece.
+    fn composed_intersection(
+        &self,
+        subject: &ObjectId,
+        counterpart: &ObjectId,
+        disjoint: bool,
+    ) -> Option<IntersectionVolume> {
+        if self.geometry.shares_body(subject, counterpart) {
+            return None;
+        }
+        let (subject_volume, counterpart_volume) = (
+            self.union_volume(subject).ok()?,
+            self.union_volume(counterpart).ok()?,
+        );
+        let shared = if disjoint {
+            (0.0, 0.0)
+        } else {
+            let mut shared = (0.0_f64, 0.0);
+            for first in self.geometry.pieces(subject) {
+                for second in self.geometry.pieces(counterpart) {
+                    let (lower, upper) = self.shared_volume(first, second).ok()?;
+                    shared = (shared.0.max(lower), shared.1 + upper);
+                }
+            }
+            shared
+        };
+        let interval = |(lower, upper): (f64, f64)| VolumeInterval::try_new(lower, upper).ok();
+        IntersectionVolume::try_new(
+            interval(shared)?,
+            interval(subject_volume)?,
+            interval(counterpart_volume)?,
+        )
+        .ok()
+    }
+
     pub(crate) fn body(&self, object: &ObjectId) -> Result<Body<'_>, ProximityError> {
         if self.geometry.has_no_body(object) {
             return Err(ProximityError::NoBody);
@@ -1742,6 +1848,10 @@ fn certified_directed(
 }
 
 impl ProximityService for AxiolidProximityService {
+    fn shares_body(&self, first: &ObjectId, second: &ObjectId) -> bool {
+        self.geometry.shares_body(first, second)
+    }
+
     fn bounds(&self, object: &ObjectId) -> Result<ObjectBounds, ProximityError> {
         let body = self.body(object)?;
         ObjectBounds::try_new(
@@ -1855,13 +1965,20 @@ impl ProximityService for AxiolidProximityService {
             )?),
             None => None,
         };
-        let volume = intersection(
-            &subject,
-            &counterpart,
-            separation > 0.0 && containment.is_none(),
-            subject_fidelity.deviation_metres(),
-            counterpart_fidelity.deviation_metres(),
-        );
+        let disjoint = separation > 0.0 && containment.is_none();
+        let composed = self.geometry.parts_of(request.subject()).is_some()
+            || self.geometry.parts_of(request.counterpart()).is_some();
+        let volume = if composed {
+            self.composed_intersection(request.subject(), request.counterpart(), disjoint)
+        } else {
+            intersection(
+                &subject,
+                &counterpart,
+                disjoint,
+                subject_fidelity.deviation_metres(),
+                counterpart_fidelity.deviation_metres(),
+            )
+        };
         let deviation = fidelity.deviation_metres();
         let (lower, upper) = hausdorff(&subject, &counterpart)?;
         let hausdorff = LengthInterval::try_new((lower - deviation).max(0.0), upper + deviation)
@@ -1877,9 +1994,11 @@ impl ProximityService for AxiolidProximityService {
             Evidence {
                 source: request.subject().source.clone(),
                 locator: format!(
-                    "axiolid:proximity:{}:{}",
+                    "axiolid:proximity:{}:{}{}",
                     request.subject(),
-                    request.counterpart()
+                    request.counterpart(),
+                    self.geometry
+                        .union_note(&[request.subject(), request.counterpart()])
                 ),
                 exact: fidelity.is_exact(),
             },
@@ -1961,23 +2080,19 @@ impl ProximityService for AxiolidProximityService {
     }
 
     fn measure_body_volume(&self, object: &ObjectId) -> Result<BodyVolume, ProximityError> {
-        let body = self.body(object)?;
-        // Only a closed two-manifold encloses a volume.
-        if !body.solid {
-            return Err(ProximityError::Unavailable);
-        }
         let fidelity = self.geometry.fidelity(object)?;
-        let enclosed = enclosed_volume(body.mesh).map_err(|_| ProximityError::Unavailable)?;
-        let band = tube_volume(&body, fidelity.deviation_metres());
-        let volume =
-            VolumeInterval::try_new((enclosed.lower - band).max(0.0), enclosed.upper + band)?;
+        let (lower, upper) = self.union_volume(object)?;
+        let volume = VolumeInterval::try_new(lower, upper)?;
         BodyVolume::try_new(
             object.clone(),
             volume,
             fidelity,
             Evidence {
                 source: object.source.clone(),
-                locator: format!("axiolid:volume:{object}"),
+                locator: format!(
+                    "axiolid:volume:{object}{}",
+                    self.geometry.union_note(&[object])
+                ),
                 exact: fidelity.is_exact(),
             },
         )
@@ -2062,7 +2177,9 @@ impl ProximityService for AxiolidProximityService {
                         request.subject(),
                         request.counterpart()
                     ),
-                },
+                } + &self
+                    .geometry
+                    .union_note(&[request.subject(), request.counterpart()]),
                 exact: fidelity.is_exact(),
             },
         )

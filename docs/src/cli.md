@@ -889,14 +889,51 @@ states:
 
 | State | Meaning | Effect on geometric rules |
 |---|---|---|
-| exact | every face is planar (polygonal extrusions, including steel sections without fillets or rounded edges, faceted B-reps, meshes, booleans of these and clips by half-spaces, bounded by a polygon or not), so the mesh is the shape | measured as exact |
-| tessellated | some face is curved; the mesh is within the deviation the mesh compiler certifies for it (the 1 mm chord budget, or the bound it computed) | measured as approximate, never exact |
+| exact | every face is planar (polygonal extrusions, including steel sections without fillets or rounded edges, faceted B-reps, meshes, booleans of these and clips by half-spaces, bounded by a polygon or not), so the mesh is the shape; a whole measured through its parts when every part is exact | measured as exact |
+| tessellated | some face is curved; the mesh is within the deviation the mesh compiler certifies for it (the 1 mm chord budget, or the bound it computed); a whole measured through its parts when some part is tessellated, within the largest deviation of its parts | measured as approximate, never exact |
 | no body | the object occupies no material: spatial structure, openings, annotations, grids, ports, structural analysis items, non-products | ignored as an obstacle |
-| unmeasured | a physical product that could not be meshed, including one without a Body representation, or a curved one whose mesh the compiler certifies no deviation for | measurements it could affect are not evaluated |
+| unmeasured | a physical product that could not be meshed: one without a Body representation and without parts (`no body representation`), a whole one of whose parts is unmeasured, or a curved one whose mesh the compiler certifies no deviation for | measurements it could affect are not evaluated |
 
 The planarity check is conservative. Anything it does not recognise counts as
 tessellated, which only loses exactness, never presents an approximation as
 exact.
+
+**Wholes measured through their parts.** A physical product with no `Body`
+of its own that is decomposed into parts (`IfcRelAggregates`, read through
+the IFC session's relationship edges, at any depth) is measured as the
+union of its parts' bodies: a stair of flights and landings, a roof of
+slabs, a curtain wall of members and plates, a wall of
+`IfcBuildingElementPart` layers, an element assembly. Its mesh is its parts'
+meshes side by side; it is exact when every part is, tessellated within the
+largest deviation of its parts otherwise, and it has an exact boundary
+where every part has one (their items side by side in the world). A part
+that occupies no material (an opening, say) adds nothing. The whole fails
+closed: if any part is unmeasured, the whole is too, with the reason naming
+the first such part in identity order (`no body representation of its own,
+and its body is the union of its 2 parts, and part … is unmeasured: …`); a
+product with neither a body nor parts stays `no body representation`. The
+result's additive `geometry.composed` counts the wholes measured this way
+(they are counted as exact or tessellated too), and the stderr line adds
+`N measured through their parts`. Evidence about such a whole states it:
+its locator ends in `;union:<whole>=<n>-parts`.
+
+The whole keeps its own identity, separate from its parts', so a rule
+selecting both measures both. A whole and its own parts (at any depth),
+or two wholes holding a part in common, are one piece of material, so the
+pairwise rules (`clash`, `clash-matrix`, `containment`, `distance`) never
+pair them: a stair never clashes with its own flight, nor is a part
+contained in its own whole. A clash between a crossing wall and a wall of
+two layers is reported against the wall and against each layer it crosses,
+since the rule selected all three. Volumes are bounded piece by piece, so
+parts that overlap are never counted twice: a whole encloses at most the
+sum of its parts' volumes and at least that sum less what any two of them
+share. Its mesh surface includes the faces where its parts meet, so a body
+inside the whole near such a face has its depth measured to it, a lower
+bound as every witnessed depth is; a distance from outside is the distance
+to the nearest part, which is exactly the distance to the union. Services
+that look at every body in a scene (facade areas, guards, space
+measurements) see the whole and its parts as separate bodies, as a rule
+selecting both asks.
 
 The kernel keeps every surface point of a revolution (tapered too), a sphere,
 a torus and a sweep along one circle or ellipse arc within the 1 mm of its

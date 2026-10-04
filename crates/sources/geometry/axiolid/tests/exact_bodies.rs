@@ -842,3 +842,52 @@ fn a_union_with_a_half_space_is_refused_by_name() {
     let refusal = exact_boundary(&graph, union).unwrap_err();
     assert!(refusal.contains("union"), "{refusal}");
 }
+
+#[test]
+fn a_whole_of_parts_with_exact_bodies_is_certified_as_their_union() {
+    // The column and its footing as two parts of one whole, each placed in
+    // the world on its own: the whole's exact body holds both items, and
+    // its distance to the wall is the nearer part's.
+    let mut builder = GeometryGraphBuilder::new();
+    let turn = Transform3::from_rotation_z(0.4);
+    let footing = extrusion(&mut builder, rectangle(1.0, 1.0), 0.5, turn);
+    let column = extrusion(
+        &mut builder,
+        circle(0.2),
+        3.0,
+        turn * Transform3::from_translation(Vec3::Z * 0.5),
+    );
+    let wall = plain_wall(&mut builder);
+    let graph = builder.finish(vec![footing, column, wall]).unwrap();
+    let parts = AxiolidGeometry::new()
+        .with_mesh(id("footing"), mesh(&graph, footing))
+        .with_tessellated_mesh(id("column"), mesh(&graph, column), DEVIATION)
+        .with_mesh(id("wall"), mesh(&graph, wall))
+        .with_exact_body(id("footing"), agreeing(&graph, footing).into_body())
+        .with_exact_body(id("column"), agreeing(&graph, column).into_body())
+        .with_exact_body(id("wall"), agreeing(&graph, wall).into_body());
+    let body = parts.compose(&[id("footing"), id("column")]).unwrap();
+    assert!(body.has_exact_body());
+    assert!(!body.is_exact(), "the column is tessellated");
+    assert_close(body.deviation_metres(), DEVIATION, 0.0);
+    let geometry = parts.with_composed_body(id("whole"), body);
+    let exact = geometry.exact_boundary(&id("whole")).unwrap();
+    assert_eq!(exact.items().len(), 2);
+    assert!(exact.is_exact());
+
+    let footing_reach = 0.5 * (0.4_f64.cos() + 0.4_f64.sin());
+    let expected = (1.5 - 0.2_f64).min(1.5 - footing_reach);
+    let request = ProximityRequest::try_new(id("whole"), id("wall")).unwrap();
+    let measured = AxiolidProximityService::new(geometry)
+        .measure_proximity(&request)
+        .unwrap();
+    let certified = measured.certified_separation().expect("certified");
+    assert!(
+        certified.lower_metres() <= expected && expected <= certified.upper_metres(),
+        "{certified:?} must hold {expected}"
+    );
+    assert!(
+        certified.upper_metres() - certified.lower_metres() <= 4.0 * CERTIFIED_ACCURACY_METRES,
+        "{certified:?}"
+    );
+}

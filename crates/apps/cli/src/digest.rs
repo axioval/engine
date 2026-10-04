@@ -312,6 +312,11 @@ pub struct GeometryRecord {
     /// results saved before it existed, and when none was registered.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub exact_boundaries: usize,
+    /// Wholes with no body of their own measured as the union of their
+    /// parts' bodies (counted as exact or tessellated too). Additive:
+    /// absent in results saved before it existed, and when there is none.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub composed: usize,
     /// Physical objects that could not be meshed. Geometric measurements
     /// they could affect are not evaluated.
     pub unmeasured: Vec<Unmeasured>,

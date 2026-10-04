@@ -4,6 +4,10 @@
 //! the engine's broad phase proposes the pairs worth measuring. An object whose
 //! extent cannot be read is reported, never silently dropped: a clash against
 //! it would otherwise be indistinguishable from no clash.
+//!
+//! A pair whose bodies share material (a whole measured through its parts
+//! and one of its own parts, [`axioval_engine::ProximityServiceHandle::shares_body`])
+//! is left out of the broad phase's pairs: it is one body, not two.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -189,7 +193,13 @@ pub(crate) fn prepare<'a>(
         projection,
         margin,
     ) {
-        Ok(pairs) => pairs,
+        // A whole measured through its parts and one of those parts are one
+        // piece of material, never a pair: leaving them in would report the
+        // whole clashing with, containing or touching itself.
+        Ok(mut pairs) => {
+            pairs.retain(|pair| !service.shares_body(pair.subject(), pair.counterpart()));
+            pairs
+        }
         Err(error) => {
             return Err(refuse_all(
                 &subjects,

@@ -1743,6 +1743,20 @@ pub trait ProximityService: Send + Sync + 'static {
         let _ = request;
         Err(ProximityError::Unavailable)
     }
+
+    /// Whether the two objects' measured bodies share material because one
+    /// is built from the other: a whole with no body of its own measured as
+    /// the union of its parts, and one of those parts (at any depth), or two
+    /// wholes holding a part in common.
+    ///
+    /// Such a pair is one piece of material counted twice, never two bodies
+    /// to compare: pairwise rules (clash, containment, distance) leave it
+    /// out. The default answers `false`, which is right for a service that
+    /// measures no body through its parts.
+    fn shares_body(&self, first: &ObjectId, second: &ObjectId) -> bool {
+        let _ = (first, second);
+        false
+    }
 }
 
 /// Registry handle for a [`ProximityService`].
@@ -1755,6 +1769,12 @@ impl ProximityServiceHandle {
     }
     pub fn bounds(&self, object: &ObjectId) -> Result<ObjectBounds, ProximityError> {
         self.0.bounds(object)
+    }
+    /// Whether one body is built from the other's
+    /// ([`ProximityService::shares_body`]), so the two never form a pair.
+    #[must_use]
+    pub fn shares_body(&self, first: &ObjectId, second: &ObjectId) -> bool {
+        self.0.shares_body(first, second)
     }
     pub fn measure_proximity(
         &self,

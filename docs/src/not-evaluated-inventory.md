@@ -83,7 +83,7 @@ objects under 23 causes. The run used `main` after 0.3.0, with
 | # | Case | Outcomes | Unmeasured objects | Models | Cause | Upstream dependency | Issue |
 |---|---|---:|---:|---:|---|---|---|
 | 1 | Clash pair: proximity "unavailable for the requested object" between two meshed bodies | 19,177 | 0 | 10 | The plan overlap of the pair's projected triangles is refused by the overlay (`RepeatedVertex`) because sliver triangles are not filtered at its tolerance | none | #210 |
-| 2 | `no body representation` | 6,937 | 2,079 | 11 | 78 % are wholes decomposed into parts (`IfcRelAggregates`) whose parts carry the body | none | #211 |
+| 2 | `no body representation` | 6,937 | 2,079 | 11 | 78 % are wholes decomposed into parts (`IfcRelAggregates`) whose parts carry the body; such wholes are now measured as the union of their parts (#211) | none | #211 |
 | 3 | Authored polygon face not planar | 689 | 346 | 2 | The mesh compiler refuses a faceted face whose corners leave its plane | `axiolid-mesh-compile`: triangulate with a certified bound | #213 |
 | 4 | Space measurement "unavailable for the requested aspect" | 547 | 0 | 5 | Any unmeasured role object or storey anywhere refuses every space (`complete()`) | none | #212 |
 | 5 | Space boundary "is not a curve node" | 388 | 0 | 3 | A curve-bounded plane bounded by a composite curve lowers to a curve relation the compiler does not accept | `axiolid-mesh-compile`: resolve curve relations as boundaries | #214 |

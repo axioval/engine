@@ -494,3 +494,38 @@ fn an_external_wall_ratio_divides_facade_area_by_gross_footprint() {
         [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
     );
 }
+
+/// The window-to-wall ratio from measured facade areas, summed per storey
+/// as an aggregate would, reaches `area-ratio`'s verdict.
+#[test]
+fn the_measured_facade_areas_reach_the_window_to_wall_verdicts() {
+    let (model, areas) = building();
+    let (judged, judged_areas) = building();
+    let evaluation = run(
+        judged,
+        judged_areas,
+        &AreaRatio,
+        &rule(RATIO, kind("storey"), window_to_wall(0.1)),
+    );
+    let (project, mut services) = model.services();
+    services
+        .register(FacadeAreaServiceHandle::new(Arc::new(areas)))
+        .unwrap();
+    let facade = |object: &str| {
+        common::measured(&services, &project, &id(object), "facade_area")
+            .unwrap()
+            .unwrap()
+            .0
+    };
+    for (storey, windows, external) in [
+        ("eg", &["f1", "f2"][..], &["w1", "w2", "f1", "f2"][..]),
+        ("og", &[][..], &["w4"][..]),
+    ] {
+        let ratio = windows.iter().map(|w| facade(w)).sum::<f64>()
+            / external.iter().map(|w| facade(w)).sum::<f64>();
+        let found = findings(&evaluation)
+            .iter()
+            .any(|(object, _)| object == storey);
+        assert_eq!(ratio > 0.1, found, "{storey}: {ratio}");
+    }
+}

@@ -309,3 +309,57 @@ fn bad_declarations_and_a_missing_service_judge_nothing() {
         [("-".into(), NotEvaluatedReason::MissingService)]
     );
 }
+
+/// The measured share, uncovered and overlapping areas against the
+/// capability's bounds reach its verdicts, a straddling one left open.
+#[test]
+fn the_measured_coverage_reaches_the_verdicts() {
+    let project = model().project();
+    let mut services = axioval_engine::ServiceRegistry::new();
+    services
+        .register(BoundaryCoverageServiceHandle::new(Arc::new(coverages())))
+        .unwrap();
+    let verdict = |evaluation: &CapabilityEvaluation, space: &str| {
+        if findings(evaluation)
+            .iter()
+            .any(|(object, _)| object == space)
+        {
+            Some(false)
+        } else if unevaluated(evaluation)
+            .iter()
+            .any(|(object, _)| object == space)
+        {
+            None
+        } else {
+            Some(true)
+        }
+    };
+    let read = |space: &str, name: &str| {
+        common::measured(&services, &project, &id(space), name)
+            .unwrap()
+            .unwrap()
+    };
+    let share = run(coverages(), vec![("minimum_covered_share", number(0.999))]);
+    let uncovered = run(coverages(), vec![("maximum_uncovered_area", area(1.0))]);
+    let overlap = run(coverages(), vec![("maximum_overlap_area", area(1.0))]);
+    let at_most =
+        |(lower, upper): (f64, f64), bound: f64| common::at_least((-upper, -lower), -bound);
+    // `misplaced` is found for an off-surface boundary whatever its share.
+    for space in ["whole", "gappy", "overlapping", "vague"] {
+        assert_eq!(
+            common::at_least(read(space, "boundary_covered_share"), 0.999),
+            verdict(&share, space),
+            "{space} share"
+        );
+        assert_eq!(
+            at_most(read(space, "boundary_uncovered_area"), 1.0),
+            verdict(&uncovered, space),
+            "{space} uncovered"
+        );
+        assert_eq!(
+            at_most(read(space, "boundary_overlap_area"), 1.0),
+            verdict(&overlap, space),
+            "{space} overlap"
+        );
+    }
+}

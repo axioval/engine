@@ -135,6 +135,134 @@ const ELEMENTS: MeasuredParameter = MeasuredParameter {
     ),
 };
 
+const fn objects(
+    key: &'static str,
+    required: bool,
+    help: &'static [LocalizedText],
+) -> MeasuredParameter {
+    MeasuredParameter {
+        key,
+        kind: MeasuredParameterKind::SourceKind,
+        required,
+        default: None,
+        help,
+    }
+}
+
+const fn metres(
+    key: &'static str,
+    default: &'static str,
+    help: &'static [LocalizedText],
+) -> MeasuredParameter {
+    MeasuredParameter {
+        key,
+        kind: MeasuredParameterKind::Length { minimum: 0.0 },
+        required: false,
+        default: Some(default),
+        help,
+    }
+}
+
+const PLANE: MeasuredParameter = metres(
+    "plane",
+    "0",
+    &en_de(
+        "How far from the body's face planes a boundary still counts, in metres.",
+        "Wie weit von den Flächenebenen des Körpers eine Begrenzung noch zählt, in Metern.",
+    ),
+);
+
+const CONTACT: [MeasuredParameter; 5] = [
+    objects(
+        "with",
+        true,
+        &en_de(
+            "The source kinds of the objects it may touch, `,`-separated.",
+            "Die Quellarten der Objekte, die es berühren können, durch `,` getrennt.",
+        ),
+    ),
+    MeasuredParameter {
+        key: "side",
+        kind: MeasuredParameterKind::Choice {
+            options: &["below", "above"],
+        },
+        required: false,
+        default: Some("below"),
+        help: &en_de(
+            "The face measured: the one `below` or `above`.",
+            "Die gemessene Fläche: die untere (`below`) oder obere (`above`).",
+        ),
+    },
+    metres(
+        "gap",
+        "0",
+        &en_de(
+            "The largest gap still touching, in metres.",
+            "Der größte Spalt, der noch berührt, in Metern.",
+        ),
+    ),
+    metres(
+        "intersection",
+        "0",
+        &en_de(
+            "The deepest intersection still touching, in metres.",
+            "Die tiefste Durchdringung, die noch berührt, in Metern.",
+        ),
+    ),
+    MeasuredParameter {
+        key: "polygon",
+        kind: MeasuredParameterKind::Length { minimum: 0.0 },
+        required: false,
+        default: Some("0"),
+        help: &en_de(
+            "The least contact polygon counted, in square metres.",
+            "Das kleinste gezählte Kontaktpolygon, in Quadratmetern.",
+        ),
+    },
+];
+
+const EFFECT: [MeasuredParameter; 4] = [
+    objects(
+        "sources",
+        true,
+        &en_de(
+            "The source kinds whose effect areas cover, `,`-separated.",
+            "Die Quellarten, deren Wirkbereiche bedecken, durch `,` getrennt.",
+        ),
+    ),
+    objects(
+        "blockers",
+        false,
+        &en_de(
+            "The source kinds that block an effect, `,`-separated.",
+            "Die Quellarten, die eine Wirkung abschirmen, durch `,` getrennt.",
+        ),
+    ),
+    MeasuredParameter {
+        key: "reach",
+        kind: MeasuredParameterKind::Choice {
+            options: &["grown", "travel", "visible"],
+        },
+        required: false,
+        default: Some("grown"),
+        help: &en_de(
+            "The source's footprint `grown` by the range, or the free region within \
+             the range by `travel` or in view (`visible`).",
+            "Der Grundriss der Quelle um die Reichweite vergrößert (`grown`) oder der \
+             freie Bereich in Reichweite auf dem Weg (`travel`) oder in Sicht \
+             (`visible`).",
+        ),
+    },
+    metres(
+        "range",
+        "0",
+        &en_de(
+            "The effect's range, in metres.",
+            "Die Reichweite der Wirkung, in Metern.",
+        ),
+    ),
+];
+
 const OWN_AXIS: MeasuredParameterKind = MeasuredParameterKind::Choice {
     options: &["own_x", "own_y", "own_z", "x", "y", "z"],
 };
@@ -330,6 +458,19 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ),
     },
     MeasuredDescriptor {
+        name: "boundary_covered_share",
+        parameters: &[PLANE],
+        dimension: None,
+        services: &["boundary-coverage"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_GEOMETRY],
+        label: &en_de("Covered boundary share", "Bedeckter Randanteil"),
+        help: &en_de(
+            "The share of a space body's surface its declared space boundaries cover, from 0 to 1.",
+            "Der Anteil der Oberfläche eines Raumkörpers, den seine Raumbegrenzungen bedecken, von 0 bis 1.",
+        ),
+    },
+    MeasuredDescriptor {
         name: "boundary_gap",
         parameters: &[
             ELEMENTS,
@@ -366,6 +507,35 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              counts it.",
             "Wie viel vom Rand eines Raums kein Bauteil bedeckt, wie \
              `space-validation` es zählt.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "boundary_overlap_area",
+        parameters: &[PLANE],
+        dimension: Some(QuantityDimension::Area),
+        services: &["boundary-coverage"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_GEOMETRY],
+        label: &en_de(
+            "Overlapping boundary area",
+            "Überlappende Begrenzungsfläche",
+        ),
+        help: &en_de(
+            "The area a space's declared boundaries cover twice.",
+            "Die Fläche, die die Raumbegrenzungen doppelt bedecken.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "boundary_uncovered_area",
+        parameters: &[PLANE],
+        dimension: Some(QuantityDimension::Area),
+        services: &["boundary-coverage"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_GEOMETRY],
+        label: &en_de("Uncovered boundary area", "Unbedeckte Begrenzungsfläche"),
+        help: &en_de(
+            "The area of a space body's surface no declared boundary covers.",
+            "Die Fläche der Oberfläche eines Raumkörpers, die keine Raumbegrenzung bedeckt.",
         ),
     },
     MeasuredDescriptor {
@@ -492,6 +662,32 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              of the spaces below; none when it stands above none.",
             "Die kleinste Höhe zwischen der Unterseite eines Laufs oder einer Rampe und \
              den Böden der Räume darunter; keine, wenn sie über keinem steht.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "contact_area",
+        parameters: &CONTACT,
+        dimension: Some(QuantityDimension::Area),
+        services: &["contact", "type-hierarchy"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_GEOMETRY],
+        label: &en_de("Contact area", "Kontaktfläche"),
+        help: &en_de(
+            "The area of a face in contact with the objects of the kinds named, as `slab-contact` measures it.",
+            "Die Fläche einer Seite in Kontakt mit Objekten der genannten Arten, wie `slab-contact` sie misst.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "contact_share",
+        parameters: &CONTACT,
+        dimension: None,
+        services: &["contact", "type-hierarchy"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_GEOMETRY],
+        label: &en_de("Contact share", "Kontaktanteil"),
+        help: &en_de(
+            "The share of a face in contact, from 0 to 1, as `slab-contact` judges it.",
+            "Der Anteil einer Seite in Kontakt, von 0 bis 1, wie `slab-contact` ihn beurteilt.",
         ),
     },
     MeasuredDescriptor {
@@ -647,6 +843,32 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         )
     ),
     MeasuredDescriptor {
+        name: "effect_covered_area",
+        parameters: &EFFECT,
+        dimension: Some(QuantityDimension::Area),
+        services: &["plan-area", "type-hierarchy"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_GEOMETRY],
+        label: &en_de("Effect-covered area", "Wirkbedeckte Fläche"),
+        help: &en_de(
+            "The part of the footprint the sources' effect areas cover, as `effective-coverage` measures it.",
+            "Der Teil des Grundrisses, den die Wirkbereiche der Quellen bedecken, wie `effective-coverage` ihn misst.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "effect_covered_share",
+        parameters: &EFFECT,
+        dimension: None,
+        services: &["plan-area", "type-hierarchy"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_GEOMETRY],
+        label: &en_de("Effect-covered share", "Wirkbedeckter Anteil"),
+        help: &en_de(
+            "The share of the footprint the sources' effect areas cover, from 0 to 1.",
+            "Der Anteil des Grundrisses, den die Wirkbereiche der Quellen bedecken, von 0 bis 1.",
+        ),
+    },
+    MeasuredDescriptor {
         name: EXTENT,
         parameters: &[
             MeasuredParameter {
@@ -720,6 +942,32 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             "Die vertikale Ausdehnung des Körpers."
         )
     ),
+    MeasuredDescriptor {
+        name: "facade_area",
+        parameters: &[],
+        dimension: Some(QuantityDimension::Area),
+        services: &["facade-area"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_GEOMETRY],
+        label: &en_de("Facade area", "Fassadenfläche"),
+        help: &en_de(
+            "The object's facade area, as `plan-area` with `measure` `facade` reads it.",
+            "Die Fassadenfläche des Objekts, wie `plan-area` mit `measure` `facade` sie liest.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "face_area",
+        parameters: &[],
+        dimension: Some(QuantityDimension::Area),
+        services: &["facade-area"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_GEOMETRY],
+        label: &en_de("Face area", "Seitenfläche"),
+        help: &en_de(
+            "The area of the object's largest plane face: a wall's or slab's side.",
+            "Die Fläche der größten ebenen Seite des Objekts: die Seite einer Wand oder Decke.",
+        ),
+    },
     MeasuredDescriptor {
         name: GRADIENT_DIRECTION,
         parameters: &[FACE],
@@ -876,6 +1124,69 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              Elternteils, wie die Quelle sie angibt; keine für das oberste Geschoss."
         )
     ),
+    MeasuredDescriptor {
+        name: "opening_area",
+        parameters: &[
+            MeasuredParameter {
+                key: "path",
+                kind: MeasuredParameterKind::Path,
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The relationship steps from the host to its openings.",
+                    "Die Beziehungsschritte vom Wirt zu seinen Öffnungen.",
+                ),
+            },
+            MeasuredParameter {
+                key: "length_axis",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["extrusion", "profile-x", "profile-y"],
+                },
+                required: false,
+                default: Some("extrusion"),
+                help: &en_de(
+                    "The host's axis along its length.",
+                    "Die Achse des Wirts entlang seiner Länge.",
+                ),
+            },
+            MeasuredParameter {
+                key: "height_axis",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["extrusion", "profile-x", "profile-y"],
+                },
+                required: false,
+                default: Some("profile-y"),
+                help: &en_de(
+                    "The host's axis along its height.",
+                    "Die Achse des Wirts entlang seiner Höhe.",
+                ),
+            },
+            MeasuredParameter {
+                key: "minimum",
+                kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                required: false,
+                default: None,
+                help: &en_de(
+                    "Openings smaller than this many square metres are not counted.",
+                    "Öffnungen kleiner als so viele Quadratmeter werden nicht gezählt.",
+                ),
+            },
+        ],
+        dimension: Some(QuantityDimension::Area),
+        services: &["relationship-selection", "body-facts"],
+        exactness: MeasuredExactness::Stated,
+        not_evaluated: &[
+            "an opening cannot be placed on the host's middle plane",
+            "openings may overlap",
+        ],
+        label: &en_de("Opening area", "Öffnungsfläche"),
+        help: &en_de(
+            "The summed section areas of a host's openings on its middle plane, as \
+             `opening-area` measures them against `gross_area − net_area`.",
+            "Die summierten Schnittflächen der Öffnungen eines Wirts auf seiner \
+             Mittelebene, wie `opening-area` sie mit `gross_area − net_area` vergleicht.",
+        ),
+    },
     plain!(
         PERIMETER,
         Some(QuantityDimension::Length),
@@ -888,6 +1199,40 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             "Die Länge des Grundrissrands, Löcher eingeschlossen."
         )
     ),
+    MeasuredDescriptor {
+        name: "plan_overlap",
+        parameters: &[
+            objects(
+                "with",
+                true,
+                &en_de(
+                    "The source kinds overlapped, `,`-separated.",
+                    "Die überlappten Quellarten, durch `,` getrennt.",
+                ),
+            ),
+            MeasuredParameter {
+                key: "measure",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["largest", "total"],
+                },
+                required: false,
+                default: Some("largest"),
+                help: &en_de(
+                    "The `largest` overlap with one of them, or their `total`.",
+                    "Die größte Überlappung mit einem (`largest`) oder ihre Summe (`total`).",
+                ),
+            },
+        ],
+        dimension: Some(QuantityDimension::Area),
+        services: &["plan-area", "type-hierarchy"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_GEOMETRY],
+        label: &en_de("Plan overlap", "Grundrissüberlappung"),
+        help: &en_de(
+            "The footprint's overlap in plan with objects of the kinds named; with the footprint `area`, `plan-coverage`'s ratio.",
+            "Die Überlappung des Grundrisses mit Objekten der genannten Arten; mit der Grundfläche `area` das Verhältnis von `plan-coverage`.",
+        ),
+    },
     MeasuredDescriptor {
         name: SKEW,
         parameters: &[REFERENCE_PATH],
@@ -1043,6 +1388,36 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             "Der Anteil der Brutto-Geschossfläche, den kein Raum bedeckt, von 0 bis 1."
         )
     ),
+    MeasuredDescriptor {
+        name: "uncovered_area",
+        parameters: &[
+            objects(
+                "by",
+                true,
+                &en_de(
+                    "The source kinds that cover, `,`-separated.",
+                    "Die bedeckenden Quellarten, durch `,` getrennt.",
+                ),
+            ),
+            metres(
+                "growth",
+                "0",
+                &en_de(
+                    "How far each cover is grown in plan first, in metres.",
+                    "Um wie viel jede Bedeckung im Grundriss zuvor vergrößert wird, in Metern.",
+                ),
+            ),
+        ],
+        dimension: Some(QuantityDimension::Area),
+        services: &["plan-area", "type-hierarchy"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_GEOMETRY],
+        label: &en_de("Uncovered area", "Unbedeckte Fläche"),
+        help: &en_de(
+            "The part of the footprint the objects of the kinds named, grown, leave uncovered in plan.",
+            "Der Teil des Grundrisses, den die Objekte der genannten Arten, vergrößert, im Grundriss unbedeckt lassen.",
+        ),
+    },
     plain!(
         MEASURED_VOLUME,
         Some(QuantityDimension::Volume),

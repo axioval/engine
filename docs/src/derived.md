@@ -384,6 +384,12 @@ ignoring ASCII case):
 | `count_within;to=<kinds>;radius=<m>[;from=<m>][;projection=…][;direction=…]` | how many counterparts lie within a radius, a plain number | built in, over `ProximityService` |
 | `duplicate_count`, `boundary_gap[;at_least=<m>][;measure=total\|longest][;elements=<kinds>]`, `intersection_count[;tolerance=<m>][;elements=<kinds>]`, `cap_coverage;cap=top\|bottom[;elements=<kinds>]`, `support_count[;of=slabs\|roofs]` | a space's `space-validation` aspects | `SpaceService` |
 | `largest_unallocated_region`, `unallocated_share` | a storey's floor no space covers | `SpaceService::measure_unallocated_regions` |
+| `facade_area`, `face_area` | the facade area, or the largest plane face's area | `FacadeAreaService` |
+| `plan_overlap;with=<kinds>[;measure=largest\|total]`, `uncovered_area;by=<kinds>[;growth=<m>]` | the footprint's overlap with, or the area left uncovered by, objects of kinds | `PlanAreaService` |
+| `contact_area`, `contact_share` `;with=<kinds>[;side=below\|above][;gap=…;intersection=…;polygon=…]` | a face's contact with objects of kinds, or its share | `ContactService` |
+| `effect_covered_area`, `effect_covered_share` `;sources=<kinds>[;blockers=<kinds>][;reach=grown\|travel\|visible][;range=<m>]` | the part of the footprint the sources' effect areas cover, or its share | `PlanAreaService::measure_coverage` |
+| `boundary_covered_share`, `boundary_uncovered_area`, `boundary_overlap_area` `[;plane=<m>]` | a space's declared boundaries over its body's surface | `BoundaryCoverageService` |
+| `opening_area;path=<steps>[;length_axis=…;height_axis=…][;minimum=<m²>]` | the summed section areas of a host's openings on its middle plane | built in, over the body facts |
 | `angle_to;path=<steps>[;between=axis\|face_normal]` | the angle to the objects a path reaches, an angle | `PlanSpanService::measure_rectangle` or `VerticalExtentService::measure_face_normals`, `RelationshipSelectionService` |
 | `skew;path=<steps>` | how far the long axis is from square to the reached objects', an angle | `PlanSpanService::measure_rectangle`, `RelationshipSelectionService` |
 | `bearing;axis=own_x\|own_y\|long[;reference=project_north\|true_north]` | an axis's plan bearing clockwise from north, an angle | `ObjectFrameService` or `PlanSpanService`, `CoordinateSystemService` for true north |
@@ -518,6 +524,28 @@ floor.
 `clear_width` is measured between two heights above the pitch line
 (`band_from`, default 0, and `band_to`, in metres) along a stair flight,
 or with `along=runs` along each of a ramp's runs, the least over them.
+
+### Areas, shares and coverage
+
+Each area capability's numerator and denominator is a measured value from
+the same request, so its verdict is an expression ratio:
+
+| Capability | As measured values |
+|---|---|
+| `plan-area` | an `aggregate` `sum` of `area` (or `facade_area`) over the member path |
+| `area-ratio` | the `divide` of two such sums, each filtered by its selector |
+| light area | `area-ratio`'s light-area numerator is an expression over the stated sizes: a `lookup` of the light area table, or `W × H − 2(W + H) × frame` |
+| `plan-coverage` | `plan_overlap;with=<kinds>` over `area` |
+| `opening-area` | `opening_area;path=…` against the stated gross less net area |
+| `slab-contact` | `contact_share;with=<kinds>;side=…` against the minimum ratio |
+| `counterpart-coverage` (plan) | `uncovered_area;by=<kinds>;growth=<tolerance>` over `area`, graded by the bands |
+| `effective-coverage` | `effect_covered_share;sources=<kinds>;reach=…;range=…` against the minimum |
+| `space-boundary-coverage` | `boundary_covered_share`, `boundary_uncovered_area` and `boundary_overlap_area` against their bounds |
+
+The objects a capability selects are named here by source kind. A
+capability's undecided members widen or leave open what a measured value
+over the kinds' objects decides; an off-surface space boundary, which
+`space-boundary-coverage` always reports, is no area.
 
 ### Space aspects
 

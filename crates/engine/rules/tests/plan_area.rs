@@ -104,6 +104,14 @@ mod area_ratio {
         (model, rectangles)
     }
 
+    pub(super) fn storeys_fixture() -> (Model, Rectangles) {
+        storeys()
+    }
+
+    pub(super) fn parameters_fixture(minimum: f64) -> Vec<(&'static str, ParameterValue)> {
+        parameters(minimum)
+    }
+
     fn parameters(minimum: f64) -> Vec<(&'static str, ParameterValue)> {
         vec![
             ("numerator_selector", selector(kind("space"))),
@@ -744,6 +752,46 @@ mod plan_coverage {
         );
     }
 
+    /// The largest measured plan overlap over the measured footprint area
+    /// reaches the capability's verdict for every space.
+    #[test]
+    fn the_measured_overlap_share_reaches_the_verdicts() {
+        let (model, rectangles) = plan();
+        let project = model.project();
+        let mut services = axioval_engine::ServiceRegistry::new();
+        services
+            .register(PlanAreaServiceHandle::new(Arc::new(rectangles)))
+            .unwrap();
+        let (judged, judged_rectangles) = plan();
+        let evaluation = run(
+            judged,
+            judged_rectangles,
+            &PlanCoverage,
+            &rule(
+                ID,
+                kind("space"),
+                vec![
+                    ("candidate_selector", selector(kind("compartment"))),
+                    ("minimum_ratio", number(0.9)),
+                ],
+            ),
+        );
+        for space in ["inside", "straddling", "outside"] {
+            let read = |name: &str| {
+                common::measured(&services, &project, &id(space), name)
+                    .unwrap()
+                    .unwrap()
+            };
+            let (overlap, area) = (read("plan_overlap;with=compartment"), read("area"));
+            let share = (overlap.0 / area.1, overlap.1 / area.0);
+            assert_eq!(
+                common::at_least(share, 0.9),
+                Some(!flagged(&evaluation).contains(&space.to_owned())),
+                "{space}"
+            );
+        }
+    }
+
     #[test]
     fn the_ratio_must_be_a_share() {
         let (model, rectangles) = plan();
@@ -958,6 +1006,77 @@ mod plan_area_range {
         assert_eq!(
             unevaluated(&evaluation),
             [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+    }
+}
+
+/// `area-ratio`'s numerator and denominator as measured footprint areas,
+/// summed by aggregates over the same relationship, reach its verdicts as
+/// an expression ratio.
+mod as_expressions {
+    use super::*;
+    use axioval_engine::CapabilityRegistry;
+    use common::runtime::{
+        definitions, entity, plan, rule as package_rule, run, session, snapshot,
+    };
+    use serde_json::{Value, json};
+
+    const EXPRESSION: &str = "axioval:capability.expression";
+
+    fn summed(kind: &str) -> Value {
+        json!({"kind": "aggregate", "function": "sum",
+            "over": {"kind": "path", "path": ["contains"]},
+            "where": entity(kind),
+            "value": {"kind": "property", "propertySet": "axioval:measured", "property": "area"}})
+    }
+
+    #[test]
+    fn a_storey_short_of_its_space_share_is_found_as_by_area_ratio() {
+        let (model, rectangles) = super::area_ratio::storeys_fixture();
+        let (judged, judged_rectangles) = super::area_ratio::storeys_fixture();
+        let capability = super::run(
+            judged,
+            judged_rectangles,
+            &AreaRatio,
+            &common::rule(
+                "axioval:capability.area-ratio",
+                kind("storey"),
+                super::area_ratio::parameters_fixture(0.5),
+            ),
+        );
+        let registry = axioval_rules::register_builtins(CapabilityRegistry::new()).unwrap();
+        let package = definitions(
+            &registry,
+            &[EXPRESSION],
+            &["storey", "slab", "space"],
+            &[],
+            &[],
+        );
+        let ratio = package_rule(
+            "ratio",
+            EXPRESSION,
+            "error",
+            entity("storey"),
+            json!({"requirement": {"type": "expression", "value": {
+                "kind": "compare", "operator": "greaterThanOrEquals",
+                "left": {"kind": "divide", "left": summed("space"), "right": summed("slab")},
+                "right": {"kind": "literal", "value": {"type": "number", "value": 0.5}}}}}),
+            json!({}),
+        );
+        let plan = plan(&registry, &package, vec![ratio]).unwrap();
+        let session = session(model)
+            .with_host_service(
+                PlanAreaServiceHandle::new(Arc::new(rectangles)),
+                &[snapshot()],
+            )
+            .unwrap();
+        let report = run(registry, plan, &session, |runtime| runtime).unwrap();
+        let found: Vec<String> = report.findings().iter().map(common::subject).collect();
+        assert_eq!(found, flagged(&capability));
+        assert!(
+            report.not_evaluated.is_empty(),
+            "{:?}",
+            report.not_evaluated
         );
     }
 }

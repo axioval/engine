@@ -22,6 +22,7 @@ use axioval_ir::{
 };
 
 mod angles;
+mod areas;
 mod clearance;
 pub(crate) mod provider;
 mod space;
@@ -72,6 +73,8 @@ pub(crate) enum MeasuredName {
     Clearance(MeasuredCall),
     /// A space-validation aspect of a space or storey.
     Space(MeasuredCall),
+    /// An area, share or coverage of the object.
+    Area(MeasuredCall),
     /// A dimension of the body: an extent, length, thickness or perimeter.
     Dimension(MeasuredCall),
     /// A value a registered provider measures.
@@ -115,6 +118,7 @@ pub(crate) fn measured_by_core(name: &str) -> bool {
         .contains(&name)
         || clearance::NAMES.contains(&name)
         || space::NAMES.contains(&name)
+        || areas::NAMES.contains(&name)
 }
 
 /// Parses a name in the measured set through the registry
@@ -165,6 +169,7 @@ pub(crate) fn parse(name: &str) -> Result<MeasuredName, String> {
         LENGTH | PERIMETER => MeasuredName::Dimension(call),
         name if clearance::NAMES.contains(&name) => MeasuredName::Clearance(call),
         name if space::NAMES.contains(&name) => MeasuredName::Space(call),
+        name if areas::NAMES.contains(&name) => MeasuredName::Area(call),
         ANGLE_TO | BEARING | SKEW => {
             let steps = match call.argument("path") {
                 Some(MeasuredArgument::Path(steps)) => steps
@@ -221,6 +226,8 @@ pub(crate) struct Measures {
     hierarchy: Option<TypeHierarchyServiceHandle>,
     rectangles: Option<PlanSpanServiceHandle>,
     walking: Option<WalkingSurfaceServiceHandle>,
+    facades: Option<crate::facade_area::FacadeAreaServiceHandle>,
+    contacts: Option<crate::contact::ContactServiceHandle>,
     spaces: Option<SpaceServiceHandle>,
     coordinates: Option<CoordinateSystemServiceHandle>,
     host: Option<PropertyResolutionServiceHandle>,
@@ -246,6 +253,12 @@ impl Measures {
             hierarchy: services.get::<TypeHierarchyServiceHandle>().cloned(),
             rectangles: services.get::<PlanSpanServiceHandle>().cloned(),
             walking: services.get::<WalkingSurfaceServiceHandle>().cloned(),
+            facades: services
+                .get::<crate::facade_area::FacadeAreaServiceHandle>()
+                .cloned(),
+            contacts: services
+                .get::<crate::contact::ContactServiceHandle>()
+                .cloned(),
             spaces: services.get::<SpaceServiceHandle>().cloned(),
             coordinates: services.get::<CoordinateSystemServiceHandle>().cloned(),
             host: host.cloned(),
@@ -357,6 +370,7 @@ impl Measures {
             MeasuredName::Dimension(call) => self.dimension(call, object),
             MeasuredName::Clearance(call) => self.clearance(call, object),
             MeasuredName::Space(call) => self.space(call, object),
+            MeasuredName::Area(call) => self.area_measure(call, object),
             MeasuredName::Provided(call) => self.provided(call, object),
         }
     }

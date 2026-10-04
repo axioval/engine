@@ -199,6 +199,21 @@ impl Model {
     }
 
     /// Evaluates with further services registered by `extra`.
+    /// The model's project and its property and relationship services.
+    #[allow(dead_code)]
+    pub fn services(self) -> (Project, ServiceRegistry) {
+        let project = Project::new(self.objects.clone()).unwrap();
+        let shared = Arc::new(self);
+        let mut services = ServiceRegistry::new();
+        services
+            .register(PropertyResolutionServiceHandle::new(shared.clone()))
+            .unwrap();
+        services
+            .register(RelationshipSelectionServiceHandle::new(shared))
+            .unwrap();
+        (project, services)
+    }
+
     pub fn evaluate_with(
         self,
         capability: &dyn RuleCapability,
@@ -552,5 +567,48 @@ pub fn assert_deviation(found: (f64, f64), expected: (f64, f64)) {
 pub fn expression(value: serde_json::Value) -> ParameterValue {
     ParameterValue::Expression {
         value: Box::new(serde_json::from_value(value).unwrap()),
+    }
+}
+
+/// The measured value `name` of `object` with `services`, as the interval
+/// `(lower, upper)` it lies in: `None` when it is absent, `Err` when it
+/// cannot be measured. Built-in providers are installed as a run would.
+#[allow(dead_code)]
+pub fn measured(
+    services: &axioval_engine::ServiceRegistry,
+    project: &axioval_ir::Project,
+    object: &ObjectId,
+    name: &str,
+) -> Result<Option<(f64, f64)>, String> {
+    use axioval_engine::{CapabilityRegistry, PropertyResolution, measured_value};
+    let mut services = services.clone();
+    axioval_rules::register_builtins(CapabilityRegistry::new())
+        .unwrap()
+        .install_measured(&mut services, project);
+    match measured_value(&services, project, object, name) {
+        Ok(PropertyResolution::Present(resolved)) => Ok(Some(match resolved.property().value() {
+            PropertyValue::Quantity { value, .. } | PropertyValue::Decimal(value) => {
+                (*value, *value)
+            }
+            #[allow(clippy::cast_precision_loss)]
+            PropertyValue::Integer(value) => (*value as f64, *value as f64),
+            PropertyValue::Measured { lower, upper, .. } => (*lower, *upper),
+            other => return Err(format!("{name} of {object} is {other:?}")),
+        })),
+        Ok(PropertyResolution::Absent(_)) => Ok(None),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+/// Whether `value` is surely at least `bound` (`Some(true)`), surely below
+/// it (`Some(false)`), or straddles it (`None`).
+#[allow(dead_code)]
+pub fn at_least((lower, upper): (f64, f64), bound: f64) -> Option<bool> {
+    if lower >= bound {
+        Some(true)
+    } else if upper < bound {
+        Some(false)
+    } else {
+        None
     }
 }

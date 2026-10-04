@@ -755,3 +755,46 @@ fn a_bad_declaration_is_not_evaluated() {
         );
     }
 }
+
+/// The measured covered share against the minimum reaches the verdicts:
+/// covered, half covered and straddling.
+#[test]
+#[allow(clippy::type_complexity)]
+fn the_measured_covered_share_reaches_the_verdicts() {
+    let straddling = || {
+        without(plan(), "b").source(
+            "a",
+            [2.4, 1.9, 2.6, 2.1],
+            [0.0, 0.0, 5.0, 4.0],
+            [0.0, 0.0, 10.0, 4.0],
+        )
+    };
+    let cases: [(&str, fn() -> Plan, &str); 3] = [
+        ("covered", plan, "grown"),
+        ("half", || without(plan(), "b"), "grown"),
+        ("straddling", straddling, "visible"),
+    ];
+    for (case, fixture, mode) in cases {
+        let evaluation = run(fixture(), &coverage(mode, vec![]));
+        let verdict = if !evaluation.findings().is_empty() {
+            Some(false)
+        } else if unevaluated(&evaluation).is_empty() {
+            Some(true)
+        } else {
+            None
+        };
+        let (project, mut services) = model(&fixture()).services();
+        services
+            .register(PlanAreaServiceHandle::new(Arc::new(fixture())))
+            .unwrap();
+        let share = common::measured(
+            &services,
+            &project,
+            &id("r"),
+            &format!("effect_covered_share;sources=device;reach={mode};range=3"),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(common::at_least(share, 0.9), verdict, "{case}: {share:?}");
+    }
+}

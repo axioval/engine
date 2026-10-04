@@ -593,3 +593,31 @@ mod scope {
         assert!(pass.outcome.not_evaluated_outcomes().is_empty());
     }
 }
+
+/// The measured contact share against the minimum ratio reaches the
+/// capability's verdict.
+#[test]
+fn the_measured_contact_share_reaches_the_verdict() {
+    let project = Project::new(vec![object("wall"), Object::new(oid("slab"), "slab")]).unwrap();
+    for (whole, contact) in [(10.0, 5.0), (10.0, 4.99), (10.0, 0.0), (10.0, 10.0)] {
+        let stub = || Stub(Ok((whole, contact, Some(0.2), vec![oid("slab")])));
+        let found = !evaluate(stub(), &rule()).findings().is_empty();
+        let mut services = ServiceRegistry::new();
+        services
+            .register(ContactServiceHandle::new(Arc::new(stub())))
+            .unwrap();
+        let share = common::measured(
+            &services,
+            &project,
+            &oid("wall"),
+            "contact_share;with=slab;side=above;gap=0.01;intersection=0.01;polygon=0.001",
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(
+            common::at_least(share, 0.5),
+            Some(!found),
+            "{contact} of {whole}"
+        );
+    }
+}

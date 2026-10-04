@@ -919,3 +919,49 @@ fn invalid_elevation_declarations_refuse_the_rule() {
         );
     }
 }
+
+/// The measured uncovered area over the measured footprint, graded by the
+/// rule's bands, reaches the plan check's grades.
+#[test]
+fn the_measured_uncovered_share_reaches_the_plan_grades() {
+    let evaluation = run(
+        three_walls(),
+        &coverage_rule(vec![("tolerance", metres(0.02))]),
+    );
+    let (project, mut services) = model(&three_walls()).services();
+    services
+        .register(PlanAreaServiceHandle::new(Arc::new(three_walls())))
+        .unwrap();
+    for wall in ["w1", "w2", "w3"] {
+        let read = |name: &str| {
+            common::measured(&services, &project, &id(wall), name)
+                .unwrap()
+                .unwrap()
+        };
+        let (uncovered, area) = (
+            read("uncovered_area;by=structure;growth=0.02"),
+            read("area"),
+        );
+        let share = (uncovered.0 / area.1, uncovered.1 / area.0);
+        let band = |share: f64| {
+            if share > 0.75 {
+                Some(Severity::Error)
+            } else if share > 0.25 {
+                Some(Severity::Warning)
+            } else if share > 0.01 {
+                Some(Severity::Info)
+            } else {
+                None
+            }
+        };
+        assert_eq!(band(share.0), band(share.1), "{wall} straddles a band");
+        let graded = evaluation
+            .findings()
+            .iter()
+            .find(|finding| {
+                common::subject(finding) == wall && finding.message.starts_with("plan:")
+            })
+            .map(|finding| finding.severity.clone());
+        assert_eq!(band(share.0), graded, "{wall}: {share:?}");
+    }
+}

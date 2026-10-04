@@ -457,3 +457,21 @@ fn openings_below_the_minimum_area_are_left_out() {
     );
     assert!(unevaluated(&evaluation).is_empty());
 }
+
+/// The measured opening area against the stated gross less net side area
+/// reaches the capability's verdicts.
+#[test]
+fn the_measured_opening_area_reaches_the_verdicts() {
+    let opening = "opening_area;path=voids:forward;length_axis=profile-x;height_axis=extrusion";
+    for net in [12.6, 13.0] {
+        let model = || window(window(wall(Some(net)), "o1", 1.0), "o2", 3.0);
+        let found = !findings(&check(model())).is_empty();
+        let (project, services) = model().services();
+        let area = common::measured(&services, &project, &common::id("w"), opening)
+            .unwrap()
+            .unwrap();
+        let voided = 15.0 - net;
+        let agrees = (area.0 - voided).abs() <= 0.01 && (area.1 - voided).abs() <= 0.01;
+        assert_eq!(agrees, !found, "net {net}: openings {area:?}");
+    }
+}

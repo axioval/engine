@@ -8,6 +8,7 @@ mod interval;
 mod types;
 mod unit;
 
+pub use crate::values::derived_value;
 pub use evaluate::{
     Evaluation, ExpressionContext, Leaf, NotEvaluated, Read, Reason, Source, Value, evaluate,
 };

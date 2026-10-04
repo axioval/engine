@@ -38,11 +38,11 @@ pub fn compile(
         }
     }
     let catalog = definition_catalog(ruleset, &packages)?;
-    let properties = vocabulary_properties(ruleset, &packages);
-    let mut concepts = concept_catalog(ruleset, &packages)?;
-    concepts.declare_classifications(class_trees(ruleset.classifications.iter())?);
-    concepts.declare_groupings(ruleset.groupings.keys().cloned());
+    let concepts = declared_concepts(ruleset, &packages)?;
     let (classifications, groupings, relations) = derivations(registry, &concepts, ruleset)?;
+    let properties = vocabulary_properties(ruleset, &packages);
+    let (vocabulary, values) =
+        crate::expression_binding::check_values(&concepts, &properties, &ruleset.values)?;
     let mut authored = Vec::new();
     flatten(&ruleset.root, &[], &mut authored);
     authored.sort_by(|(left, _), (right, _)| left.id.cmp(&right.id));
@@ -68,7 +68,7 @@ pub fn compile(
             .get(rule.definition_id.as_str())
             .ok_or_else(|| EngineError::UnknownDefinition(rule.definition_id.clone()))?;
         let parameters = bind_parameters(registry, rule, definition)?;
-        validate_bound(&concepts, &properties, &rule.id, &parameters, definition)?;
+        validate_bound(&vocabulary, &rule.id, &parameters, definition)?;
         let id = RuleId::new(rule.id.clone())
             .map_err(|_| EngineError::InvalidRuleId(rule.id.clone()))?;
         let refinement = refinement(registry, &concepts, rule, &definition.capability)?;
@@ -130,6 +130,7 @@ pub fn compile(
         groupings,
         relations,
         supplied: BTreeMap::new(),
+        values: Arc::new(values),
     })
 }
 
@@ -838,6 +839,7 @@ pub fn compile_rulesets(
     let mut recorded = BTreeSet::new();
     let mut auxiliary = BTreeSet::new();
     let mut derived: Derived = (Vec::new(), Vec::new(), Vec::new());
+    let mut values: BTreeMap<String, axioval_ir::contract::Expression> = BTreeMap::new();
     for ruleset in rulesets {
         let package = &ruleset.package.id;
         if !packages_seen.insert(package.as_str()) {
@@ -887,6 +889,7 @@ pub fn compile_rulesets(
             &mut derived,
             (plan.classifications, plan.groupings, plan.relations),
         )?;
+        merge_values(&mut values, &plan.values)?;
         for mut rule in plan.deferred {
             rule.id = qualify(&rule.id)?;
             deferred.push(rule);
@@ -905,6 +908,7 @@ pub fn compile_rulesets(
             .map(|definition| (&definition.id, definition)),
     )?);
     concepts.declare_groupings(groupings.iter().map(|definition| definition.id.clone()));
+    concepts.declare_values(values.keys().cloned());
     Ok(ExecutionPlan {
         rules,
         deferred,
@@ -917,6 +921,7 @@ pub fn compile_rulesets(
         groupings,
         relations,
         supplied: BTreeMap::new(),
+        values: Arc::new(values),
     })
 }
 
@@ -1389,6 +1394,41 @@ fn validate_selector_concepts(
     }
 }
 
+/// Every concept the ruleset may name: its packages' vocabulary and the
+/// classifications, groupings and values it derives.
+fn declared_concepts(
+    ruleset: &RuleSetPackage,
+    packages: &BTreeMap<&str, &DefinitionPackage>,
+) -> Result<ConceptCatalog, EngineError> {
+    let mut concepts = concept_catalog(ruleset, packages)?;
+    concepts.declare_classifications(class_trees(ruleset.classifications.iter())?);
+    concepts.declare_groupings(ruleset.groupings.keys().cloned());
+    concepts.declare_values(ruleset.values.keys().cloned());
+    Ok(concepts)
+}
+
+/// Adds `more` to the values merged from earlier rulesets; a name two
+/// rulesets derive differently is refused.
+fn merge_values(
+    values: &mut BTreeMap<String, axioval_ir::contract::Expression>,
+    more: &BTreeMap<String, axioval_ir::contract::Expression>,
+) -> Result<(), EngineError> {
+    for (name, expression) in more {
+        match values.get(name) {
+            Some(seen) if seen != expression => {
+                return Err(EngineError::InvalidValue {
+                    value: name.clone(),
+                    detail: "two rulesets derive it differently".into(),
+                });
+            }
+            _ => {
+                values.insert(name.clone(), expression.clone());
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Every property the ruleset's definition packages declare, by id.
 fn vocabulary_properties<'a>(
     ruleset: &RuleSetPackage,
@@ -1405,18 +1445,16 @@ fn vocabulary_properties<'a>(
 /// Checks a rule's bound parameters: the concepts they name, and its
 /// expressions' structure and types.
 fn validate_bound(
-    concepts: &ConceptCatalog,
-    properties: &BTreeMap<&str, &axioval_ir::contract::PropertyDefinition>,
+    vocabulary: &crate::expression_binding::Vocabulary<'_>,
     rule: &str,
     parameters: &BTreeMap<String, ParameterValue>,
     definition: &RuleDefinition,
 ) -> Result<(), EngineError> {
     for value in parameters.values() {
-        validate_parameter_concepts(concepts, rule, value)?;
+        validate_parameter_concepts(vocabulary.concepts, rule, value)?;
     }
     crate::expression_binding::check_rule_expressions(
-        concepts,
-        properties,
+        vocabulary,
         rule,
         parameters,
         &definition.parameters,

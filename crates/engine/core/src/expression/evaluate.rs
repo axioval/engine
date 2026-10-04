@@ -78,10 +78,14 @@ impl Value {
             ScalarValue::Number { value } => Self::number(*value),
             ScalarValue::Quantity { value, unit } => {
                 let (scale, unit) = parse_unit(unit)?;
-                let value = Interval::point(*value)
-                    .times(Interval::point(scale))
-                    .map_err(|_| format!("`{value}` overflows in coherent units"))?;
-                Self::Number { value, unit }
+                let coherent = coherent(*value, scale);
+                if !coherent.is_finite() {
+                    return Err(format!("`{value}` overflows in coherent units"));
+                }
+                Self::Number {
+                    value: Interval::point(coherent),
+                    unit,
+                }
             }
             ScalarValue::String { value } => Self::Text(value.clone()),
             ScalarValue::Enum { value } => Self::Enum(value.clone()),
@@ -161,6 +165,22 @@ impl Value {
             Self::DateTime(_) => "a date-time",
         }
     }
+}
+
+/// A stated quantity in coherent units: the double nearest the decimal it
+/// states, as a source states its values. A decimal prefix (`mm`, `cm`)
+/// divides by an exact power of ten, which rounds correctly, so `30 mm` is
+/// the same double as `0.030 m`.
+#[allow(clippy::float_cmp)]
+fn coherent(value: f64, scale: f64) -> f64 {
+    if scale < 1.0 {
+        let inverse = (1.0 / scale).round();
+        let power_of_ten = (0..=15).any(|exponent| inverse == 10f64.powi(exponent));
+        if power_of_ten && (1.0 / inverse - scale).abs() <= f64::EPSILON * scale {
+            return value / inverse;
+        }
+    }
+    value * scale
 }
 
 impl fmt::Display for Value {

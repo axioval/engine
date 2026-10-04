@@ -16,7 +16,7 @@ use axioval_ir::contract::{
 };
 use axioval_ir::{
     CLASSIFICATION_SET, Evidence, GROUP_SET, MEASURED_SET, NotEvaluatedReason, ObjectId, Property,
-    PropertyValue,
+    PropertyValue, VALUE_SET,
 };
 
 use crate::groupings::DerivedGroups;
@@ -27,6 +27,7 @@ use crate::properties::{
     PropertyResolutionServiceHandle, ResolvedProperty,
 };
 use crate::session::SourceSnapshot;
+use crate::values::{DerivedValues, ValueExpressions};
 use crate::{OutcomeRefiner, RuleContext, SelectorVerdict};
 
 /// What one classification assigned one object.
@@ -286,6 +287,7 @@ pub(crate) struct DerivedProperties {
     pub(crate) measures: Measures,
     pub(crate) classifications: Arc<Classifications>,
     pub(crate) groups: Arc<DerivedGroups>,
+    pub(crate) values: Arc<DerivedValues>,
     pub(crate) snapshots: Vec<SourceSnapshot>,
 }
 
@@ -306,6 +308,11 @@ impl PropertyResolutionService for DerivedProperties {
         }
         if request.property_set() == Some(CLASSIFICATION_SET) {
             return self.classifications.resolve(request);
+        }
+        if request.property_set() == Some(VALUE_SET) {
+            return self
+                .values
+                .resolve(request, &|request: &PropertyRequest| self.resolve(request));
         }
         if request.property_set() == Some(MEASURED_SET) {
             return self.measures.resolve(request);
@@ -342,16 +349,27 @@ pub(crate) fn install(
 ) {
     use crate::SnapshotBoundService as _;
     let snapshots = host.map_or_else(Vec::new, |host| host.source_snapshots().to_vec());
+    // A fresh cache per install: values read the classes and groups
+    // derived so far, and are computed again once more are derived.
+    let values = Arc::new(DerivedValues::new(
+        services
+            .get::<ValueExpressions>()
+            .map(|expressions| expressions.0.clone())
+            .unwrap_or_default(),
+        services.get::<crate::ConceptBindings>().cloned(),
+    ));
     services.replace(PropertyResolutionServiceHandle::new(Arc::new(
         DerivedProperties {
             inner: host.cloned(),
             measures: Measures::of(services, host, project),
             classifications: classifications.clone(),
             groups,
+            values: values.clone(),
             snapshots,
         },
     )));
     services.replace(classifications);
+    services.replace(values);
 }
 
 #[cfg(test)]

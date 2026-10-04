@@ -1,6 +1,7 @@
 #![allow(missing_docs)]
 use super::{
-    Citation, LocalizedText, PackageMetadata, ParameterValue, Selector, Source, TableFileColumn,
+    Citation, Expression, LocalizedText, PackageMetadata, ParameterValue, Selector, Source,
+    TableFileColumn,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -254,6 +255,28 @@ pub struct RuleSetPackage {
     /// [`RelationDefinition`]. Omitted when empty.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub relations: BTreeMap<String, RelationDefinition>,
+    /// Values the ruleset derives per object from an expression, by name;
+    /// see [`ValueDefinition`]. Omitted when empty.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub values: BTreeMap<String, ValueDefinition>,
+}
+
+/// A value the ruleset names once and derives for every object from an
+/// expression, such as `slope_percent`.
+///
+/// It is read like a property of [`crate::VALUE_SET`] (`axioval:value`)
+/// by selectors, expressions, takeoff columns, groupings and
+/// classifications, and as a `derived` node by expressions. A value may
+/// read other values; a cycle fails compilation. The engine evaluates it at
+/// most once per object in a run and cites the evidence it was computed
+/// from.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ValueDefinition {
+    pub name: LocalizedText,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<LocalizedText>,
+    pub expression: Expression,
 }
 
 /// A relation users declare between objects the model does not relate,

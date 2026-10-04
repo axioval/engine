@@ -485,14 +485,7 @@ fn vocabulary<'a>(context: &RuleContext<'a>) -> Vocabulary<'a> {
 }
 
 fn binding_error(error: &BindingError) -> (NotEvaluatedReason, String) {
-    // An unbound concept is a property of the package/source pairing, not of
-    // the evidence: the package names nothing this source can express. A
-    // concept no package declares is a broken declaration instead.
-    let reason = match error {
-        BindingError::UnknownConcept { .. } => NotEvaluatedReason::InvalidDeclaration,
-        _ => NotEvaluatedReason::UnboundConcept,
-    };
-    (reason, error.to_string())
+    axioval_engine::binding_reason(error)
 }
 
 /// Builds a property request in the checked object's own source vocabulary.
@@ -508,36 +501,7 @@ pub(crate) fn bound_property_request(
     set: Option<&str>,
     name: &str,
 ) -> Result<PropertyRequest, (NotEvaluatedReason, String)> {
-    // A derived set's names are the engine's or the ruleset's own, the same
-    // in every source.
-    if let Some(derived) = set.filter(|set| axioval_ir::is_derived_set(set)) {
-        return PropertyRequest::try_new(object.id.clone(), Some(derived.to_owned()), name)
-            .map_err(|error| (NotEvaluatedReason::InvalidDeclaration, error.to_string()));
-    }
-    let (property_set, property) = match vocabulary(context) {
-        Vocabulary::Native => (set.map(ToOwned::to_owned), name),
-        Vocabulary::Package(bindings) => {
-            let source = &object.id.source;
-            let property = bindings
-                .property(name, source)
-                .map_err(|error| binding_error(&error))?;
-            // The attribute sets are engine vocabulary with one meaning in
-            // every source, so they bind to themselves.
-            let property_set = set
-                .map(|set| {
-                    if axioval_ir::is_reserved_set(set) {
-                        Ok(set.to_owned())
-                    } else {
-                        bindings.property_set(set, source).map(ToOwned::to_owned)
-                    }
-                })
-                .transpose()
-                .map_err(|error| binding_error(&error))?;
-            (property_set, property)
-        }
-    };
-    PropertyRequest::try_new(object.id.clone(), property_set, property)
-        .map_err(|error| (NotEvaluatedReason::InvalidDeclaration, error.to_string()))
+    axioval_engine::bound_property_request(context.services, &object.id, set, name)
 }
 
 /// Whether an object is an instance of an object type.

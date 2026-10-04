@@ -449,3 +449,27 @@ Without the service a value needs, the resolver answers
 runtime reports it once per rule and source (`missing_service`), as it
 collapses every object-level missing service. A body the service cannot
 measure is unavailable for that object.
+
+## Derived values
+
+A ruleset's `values` name expressions once ([Expressions](./expressions.md)), evaluated for every object, and every reader reads them like a property of the reserved set `axioval:value` (`axioval_ir::VALUE_SET`): selectors, expressions (also as a `derived` node), `property-predicate` and the other property capabilities, takeoff columns, grouping keys and classification rows.
+
+```json
+{"values": {
+  "margin": {"name": {"default": "Cover margin", "translations": {}},
+             "expression": {"kind": "subtract",
+               "left": {"kind": "property", "propertySet": "Pset_Concrete", "property": "Cover"},
+               "right": {"kind": "literal", "value": {"type": "quantity", "value": 30.0, "unit": "mm"}}}},
+  "short": {"name": {"default": "Cover too short", "translations": {}},
+            "expression": {"kind": "compare", "operator": "lessThan",
+              "left": {"kind": "derived", "name": "margin"},
+              "right": {"kind": "literal", "value": {"type": "quantity", "value": 0.0, "unit": "m"}}}}}}
+```
+
+- A value may read stated, measured, classified and other derived values. Compilation orders them so each follows those it reads, and refuses one reading an undeclared value or a cycle, naming it: `value `a`: the values read one another: a → b → c → a`. It type checks each value as it would a requirement, and the types reach every expression that reads them.
+- A value reads no rule parameter: it is the ruleset's, not one rule's.
+- The engine evaluates each value at most once per object in a run and caches it. Classifications and groupings derived before the rules read the values as far as they are derived then; rules read the final ones.
+- A number with a unit is a quantity: exact when it is a point, otherwise a `measured` interval, whose evidence is never exact. Text, enumeration values, truths, dates and date-times are themselves, and `null` is an exact absence. An interval of plain numbers is read only by expressions; anywhere else it cannot be read. A value that cannot be computed leaves its reader not evaluated with the reason.
+- Its evidence is located at `axioval:value/<name>` and cites the locators of every read it was computed from.
+
+A decimal literal states a value as a source does: `30 mm` is the double nearest 0.030 m, the same one a source stating `0.030` holds, so a cover of exactly 30 mm meets a 30 mm bound rather than straddling it.

@@ -78,3 +78,7 @@ Keep this crate serializable and deterministic. It must not depend on a source f
   `MeasuredDescriptor` per name, sorted, labelled in English and German.
   Register a new measured value there (and nowhere else), with its
   parameters, dimension, services, exactness and not-evaluated causes.
+- `RuleSetPackage::values` (`ValueDefinition`: localized name, optional
+  description, expression) is omitted when empty so rulesets serialize as
+  before; `VALUE_SET` is a derived set. The MCS ruleset schema must mirror
+  it.

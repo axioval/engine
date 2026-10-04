@@ -23,6 +23,7 @@ use serde_json::{Value, json};
 
 const EXPRESSION: &str = "axioval:capability.expression";
 const PREDICATE: &str = "axioval:capability.property-predicate";
+const TAKEOFF: &str = "axioval:capability.quantity-takeoff";
 
 fn registry() -> CapabilityRegistry {
     register_builtins(CapabilityRegistry::new()).unwrap()
@@ -33,7 +34,7 @@ fn registry() -> CapabilityRegistry {
 fn vocabulary(registry: &CapabilityRegistry, extra: &[Value]) -> DefinitionPackage {
     let mut package = definitions(
         registry,
-        &[EXPRESSION, PREDICATE],
+        &[EXPRESSION, PREDICATE, TAKEOFF],
         &["slab", "pipe"],
         &["Cover", "Class"],
         &["Pset"],
@@ -371,4 +372,130 @@ fn authored_parameters_are_read_and_checked() {
         compiled(&package, expression_rule(&requirement, extra)),
         Err(EngineError::UnknownParameter { .. })
     ));
+}
+
+/// The cover beyond 30 mm, derived once.
+fn margin_values() -> BTreeMap<String, axioval_ir::contract::ValueDefinition> {
+    serde_json::from_value(json!({
+        "margin": {"name": text("margin"), "expression": {"kind": "subtract",
+            "left": property("Cover"), "right": mm(30.0)}},
+        "short": {"name": text("short"), "expression": {"kind": "compare", "operator": "lessThan",
+            "left": {"kind": "derived", "name": "margin"}, "right": mm(0.0)}},
+    }))
+    .unwrap()
+}
+
+fn value(name: &str) -> Value {
+    json!({"kind": "property", "propertySet": "axioval:value", "property": name})
+}
+
+#[test]
+fn a_derived_value_reads_alike_in_selectors_requirements_predicates_and_takeoffs() {
+    let registry = registry();
+    let package = vocabulary(&registry, &[]);
+    let selected = rule(
+        "selected",
+        EXPRESSION,
+        "error",
+        json!({"kind": "allOf", "operands": [entity("slab"),
+            {"kind": "property", "propertySet": "axioval:value", "property": "short",
+             "operator": "equals", "value": {"type": "boolean", "value": true}}]}),
+        json!({"requirement": {"type": "expression", "value":
+            {"kind": "literal", "value": {"type": "boolean", "value": false}}}}),
+        json!({}),
+    );
+    let required = rule(
+        "required",
+        EXPRESSION,
+        "error",
+        entity("slab"),
+        json!({"requirement": {"type": "expression", "value":
+            {"kind": "not", "operand": {"kind": "derived", "name": "short"}}}}),
+        json!({}),
+    );
+    let predicate = rule(
+        "predicate",
+        PREDICATE,
+        "error",
+        entity("slab"),
+        json!({
+            "property_set": {"type": "string", "value": "axioval:value"},
+            "property": {"type": "string", "value": "margin"},
+            "operator": {"type": "string", "value": "greater_or_equal"},
+            "quantity": {"type": "quantity", "value": 0.0, "unit": "m"},
+        }),
+        json!({}),
+    );
+    let takeoff = rule(
+        "takeoff",
+        TAKEOFF,
+        "info",
+        entity("slab"),
+        json!({
+            "measure_1": {"type": "propertyReference", "propertySet": "axioval:value", "property": "margin"},
+            "measure_1_name": {"type": "string", "value": "margin"},
+            "measure_1_aggregates": {"type": "stringList", "value": ["sum"]},
+        }),
+        json!({}),
+    );
+    let mut ruleset = common::runtime::ruleset(vec![selected, required, predicate, takeoff]);
+    ruleset.values = margin_values();
+    let registry = self::registry();
+    let plan =
+        axioval_engine::compile(&registry, std::slice::from_ref(&package), &ruleset).unwrap();
+    let report = run(registry, plan, &session(slabs()), |runtime| runtime).unwrap();
+    assert!(
+        report.not_evaluated.is_empty(),
+        "{:?}",
+        report.not_evaluated
+    );
+    // s2 (35 mm) and s1 (45 mm) are above 30 mm; s3, s4 (30 mm) at it.
+    for rule in ["selected", "required", "predicate"] {
+        assert_eq!(subjects(&report, rule), ["s5"], "{rule}");
+    }
+    let table = report
+        .table(&axioval_ir::RuleId::new("takeoff").unwrap(), "takeoff")
+        .unwrap();
+    let total = &table.rows()[0].values()[1];
+    // 15 + 5 + 0 + 0 - 10 mm: the sum holds 10 mm.
+    let (lower, upper) = match total {
+        axioval_ir::ReportValue::Exact { value } => (*value, *value),
+        axioval_ir::ReportValue::Interval { lower, upper } => (*lower, *upper),
+        other => panic!("{other:?}"),
+    };
+    assert!(
+        lower - 1e-12 <= 0.010 && 0.010 <= upper + 1e-12,
+        "{lower}..{upper}"
+    );
+}
+
+#[test]
+fn values_reading_one_another_in_a_cycle_fail_compilation_naming_it() {
+    let registry = registry();
+    let package = vocabulary(&registry, &[]);
+    let mut ruleset = common::runtime::ruleset(vec![expression_rule(
+        &json!({"kind": "literal", "value": {"type": "boolean", "value": true}}),
+        json!({}),
+    )]);
+    ruleset.values = serde_json::from_value(json!({
+        "a": {"name": text("a"), "expression": {"kind": "add", "left": value("b"), "right": mm(1.0)}},
+        "b": {"name": text("b"), "expression": {"kind": "derived", "name": "c"}},
+        "c": {"name": text("c"), "expression": {"kind": "derived", "name": "a"}},
+    }))
+    .unwrap();
+    let error = axioval_engine::compile(&registry, std::slice::from_ref(&package), &ruleset)
+        .map(drop)
+        .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "value `a`: the values read one another: a → b → c → a"
+    );
+    ruleset.values = serde_json::from_value(json!({
+        "a": {"name": text("a"), "expression": {"kind": "derived", "name": "missing"}},
+    }))
+    .unwrap();
+    let error = axioval_engine::compile(&registry, std::slice::from_ref(&package), &ruleset)
+        .map(drop)
+        .unwrap_err();
+    assert!(error.to_string().contains("`missing`"), "{error}");
 }

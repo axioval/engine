@@ -86,6 +86,8 @@ pub struct ConceptCatalog {
     classifications: BTreeMap<String, ClassTree>,
     /// The groupings the ruleset derives, by id.
     groupings: std::collections::BTreeSet<String>,
+    /// The values the ruleset derives, by name.
+    values: std::collections::BTreeSet<String>,
 }
 
 impl ConceptCatalog {
@@ -102,6 +104,12 @@ impl ConceptCatalog {
         }
         self.entries.insert(key, names.to_vec());
         Ok(())
+    }
+
+    /// Declares the values the ruleset derives, so references to them in
+    /// the reserved value set resolve.
+    pub(crate) fn declare_values(&mut self, names: impl IntoIterator<Item = String>) {
+        self.values.extend(names);
     }
 
     /// Declares the classifications the ruleset derives, so references to
@@ -137,6 +145,9 @@ impl ConceptCatalog {
     pub fn derives(&self, set: &str, name: &str) -> Option<bool> {
         if set == axioval_ir::MEASURED_SET {
             return Some(crate::measured::parse(name).is_ok());
+        }
+        if set == axioval_ir::VALUE_SET {
+            return Some(self.values.contains(name));
         }
         if set == axioval_ir::GROUP_SET {
             return Some(name == axioval_ir::GROUP_KEY || name == axioval_ir::GROUP_MEMBERS);
@@ -323,4 +334,79 @@ impl SnapshotBoundService for TypeHierarchyServiceHandle {
     fn source_snapshots(&self) -> &[SourceSnapshot] {
         &self.snapshots
     }
+}
+
+/// Why a concept cannot be bound, in a report's terms: a concept no package
+/// declares is a broken declaration, one the source's vocabulary cannot
+/// express a fact of the package and source pairing.
+#[must_use]
+pub fn binding_reason(error: &BindingError) -> (axioval_ir::NotEvaluatedReason, String) {
+    let reason = match error {
+        BindingError::UnknownConcept { .. } => axioval_ir::NotEvaluatedReason::InvalidDeclaration,
+        _ => axioval_ir::NotEvaluatedReason::UnboundConcept,
+    };
+    (reason, error.to_string())
+}
+
+/// Builds a property request in `object`'s own source vocabulary.
+///
+/// Package rules reference canonical concepts, which are bound through the
+/// object's declared type system first, for both the property and its
+/// optional set qualifier; without [`ConceptBindings`] in `services` names
+/// are the source's own. A derived set's names are the engine's or the
+/// ruleset's, the same in every source, and the reserved sets bind to
+/// themselves. An unbindable concept is never passed through verbatim: a
+/// source asked for a name it does not use would answer "absent" and turn a
+/// vocabulary gap into a violation.
+///
+/// # Errors
+///
+/// A concept that cannot be bound, or a malformed request.
+pub fn bound_property_request(
+    services: &crate::ServiceRegistry,
+    object: &axioval_ir::ObjectId,
+    set: Option<&str>,
+    name: &str,
+) -> Result<crate::PropertyRequest, (axioval_ir::NotEvaluatedReason, String)> {
+    bind_request(services.get::<ConceptBindings>(), object, set, name)
+}
+
+/// [`bound_property_request`] with the run's bindings, if any.
+pub(crate) fn bind_request(
+    bindings: Option<&ConceptBindings>,
+    object: &axioval_ir::ObjectId,
+    set: Option<&str>,
+    name: &str,
+) -> Result<crate::PropertyRequest, (axioval_ir::NotEvaluatedReason, String)> {
+    let invalid = |error: crate::PropertyResolutionError| {
+        (
+            axioval_ir::NotEvaluatedReason::InvalidDeclaration,
+            error.to_string(),
+        )
+    };
+    if let Some(derived) = set.filter(|set| axioval_ir::is_derived_set(set)) {
+        return crate::PropertyRequest::try_new(object.clone(), Some(derived.to_owned()), name)
+            .map_err(invalid);
+    }
+    let (property_set, property) = match bindings {
+        None => (set.map(ToOwned::to_owned), name),
+        Some(bindings) => {
+            let source = &object.source;
+            let property = bindings
+                .property(name, source)
+                .map_err(|error| binding_reason(&error))?;
+            let property_set = set
+                .map(|set| {
+                    if axioval_ir::is_reserved_set(set) {
+                        Ok(set.to_owned())
+                    } else {
+                        bindings.property_set(set, source).map(ToOwned::to_owned)
+                    }
+                })
+                .transpose()
+                .map_err(|error| binding_reason(&error))?;
+            (property_set, property)
+        }
+    };
+    crate::PropertyRequest::try_new(object.clone(), property_set, property).map_err(invalid)
 }

@@ -4,21 +4,22 @@
 use std::collections::BTreeMap;
 
 use axioval_ir::contract::{
-    ColumnKind, ParameterDefinition, ParameterKind, ParameterValue, PropertyDefinition,
-    PropertyValueKind,
+    ColumnKind, Expression, ParameterDefinition, ParameterKind, ParameterValue, PropertyDefinition,
+    PropertyValueKind, ValueDefinition,
 };
 
 use axioval_ir::QuantityDimension;
 
 use crate::EngineError;
 use crate::concepts::ConceptCatalog;
-use crate::expression::{Type, TypeEnvironment, Unit, check_as, measured_type, parse_unit};
+use crate::expression::{Type, TypeEnvironment, Unit, check, check_as, measured_type, parse_unit};
 
 /// The types an expression of one rule may read: the vocabulary's
 /// properties, measured values, and the rule's own parameters.
 struct RuleEnvironment<'a> {
     concepts: &'a ConceptCatalog,
     properties: &'a BTreeMap<&'a str, &'a PropertyDefinition>,
+    values: &'a BTreeMap<String, Type>,
     rule: &'a str,
     parameters: &'a BTreeMap<String, ParameterValue>,
     declared: &'a BTreeMap<String, ParameterDefinition>,
@@ -28,6 +29,9 @@ impl TypeEnvironment for RuleEnvironment<'_> {
     fn property(&self, set: Option<&str>, name: &str) -> Result<Type, String> {
         if set == Some(axioval_ir::MEASURED_SET) {
             return measured_type(name);
+        }
+        if set == Some(axioval_ir::VALUE_SET) {
+            return self.derived(name);
         }
         crate::compiler::require_property(self.concepts, self.rule, set, name)
             .map_err(|error| error.to_string())?;
@@ -45,6 +49,13 @@ impl TypeEnvironment for RuleEnvironment<'_> {
             .get(name)
             .ok_or_else(|| format!("the rule has no parameter `{name}`"))?;
         value_type(value).ok_or_else(|| format!("parameter `{name}` is no single value"))
+    }
+
+    fn derived(&self, name: &str) -> Result<Type, String> {
+        self.values
+            .get(name)
+            .cloned()
+            .ok_or_else(|| format!("the ruleset derives no value `{name}`"))
     }
 
     fn lookup(&self, table: &str, column: &str) -> Result<(BTreeMap<String, Type>, Type), String> {
@@ -143,15 +154,15 @@ pub(crate) fn value_type(value: &ParameterValue) -> Option<Type> {
 /// Checks every expression parameter of a bound rule: its structure, the
 /// concepts it reads, and that its value is a truth.
 pub(crate) fn check_rule_expressions(
-    concepts: &ConceptCatalog,
-    properties: &BTreeMap<&str, &PropertyDefinition>,
+    vocabulary: &Vocabulary<'_>,
     rule: &str,
     parameters: &BTreeMap<String, ParameterValue>,
     declared: &BTreeMap<String, ParameterDefinition>,
 ) -> Result<(), EngineError> {
     let environment = RuleEnvironment {
-        concepts,
-        properties,
+        concepts: vocabulary.concepts,
+        properties: vocabulary.properties,
+        values: &vocabulary.values,
         rule,
         parameters,
         declared,
@@ -173,4 +184,58 @@ pub(crate) fn check_rule_expressions(
             .map_err(|error| invalid(error.path.clone(), error.to_string()))?;
     }
     Ok(())
+}
+
+/// What a ruleset's expressions may read: its concepts, the vocabulary's
+/// property definitions and the types of its derived values.
+pub(crate) struct Vocabulary<'a> {
+    pub(crate) concepts: &'a ConceptCatalog,
+    pub(crate) properties: &'a BTreeMap<&'a str, &'a PropertyDefinition>,
+    pub(crate) values: BTreeMap<String, Type>,
+}
+
+/// Checks a ruleset's derived values in dependency order and gives their
+/// expressions: each well formed, reading only declared concepts and
+/// values, and of a type a property can state.
+pub(crate) fn check_values<'a>(
+    concepts: &'a ConceptCatalog,
+    properties: &'a BTreeMap<&'a str, &'a PropertyDefinition>,
+    values: &BTreeMap<String, ValueDefinition>,
+) -> Result<(Vocabulary<'a>, BTreeMap<String, Expression>), EngineError> {
+    let mut types = BTreeMap::new();
+    let none = BTreeMap::new();
+    let undeclared = BTreeMap::new();
+    for name in crate::values::order(values)? {
+        let expression = &values[&name].expression;
+        let invalid = |detail: String| EngineError::InvalidValue {
+            value: name.clone(),
+            detail,
+        };
+        expression
+            .validate()
+            .map_err(|error| invalid(error.to_string()))?;
+        let environment = RuleEnvironment {
+            concepts,
+            properties,
+            values: &types,
+            rule: &name,
+            parameters: &none,
+            declared: &undeclared,
+        };
+        let found = check(expression, &format!("values.{name}"), &environment)
+            .map_err(|error| invalid(error.to_string()))?;
+        types.insert(name, found);
+    }
+    let expressions = values
+        .iter()
+        .map(|(name, definition)| (name.clone(), definition.expression.clone()))
+        .collect();
+    Ok((
+        Vocabulary {
+            concepts,
+            properties,
+            values: types,
+        },
+        expressions,
+    ))
 }

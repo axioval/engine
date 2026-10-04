@@ -124,6 +124,10 @@ pub enum EngineError {
         property: String,
         detail: String,
     },
+    /// A derived value of the ruleset is malformed, ill-typed, reads an
+    /// undeclared value, or takes part in a cycle of values.
+    #[error("value `{value}`: {detail}")]
+    InvalidValue { value: String, detail: String },
     /// A rule's expression parameter is malformed or ill-typed.
     #[error("rule `{rule}` parameter `{parameter}`: {detail}")]
     InvalidExpression {
@@ -648,6 +652,8 @@ pub struct ExecutionPlan {
     relations: Vec<schema::RelationDefinition>,
     /// The pairs the host supplied for its supplied relations, by id.
     supplied: BTreeMap<String, SuppliedPairs>,
+    /// The values the ruleset derives, by name.
+    values: Arc<BTreeMap<String, schema::Expression>>,
 }
 impl ExecutionPlan {
     /// Rules in execution order: every rule after the rules its gates and
@@ -773,6 +779,7 @@ mod space;
 mod table_files;
 mod topology;
 mod triangle_count;
+mod values;
 mod vertical_extent;
 mod walkability;
 mod walking_surface;
@@ -791,7 +798,7 @@ pub use classifications::{
 pub use compiler::{QUALIFIED_RULE_SEPARATOR, SUPPORTED_SCHEMA_VERSION, compile, compile_rulesets};
 pub use concepts::{
     BindingError, ConceptBindings, ConceptCatalog, ConceptKind, TypeHierarchyError,
-    TypeHierarchyService, TypeHierarchyServiceHandle,
+    TypeHierarchyService, TypeHierarchyServiceHandle, binding_reason, bound_property_request,
 };
 pub use contact::{
     ContactError, ContactEvidence, ContactRequest, ContactService, ContactServiceHandle,
@@ -1237,6 +1244,7 @@ impl Runtime {
                 location: None,
             })
             .collect();
+        services.replace(values::ValueExpressions(plan.values.clone()));
         // Measured values are answered through the host's resolver in
         // every run; classifications are derived first when the plan has
         // any.

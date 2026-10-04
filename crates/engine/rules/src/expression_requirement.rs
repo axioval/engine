@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 
 use axioval_engine::expression::{
-    Evaluation, ExpressionContext, Leaf, NotEvaluated, Reason, Value, evaluate,
+    Evaluation, ExpressionContext, Leaf, NotEvaluated, Reason, Value, derived_value, evaluate,
 };
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, ParameterDescriptor, ParameterType, RuleCapability,
@@ -196,6 +196,9 @@ struct ObjectLeaves<'a> {
 
 impl ExpressionContext for ObjectLeaves<'_> {
     fn property(&mut self, set: Option<&str>, name: &str) -> Leaf {
+        if set == Some(axioval_ir::VALUE_SET) {
+            return self.derived(name);
+        }
         match resolve(self.context, self.object, PropertyRef { set, name }) {
             Ok(resolved) => {
                 let evidence = resolved.evidence();
@@ -216,6 +219,16 @@ impl ExpressionContext for ObjectLeaves<'_> {
                 Leaf::unreadable(message)
             }
         }
+    }
+
+    fn derived(&mut self, name: &str) -> Leaf {
+        let leaf = derived_value(self.context.services, &self.object.id, name);
+        if leaf.value.is_err() {
+            self.reasons
+                .borrow_mut()
+                .push(NotEvaluatedReason::IncompleteEvidence);
+        }
+        leaf
     }
 
     fn parameter(&mut self, name: &str) -> Leaf {

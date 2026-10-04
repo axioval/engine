@@ -650,6 +650,16 @@ pub const GROUP_MEMBERS: &str = "members";
 /// The kind of every derived group object.
 pub const DERIVED_GROUP_KIND: &str = "axioval:group";
 
+/// Property set holding the values a ruleset derives from expressions
+/// (`contract::ValueDefinition`), by their names in the ruleset's `values`.
+///
+/// The engine answers it, never a source: a number with a unit is a
+/// quantity (a `measured` interval when not exact), text and truths as
+/// themselves, and `null` an exact absence. A value that cannot be computed
+/// leaves its reader undecided. Names are the ruleset's own and bind to no
+/// concept. Reserved like [`ATTRIBUTE_SET`].
+pub const VALUE_SET: &str = "axioval:value";
+
 /// Whether `set` is one of the reserved sets, which bind to themselves.
 #[must_use]
 pub fn is_reserved_set(set: &str) -> bool {
@@ -744,7 +754,7 @@ pub const MEASURED_NAMES: [&str; 11] = [
 /// no concept.
 #[must_use]
 pub fn is_derived_set(set: &str) -> bool {
-    set == CLASSIFICATION_SET || set == MEASURED_SET || set == GROUP_SET
+    set == CLASSIFICATION_SET || set == MEASURED_SET || set == GROUP_SET || set == VALUE_SET
 }
 
 /// A named semantic property.

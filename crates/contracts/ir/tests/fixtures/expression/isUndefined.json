@@ -1,0 +1,8 @@
+{
+  "kind": "isUndefined",
+  "operand": {
+    "kind": "property",
+    "propertySet": "Pset_WallCommon",
+    "property": "FireRating"
+  }
+}

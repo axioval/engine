@@ -1,0 +1,7 @@
+{
+  "kind": "cos",
+  "operand": {
+    "kind": "parameter",
+    "name": "slope_angle"
+  }
+}

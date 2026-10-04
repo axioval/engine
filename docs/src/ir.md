@@ -189,6 +189,54 @@ A grouped table writes its group column ids as `group_by` and each row's group v
 ```
 
 
+## Expressions
+
+`contract::Expression` is a typed expression tree: values a rule computes and combines, stated as data. It is tagged by `kind` like a selector, refuses unknown kinds and fields when a package is read, and serializes in a stable order (a lookup's keys by column ID). The language is total: no loops, no recursion, no user-defined functions and no package-provided code, so a finite tree always finishes evaluating. Nothing in a package carries an expression yet; the `expression` requirement, derived values and expression parameters bind it.
+
+Every node may carry a `label`, which findings name in place of the node's rendered form. `Expression::validate` refuses what serde cannot state: nesting deeper than `MAX_EXPRESSION_DEPTH` (64), an empty operand list, an `if` without a branch, a lookup without keys, a blank name, unit or label, and a number that is not finite. Types and units are checked when a ruleset is compiled. The engine evaluates every value as an interval with three-valued truth; `null` is a value the source states as absent, never a value that could not be read or measured, and the two never mix.
+
+| Kind | Fields | Meaning |
+| --- | --- | --- |
+| `literal` | `value` | a constant: a `ScalarValue` of type `boolean`, `integer`, `number`, `quantity` (with `unit`), `string`, `enum`, `date` or `dateTime`, in the wire form of the same parameter value; lists, tables, references and selectors are not literals |
+| `null` | | the source states no value |
+| `property` | `propertySet`?, `property` | a property of the object in scope; `axioval:measured` names carry their parameters (`bottom_above_level;path=…`) |
+| `parameter` | `name` | a parameter of the rule |
+| `derived` | `name` | a derived value the ruleset names |
+| `lookup` | `table`, `keys`, `column` | the `column` cell of the most specific row of the `table` parameter whose key columns match `keys` (column ID → expression), as `keyed-limit` selects a row |
+| `not` | `operand` | negation |
+| `and`, `or` | `operands` | conjunction, disjunction |
+| `implies` | `antecedent`, `consequent` | implication |
+| `xor` | `left`, `right` | exclusive or |
+| `compare` | `operator`, `left`, `right`, `caseSensitive`? | `equals`, `notEquals`, `lessThan`, `lessThanOrEquals`, `greaterThan`, `greaterThanOrEquals` (dates chronologically), `like` (`*`, `?`, `\` escapes), `matches` (a regular expression over the whole text), `contains` |
+| `between` | `operand`, `low`, `high`, `lowInclusive`?, `highInclusive`? | a range test; bounds are inclusive unless stated `false` |
+| `oneOf`, `noneOf` | `operand`, `values`, `caseSensitive`? | membership in a list of expressions |
+| `isDefined`, `isUndefined` | `operand` | whether the value is not `null`, or is |
+| `if` | `branches` (`when`, `then`), `else` | the `then` of the first branch whose `when` holds; a ternary is one branch |
+| `coalesce` | `operands` | the first operand that is not `null` |
+| `add`, `subtract`, `multiply`, `divide` | `left`, `right` | arithmetic |
+| `negate`, `abs`, `floor`, `ceil`, `sqrt` | `operand` | unary arithmetic |
+| `min`, `max` | `operands` | the least or greatest operand |
+| `round` | `operand`, `step` | the nearest multiple of `step` |
+| `sin`, `cos`, `tan` | `operand` | trigonometry of a plane angle |
+| `atan2` | `y`, `x` | the plane angle of the vector `(x, y)` |
+| `convertSlope` | `operand`, `from`, `to` | a slope restated between `ratio`, `percent` and `angle` |
+| `concat` | `operands` | joined text |
+| `length`, `lower`, `upper`, `trim` | `operand` | text functions |
+
+A three-branch cover requirement reads:
+
+```json
+{"kind": "if", "label": "required cover",
+ "branches": [
+   {"when": {"kind": "compare", "operator": "equals",
+             "left": {"kind": "property", "propertySet": "Pset_WallCommon", "property": "ExposureClass"},
+             "right": {"kind": "literal", "value": {"type": "string", "value": "XC4"}}},
+    "then": {"kind": "literal", "value": {"type": "quantity", "value": 40.0, "unit": "mm"}}}],
+ "else": {"kind": "literal", "value": {"type": "quantity", "value": 25.0, "unit": "mm"}}}
+```
+
+`crates/contracts/ir/tests/fixtures/expression` holds one golden fixture per kind, and one per literal type.
+
 ## No source leakage
 
 Core architecture checks reject references to `IfcModel`, STEP entity handles, ICDD container types, Axiolid meshes, OpenCascade, CGAL, and the legacy runtime types.

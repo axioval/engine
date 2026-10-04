@@ -1,0 +1,16 @@
+{
+  "kind": "round",
+  "operand": {
+    "kind": "property",
+    "propertySet": "axioval:measured",
+    "property": "extent_z"
+  },
+  "step": {
+    "kind": "literal",
+    "value": {
+      "type": "quantity",
+      "value": 5.0,
+      "unit": "mm"
+    }
+  }
+}

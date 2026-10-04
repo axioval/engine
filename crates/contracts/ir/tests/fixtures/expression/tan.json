@@ -1,0 +1,7 @@
+{
+  "kind": "tan",
+  "operand": {
+    "kind": "parameter",
+    "name": "slope_angle"
+  }
+}

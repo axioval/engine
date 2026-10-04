@@ -1,0 +1,24 @@
+{
+  "kind": "concat",
+  "operands": [
+    {
+      "kind": "property",
+      "propertySet": "Pset_WallCommon",
+      "property": "Reference"
+    },
+    {
+      "kind": "literal",
+      "value": {
+        "type": "string",
+        "value": "/"
+      }
+    },
+    {
+      "kind": "literal",
+      "value": {
+        "type": "enum",
+        "value": "NOTDEFINED"
+      }
+    }
+  ]
+}

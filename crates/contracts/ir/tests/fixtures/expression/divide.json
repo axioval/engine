@@ -1,0 +1,13 @@
+{
+  "kind": "divide",
+  "left": {
+    "kind": "property",
+    "propertySet": "axioval:measured",
+    "property": "volume"
+  },
+  "right": {
+    "kind": "property",
+    "propertySet": "axioval:measured",
+    "property": "area"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "kind": "coalesce",
+  "operands": [
+    {
+      "kind": "property",
+      "propertySet": "Pset_WallCommon",
+      "property": "NominalWidth"
+    },
+    {
+      "kind": "property",
+      "propertySet": "axioval:measured",
+      "property": "extent_x"
+    }
+  ]
+}

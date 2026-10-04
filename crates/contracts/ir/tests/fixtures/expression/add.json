@@ -1,0 +1,16 @@
+{
+  "kind": "add",
+  "left": {
+    "kind": "property",
+    "propertySet": "axioval:measured",
+    "property": "extent_z"
+  },
+  "right": {
+    "kind": "literal",
+    "value": {
+      "type": "quantity",
+      "value": 0.1,
+      "unit": "m"
+    }
+  }
+}

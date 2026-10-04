@@ -1,0 +1,66 @@
+{
+  "kind": "if",
+  "branches": [
+    {
+      "when": {
+        "kind": "compare",
+        "operator": "equals",
+        "left": {
+          "kind": "property",
+          "propertySet": "Pset_WallCommon",
+          "property": "ExposureClass"
+        },
+        "right": {
+          "kind": "literal",
+          "value": {
+            "type": "string",
+            "value": "XC4"
+          }
+        }
+      },
+      "then": {
+        "kind": "literal",
+        "value": {
+          "type": "quantity",
+          "value": 40.0,
+          "unit": "mm"
+        }
+      }
+    },
+    {
+      "when": {
+        "kind": "compare",
+        "operator": "equals",
+        "left": {
+          "kind": "property",
+          "propertySet": "Pset_WallCommon",
+          "property": "ExposureClass"
+        },
+        "right": {
+          "kind": "literal",
+          "value": {
+            "type": "string",
+            "value": "XC3"
+          }
+        }
+      },
+      "then": {
+        "kind": "literal",
+        "value": {
+          "type": "quantity",
+          "value": 35.0,
+          "unit": "mm"
+        }
+      }
+    }
+  ],
+  "else": {
+    "kind": "literal",
+    "value": {
+      "type": "quantity",
+      "value": 25.0,
+      "unit": "mm"
+    }
+  },
+  "label": "required cover"
+}

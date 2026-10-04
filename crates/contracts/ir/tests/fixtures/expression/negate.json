@@ -1,0 +1,8 @@
+{
+  "kind": "negate",
+  "operand": {
+    "kind": "property",
+    "propertySet": "axioval:measured",
+    "property": "z"
+  }
+}

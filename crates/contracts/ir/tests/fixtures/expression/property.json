@@ -1,0 +1,6 @@
+{
+  "kind": "property",
+  "propertySet": "axioval:measured",
+  "property": "bottom_above_level;path=IfcRelContainedInSpatialStructure:backward",
+  "label": "sill height"
+}

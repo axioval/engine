@@ -1,0 +1,7 @@
+{
+  "kind": "sin",
+  "operand": {
+    "kind": "parameter",
+    "name": "slope_angle"
+  }
+}

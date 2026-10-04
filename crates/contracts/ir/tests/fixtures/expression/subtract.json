@@ -1,0 +1,13 @@
+{
+  "kind": "subtract",
+  "left": {
+    "kind": "property",
+    "propertySet": "axioval:measured",
+    "property": "top"
+  },
+  "right": {
+    "kind": "property",
+    "propertySet": "axioval:measured",
+    "property": "bottom"
+  }
+}

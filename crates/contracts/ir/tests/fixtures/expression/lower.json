@@ -1,0 +1,8 @@
+{
+  "kind": "lower",
+  "operand": {
+    "kind": "property",
+    "propertySet": "Pset_WallCommon",
+    "property": "Reference"
+  }
+}

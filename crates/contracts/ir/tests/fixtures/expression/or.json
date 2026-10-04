@@ -1,0 +1,15 @@
+{
+  "kind": "or",
+  "operands": [
+    {
+      "kind": "property",
+      "propertySet": "Pset_WallCommon",
+      "property": "IsExternal"
+    },
+    {
+      "kind": "property",
+      "propertySet": "Pset_WallCommon",
+      "property": "LoadBearing"
+    }
+  ]
+}

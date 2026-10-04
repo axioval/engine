@@ -1,0 +1,17 @@
+{
+  "kind": "compare",
+  "operator": "like",
+  "left": {
+    "kind": "property",
+    "propertySet": "Pset_WallCommon",
+    "property": "Reference"
+  },
+  "right": {
+    "kind": "literal",
+    "value": {
+      "type": "string",
+      "value": "W-*"
+    }
+  },
+  "caseSensitive": false
+}

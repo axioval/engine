@@ -1,0 +1,10 @@
+{
+  "kind": "ceil",
+  "operand": {
+    "kind": "literal",
+    "value": {
+      "type": "number",
+      "value": 2.2
+    }
+  }
+}

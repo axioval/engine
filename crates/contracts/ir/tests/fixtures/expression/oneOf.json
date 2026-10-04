@@ -1,0 +1,24 @@
+{
+  "kind": "oneOf",
+  "operand": {
+    "kind": "property",
+    "propertySet": "Pset_WallCommon",
+    "property": "ExposureClass"
+  },
+  "values": [
+    {
+      "kind": "literal",
+      "value": {
+        "type": "string",
+        "value": "XC3"
+      }
+    },
+    {
+      "kind": "literal",
+      "value": {
+        "type": "string",
+        "value": "XC4"
+      }
+    }
+  ]
+}

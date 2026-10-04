@@ -1,0 +1,15 @@
+{
+  "kind": "multiply",
+  "left": {
+    "kind": "property",
+    "propertySet": "axioval:measured",
+    "property": "area"
+  },
+  "right": {
+    "kind": "literal",
+    "value": {
+      "type": "integer",
+      "value": 2
+    }
+  }
+}

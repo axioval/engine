@@ -1,0 +1,16 @@
+{
+  "kind": "lookup",
+  "table": "limits",
+  "keys": {
+    "key_1": {
+      "kind": "property",
+      "propertySet": "Pset_WallCommon",
+      "property": "FireClass"
+    },
+    "key_2": {
+      "kind": "property",
+      "property": "OccupancyType"
+    }
+  },
+  "column": "maximum"
+}

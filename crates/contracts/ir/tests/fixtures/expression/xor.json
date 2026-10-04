@@ -1,0 +1,13 @@
+{
+  "kind": "xor",
+  "left": {
+    "kind": "property",
+    "propertySet": "Pset_WallCommon",
+    "property": "IsExternal"
+  },
+  "right": {
+    "kind": "property",
+    "propertySet": "Pset_WallCommon",
+    "property": "LoadBearing"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "kind": "convertSlope",
+  "operand": {
+    "kind": "literal",
+    "value": {
+      "type": "number",
+      "value": 0.06
+    }
+  },
+  "from": "ratio",
+  "to": "percent"
+}

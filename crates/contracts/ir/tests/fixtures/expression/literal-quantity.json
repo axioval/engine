@@ -1,0 +1,9 @@
+{
+  "kind": "literal",
+  "value": {
+    "type": "quantity",
+    "value": 0.04,
+    "unit": "m"
+  },
+  "label": "minimum cover"
+}

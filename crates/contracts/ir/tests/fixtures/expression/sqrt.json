@@ -1,0 +1,8 @@
+{
+  "kind": "sqrt",
+  "operand": {
+    "kind": "property",
+    "propertySet": "axioval:measured",
+    "property": "area"
+  }
+}

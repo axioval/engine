@@ -68,3 +68,9 @@ Keep this crate serializable and deterministic. It must not depend on a source f
   value of any type: not scalar, never inside another value, never typed
   (the engine's property handle refuses either), never compared as one of
   its members.
+- `contract::Expression` is the expression contract: tagged by `kind`,
+  `deny_unknown_fields`, literals only of `ScalarValue` kinds. Add a kind
+  to `Expression::KINDS`, `kind()`, `children()` and a golden fixture in
+  `tests/fixtures/expression` together; never add a loop, recursion, a
+  user-defined function or anything that runs package code. The MCS
+  expression schema must mirror it.

@@ -208,7 +208,9 @@ impl VerticalExtentService for AxiolidVerticalExtentService {
         )
     }
 
-    /// The normals of the face's triangles; see [`crate::face_normals`].
+    /// The certified normals of the face's triangles: chosen by their
+    /// outward normal on a closed mesh, each boxed by its rounding and widened
+    /// by a tessellation's chord deviation.
     fn measure_face_normals(
         &self,
         object: &ObjectId,

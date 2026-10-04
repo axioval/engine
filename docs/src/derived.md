@@ -372,6 +372,9 @@ ignoring ASCII case):
 | `cross_fall;axis=x\|y\|own_x\|own_y[;face=…]` | a face's unsigned gradient across a plan axis, an angle | as `slope_along` |
 | `gradient_direction[;face=…]` | the plan bearing of a face's steepest descent, an angle | `VerticalExtentService::measure_face_normals` |
 | `inclination;axis=own_x\|own_y\|own_z` | the tilt of one of the placement's axes, an angle | `ObjectFrameService` |
+| `angle_to;path=<steps>[;between=axis\|face_normal]` | the angle to the objects a path reaches, an angle | `PlanSpanService::measure_rectangle` or `VerticalExtentService::measure_face_normals`, `RelationshipSelectionService` |
+| `skew;path=<steps>` | how far the long axis is from square to the reached objects', an angle | `PlanSpanService::measure_rectangle`, `RelationshipSelectionService` |
+| `bearing;axis=own_x\|own_y\|long[;reference=project_north\|true_north]` | an axis's plan bearing clockwise from north, an angle | `ObjectFrameService` or `PlanSpanService`, `CoordinateSystemService` for true north |
 
 ### Names with parameters
 
@@ -463,6 +466,46 @@ triangle too small for its deviation leaves the face unmeasured. On a
 ramp, the steepest piece of the top face is the run that
 `WalkingSurfaceService::measure_sloped_runs` measures, and the landings
 are level.
+
+### Angles between objects
+
+`angle_to`, `skew` and `bearing` measure an object against other objects
+or a reference direction. Every value is an angle in radians, rounded
+outward.
+
+- `angle_to;path=<steps>` (`between=axis`, the default) is the acute angle
+  in plan between the long axes of the object's footprint and of each
+  object the path reaches, in `[0, π/2]`. The long axes are those of each
+  footprint's least-area rectangle, the axes `parking-bay` and
+  `wall-spacing` judge, so the measured angle and a capability's
+  alignment agree.
+- `between=face_normal` measures between the top faces' normals instead,
+  each turned to look up, in `[0, π]`: the hull over every pair of pieces,
+  at most 250 000 pairs.
+- `skew;path=<steps>` is how far the long axis is from square to the
+  reached objects' long axes, `π/2` less their angle: a pier's skew to the
+  deck it carries.
+
+The path is written and walked as for `bottom_above_level`. Several
+objects reached give the hull over them; none reached is an exact
+absence. A footprint without a long axis of its own leaves the object not
+evaluated: a square, a tie between least-area orientations, or a
+tessellation, whose orientation is unproven.
+
+`bearing;axis=…` is the plan bearing of an axis, clockwise from north:
+
+- `own_x` or `own_y` is the placement's axis projected to plan, its
+  midpoint in `[0, 2π)`;
+- `long` is the footprint's long axis, which has no direction, its
+  midpoint in `[0, π)`.
+
+`reference=project_north`, the default, is the plan y axis.
+`reference=true_north` is north as the source's coordinate system states
+it, and a source stating none leaves the object not evaluated.
+
+`axioval_engine::measured_value` reads one measured value of one object
+with a run's services, outside a run, for a host previewing a value or a
+test comparing it with a capability's judgement.
 
 ### Stated rather than measured
 

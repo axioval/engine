@@ -1,8 +1,9 @@
 //! Every measured value's descriptor, sorted by name.
 
 use super::{
-    CROSS_FALL, GRADIENT_DIRECTION, INCLINATION, LocalizedText, MeasuredDescriptor,
-    MeasuredExactness, MeasuredParameter, MeasuredParameterKind, SLOPE, SLOPE_ALONG,
+    ANGLE_TO, BEARING, CROSS_FALL, GRADIENT_DIRECTION, INCLINATION, LocalizedText,
+    MeasuredDescriptor, MeasuredExactness, MeasuredParameter, MeasuredParameterKind, SKEW, SLOPE,
+    SLOPE_ALONG,
 };
 use crate::{
     MEASURED_AREA, MEASURED_BOTTOM, MEASURED_BOTTOM_ABOVE_LEVEL, MEASURED_BOUNDARY_AREA,
@@ -44,6 +45,23 @@ const FACE: MeasuredParameter = MeasuredParameter {
     ),
 };
 
+const RECTANGLES: &[&str] = &["plan-span", "relationship-selection"];
+const NO_LONG_AXIS: &str = "a footprint has no long axis of its own (a square, a tie, a \
+     tessellation)";
+
+const REFERENCE_PATH: MeasuredParameter = MeasuredParameter {
+    key: "path",
+    kind: MeasuredParameterKind::Path,
+    required: true,
+    default: None,
+    help: &en_de(
+        "The relationship steps from the object to the objects it is measured against; \
+         the angle is the hull over every one reached, none when none is.",
+        "Die Beziehungsschritte vom Objekt zu den Objekten, gegen die gemessen wird; \
+         der Winkel ist die Hülle über alle erreichten, keiner, wenn keines erreicht wird.",
+    ),
+};
+
 const PLAN_AXIS: MeasuredParameterKind = MeasuredParameterKind::Choice {
     options: &["x", "y", "own_x", "own_y"],
 };
@@ -67,6 +85,35 @@ macro_rules! plain {
 
 /// Every measured value, sorted by name.
 pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
+    MeasuredDescriptor {
+        name: ANGLE_TO,
+        parameters: &[
+            MeasuredParameter {
+                key: "between",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["axis", "face_normal"],
+                },
+                required: false,
+                default: Some("axis"),
+                help: &en_de(
+                    "`axis`: the acute angle between the footprints' long axes in plan; \
+                     `face_normal`: the angle between the top faces' normals.",
+                    "`axis`: der spitze Winkel zwischen den Längsachsen der Grundrisse; \
+                     `face_normal`: der Winkel zwischen den Normalen der Oberseiten.",
+                ),
+            },
+            REFERENCE_PATH,
+        ],
+        dimension: QuantityDimension::PlaneAngle,
+        services: &["plan-span", "relationship-selection", "vertical-extent"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_GEOMETRY, NO_LONG_AXIS, STANDS_VERTICAL],
+        label: &en_de("Angle to", "Winkel zu"),
+        help: &en_de(
+            "The angle between the object and the objects a path reaches.",
+            "Der Winkel zwischen dem Objekt und den Objekten, die ein Pfad erreicht.",
+        ),
+    },
     plain!(
         MEASURED_AREA,
         QuantityDimension::Area,
@@ -79,6 +126,53 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             "Die Fläche des Grundrisses des Objekts, Überlappungen einmal gezählt."
         )
     ),
+    MeasuredDescriptor {
+        name: BEARING,
+        parameters: &[
+            MeasuredParameter {
+                key: "axis",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["own_x", "own_y", "long"],
+                },
+                required: true,
+                default: None,
+                help: &en_de(
+                    "`own_x` or `own_y` of the placement in plan, or the footprint's \
+                     `long` axis, which has no direction (a bearing in `[0, π)`).",
+                    "`own_x` oder `own_y` der Platzierung im Grundriss oder die `long` \
+                     Längsachse des Grundrisses, die keine Richtung hat (in `[0, π)`).",
+                ),
+            },
+            MeasuredParameter {
+                key: "reference",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["project_north", "true_north"],
+                },
+                required: false,
+                default: Some("project_north"),
+                help: &en_de(
+                    "`project_north`, the plan y axis, or `true_north` as the source \
+                     states it.",
+                    "`project_north`, die y-Achse des Plans, oder `true_north`, wie die \
+                     Quelle sie angibt.",
+                ),
+            },
+        ],
+        dimension: QuantityDimension::PlaneAngle,
+        services: &["object-frame", "plan-span", "coordinate-system"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[
+            "the placement is not stated exactly",
+            NO_LONG_AXIS,
+            "the source states no true north",
+            "the axis stands vertical",
+        ],
+        label: &en_de("Bearing", "Ausrichtung"),
+        help: &en_de(
+            "The plan bearing of an axis, clockwise from north.",
+            "Die Grundrissrichtung einer Achse, im Uhrzeigersinn von Norden.",
+        ),
+    },
     plain!(
         MEASURED_BOTTOM,
         QuantityDimension::Length,
@@ -284,6 +378,21 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              Elternteils, wie die Quelle sie angibt; keine für das oberste Geschoss."
         )
     ),
+    MeasuredDescriptor {
+        name: SKEW,
+        parameters: &[REFERENCE_PATH],
+        dimension: QuantityDimension::PlaneAngle,
+        services: RECTANGLES,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_GEOMETRY, NO_LONG_AXIS],
+        label: &en_de("Skew", "Schiefe"),
+        help: &en_de(
+            "How far the footprint's long axis is from square to the long axes of the \
+             objects a path reaches, in `[0, π/2]`: a pier's skew to the deck it carries.",
+            "Wie weit die Längsachse des Grundrisses von rechtwinklig zu den Längsachsen \
+             der erreichten Objekte abweicht, in `[0, π/2]`: die Schiefe eines Pfeilers.",
+        ),
+    },
     MeasuredDescriptor {
         name: SLOPE,
         parameters: &[FACE],

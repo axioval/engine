@@ -15,6 +15,12 @@ use serde::Serialize;
 
 mod registry;
 
+/// The angle between the object and the objects a path reaches.
+pub const ANGLE_TO: &str = "angle_to";
+/// The plan bearing of an axis from north.
+pub const BEARING: &str = "bearing";
+/// How far a long axis is from square to a reference's.
+pub const SKEW: &str = "skew";
 /// The steepest gradient of a face, as an angle.
 pub const SLOPE: &str = "slope";
 /// A face's gradient in a plan direction, as a signed angle.
@@ -373,10 +379,7 @@ mod tests {
     #[test]
     fn wrong_names_and_parameters_are_refused_with_a_reason() {
         for (name, message) in [
-            (
-                "height",
-                "`height` is no measured value; known: area, bottom,",
-            ),
+            ("height", "`height` is no measured value; known: "),
             ("extent_x;path=a", "`extent_x` takes no parameter `path`"),
             (
                 "bottom_above_level;path=a;PATH=b",

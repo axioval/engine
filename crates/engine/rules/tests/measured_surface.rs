@@ -9,10 +9,11 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use axioval_engine::{
-    CapabilityRegistry, EvidenceSession, FaceNormal, FaceNormals, MetricDirection, MetricFrame,
-    MetricPoint, ObjectFrame, ObjectFrameError, ObjectFrameService, ObjectFrameServiceHandle,
-    ObjectFront, SurfaceFace, VerticalExtent, VerticalExtentError, VerticalExtentService,
-    VerticalExtentServiceHandle,
+    CapabilityRegistry, CoordinateSystemError, CoordinateSystemService,
+    CoordinateSystemServiceHandle, EvidenceSession, FaceNormal, FaceNormals, MetricDirection,
+    MetricFrame, MetricPoint, ObjectFrame, ObjectFrameError, ObjectFrameService,
+    ObjectFrameServiceHandle, ObjectFront, SourceCoordinateSystem, SurfaceFace, VerticalExtent,
+    VerticalExtentError, VerticalExtentService, VerticalExtentServiceHandle,
 };
 use axioval_ir::{Evidence, NotEvaluatedReason, ObjectId, Report};
 use axioval_rules::register_builtins;
@@ -91,7 +92,9 @@ fn exact(vector: [f64; 3]) -> FaceNormal {
 fn slabs() -> EvidenceSession {
     let model = ["flat", "gentle", "steep", "warped", "wall"]
         .iter()
-        .fold(Model::default(), |model, local| model.object(local, "slab"));
+        .fold(Model::default(), |model, local| model.object(local, "slab"))
+        .edge("over", "steep", "flat")
+        .edge("over", "gentle", "flat");
     let faces = Faces(BTreeMap::from([
         (id("flat"), vec![exact([0.0, 0.0, 1.0])]),
         // One in twenty, falling towards +x.
@@ -127,6 +130,33 @@ fn slabs() -> EvidenceSession {
             &[snapshot()],
         )
         .unwrap()
+        .with_host_service(
+            CoordinateSystemServiceHandle::new(Arc::new(TrueNorthEast(vec![snapshot()]))),
+            &[snapshot()],
+        )
+        .unwrap()
+}
+
+/// A source whose true north points along its x axis.
+struct TrueNorthEast(Vec<axioval_engine::SourceSnapshot>);
+
+impl CoordinateSystemService for TrueNorthEast {
+    fn source_snapshots(&self) -> &[axioval_engine::SourceSnapshot] {
+        &self.0
+    }
+
+    fn coordinate_system(
+        &self,
+        source: &axioval_ir::SourceId,
+    ) -> Result<SourceCoordinateSystem, CoordinateSystemError> {
+        SourceCoordinateSystem::try_new(
+            source.clone(),
+            None,
+            Some([1.0, 0.0]),
+            None,
+            Evidence::exact(source.clone(), "north:east"),
+        )
+    }
 }
 
 fn measured(name: &str) -> Value {
@@ -259,4 +289,49 @@ fn the_direction_of_descent_and_the_tilt_of_an_axis_are_angles() {
     );
     // `steep` is tilted 0.1 rad, about 5.7°.
     assert_eq!(found(&report, "plumb"), ["steep"]);
+}
+
+#[test]
+fn faces_meet_their_neighbours_at_the_angle_of_their_normals() {
+    let angle = measured("angle_to;between=face_normal;path=over");
+    let report = check(vec![requirement(
+        "pitch",
+        json!({"kind": "or", "operands": [
+            {"kind": "isUndefined", "operand": angle},
+            at_most(angle.clone(), degrees(5.0)),
+        ]}),
+    )]);
+    // `steep` meets `flat` at one in eight (7.1°), `gentle` at one in
+    // twenty (2.9°); the others reach nothing over, so have no angle.
+    assert_eq!(found(&report, "pitch"), ["steep"]);
+    assert!(open(&report, "pitch").is_empty());
+}
+
+#[test]
+fn bearings_are_read_from_project_or_true_north() {
+    let report = check(vec![
+        requirement(
+            "true",
+            json!({"kind": "between",
+                "operand": measured("bearing;axis=own_x;reference=true_north"),
+                "low": degrees(269.0), "high": degrees(271.0)}),
+        ),
+        requirement(
+            "project",
+            at_most(measured("bearing;axis=own_x"), degrees(1.0)),
+        ),
+    ]);
+    // A requirement finds the objects failing it. `gentle` is turned a
+    // quarter: its own x runs to project north, a quarter turn anticlockwise
+    // of true north (east), so it alone holds both; the others' own x runs
+    // east, true north itself and a quarter turn from project north.
+    assert_eq!(found(&report, "true"), ["flat", "steep"]);
+    assert_eq!(found(&report, "project"), ["flat", "steep"]);
+    let open = open(&report, "true");
+    assert_eq!(
+        open.iter()
+            .map(|(object, _)| object.as_str())
+            .collect::<Vec<_>>(),
+        ["wall", "warped"]
+    );
 }

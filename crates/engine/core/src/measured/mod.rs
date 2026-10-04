@@ -21,10 +21,12 @@ use axioval_ir::{
     PropertyValue, QuantityDimension,
 };
 
+mod angles;
 mod surface;
 
 use axioval_ir::measured::{
-    CROSS_FALL, GRADIENT_DIRECTION, INCLINATION, MeasuredCall, SLOPE, SLOPE_ALONG,
+    ANGLE_TO, BEARING, CROSS_FALL, GRADIENT_DIRECTION, INCLINATION, MeasuredCall, SKEW, SLOPE,
+    SLOPE_ALONG,
 };
 
 use crate::ServiceRegistry;
@@ -32,10 +34,12 @@ use crate::boundary_coverage::{
     BoundaryCoverageRequest, BoundaryCoverageServiceHandle, BoundaryPlacement,
 };
 use crate::concepts::TypeHierarchyServiceHandle;
+use crate::coordinate_system::CoordinateSystemServiceHandle;
 use crate::free_space::MetricDirection;
 use crate::object_frame::ObjectFrameServiceHandle;
 use crate::path::PathSegment;
 use crate::plan_area::PlanAreaServiceHandle;
+use crate::plan_span::{PlanRectangle, PlanSpanServiceHandle};
 use crate::properties::{
     CompletePropertyAbsenceEvidence, PropertyRequest, PropertyResolution, PropertyResolutionError,
     PropertyResolutionServiceHandle, ResolvedProperty,
@@ -57,6 +61,8 @@ pub(crate) enum MeasuredName {
     BoundaryArea { kind: String, plane: f64 },
     /// A slope, fall or tilt, measured from a face's normals or an axis.
     Surface(MeasuredCall),
+    /// An angle to other objects or a bearing, with the path's steps.
+    Angle(MeasuredCall, Vec<PathSegment>),
 }
 
 /// Parses a name in the measured set through the registry
@@ -91,9 +97,39 @@ pub(crate) fn parse(name: &str) -> Result<MeasuredName, String> {
         SLOPE | SLOPE_ALONG | CROSS_FALL | INCLINATION | GRADIENT_DIRECTION => {
             MeasuredName::Surface(call)
         }
+        ANGLE_TO | BEARING | SKEW => {
+            let steps = match call.argument("path") {
+                Some(MeasuredArgument::Path(steps)) => steps
+                    .iter()
+                    .map(|step| PathSegment::parse(step))
+                    .collect::<Result<_, _>>()?,
+                _ => Vec::new(),
+            };
+            MeasuredName::Angle(call, steps)
+        }
         name if call.descriptor.parameters.is_empty() => MeasuredName::Plain(name),
         name => return Err(format!("`{name}` is registered but not measured")),
     })
+}
+
+/// The measured value `name` (with its parameters) of `object`, measured
+/// with the geometry services in `services` as a run would, outside a run:
+/// for a host previewing a value or a test comparing one with a
+/// capability's judgement. `project` holds the objects a path may reach.
+///
+/// # Errors
+///
+/// As a run's property resolution: an unknown or malformed name, a missing
+/// service, or a measurement that cannot be made.
+pub fn measured_value(
+    services: &ServiceRegistry,
+    project: &Project,
+    object: &ObjectId,
+    name: &str,
+) -> Result<PropertyResolution, PropertyResolutionError> {
+    let host = services.get::<PropertyResolutionServiceHandle>();
+    let request = PropertyRequest::try_new(object.clone(), Some(MEASURED_SET.to_owned()), name)?;
+    Measures::of(services, host, project).resolve(&request)
 }
 
 /// A measured answer before it becomes a property.
@@ -113,6 +149,8 @@ pub(crate) struct Measures {
     relationships: Option<RelationshipSelectionServiceHandle>,
     boundaries: Option<BoundaryCoverageServiceHandle>,
     hierarchy: Option<TypeHierarchyServiceHandle>,
+    rectangles: Option<PlanSpanServiceHandle>,
+    coordinates: Option<CoordinateSystemServiceHandle>,
     host: Option<PropertyResolutionServiceHandle>,
     kinds: Arc<BTreeMap<ObjectId, String>>,
 }
@@ -133,6 +171,8 @@ impl Measures {
                 .cloned(),
             boundaries: services.get::<BoundaryCoverageServiceHandle>().cloned(),
             hierarchy: services.get::<TypeHierarchyServiceHandle>().cloned(),
+            rectangles: services.get::<PlanSpanServiceHandle>().cloned(),
+            coordinates: services.get::<CoordinateSystemServiceHandle>().cloned(),
             host: host.cloned(),
             kinds: Arc::new(
                 project
@@ -227,6 +267,7 @@ impl Measures {
             MeasuredName::BottomAboveLevel(steps) => self.bottom_above_level(steps, object),
             MeasuredName::BoundaryArea { kind, plane } => self.boundary_area(kind, *plane, object),
             MeasuredName::Surface(call) => self.surface(call, object),
+            MeasuredName::Angle(call, steps) => self.angle(call, steps, object),
         }
     }
 
@@ -352,6 +393,120 @@ impl Measures {
         Ok((frame.origin().coordinates_metres(), locator))
     }
 
+    /// The least-area rectangle of `object`'s footprint.
+    fn rectangle(
+        &self,
+        name: &str,
+        object: &ObjectId,
+    ) -> Result<PlanRectangle, PropertyResolutionError> {
+        self.rectangles
+            .as_ref()
+            .ok_or_else(|| Self::missing(name, "plan-span"))?
+            .measure_rectangle(object)
+            .map_err(|error| Self::unavailable(name, object, &error.to_string()))
+    }
+
+    /// An angle between `object` and the objects `steps` reach, or a
+    /// bearing of one of its axes.
+    fn angle(
+        &self,
+        call: &MeasuredCall,
+        steps: &[PathSegment],
+        object: &ObjectId,
+    ) -> Result<Answer, PropertyResolutionError> {
+        let name = call.name();
+        let unavailable = |error: String| Self::unavailable(name, object, &error);
+        let answer = |value: crate::expression::Interval, locator: String| {
+            Answer::Value(
+                value.lower,
+                value.upper,
+                QuantityDimension::PlaneAngle,
+                locator,
+            )
+        };
+        if name == BEARING {
+            let (direction, undirected, locator) = match call.choice("axis") {
+                Some("long") => {
+                    let rectangle = self.rectangle(name, object)?;
+                    let long = rectangle.long_axis().map_err(unavailable)?;
+                    (
+                        rectangle.axes()[long],
+                        true,
+                        rectangle.evidence().locator.clone(),
+                    )
+                }
+                axis => {
+                    let (frame, locator) = self.frame(name, object)?;
+                    let [x, y, _] = if axis == Some("own_y") {
+                        frame.forward().components()
+                    } else {
+                        frame.right().components()
+                    };
+                    ([x, y], false, locator)
+                }
+            };
+            let north = if call.choice("reference") == Some("true_north") {
+                self.coordinates
+                    .as_ref()
+                    .ok_or_else(|| Self::missing(name, "coordinate-system"))?
+                    .coordinate_system(&object.source)
+                    .map_err(|error| unavailable(error.to_string()))?
+                    .true_north()
+                    .ok_or_else(|| unavailable("the source states no true north".into()))?
+            } else {
+                [0.0, 1.0]
+            };
+            let value = angles::bearing(direction, north, undirected).map_err(unavailable)?;
+            return Ok(answer(value, locator));
+        }
+        let (reached, cited) = self.reach(name, steps, object)?;
+        if reached.is_empty() {
+            return Ok(Answer::Absent(format!(
+                "the path reaches no object ({})",
+                cited.join("; ")
+            )));
+        }
+        let faces = name == ANGLE_TO && call.choice("between") == Some("face_normal");
+        let mut hull: Option<crate::expression::Interval> = None;
+        let mut locators = Vec::new();
+        if faces {
+            let service = self
+                .vertical
+                .as_ref()
+                .ok_or_else(|| Self::missing(name, "vertical-extent"))?;
+            let face = |of: &ObjectId| {
+                service
+                    .measure_face_normals(of, SurfaceFace::Top)
+                    .map_err(|error| Self::unavailable(name, of, &error.to_string()))
+            };
+            let own = face(object)?;
+            locators.push(own.evidence().locator.clone());
+            for other in &reached {
+                let theirs = face(other)?;
+                locators.push(theirs.evidence().locator.clone());
+                let value =
+                    angles::between_faces(own.normals(), theirs.normals()).map_err(unavailable)?;
+                hull = Some(hull.map_or(value, |hull| hull.hull(value)));
+            }
+        } else {
+            let own = self.rectangle(name, object)?;
+            locators.push(own.evidence().locator.clone());
+            for other in &reached {
+                let theirs = self.rectangle(name, other)?;
+                locators.push(theirs.evidence().locator.clone());
+                let value = if name == SKEW {
+                    angles::skew(&own, &theirs)
+                } else {
+                    angles::between_axes(&own, &theirs)
+                }
+                .map_err(unavailable)?;
+                hull = Some(hull.map_or(value, |hull| hull.hull(value)));
+            }
+        }
+        let value = hull.ok_or(PropertyResolutionError::InvalidRequest)?;
+        Ok(answer(value, locators.join("; ")))
+    }
+
     /// A slope, fall or tilt of `object`, as an angle.
     fn surface(
         &self,
@@ -416,15 +571,15 @@ impl Measures {
         Ok(angle(value, normals.evidence().locator.clone()))
     }
 
-    /// The object's bottom above the elevation of the one level `steps`
-    /// reach from it: the level's placement origin. No level reached is an
-    /// exact absence; levels at different elevations are a conflict.
-    fn bottom_above_level(
+    /// The objects `steps` reach from `object`, walked one after another
+    /// over the whole project, `object` itself left out, and the locators
+    /// the walk cites.
+    fn reach(
         &self,
+        name: &str,
         steps: &[PathSegment],
         object: &ObjectId,
-    ) -> Result<Answer, PropertyResolutionError> {
-        let name = MEASURED_BOTTOM_ABOVE_LEVEL;
+    ) -> Result<(BTreeSet<ObjectId>, Vec<String>), PropertyResolutionError> {
         let service = self
             .relationships
             .as_ref()
@@ -461,6 +616,19 @@ impl Measures {
             reached.remove(object);
             frontier = reached;
         }
+        Ok((frontier, cited))
+    }
+
+    /// The object's bottom above the elevation of the one level `steps`
+    /// reach from it: the level's placement origin. No level reached is an
+    /// exact absence; levels at different elevations are a conflict.
+    fn bottom_above_level(
+        &self,
+        steps: &[PathSegment],
+        object: &ObjectId,
+    ) -> Result<Answer, PropertyResolutionError> {
+        let name = MEASURED_BOTTOM_ABOVE_LEVEL;
+        let (frontier, cited) = self.reach(name, steps, object)?;
         if frontier.is_empty() {
             return Ok(Answer::Absent(format!(
                 "the path reaches no level ({})",

@@ -18,8 +18,11 @@ use axioval::engine::{
     RelationshipSelectionRequest, RelationshipSelectionService, RelationshipSelectionServiceHandle,
     RuleCapability, RuleContext, ServiceRegistry, TraversalDirection, VerticalExtentServiceHandle,
 };
+use axioval::engine::{PropertyResolution, measured_value};
 use axioval::ir::contract::{ParameterValue, Selector, Severity};
-use axioval::ir::{Evidence, NotEvaluatedReason, Object, ObjectId, Project, RuleId, SourceId};
+use axioval::ir::{
+    Evidence, NotEvaluatedReason, Object, ObjectId, Project, PropertyValue, RuleId, SourceId,
+};
 use axioval::rules::{ParkingBay, WallSpacing};
 
 const CONTAINS: &str = "contains";
@@ -74,7 +77,7 @@ fn turned(centre: [f64; 2], length: f64, width: f64, degrees: f64) -> Vec<[f64; 
 struct Scene {
     objects: Vec<Object>,
     geometry: AxiolidGeometry,
-    edges: Vec<(ObjectId, ObjectId)>,
+    edges: Vec<(&'static str, ObjectId, ObjectId)>,
 }
 
 impl Scene {
@@ -90,29 +93,19 @@ impl Scene {
         self
     }
 
-    fn contains(mut self, container: &str, members: &[&str]) -> Self {
-        for member in members {
-            self.edges.push((id(container), id(member)));
+    fn contains(self, container: &str, members: &[&str]) -> Self {
+        self.relate(CONTAINS, container, members)
+    }
+
+    fn relate(mut self, relationship: &'static str, from: &str, to: &[&str]) -> Self {
+        for member in to {
+            self.edges.push((relationship, id(from), id(member)));
         }
         self
     }
 
-    fn check(
-        self,
-        capability: &dyn RuleCapability,
-        subjects: &str,
-        parameters: Vec<(&str, ParameterValue)>,
-    ) -> CapabilityEvaluation {
-        let rule = CompiledRule {
-            id: RuleId::new("under-test").unwrap(),
-            capability: capability.id().into(),
-            severity: Severity::Error,
-            selector: kind(subjects),
-            parameters: parameters
-                .into_iter()
-                .map(|(name, value)| (name.to_owned(), value))
-                .collect::<BTreeMap<_, _>>(),
-        };
+    /// The geometry services and this scene's relationships.
+    fn services(self) -> (Project, ServiceRegistry) {
         let project = Project::new(self.objects.clone()).unwrap();
         let geometry = self.geometry.clone();
         let mut services = ServiceRegistry::new();
@@ -139,6 +132,26 @@ impl Scene {
         services
             .register(RelationshipSelectionServiceHandle::new(Arc::new(self)))
             .unwrap();
+        (project, services)
+    }
+
+    fn check(
+        self,
+        capability: &dyn RuleCapability,
+        subjects: &str,
+        parameters: Vec<(&str, ParameterValue)>,
+    ) -> CapabilityEvaluation {
+        let rule = CompiledRule {
+            id: RuleId::new("under-test").unwrap(),
+            capability: capability.id().into(),
+            severity: Severity::Error,
+            selector: kind(subjects),
+            parameters: parameters
+                .into_iter()
+                .map(|(name, value)| (name.to_owned(), value))
+                .collect::<BTreeMap<_, _>>(),
+        };
+        let (project, services) = self.services();
         capability.evaluate(
             &RuleContext {
                 project: &project,
@@ -162,7 +175,11 @@ impl RelationshipSelectionService for Scene {
         else {
             return Err(RelationshipSelectionError::InvalidRequest);
         };
-        if relationship.as_str() != CONTAINS {
+        if !self
+            .edges
+            .iter()
+            .any(|(name, _, _)| *name == relationship.as_str())
+        {
             return Err(RelationshipSelectionError::Unavailable(format!(
                 "no {} in this source",
                 relationship.as_str()
@@ -171,10 +188,12 @@ impl RelationshipSelectionService for Scene {
         let reached = self
             .edges
             .iter()
-            .filter(|(from, to)| {
-                from == request.anchor() && request.candidate_universe().contains(to)
+            .filter(|(name, from, to)| {
+                *name == relationship.as_str()
+                    && from == request.anchor()
+                    && request.candidate_universe().contains(to)
             })
-            .map(|(_, to)| to.clone())
+            .map(|(_, _, to)| to.clone())
             .collect();
         CompleteRelationshipSelection::try_new(
             request.clone(),
@@ -660,4 +679,66 @@ fn an_uncovered_strip_of_the_storey_is_found() {
         found[0].1.starts_with("33.6 m² of cad:model/slab"),
         "{found:#?}"
     );
+}
+
+/// The measured value `name` of `local` in `scene`, in degrees as
+/// `(lower, upper)`.
+fn degrees(scene: Scene, local: &str, name: &str) -> (f64, f64) {
+    let (project, services) = scene.services();
+    let PropertyResolution::Present(resolved) =
+        measured_value(&services, &project, &id(local), name).unwrap()
+    else {
+        panic!("{local} has no {name}");
+    };
+    match resolved.property().value() {
+        PropertyValue::Quantity { value, .. } => (value.to_degrees(), value.to_degrees()),
+        PropertyValue::Measured { lower, upper, .. } => (lower.to_degrees(), upper.to_degrees()),
+        other => panic!("{name} of {local} is {other:?}"),
+    }
+}
+
+fn near((lower, upper): (f64, f64), value: f64) -> bool {
+    lower - 1e-9 <= value && value <= upper + 1e-9 && upper - lower < 1e-6
+}
+
+#[test]
+fn measured_angles_agree_with_the_bay_orientation_judgement() {
+    let scene = || {
+        car_park()
+            .relate("serves", "b1", &["aisle"])
+            .relate("serves", "b2", &["aisle"])
+    };
+    // `perpendicular` within 5° finds `b2` only, and `angled` only `b1`:
+    // `b1` stands at 90° to its aisle and `b2` at 45°.
+    let b1 = degrees(scene(), "b1", "angle_to;path=serves");
+    let b2 = degrees(scene(), "b2", "angle_to;path=serves");
+    assert!(near(b1, 90.0), "{b1:?}");
+    assert!(near(b2, 45.0), "{b2:?}");
+    assert!(near(degrees(scene(), "b1", "skew;path=serves"), 0.0));
+    assert!(near(degrees(scene(), "b2", "skew;path=serves"), 45.0));
+    // The long axis of `b1` runs north, the aisle's east; a long axis has
+    // no direction.
+    assert!(near(degrees(scene(), "b1", "bearing;axis=long"), 0.0));
+    assert!(near(degrees(scene(), "aisle", "bearing;axis=long"), 90.0));
+    let b2 = degrees(scene(), "b2", "bearing;axis=long");
+    assert!(near(b2, 45.0), "{b2:?}");
+}
+
+#[test]
+fn measured_angles_agree_with_the_wall_parallelism_judgement() {
+    // `m` and `n`, judged a parallel pair, meet at 0°; `x` stands across `s`.
+    let scene = || {
+        storey()
+            .relate("beside", "m", &["n", "s"])
+            .relate("beside", "x", &["s"])
+    };
+    assert!(near(degrees(scene(), "m", "angle_to;path=beside"), 0.0));
+    assert!(near(degrees(scene(), "x", "angle_to;path=beside"), 90.0));
+    assert!(near(degrees(scene(), "x", "skew;path=beside"), 0.0));
+    // A path reaching nothing measures nothing.
+    let (project, services) = scene().services();
+    assert!(matches!(
+        measured_value(&services, &project, &id("n"), "angle_to;path=beside").unwrap(),
+        PropertyResolution::Absent(_)
+    ));
 }

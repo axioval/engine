@@ -418,10 +418,7 @@ fn an_unknown_or_malformed_measured_name_is_refused() {
     let registry = registry();
     let definitions = definitions(&registry, &[EXISTS], &["pipe"], &["Label"], &[]);
     for (name, message) in [
-        (
-            "height",
-            "`height` is no measured value; known: area, bottom,",
-        ),
+        ("height", "`height` is no measured value; known: "),
         ("bottom_above_level", "`bottom_above_level` needs `path`"),
         ("boundary_area;plane=1", "`boundary_area` needs `kind`"),
         ("extent_x;path=a", "`extent_x` takes no parameter `path`"),

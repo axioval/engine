@@ -11,7 +11,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-use axioval_ir::{NotEvaluatedReason, ObjectId, Report, Scope, Severity};
+use axioval_engine::CapabilityEvaluation;
+use axioval_ir::{Finding, NotEvaluatedReason, ObjectId, Report, Scope, Severity};
 use serde::Serialize;
 
 /// How one rule judged one object.
@@ -51,14 +52,41 @@ impl fmt::Display for Outcome {
 /// when every one is; a finding outranks an open outcome.
 #[must_use]
 pub fn outcomes(report: &Report, rule: &str) -> BTreeMap<ObjectId, Outcome> {
+    let findings = report
+        .findings()
+        .iter()
+        .filter(|finding| finding.rule_id.to_string() == rule);
+    let open = report
+        .not_evaluated
+        .iter()
+        .filter(|outcome| outcome.rule_id.to_string() == rule)
+        .filter_map(|outcome| match &outcome.scope {
+            Scope::Object(object) => Some((object, &outcome.reason)),
+            _ => None,
+        });
+    collect(findings, open)
+}
+
+/// How one capability evaluation judged each object, read as
+/// [`outcomes`] reads a rule of a report.
+#[must_use]
+pub fn evaluation_outcomes(evaluation: &CapabilityEvaluation) -> BTreeMap<ObjectId, Outcome> {
+    let open = evaluation
+        .not_evaluated_outcomes()
+        .iter()
+        .filter_map(|outcome| Some((outcome.object_id()?, outcome.reason())));
+    collect(evaluation.findings().iter(), open)
+}
+
+fn collect<'a>(
+    findings: impl Iterator<Item = &'a Finding>,
+    open: impl Iterator<Item = (&'a ObjectId, &'a NotEvaluatedReason)>,
+) -> BTreeMap<ObjectId, Outcome> {
     let mut outcomes = BTreeMap::new();
-    for finding in report.findings() {
+    for finding in findings {
         let Scope::Object(object) = &finding.scope else {
             continue;
         };
-        if finding.rule_id.to_string() != rule {
-            continue;
-        }
         let exact = finding.evidence.iter().all(|evidence| evidence.exact);
         let merged = match outcomes.remove(object) {
             Some(Outcome::Finding {
@@ -76,17 +104,12 @@ pub fn outcomes(report: &Report, rule: &str) -> BTreeMap<ObjectId, Outcome> {
         };
         outcomes.insert(object.clone(), merged);
     }
-    for outcome in &report.not_evaluated {
-        if outcome.rule_id.to_string() != rule {
-            continue;
-        }
-        if let Scope::Object(object) = &outcome.scope {
-            outcomes
-                .entry(object.clone())
-                .or_insert_with(|| Outcome::NotEvaluated {
-                    reason: outcome.reason.clone(),
-                });
-        }
+    for (object, reason) in open {
+        outcomes
+            .entry(object.clone())
+            .or_insert_with(|| Outcome::NotEvaluated {
+                reason: reason.clone(),
+            });
     }
     outcomes
 }
@@ -161,8 +184,30 @@ impl ParityEvidence {
 /// `report` judged every object.
 #[must_use]
 pub fn compare(report: &Report, capability: &str, expression: &str) -> ParityEvidence {
-    let left = outcomes(report, capability);
-    let right = outcomes(report, expression);
+    lined_up(
+        (capability, outcomes(report, capability)),
+        (expression, outcomes(report, expression)),
+    )
+}
+
+/// Compares how a capability's evaluation and its rewrite's, run on the
+/// same model, judged every object: the harness over capabilities run
+/// directly, as their fixture tests run them.
+#[must_use]
+pub fn compare_evaluations(
+    (capability, evaluated): (&str, &CapabilityEvaluation),
+    (expression, rewritten): (&str, &CapabilityEvaluation),
+) -> ParityEvidence {
+    lined_up(
+        (capability, evaluation_outcomes(evaluated)),
+        (expression, evaluation_outcomes(rewritten)),
+    )
+}
+
+fn lined_up(
+    (capability, left): (&str, BTreeMap<ObjectId, Outcome>),
+    (expression, right): (&str, BTreeMap<ObjectId, Outcome>),
+) -> ParityEvidence {
     let objects: BTreeSet<&ObjectId> = left.keys().chain(right.keys()).collect();
     let differences = objects
         .iter()

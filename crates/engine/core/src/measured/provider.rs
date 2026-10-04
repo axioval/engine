@@ -66,6 +66,10 @@ pub struct MeasuredMember {
     /// Whether it surely is a member; `false` when the measurement could
     /// not decide it.
     pub certain: bool,
+    /// Whether the measurement it comes from is exact: its fields' evidence
+    /// is then exact, an interval holding only the rounding of exact
+    /// arithmetic.
+    pub exact: bool,
     /// Every field its list declares, by name.
     pub fields: BTreeMap<&'static str, MemberValue>,
 }

@@ -161,6 +161,7 @@ fn steps(flight: &TreadFlight, object: &ObjectId) -> Vec<MeasuredMember> {
             );
             MeasuredMember {
                 certain: true,
+                exact: flight.evidence().exact,
                 fields,
             }
         })
@@ -291,6 +292,7 @@ fn rails_along(
         ]);
         members.push(MeasuredMember {
             certain: true,
+            exact: measured.evidence().exact,
             fields,
         });
     }
@@ -468,6 +470,7 @@ impl MeasuredProvider for StairMeasures {
                 ]);
                 MeasuredMember {
                     certain: true,
+                    exact: measured.evidence().exact,
                     fields,
                 }
             })

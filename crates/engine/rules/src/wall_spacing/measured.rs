@@ -105,6 +105,7 @@ impl SpacingMeasures {
         let (pairs, blind) = pairs(call, object, context, length(call, "reach"))?;
         let undecided = |why: String| MeasuredMember {
             certain: false,
+            exact: false,
             fields: BTreeMap::from([("distance", MemberValue::Undecided { why })]),
         };
         let mut members: Vec<MeasuredMember> = blind.into_iter().map(undecided).collect();
@@ -130,6 +131,7 @@ impl SpacingMeasures {
             };
             members.push(MeasuredMember {
                 certain: pair.paired == Tri::Yes,
+                exact: pair.evidence.iter().all(|evidence| evidence.exact),
                 fields: BTreeMap::from([("distance", distance)]),
             });
         }

@@ -82,6 +82,7 @@ const LENGTH: Option<QuantityDimension> = Some(QuantityDimension::Length);
 
 /// What guards one edge, under the searches and gaps `call` states.
 fn edge_member(
+    exact: bool,
     call: &MeasuredCall,
     edge: &GuardEdge,
     at: &dyn Fn(&str) -> String,
@@ -126,6 +127,7 @@ fn edge_member(
     );
     MeasuredMember {
         certain: true,
+        exact,
         fields: BTreeMap::from([
             (
                 "guarded_height",
@@ -246,7 +248,7 @@ impl MeasuredProvider for GuardMeasures {
             .iter()
             .enumerate()
             .map(|(index, edge)| {
-                edge_member(call, edge, &|field: &str| {
+                edge_member(measured.evidence().exact, call, edge, &|field: &str| {
                     format!("{name}:{object}#{}/{total}:{field}", index + 1)
                 })
             })

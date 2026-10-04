@@ -174,6 +174,7 @@ impl BayMeasures {
         let own = rectangle(rectangles, &bay.id)?;
         let undecided = |why: String| MeasuredMember {
             certain: false,
+            exact: false,
             fields: BTreeMap::from([("angle", MemberValue::Undecided { why })]),
         };
         let mut members: Vec<MeasuredMember> = near
@@ -194,9 +195,11 @@ impl BayMeasures {
             if within == Tri::No {
                 continue;
             }
+            let (angle, exact) = angle(&own, rectangles, other);
             members.push(MeasuredMember {
                 certain: within == Tri::Yes,
-                fields: BTreeMap::from([("angle", angle(&own, rectangles, other))]),
+                exact,
+                fields: BTreeMap::from([("angle", angle)]),
             });
         }
         Ok(members)
@@ -204,12 +207,18 @@ impl BayMeasures {
 }
 
 /// The acute angle between the long axes of `own` and `other`.
-fn angle(own: &PlanRectangle, rectangles: &PlanSpanServiceHandle, other: &ObjectId) -> MemberValue {
+/// The angle between both long axes, and whether both rectangles are exact.
+fn angle(
+    own: &PlanRectangle,
+    rectangles: &PlanSpanServiceHandle,
+    other: &ObjectId,
+) -> (MemberValue, bool) {
     let theirs = match rectangle_of(rectangles, other) {
         Ok(theirs) => theirs,
-        Err(why) => return MemberValue::Undecided { why },
+        Err(why) => return (MemberValue::Undecided { why }, false),
     };
-    match own.long_axis_angle(&theirs) {
+    let exact = own.is_exact() && theirs.is_exact();
+    let value = match own.long_axis_angle(&theirs) {
         Ok(degrees) => {
             let (lower, upper) = radians(degrees);
             MemberValue::Measured(Measurement::Value {
@@ -220,7 +229,8 @@ fn angle(own: &PlanRectangle, rectangles: &PlanSpanServiceHandle, other: &Object
             })
         }
         Err(why) => MemberValue::Undecided { why },
-    }
+    };
+    (value, exact)
 }
 
 fn bay<'a>(

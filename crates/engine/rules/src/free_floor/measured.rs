@@ -132,6 +132,7 @@ impl MeasuredProvider for PlacementMeasures {
         };
         let member = |certain| MeasuredMember {
             certain,
+            exact: true,
             fields: BTreeMap::new(),
         };
         if !evaluation.findings().is_empty() {

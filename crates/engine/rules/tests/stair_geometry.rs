@@ -3894,8 +3894,8 @@ mod as_expressions {
                 .register(WalkingSurfaceServiceHandle::new(Arc::new(fixture())))
                 .unwrap();
         };
-        let expected =
-            verdicts(&model().evaluate_with(check, &rule(id, kind(of), parameters), register));
+        let evaluated = model().evaluate_with(check, &rule(id, kind(of), parameters), register);
+        let expected = verdicts(&evaluated);
         let rule = rule(
             "axioval:capability.expression",
             kind(of),
@@ -3907,12 +3907,11 @@ mod as_expressions {
             )],
         );
         let evaluation = model().evaluate_measured(&ExpressionRequirement, &rule, register);
-        assert_eq!(
-            verdicts(&evaluation),
-            expected,
-            "{requirement}: {:?}",
-            evaluation.not_evaluated_outcomes()
+        let parity = axioval_rules::parity::compare_evaluations(
+            (id, &evaluated),
+            ("expression", &evaluation),
         );
+        assert!(parity.holds(), "{requirement}:\n{}", parity.diff());
         expected
     }
 

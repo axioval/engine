@@ -782,7 +782,10 @@ final riser have none (`null`). A field the measurement cannot decide (an
 unmeasured winder angle, whether a riser is closed, the order of pieces
 lying beside one another) leaves an expression reading it not evaluated.
 Built-in code registered beside the capabilities measures each list
-(`MeasuredProvider::member_lists`), never a package.
+(`MeasuredProvider::member_lists`), never a package. A member states
+whether the measurement it comes from is exact: its fields' evidence is
+then exact, an interval holding only the rounding of exact arithmetic, as
+the capability measuring it cites it.
 
 "Every riser at most 0.19 m, and risers within 5 mm of one another":
 

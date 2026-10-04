@@ -262,6 +262,7 @@ impl PlanMeasures {
                 let at = |field: &str| format!("recesses:{object}#{}/{total}:{field}", index + 1);
                 MeasuredMember {
                     certain: true,
+                    exact: found.evidence().exact,
                     fields: BTreeMap::from([
                         (
                             "width",
@@ -322,6 +323,7 @@ impl PlanMeasures {
                 };
                 members.push(MeasuredMember {
                     certain: true,
+                    exact: ends.evidence().exact,
                     fields,
                 });
             }
@@ -355,6 +357,10 @@ impl PlanMeasures {
                     "exit_pairs:{object}:{}:{}:separation",
                     pair.first, pair.second
                 );
+                let exact = pair
+                    .measured
+                    .as_ref()
+                    .is_ok_and(|(_, _, cited)| cited.exact);
                 let separation = match pair.measured {
                     Ok((lower, upper, _)) => MemberValue::Measured(value(lower, upper, LENGTH, at)),
                     Err(why) => MemberValue::Undecided {
@@ -366,6 +372,7 @@ impl PlanMeasures {
                 };
                 MeasuredMember {
                     certain: true,
+                    exact,
                     fields: BTreeMap::from([("separation", separation)]),
                 }
             })

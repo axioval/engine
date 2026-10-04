@@ -97,7 +97,11 @@ The differential parity harness, `axioval_rules::parity`, checks that:
   one line per object for a failing test.
 
 Both rules go in one ruleset and run over the same model, so the outcomes
-compared come from the same evidence. The harness runs in two places:
+compared come from the same evidence. A capability run directly, as its
+fixture tests run it, is compared with its rewrite by
+`compare_evaluations((capability, evaluation), (expression, rewritten))`,
+which reads each `CapabilityEvaluation` as `outcomes` reads a rule
+(`evaluation_outcomes`) and lists the same differences. The harness runs in two places:
 
 - **Fixtures, in CI.** `crates/engine/rules/tests/parity.rs` runs the
   `property-predicate` capability against its expression rewrite over a

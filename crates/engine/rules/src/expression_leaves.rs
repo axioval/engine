@@ -94,7 +94,8 @@ impl<'a> ObjectLeaves<'a> {
             ));
         };
         let source = self.object.id.source.clone();
-        let cited = |locator: &str, exact: bool| {
+        let exact = member.exact;
+        let cited = |locator: &str| {
             let locator = format!("{}/{name}:{locator}", axioval_ir::MEMBER_SET);
             vec![Evidence {
                 source: source.clone(),
@@ -117,11 +118,11 @@ impl<'a> ObjectLeaves<'a> {
             }
             Some(MemberValue::Truth { value, locator }) => Leaf {
                 value: Ok(Value::Boolean(*value)),
-                evidence: cited(locator, true),
+                evidence: cited(locator),
             },
             Some(MemberValue::Measured(Measurement::Absent { locator })) => Leaf {
                 value: Ok(Value::Null),
-                evidence: cited(locator, true),
+                evidence: cited(locator),
             },
             Some(MemberValue::Measured(Measurement::Value {
                 lower,
@@ -129,8 +130,6 @@ impl<'a> ObjectLeaves<'a> {
                 dimension,
                 locator,
             })) => {
-                #[allow(clippy::float_cmp)]
-                let exact = lower == upper;
                 let value = Value::from_property(&axioval_ir::PropertyValue::Measured {
                     lower: *lower,
                     upper: *upper,
@@ -143,7 +142,7 @@ impl<'a> ObjectLeaves<'a> {
                 }
                 Leaf {
                     value,
-                    evidence: cited(locator, exact),
+                    evidence: cited(locator),
                 }
             }
         }

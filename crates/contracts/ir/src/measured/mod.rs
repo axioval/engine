@@ -145,6 +145,9 @@ pub enum MeasuredParameterKind {
     Vector,
     /// A property the object states, written `set/name` or `name`.
     Property,
+    /// A word naming something the source declares, such as a discipline,
+    /// as written.
+    Text,
 }
 
 /// How exact a measured value can be.
@@ -204,6 +207,8 @@ pub enum MeasuredArgument {
     Choice(&'static str),
     /// A direction's components, as written.
     Vector([f64; 3]),
+    /// A word, as written.
+    Text(String),
     /// A property, by its set (when written) and name.
     Property {
         /// The property set, `None` when only the name is written.
@@ -374,6 +379,12 @@ fn argument(kind: MeasuredParameterKind, value: &str) -> Result<MeasuredArgument
                 .find(|option| option.eq_ignore_ascii_case(value))
                 .ok_or_else(|| format!("`{value}` is none of {}", options.join(", ")))?,
         ),
+        MeasuredParameterKind::Text => {
+            if value.is_empty() {
+                return Err("it is empty".into());
+            }
+            MeasuredArgument::Text(value.to_owned())
+        }
         MeasuredParameterKind::Property => {
             let (set, name) = match value.split_once('/') {
                 Some((set, name)) => (Some(set.trim().to_owned()), name.trim().to_owned()),

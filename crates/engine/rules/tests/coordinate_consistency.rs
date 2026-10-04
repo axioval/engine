@@ -369,3 +369,307 @@ fn one_source_or_no_service_is_not_evaluated() {
         vec![("-".into(), NotEvaluatedReason::MissingService)]
     );
 }
+
+/// Each statement's `coordinate_shift`, `coordinate_turn`,
+/// `map_scale_change` and `map_target_change` within the tolerances, and
+/// `map_conversion` where one is required, reach `coordinate-consistency`'s
+/// verdicts. The capability judges a source and the rewrite each object of
+/// it; the comparison reads the capability's outcome for a source as its
+/// one object's.
+mod as_expressions {
+    use super::*;
+    use axioval_engine::CapabilityEvaluation;
+    use axioval_rules::ExpressionRequirement;
+    use common::expressions::{
+        and, assert_parity, at_most, compare, integer, m, measured, plain, quantity,
+        rule as expression, unless_null,
+    };
+    use serde_json::{Value, json};
+
+    type Systems = Vec<(
+        &'static str,
+        Result<SourceCoordinateSystem, CoordinateSystemError>,
+    )>;
+
+    /// The capability's outcomes for each source, as outcomes for the
+    /// source's objects: its one wall.
+    fn by_object(evaluation: &CapabilityEvaluation) -> CapabilityEvaluation {
+        let wall = |source: &SourceId| axioval_ir::ObjectId::new(source.clone(), "#1").unwrap();
+        let mut objects = CapabilityEvaluation::default();
+        for finding in evaluation.findings() {
+            if let Scope::Source(source) = &finding.scope {
+                let mut found = finding.clone();
+                found.scope = Scope::Object(wall(source));
+                objects.push_finding(found);
+            }
+        }
+        for outcome in evaluation.not_evaluated_outcomes() {
+            if let Scope::Source(source) = outcome.scope() {
+                objects.push_object_not_evaluated(
+                    wall(source),
+                    outcome.reason().clone(),
+                    outcome.message(),
+                );
+            }
+        }
+        objects
+    }
+
+    fn rewrite(systems: &dyn Fn() -> Systems, requirement: &Value) -> CapabilityEvaluation {
+        let mut model = Model::default();
+        for (name, _) in systems() {
+            model = model.object_in(name, "#1", "wall");
+        }
+        model.evaluate_measured(
+            &ExpressionRequirement,
+            &expression(kind("wall"), requirement),
+            |services| {
+                let mut snapshots = Vec::new();
+                let mut disciplines = Vec::new();
+                let mut held = BTreeMap::new();
+                for (name, system) in systems() {
+                    snapshots.push(
+                        SourceSnapshot::try_new(document(name), "r", format!("sha256:{name}"))
+                            .unwrap(),
+                    );
+                    disciplines.push((document(name), Discipline::new(name).unwrap()));
+                    held.insert(document(name), system);
+                }
+                services
+                    .register(CoordinateSystemServiceHandle::new(Arc::new(Systems(
+                        snapshots, held,
+                    ))))
+                    .unwrap();
+                services
+                    .register(SourceDisciplines::new(disciplines))
+                    .unwrap();
+            },
+        )
+    }
+
+    /// Every statement within the tolerances; a missing map conversion is
+    /// a finding with `required`.
+    fn consistent(reference: &str, length: f64, required: bool) -> Value {
+        let value = |name: &str| measured(&format!("{name}{reference}"));
+        let degrees = || quantity(0.01, "deg");
+        let metres = || m(length);
+        let maps = and(vec![
+            compare("equals", value("map_target_change"), integer(0)),
+            at_most(value("coordinate_shift;of=map"), metres()),
+            at_most(value("coordinate_turn;of=map"), degrees()),
+            at_most(value("map_scale_change"), plain(0.0)),
+        ]);
+        let mut checks = vec![
+            at_most(value("coordinate_shift;of=world"), metres()),
+            at_most(value("coordinate_turn;of=world"), degrees()),
+        ];
+        for (name, bound) in [
+            ("coordinate_turn;of=north", degrees()),
+            ("coordinate_shift;of=site", metres()),
+            ("coordinate_turn;of=site", degrees()),
+        ] {
+            let read = value(name);
+            checks.push(unless_null(&read, at_most(read.clone(), bound)));
+        }
+        if required {
+            checks.insert(
+                0,
+                compare("equals", value("map_conversion;of=own"), integer(1)),
+            );
+            checks.push(json!({"kind": "if",
+                "branches": [{"when": compare("equals",
+                    value("map_conversion;of=reference"), integer(1)), "then": maps}],
+                "else": {"kind": "literal", "value": {"type": "boolean", "value": true}}}));
+        } else {
+            // Last, so a missing map conversion is not recorded only when
+            // nothing else is unknown.
+            checks.push(maps);
+        }
+        and(checks)
+    }
+
+    fn parity(
+        systems: &dyn Fn() -> Systems,
+        parameters: Vec<(&str, ParameterValue)>,
+        requirement: &Value,
+    ) {
+        let found = by_object(&evaluate(systems(), parameters));
+        assert_parity(ID, &found, &rewrite(systems, requirement));
+    }
+
+    const BY_ARCHITECTURE: &str = ";reference=architecture";
+
+    fn shifted(easting: f64, millimetres: bool) -> Systems {
+        vec![
+            (
+                "architecture",
+                Ok(georeferenced("architecture", 500_000.0, false)),
+            ),
+            (
+                "structural",
+                Ok(georeferenced("structural", easting, millimetres)),
+            ),
+        ]
+    }
+
+    #[test]
+    fn map_offsets_within_the_tolerance_reach_the_verdicts() {
+        for (easting, millimetres) in [
+            (500_000.0, true),
+            (500_001.0, false),
+            (500_000.000_5, false),
+        ] {
+            let systems = move || shifted(easting, millimetres);
+            parity(
+                &systems,
+                by_architecture(),
+                &consistent(BY_ARCHITECTURE, 0.001, false),
+            );
+            parity(
+                &systems,
+                vec![
+                    ("reference", string("architecture")),
+                    ("length_tolerance", number(1.5)),
+                ],
+                &consistent(BY_ARCHITECTURE, 1.5, false),
+            );
+        }
+    }
+
+    #[test]
+    fn a_default_map_unit_reaches_the_verdicts() {
+        for easting in [500_000.0, 500_001.0] {
+            let systems = move || -> Systems {
+                let map = MapConversion::try_new(
+                    Some("EPSG:25832".into()),
+                    [easting * 1000.0, 5_600_000_000.0, 50_000.0],
+                    [1.0, 0.0],
+                    1.0,
+                    Some(0.001),
+                )
+                .unwrap()
+                .with_map_unit_by_default();
+                vec![
+                    (
+                        "architecture",
+                        Ok(georeferenced("architecture", 500_000.0, false)),
+                    ),
+                    ("structural", Ok(system("structural", Some(map)))),
+                ]
+            };
+            parity(
+                &systems,
+                by_architecture(),
+                &consistent(BY_ARCHITECTURE, 0.001, false),
+            );
+        }
+    }
+
+    #[test]
+    fn a_moved_site_against_the_first_source_reaches_the_verdicts() {
+        let systems = || -> Systems {
+            vec![
+                (
+                    "a-architecture",
+                    Ok(georeferenced("a-architecture", 500_000.0, false)),
+                ),
+                (
+                    "b-structural",
+                    Ok(georeferenced("b-structural", 500_000.0, false)
+                        .with_site(SitePlacement::Stated(frame([0.0, 2.0, 0.0])))),
+                ),
+            ]
+        };
+        parity(&systems, Vec::new(), &consistent("", 0.001, false));
+    }
+
+    #[test]
+    fn a_missing_map_conversion_reaches_the_verdicts() {
+        let systems = || -> Systems {
+            vec![
+                (
+                    "architecture",
+                    Ok(georeferenced("architecture", 500_000.0, false)),
+                ),
+                ("structural", Ok(system("structural", None))),
+            ]
+        };
+        parity(
+            &systems,
+            by_architecture(),
+            &consistent(BY_ARCHITECTURE, 0.001, false),
+        );
+        parity(
+            &systems,
+            vec![
+                ("reference", string("architecture")),
+                ("require_map_conversion", boolean(true)),
+            ],
+            &consistent(BY_ARCHITECTURE, 0.001, true),
+        );
+        // The reference itself without one is its own finding.
+        let reversed = || -> Systems {
+            vec![
+                ("architecture", Ok(system("architecture", None))),
+                (
+                    "structural",
+                    Ok(georeferenced("structural", 500_000.0, false)),
+                ),
+            ]
+        };
+        parity(
+            &reversed,
+            vec![
+                ("reference", string("architecture")),
+                ("require_map_conversion", boolean(true)),
+            ],
+            &consistent(BY_ARCHITECTURE, 0.001, true),
+        );
+    }
+
+    #[test]
+    fn one_sided_statements_and_unreadable_systems_reach_the_verdicts() {
+        let systems = || -> Systems {
+            vec![
+                (
+                    "architecture",
+                    Ok(georeferenced("architecture", 500_000.0, false)),
+                ),
+                (
+                    "structural",
+                    Ok(georeferenced("structural", 500_000.0, false)
+                        .with_site(SitePlacement::Unknown("2 sites".into()))),
+                ),
+                (
+                    "mep",
+                    Err(CoordinateSystemError::Ambiguous("2 model contexts".into())),
+                ),
+            ]
+        };
+        parity(
+            &systems,
+            by_architecture(),
+            &consistent(BY_ARCHITECTURE, 0.001, false),
+        );
+        // A site unknown beside a missing map conversion is incomplete, not
+        // merely unrecorded.
+        let both = || -> Systems {
+            vec![
+                (
+                    "architecture",
+                    Ok(georeferenced("architecture", 500_000.0, false)),
+                ),
+                (
+                    "structural",
+                    Ok(system("structural", None)
+                        .with_site(SitePlacement::Unknown("2 sites".into()))),
+                ),
+            ]
+        };
+        parity(
+            &both,
+            by_architecture(),
+            &consistent(BY_ARCHITECTURE, 0.001, false),
+        );
+    }
+}

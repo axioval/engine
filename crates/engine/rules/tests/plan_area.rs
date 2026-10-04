@@ -1080,3 +1080,572 @@ mod as_expressions {
         );
     }
 }
+
+/// The area capabilities rewritten as expressions over measured areas,
+/// compared object by object with the capabilities on their fixtures.
+mod parity {
+    use super::*;
+    use axioval_engine::CapabilityEvaluation;
+    use axioval_ir::contract::{ComparisonOperator, Selector};
+    use axioval_ir::{PropertyValue, QuantityDimension};
+    use axioval_rules::{ExpressionRequirement, PlanAreaRange};
+    use common::expressions::{
+        and, assert_parity, at_least, at_most, between, defined, differences, divide, m2, measured,
+        over_path, plain, rule as expression, stated,
+    };
+    use serde_json::{Value, json};
+
+    type Fixture = Box<dyn Fn() -> (Model, Rectangles)>;
+
+    fn rewrite(fixture: &Fixture, selector: Selector, requirement: &Value) -> CapabilityEvaluation {
+        let (model, _) = fixture();
+        model.evaluate_measured(
+            &ExpressionRequirement,
+            &expression(selector, requirement),
+            |services| {
+                services
+                    .register(PlanAreaServiceHandle::new(Arc::new(fixture().1)))
+                    .unwrap();
+            },
+        )
+    }
+
+    fn capability(
+        fixture: &Fixture,
+        check: &dyn axioval_engine::RuleCapability,
+        id: &str,
+        selector: Selector,
+        parameters: Vec<(&str, ParameterValue)>,
+    ) -> CapabilityEvaluation {
+        let (model, rectangles) = fixture();
+        run(model, rectangles, check, &rule(id, selector, parameters))
+    }
+
+    /// `value`, an area, summed in square metres over the objects `path`
+    /// reaches, those `filter` selects: a plain number, so a sum over none
+    /// is the plain 0.
+    fn summed(path: &[&str], filter: &Selector, value: Value) -> Value {
+        over_path("sum", path, filter, Some(divide(value, m2(1.0))))
+    }
+
+    /// A ratio rounded to 1e-9, as the capability compares a quotient the
+    /// literal bound names.
+    fn ratio(numerator: Value, denominator: Value) -> Value {
+        json!({"kind": "round", "operand": divide(numerator, denominator),
+            "step": plain(1e-9)})
+    }
+
+    mod area_ratio {
+        use super::*;
+
+        const ID: &str = "axioval:capability.area-ratio";
+
+        fn storeys() -> Fixture {
+            Box::new(super::super::area_ratio::storeys_fixture)
+        }
+
+        fn straddling() -> Fixture {
+            Box::new(|| {
+                let (model, rectangles) = super::super::area_ratio::storeys_fixture();
+                (model, rectangles.with("s3", [0.0, 0.0, 5.0, 10.0], 1.0))
+            })
+        }
+
+        fn spaces_over_slabs() -> Value {
+            let area = || measured("area");
+            ratio(
+                summed(&["contains"], &kind("space"), area()),
+                summed(&["contains"], &kind("slab"), area()),
+            )
+        }
+
+        #[test]
+        fn the_summed_footprints_ratio_reaches_the_verdicts() {
+            for fixture in [storeys(), straddling()] {
+                for minimum in [0.5, 0.3, 0.25] {
+                    let found = capability(
+                        &fixture,
+                        &AreaRatio,
+                        ID,
+                        kind("storey"),
+                        super::super::area_ratio::parameters_fixture(minimum),
+                    );
+                    let rewritten = rewrite(
+                        &fixture,
+                        kind("storey"),
+                        &at_least(spaces_over_slabs(), plain(minimum)),
+                    );
+                    assert_parity(ID, &found, &rewritten);
+                }
+                let mut parameters = super::super::area_ratio::parameters_fixture(0.0);
+                parameters.retain(|(name, _)| *name != "minimum");
+                parameters.push(("maximum", number(0.55)));
+                let found = capability(&fixture, &AreaRatio, ID, kind("storey"), parameters);
+                let rewritten = rewrite(
+                    &fixture,
+                    kind("storey"),
+                    &at_most(spaces_over_slabs(), plain(0.55)),
+                );
+                assert_parity(ID, &found, &rewritten);
+            }
+        }
+
+        #[test]
+        fn without_geometry_both_leave_every_storey_open() {
+            let (model, _) = super::super::area_ratio::storeys_fixture();
+            let found = model.evaluate(
+                &AreaRatio,
+                &rule(
+                    ID,
+                    kind("storey"),
+                    super::super::area_ratio::parameters_fixture(0.5),
+                ),
+            );
+            let (model, _) = super::super::area_ratio::storeys_fixture();
+            let rewritten = model.evaluate_measured(
+                &ExpressionRequirement,
+                &expression(kind("storey"), &at_least(spaces_over_slabs(), plain(0.5))),
+                |_| {},
+            );
+            assert_parity(ID, &found, &rewritten);
+        }
+
+        fn glazing(area: f64) -> PropertyValue {
+            PropertyValue::Quantity {
+                value: area,
+                dimension: QuantityDimension::Area,
+            }
+        }
+
+        /// One eighth of the floor must be glazed: windows `w1` (3 m²) and
+        /// `w2` (2 m², or stating none) in a 50 m² room.
+        fn windows(second: Option<f64>) -> Fixture {
+            Box::new(move || {
+                let mut model = Model::default()
+                    .object("st", "storey")
+                    .object("room", "space")
+                    .object("w1", "window")
+                    .object("w2", "window")
+                    .edge("contains", "st", "room")
+                    .edge("contains", "st", "w1")
+                    .edge("contains", "st", "w2")
+                    .value("w1", "Qto", "Area", glazing(3.0));
+                if let Some(area) = second {
+                    model = model.value("w2", "Qto", "Area", glazing(area));
+                }
+                let rectangles = Rectangles::default().with("room", [0.0, 0.0, 10.0, 5.0], 0.0);
+                (model, rectangles)
+            })
+        }
+
+        fn glazed(minimum: f64) -> Vec<(&'static str, ParameterValue)> {
+            vec![
+                ("numerator_selector", selector(kind("window"))),
+                ("numerator_property", common::property(Some("Qto"), "Area")),
+                ("denominator_selector", selector(kind("space"))),
+                ("minimum", number(minimum)),
+                ("relationship", string("contains")),
+            ]
+        }
+
+        /// The stated glazing over the measured floor, every window stating
+        /// its glazing.
+        fn glazing_share(minimum: f64) -> Value {
+            let window = kind("window");
+            and(vec![
+                over_path(
+                    "all",
+                    &["contains"],
+                    &window,
+                    Some(defined(&stated("Qto", "Area"))),
+                ),
+                at_least(
+                    ratio(
+                        summed(&["contains"], &window, stated("Qto", "Area")),
+                        summed(&["contains"], &kind("space"), measured("area")),
+                    ),
+                    plain(minimum),
+                ),
+            ])
+        }
+
+        #[test]
+        fn stated_numerator_areas_reach_the_verdicts() {
+            for (second, minimum) in [(Some(2.0), 0.125), (Some(2.0), 0.1), (Some(4.0), 0.125)] {
+                let fixture = windows(second);
+                let found = capability(&fixture, &AreaRatio, ID, kind("storey"), glazed(minimum));
+                let rewritten = rewrite(&fixture, kind("storey"), &glazing_share(minimum));
+                assert_parity(ID, &found, &rewritten);
+            }
+        }
+
+        /// A window stating no glazing: the capability leaves its storey
+        /// open, unable to sum it; the rewrite cannot leave an object open
+        /// on a stated absence, so it requires every window to state one and
+        /// finds the storey.
+        #[test]
+        fn a_window_stating_no_area_is_found_where_the_capability_leaves_it_open() {
+            let fixture = windows(None);
+            let found = capability(&fixture, &AreaRatio, ID, kind("storey"), glazed(0.05));
+            let rewritten = rewrite(&fixture, kind("storey"), &glazing_share(0.05));
+            assert_eq!(
+                differences(ID, &found, &rewritten),
+                [
+                    "test:model/st: capability not evaluated (IncompleteEvidence), \
+                     expression finding (Error, exact evidence)"
+                ]
+            );
+        }
+
+        /// A storey reaching no window is a finding of its own with
+        /// `empty_numerator_finding`: at least one window, and the share.
+        #[test]
+        fn a_storey_without_a_numerator_object_reaches_the_verdicts() {
+            let fixture: Fixture = Box::new(|| {
+                let (model, rectangles) = windows(Some(4.0))();
+                let model = model
+                    .object("bare", "storey")
+                    .object("hall", "space")
+                    .edge("contains", "bare", "hall");
+                (model, rectangles.with("hall", [0.0, 0.0, 2.0, 2.0], 0.0))
+            });
+            for minimum in [0.125, 0.15, 0.0] {
+                let mut parameters = glazed(minimum);
+                parameters.push(("empty_numerator_finding", common::boolean(true)));
+                let found = capability(&fixture, &AreaRatio, ID, kind("storey"), parameters);
+                let some_window = at_least(
+                    over_path("count", &["contains"], &kind("window"), None),
+                    common::expressions::integer(1),
+                );
+                let rewritten = rewrite(
+                    &fixture,
+                    kind("storey"),
+                    &and(vec![some_window, glazing_share(minimum)]),
+                );
+                assert_parity(ID, &found, &rewritten);
+            }
+        }
+
+        #[test]
+        fn a_derived_relationship_walked_backward_reaches_the_verdicts() {
+            const SPANS: &str = "axioval:derived.spans-level;overlap=1";
+            let fixture: Fixture = Box::new(|| {
+                let model = Model::default()
+                    .object("eg", "storey")
+                    .object("og", "storey")
+                    .object("atrium", "space")
+                    .object("office", "space")
+                    .object("upper", "space")
+                    .object("eg-slab", "slab")
+                    .object("og-slab", "slab")
+                    .edge(SPANS, "atrium", "eg")
+                    .edge(SPANS, "atrium", "og")
+                    .edge(SPANS, "office", "eg")
+                    .edge(SPANS, "upper", "og")
+                    .edge(SPANS, "eg-slab", "eg")
+                    .edge(SPANS, "og-slab", "og");
+                let rectangles = Rectangles::default()
+                    .with("atrium", [0.0, 0.0, 4.0, 5.0], 0.0)
+                    .with("office", [4.0, 0.0, 10.0, 5.0], 0.0)
+                    .with("upper", [4.0, 0.0, 10.0, 5.0], 0.0)
+                    .with("eg-slab", [0.0, 0.0, 10.0, 5.0], 0.0)
+                    .with("og-slab", [0.0, 0.0, 10.0, 5.0], 0.0);
+                (model, rectangles)
+            });
+            let path = format!("{SPANS}:backward");
+            for minimum in [0.9, 1.0, 1.1] {
+                let found = capability(
+                    &fixture,
+                    &AreaRatio,
+                    ID,
+                    kind("storey"),
+                    vec![
+                        ("numerator_selector", selector(kind("space"))),
+                        ("denominator_selector", selector(kind("slab"))),
+                        ("minimum", number(minimum)),
+                        ("relationship", string(SPANS)),
+                        ("direction", string("backward")),
+                    ],
+                );
+                let area = || measured("area");
+                let rewritten = rewrite(
+                    &fixture,
+                    kind("storey"),
+                    &at_least(
+                        ratio(
+                            summed(&[&path], &kind("space"), area()),
+                            summed(&[&path], &kind("slab"), area()),
+                        ),
+                        plain(minimum),
+                    ),
+                );
+                assert_parity(ID, &found, &rewritten);
+            }
+        }
+    }
+
+    mod plan_coverage {
+        use super::*;
+
+        const ID: &str = "axioval:capability.plan-coverage";
+
+        /// The plan of `plan_coverage`'s fixture, a space with a slack
+        /// added.
+        fn plan(slack: f64) -> Fixture {
+            Box::new(move || {
+                let model = Model::default()
+                    .object("c1", "compartment")
+                    .object("c2", "compartment")
+                    .object("inside", "space")
+                    .object("straddling", "space")
+                    .object("outside", "space")
+                    .object("bodiless", "space")
+                    .object("unmeasured", "space");
+                let rectangles = Rectangles::default()
+                    .with("c1", [0.0, 0.0, 10.0, 10.0], 0.0)
+                    .with("c2", [10.0, 0.0, 20.0, 10.0], 0.0)
+                    .with("inside", [1.0, 1.0, 4.0, 4.0], 0.0)
+                    .with("straddling", [8.0, 0.0, 12.0, 2.0], slack)
+                    .with("outside", [30.0, 0.0, 32.0, 2.0], 0.0)
+                    .with("bodiless", [0.0, 0.0, 0.0, 0.0], 0.0);
+                (model, rectangles)
+            })
+        }
+
+        #[test]
+        fn the_largest_overlap_over_the_footprint_reaches_the_verdicts() {
+            for slack in [0.0, 1.0] {
+                for minimum in [0.9, 0.5, 0.45, 0.4] {
+                    let fixture = plan(slack);
+                    let found = capability(
+                        &fixture,
+                        &PlanCoverage,
+                        ID,
+                        kind("space"),
+                        vec![
+                            ("candidate_selector", selector(kind("compartment"))),
+                            ("minimum_ratio", number(minimum)),
+                        ],
+                    );
+                    let rewritten = rewrite(
+                        &fixture,
+                        kind("space"),
+                        &at_least(
+                            ratio(
+                                measured("plan_overlap;with=compartment"),
+                                measured("plan_area"),
+                            ),
+                            plain(minimum),
+                        ),
+                    );
+                    assert_parity(ID, &found, &rewritten);
+                }
+            }
+        }
+    }
+
+    mod plan_area_range {
+        use super::*;
+
+        const ID: &str = "axioval:capability.plan-area";
+
+        fn spaces() -> Fixture {
+            Box::new(|| {
+                let model = Model::default()
+                    .object("large", "space")
+                    .object("small", "space")
+                    .object("tiny", "space")
+                    .object("bodiless", "space")
+                    .object("straddling", "space")
+                    .object("beyond", "space")
+                    .object("unmeasured", "space");
+                let rectangles = Rectangles::default()
+                    .with("large", [0.0, 0.0, 4.0, 5.0], 0.0)
+                    .with("small", [0.0, 0.0, 3.0, 2.0], 0.0)
+                    .with("tiny", [0.0, 0.0, 2.0, 2.0], 0.0)
+                    .with("bodiless", [0.0, 0.0, 0.0, 0.0], 0.0)
+                    .with("straddling", [0.0, 0.0, 5.0, 4.0], 1.0)
+                    .with("beyond", [0.0, 0.0, 5.0, 5.0], 1.0);
+                (model, rectangles)
+            })
+        }
+
+        #[test]
+        fn each_own_footprint_within_the_range_reaches_the_verdicts() {
+            let fixture = spaces();
+            for (minimum, maximum) in [
+                (Some(6.0), Some(20.0)),
+                (None, Some(20.0)),
+                (Some(4.0), None),
+                (Some(19.0), Some(26.0)),
+            ] {
+                let mut parameters = Vec::new();
+                let mut tests = Vec::new();
+                if let Some(minimum) = minimum {
+                    parameters.push(("minimum", number(minimum)));
+                    tests.push(at_least(measured("plan_area"), m2(minimum)));
+                }
+                if let Some(maximum) = maximum {
+                    parameters.push(("maximum", number(maximum)));
+                    tests.push(at_most(measured("plan_area"), m2(maximum)));
+                }
+                let found = capability(&fixture, &PlanAreaRange, ID, kind("space"), parameters);
+                let rewritten = rewrite(&fixture, kind("space"), &and(tests));
+                assert_parity(ID, &found, &rewritten);
+            }
+        }
+
+        /// Storeys of `plan_area_range`'s fixture: `a` holds 26 m² of
+        /// spaces, `b` 30 m², `c` 23 to 27 m², `d` a bodiless space.
+        fn storeys(undecided: bool) -> Fixture {
+            Box::new(move || {
+                let mut model = Model::default()
+                    .object("a", "storey")
+                    .object("b", "storey")
+                    .object("c", "storey")
+                    .object("d", "storey")
+                    .object("slab", "slab")
+                    .object("a1", "space")
+                    .object("a2", "space")
+                    .object("b1", "space")
+                    .object("c1", "space")
+                    .object("d1", "space")
+                    .edge("contains", "a", "slab")
+                    .edge("contains", "a", "a1")
+                    .edge("contains", "a", "a2")
+                    .edge("contains", "b", "b1")
+                    .edge("contains", "c", "c1")
+                    .edge("contains", "d", "d1");
+                let mut rectangles = Rectangles::default()
+                    .with("slab", [0.0, 0.0, 10.0, 10.0], 0.0)
+                    .with("a1", [0.0, 0.0, 4.0, 5.0], 0.0)
+                    .with("a2", [4.0, 0.0, 7.0, 2.0], 0.0)
+                    .with("b1", [0.0, 0.0, 6.0, 5.0], 0.0)
+                    .with("c1", [0.0, 0.0, 5.0, 5.0], 2.0)
+                    .with("d1", [0.0, 0.0, 0.0, 0.0], 0.0);
+                if undecided {
+                    model = model
+                        .text("a1", "Pset", "IsRoom", "yes")
+                        .text("b1", "Pset", "IsRoom", "yes")
+                        .unreadable("a2")
+                        .object("b2", "space")
+                        .edge("contains", "b", "b2")
+                        .unreadable("b2");
+                    rectangles = rectangles.with("b2", [0.0, 0.0, 1.0, 1.0], 0.0);
+                }
+                (model, rectangles)
+            })
+        }
+
+        fn room() -> Selector {
+            Selector::property(
+                Some("Pset".into()),
+                "IsRoom",
+                ComparisonOperator::Exists,
+                None,
+            )
+        }
+
+        fn members(member: Selector, maximum: f64) -> Vec<(&'static str, ParameterValue)> {
+            vec![
+                ("member_selector", selector(member)),
+                ("maximum", number(maximum)),
+                ("relationship", string("contains")),
+            ]
+        }
+
+        fn summed_at_most(member: &Selector, maximum: f64) -> Value {
+            at_most(
+                summed(&["contains"], member, measured("plan_area")),
+                plain(maximum),
+            )
+        }
+
+        #[test]
+        fn the_summed_member_footprints_reach_the_verdicts() {
+            let fixture = storeys(false);
+            for maximum in [26.0, 30.0, 22.0] {
+                let found = capability(
+                    &fixture,
+                    &PlanAreaRange,
+                    ID,
+                    kind("storey"),
+                    members(kind("space"), maximum),
+                );
+                let rewritten = rewrite(
+                    &fixture,
+                    kind("storey"),
+                    &summed_at_most(&kind("space"), maximum),
+                );
+                assert_parity(ID, &found, &rewritten);
+            }
+            let found = capability(
+                &fixture,
+                &PlanAreaRange,
+                ID,
+                kind("storey"),
+                vec![
+                    ("member_selector", selector(kind("space"))),
+                    ("minimum", number(26.0)),
+                    ("relationship", string("contains")),
+                ],
+            );
+            let rewritten = rewrite(
+                &fixture,
+                kind("storey"),
+                &at_least(
+                    summed(&["contains"], &kind("space"), measured("plan_area")),
+                    plain(26.0),
+                ),
+            );
+            assert_parity(ID, &found, &rewritten);
+        }
+
+        /// Undecided members: an excess stands in both. The capability
+        /// leaves `a` open, not measuring its undecided `a2`; the rewrite
+        /// measures it, and with it `a` sums to at most 26 m², a pass.
+        #[test]
+        fn undecided_members_are_measured_by_the_rewrite() {
+            let fixture = storeys(true);
+            let found = capability(
+                &fixture,
+                &PlanAreaRange,
+                ID,
+                kind("storey"),
+                members(room(), 26.0),
+            );
+            let rewritten = rewrite(&fixture, kind("storey"), &summed_at_most(&room(), 26.0));
+            assert_eq!(
+                differences(ID, &found, &rewritten),
+                ["test:model/a: capability not evaluated (IncompleteEvidence), expression passed"]
+            );
+            let found = capability(
+                &fixture,
+                &PlanAreaRange,
+                ID,
+                kind("storey"),
+                members(room(), 22.0),
+            );
+            let rewritten = rewrite(&fixture, kind("storey"), &summed_at_most(&room(), 22.0));
+            assert_parity(ID, &found, &rewritten);
+        }
+
+        #[test]
+        fn a_value_between_the_bounds_is_inclusive_both_ways() {
+            let fixture = spaces();
+            let found = capability(
+                &fixture,
+                &PlanAreaRange,
+                ID,
+                kind("space"),
+                vec![("minimum", number(6.0)), ("maximum", number(20.0))],
+            );
+            let rewritten = rewrite(
+                &fixture,
+                kind("space"),
+                &between(measured("plan_area"), m2(6.0), m2(20.0)),
+            );
+            assert_parity(ID, &found, &rewritten);
+        }
+    }
+}

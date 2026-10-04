@@ -126,3 +126,56 @@ fn a_negative_maximum_or_no_service_judges_nothing() {
         [("-".into(), NotEvaluatedReason::MissingService)]
     );
 }
+
+/// `triangle_count` at most the maximum reaches the capability's verdicts,
+/// a tessellation's count cited as approximate evidence as the capability
+/// cites it.
+mod as_expressions {
+    use super::*;
+    use common::expressions::{
+        assert_parity, at_most, integer as count, measured, rule as expression,
+    };
+
+    fn rewrite(counts: fn() -> Counts, maximum: i64) -> CapabilityEvaluation {
+        model().evaluate_measured(
+            &axioval_rules::ExpressionRequirement,
+            &expression(
+                kind("column"),
+                &at_most(measured("triangle_count"), count(maximum)),
+            ),
+            |services| {
+                services
+                    .register(TriangleCountServiceHandle::new(Arc::new(counts())))
+                    .unwrap();
+            },
+        )
+    }
+
+    fn mixed() -> Counts {
+        Counts::default()
+            .with("box", 12, true)
+            .with("round", 480, false)
+            .with("dense", 5000, true)
+    }
+
+    fn all_measured() -> Counts {
+        Counts::default()
+            .with("box", 12, true)
+            .with("round", 480, false)
+            .with("dense", 50, true)
+            .with("broken", 0, true)
+    }
+
+    #[test]
+    fn the_count_against_the_maximum_reaches_the_verdicts() {
+        for (counts, maximum) in [
+            (mixed as fn() -> Counts, 500),
+            (all_measured, 100),
+            (all_measured, 480),
+            (mixed, 11),
+        ] {
+            let capability = run(counts(), integer(maximum));
+            assert_parity(ID, &capability, &rewrite(counts, maximum));
+        }
+    }
+}

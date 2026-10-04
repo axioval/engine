@@ -533,3 +533,158 @@ fn the_measured_extent_along_an_own_axis_is_the_body_extent() {
         );
     }
 }
+
+/// `body_extent` against the stated thickness within the tolerance, or
+/// within the range, rounded to the micrometre as the capability allows
+/// binary rounding, reaches `body-extent`'s verdicts on its fixtures.
+mod as_expressions {
+    use super::*;
+    use common::expressions::{
+        abs, assert_parity, at_least, at_most, between, m, measured, mm, quantity,
+        rule as expression, stated, subtract,
+    };
+    use serde_json::Value;
+
+    type Fixture = fn() -> (Model, Frames, Boxes);
+
+    fn parity(fixture: Fixture, parameters: Vec<(&str, ParameterValue)>, requirement: &Value) {
+        let (model, frames, boxes) = fixture();
+        let capability = run(model, frames, boxes, parameters);
+        let (model, _, _) = fixture();
+        let rewrite = model.evaluate_measured(
+            &axioval_rules::ExpressionRequirement,
+            &expression(kind("wall"), requirement),
+            |services| {
+                let (_, frames, boxes) = fixture();
+                services
+                    .register(ObjectFrameServiceHandle::new(Arc::new(frames)))
+                    .unwrap();
+                services
+                    .register(VerticalExtentServiceHandle::new(Arc::new(boxes)))
+                    .unwrap();
+            },
+        );
+        assert_parity(ID, &capability, &rewrite);
+    }
+
+    fn extent(axis: &str) -> Value {
+        measured(&format!("body_extent;axis={axis}"))
+    }
+
+    /// The extent along `axis` equals the stated thickness within
+    /// `tolerance`.
+    fn as_stated(axis: &str, tolerance: Value) -> Value {
+        at_most(
+            mm(abs(subtract(
+                extent(axis),
+                stated(MATERIAL, "TotalThickness"),
+            ))),
+            tolerance,
+        )
+    }
+
+    fn straddling() -> (Model, Frames, Boxes) {
+        let model = Model::default()
+            .object("curved", "wall")
+            .object("far", "wall")
+            .value("curved", MATERIAL, "TotalThickness", metres(0.3))
+            .value("far", MATERIAL, "TotalThickness", metres(0.3));
+        (
+            model,
+            Frames::new()
+                .with("curved", [1.0, 0.0, 0.0])
+                .with("far", [1.0, 0.0, 0.0]),
+            Boxes::default().with("curved", [5.0, 0.3, 3.0], 0.01).with(
+                "far",
+                [5.0, 0.5, 3.0],
+                0.01,
+            ),
+        )
+    }
+
+    fn rounded() -> (Model, Frames, Boxes) {
+        let model = Model::default().object("w", "wall").value(
+            "w",
+            MATERIAL,
+            "TotalThickness",
+            metres(0.1 + 0.2),
+        );
+        (
+            model,
+            Frames::new().with("w", [1.0, 0.0, 0.0]),
+            Boxes::default().with("w", [5.0, 0.3, 3.0], 0.0),
+        )
+    }
+
+    fn unreadable() -> (Model, Frames, Boxes) {
+        let model = Model::default()
+            .object("unplaced", "wall")
+            .object("unmeshed", "wall")
+            .object("counted", "wall")
+            .value("unplaced", MATERIAL, "TotalThickness", metres(0.3))
+            .value("unmeshed", MATERIAL, "TotalThickness", metres(0.3))
+            .value(
+                "counted",
+                MATERIAL,
+                "TotalThickness",
+                PropertyValue::Decimal(0.3),
+            );
+        (
+            model,
+            Frames::new()
+                .with("unmeshed", [1.0, 0.0, 0.0])
+                .with("counted", [1.0, 0.0, 0.0]),
+            Boxes::default().with("counted", [5.0, 0.3, 3.0], 0.0),
+        )
+    }
+
+    #[test]
+    fn the_extent_against_the_stated_thickness_reaches_the_verdicts() {
+        let target = || ("target_property", thickness());
+        for fixture in [walls as Fixture, straddling, rounded, unreadable] {
+            for axis in ["forward", "right", "up"] {
+                parity(
+                    fixture,
+                    vec![("axis", string(axis)), target()],
+                    &as_stated(axis, m(0.0)),
+                );
+            }
+            for tolerance in [50.0, 10.0] {
+                parity(
+                    fixture,
+                    vec![
+                        ("axis", string("forward")),
+                        target(),
+                        ("tolerance", millimetres(tolerance)),
+                    ],
+                    &as_stated("forward", quantity(tolerance, "mm")),
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_extent_within_a_range_reaches_the_verdicts() {
+        for fixture in [walls as Fixture, straddling, unreadable] {
+            parity(
+                fixture,
+                vec![
+                    ("axis", string("forward")),
+                    ("minimum", length(0.26)),
+                    ("maximum", millimetres(400.0)),
+                ],
+                &between(mm(extent("forward")), m(0.26), quantity(400.0, "mm")),
+            );
+            parity(
+                fixture,
+                vec![("axis", string("forward")), ("minimum", length(0.3))],
+                &at_least(mm(extent("forward")), m(0.3)),
+            );
+            parity(
+                fixture,
+                vec![("axis", string("right")), ("maximum", length(4.0))],
+                &at_most(mm(extent("right")), m(4.0)),
+            );
+        }
+    }
+}

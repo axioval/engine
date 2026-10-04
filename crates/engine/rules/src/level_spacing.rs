@@ -12,6 +12,10 @@ use axioval_ir::{
     ReportValue, RuleId,
 };
 
+mod measured;
+
+pub(crate) use measured::LevelMeasures;
+
 use crate::counts::{Population, tally};
 use crate::selection::select_objects;
 use crate::support::{
@@ -339,6 +343,17 @@ fn levels<'a>(
             Vec::new(),
         ),
     };
+    ordered(context, config, reached, &relation_evidence)
+}
+
+/// The levels `reached`, ordered lowest first by their `order` lengths, or
+/// why they cannot be ordered.
+fn ordered<'a>(
+    context: &RuleContext<'a>,
+    config: &Config<'_>,
+    reached: Vec<ObjectId>,
+    relation_evidence: &[Evidence],
+) -> Result<Vec<Level<'a>>, Unavailable> {
     let mut levels = Vec::new();
     for id in reached {
         let object = context
@@ -360,7 +375,7 @@ fn levels<'a>(
                 ),
             ));
         };
-        let mut evidence = relation_evidence.clone();
+        let mut evidence = relation_evidence.to_vec();
         evidence.extend(order.evidence());
         levels.push(Level {
             object,

@@ -421,3 +421,136 @@ fn a_rule_without_an_access_path_is_an_invalid_declaration() {
         &NotEvaluatedReason::InvalidDeclaration
     );
 }
+
+/// `shelf_clear_height` reaching the shelving's top and `shelf_length` the
+/// minimum reach `shelf-capacity`'s verdicts, from the same request with the
+/// same doors.
+mod as_expressions {
+    use super::*;
+    use axioval_rules::ExpressionRequirement;
+    use common::expressions::{and, assert_parity, at_least, graded, m, measured};
+    use serde_json::Value;
+
+    const SHELVING: &str = "depth=0.4;horizontal=0.3;vertical=0.35;bottom=0.1;top=2;\
+                            clearance=0.9;doors=door";
+
+    fn requirement(access: &str, minimum: f64) -> Value {
+        let value = |name: &str| measured(&format!("{name};{SHELVING};access={access}"));
+        and(vec![
+            at_least(value("shelf_clear_height"), m(2.0)),
+            at_least(value("shelf_length"), m(minimum)),
+        ])
+    }
+
+    fn parity(
+        model: fn() -> common::Model,
+        service: &dyn Fn() -> Arc<dyn LinearQuantityService>,
+        capability: &CompiledRule,
+        access: &str,
+        minimum: f64,
+    ) {
+        let found = model().evaluate_with(&ShelfCapacity, capability, |services| {
+            services
+                .register(LinearQuantityServiceHandle::new(service()))
+                .unwrap();
+        });
+        let rewritten = model().evaluate_measured(
+            &ExpressionRequirement,
+            &graded(
+                capability.selector.clone(),
+                &requirement(access, minimum),
+                RuleSeverity::Warning,
+            ),
+            |services| {
+                services
+                    .register(LinearQuantityServiceHandle::new(service()))
+                    .unwrap();
+            },
+        );
+        assert_parity("axioval:capability.shelf-capacity", &found, &rewritten);
+    }
+
+    fn lone_store() -> common::Model {
+        common::Model::default().object("store", "space")
+    }
+
+    #[test]
+    fn the_running_metres_and_the_clear_height_reach_the_verdicts() {
+        let answers: [fn() -> Answer; 6] = [
+            || Answer::Measured(LinearInterval::exact(12.0).unwrap()),
+            || Answer::Measured(LinearInterval::exact(4.0).unwrap()),
+            || Answer::Measured(LinearInterval::try_new(9.0, 11.0).unwrap()),
+            || Answer::Measured(LinearInterval::try_new(2.0, 3.0).unwrap()),
+            || Answer::Inexact(LinearInterval::exact(4.0).unwrap()),
+            || Answer::Failed(LinearQuantityError::Unavailable),
+        ];
+        for answer in answers {
+            for minimum in [10.0, 3.0] {
+                parity(
+                    lone_store,
+                    &|| Arc::new(StubQuantities(answer())),
+                    &rule_with(ParameterValue::Number { value: minimum }),
+                    "bounds:forward",
+                    minimum,
+                );
+            }
+        }
+    }
+
+    fn space_rule() -> CompiledRule {
+        let mut rule = rule();
+        rule.selector = Selector::EntityType {
+            object_type: "space".into(),
+            include_subtypes: false,
+        };
+        rule
+    }
+
+    #[test]
+    fn the_doors_of_each_space_and_its_height_reach_the_verdicts() {
+        let heights: [LinearInterval; 3] = [
+            LinearInterval::exact(3.0).unwrap(),
+            LinearInterval::exact(1.5).unwrap(),
+            LinearInterval::try_new(1.9, 2.1).unwrap(),
+        ];
+        for height in heights {
+            let doors = move || -> Arc<dyn LinearQuantityService> {
+                Arc::new(Doors {
+                    height,
+                    asked: std::sync::Mutex::new(Vec::new()),
+                })
+            };
+            parity(store, &doors, &space_rule(), "bounds:forward", 10.0);
+            parity(
+                || store().edge("bounds", "d2", "store"),
+                &doors,
+                &space_rule(),
+                "bounds:forward",
+                10.0,
+            );
+        }
+    }
+
+    #[test]
+    fn doors_with_unreadable_spaces_leave_every_space_open_alike() {
+        let mut capability = space_rule();
+        capability.parameters.insert(
+            "access_path".into(),
+            ParameterValue::StringList {
+                value: vec!["unknown:forward".into()],
+            },
+        );
+        parity(
+            store,
+            &|| {
+                Arc::new(Doors {
+                    height: LinearInterval::exact(3.0).unwrap(),
+                    asked: std::sync::Mutex::new(Vec::new()),
+                })
+            },
+            &capability,
+            "unknown:forward",
+            10.0,
+        );
+    }
+}

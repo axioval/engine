@@ -474,3 +474,212 @@ fn disjoint_enclosing_boxes_skip_the_overlap_measurement() {
         "{measured:?}"
     );
 }
+
+/// Each threshold of `slab-stack-spacing` is the `stack_distance` of its
+/// measure within the bound, none where no slab stacks above: expressions
+/// over it reach the capability's verdicts on its fixtures.
+mod as_expressions {
+    use super::*;
+    use axioval_rules::ExpressionRequirement;
+    use common::expressions::{
+        and, assert_parity, at_least, at_most, m, measured, mm, rule as expression, unless_null,
+    };
+    use serde_json::Value;
+
+    /// The services to register: proximity boxes too, or not.
+    #[derive(Clone, Copy)]
+    enum Services {
+        None,
+        Measuring,
+        WithBoxes,
+    }
+
+    fn rewrite(
+        slabs: fn() -> Slabs,
+        ghost: bool,
+        services: Services,
+        requirement: &Value,
+    ) -> CapabilityEvaluation {
+        let mut model = model(&slabs());
+        if ghost {
+            model = model.object("ghost", "slab");
+        }
+        model.evaluate_measured(
+            &ExpressionRequirement,
+            &expression(kind("slab"), requirement),
+            |registry| {
+                let shared = Arc::new(slabs());
+                if matches!(services, Services::None) {
+                    return;
+                }
+                registry
+                    .register(VerticalExtentServiceHandle::new(shared.clone()))
+                    .unwrap();
+                registry
+                    .register(PlanAreaServiceHandle::new(shared.clone()))
+                    .unwrap();
+                if matches!(services, Services::WithBoxes) {
+                    registry
+                        .register(ProximityServiceHandle::new(shared))
+                        .unwrap();
+                }
+            },
+        )
+    }
+
+    fn capability(
+        slabs: fn() -> Slabs,
+        ghost: bool,
+        services: Services,
+        rule: &CompiledRule,
+    ) -> CapabilityEvaluation {
+        let shared = Arc::new(slabs());
+        let mut model = model(&shared);
+        if ghost {
+            model = model.object("ghost", "slab");
+        }
+        model.evaluate_with(&SlabStackSpacing, rule, |registry| {
+            if matches!(services, Services::None) {
+                return;
+            }
+            registry
+                .register(VerticalExtentServiceHandle::new(shared.clone()))
+                .unwrap();
+            registry
+                .register(PlanAreaServiceHandle::new(shared.clone()))
+                .unwrap();
+            if matches!(services, Services::WithBoxes) {
+                registry
+                    .register(ProximityServiceHandle::new(shared))
+                    .unwrap();
+            }
+        })
+    }
+
+    /// A measure with its minimum and maximum.
+    type Band = (&'static str, Option<f64>, Option<f64>);
+
+    /// The bounds of each measure, rewritten.
+    fn bounded(bands: &[Band]) -> Value {
+        and(bands
+            .iter()
+            .map(|(measure, minimum, maximum)| {
+                let distance = measured(&format!(
+                    "stack_distance;measure={measure};slabs=slab;ratio=0.5"
+                ));
+                let mut tests = Vec::new();
+                if let Some(minimum) = minimum {
+                    tests.push(at_least(mm(distance.clone()), m(*minimum)));
+                }
+                if let Some(maximum) = maximum {
+                    tests.push(at_most(mm(distance.clone()), m(*maximum)));
+                }
+                unless_null(&distance, and(tests))
+            })
+            .collect())
+    }
+
+    /// The capability's parameter bounding `measure` from below or above.
+    fn bound(measure: &str, minimum: bool) -> &'static str {
+        match (measure, minimum) {
+            ("top_to_top", true) => "top_to_top_minimum",
+            ("top_to_top", false) => "top_to_top_maximum",
+            ("bottom_to_bottom", true) => "bottom_to_bottom_minimum",
+            ("bottom_to_bottom", false) => "bottom_to_bottom_maximum",
+            ("top_to_bottom", true) => "top_to_bottom_minimum",
+            _ => "top_to_bottom_maximum",
+        }
+    }
+
+    fn declared(bands: &[Band]) -> CompiledRule {
+        let mut extra = Vec::new();
+        for (measure, minimum, maximum) in bands {
+            if let Some(minimum) = minimum {
+                extra.push((bound(measure, true), metres(*minimum)));
+            }
+            if let Some(maximum) = maximum {
+                extra.push((bound(measure, false), metres(*maximum)));
+            }
+        }
+        stack_rule(extra)
+    }
+
+    fn parity(slabs: fn() -> Slabs, ghost: bool, services: Services, bands: &[Band]) {
+        let found = capability(slabs, ghost, services, &declared(bands));
+        let rewritten = rewrite(slabs, ghost, services, &bounded(bands));
+        assert_parity(ID, &found, &rewritten);
+    }
+
+    fn alone() -> Slabs {
+        Slabs::default()
+            .with("s1", PLAN, 0.0, 0.2)
+            .with("alone", [30.0, 0.0, 40.0, 8.0], 0.9, 1.1)
+            .with("offset", [8.0, 0.0, 18.0, 8.0], 1.0, 1.2)
+    }
+
+    fn partial() -> Slabs {
+        Slabs::default()
+            .with("s1", PLAN, 0.0, 0.2)
+            .with("offset", [2.0, 0.0, 12.0, 8.0], 1.0, 1.2)
+    }
+
+    fn tessellated() -> Slabs {
+        three_stacked().tessellated("s3", 0.01)
+    }
+
+    fn level() -> Slabs {
+        Slabs::default()
+            .with("s1", PLAN, 0.0, 0.2)
+            .with("s2", PLAN, 0.0, 0.2)
+            .tessellated("s2", 0.01)
+    }
+
+    fn straddling_overlap() -> Slabs {
+        Slabs::default()
+            .with("s1", PLAN, 0.0, 0.2)
+            .with("s2", [5.0, 0.0, 15.0, 8.0], 3.0, 3.2)
+            .tessellated("s2", 0.5)
+    }
+
+    fn with_far() -> Slabs {
+        three_stacked().with("far", [30.0, 0.0, 40.0, 8.0], 3.0, 3.2)
+    }
+
+    #[test]
+    fn every_threshold_reaches_the_verdicts() {
+        let checks: [&[Band]; 6] = [
+            &[
+                ("top_to_top", None, Some(3.2)),
+                ("top_to_bottom", Some(2.7), None),
+            ],
+            &[("top_to_bottom", Some(3.0), None)],
+            &[("top_to_top", Some(2.5), None)],
+            &[
+                ("top_to_top", None, Some(3.5)),
+                ("bottom_to_bottom", None, Some(3.4)),
+            ],
+            &[("bottom_to_bottom", Some(3.0), Some(3.3))],
+            &[("top_to_top", None, Some(4.0))],
+        ];
+        for slabs in [
+            three_stacked as fn() -> Slabs,
+            alone,
+            partial,
+            tessellated,
+            level,
+            straddling_overlap,
+        ] {
+            for bands in checks {
+                parity(slabs, false, Services::Measuring, bands);
+            }
+        }
+    }
+
+    #[test]
+    fn an_unmeasurable_slab_or_no_services_leave_the_slabs_open_alike() {
+        let bands: &[Band] = &[("top_to_top", None, Some(3.2))];
+        parity(three_stacked, true, Services::Measuring, bands);
+        parity(three_stacked, false, Services::None, bands);
+        parity(with_far, false, Services::WithBoxes, bands);
+    }
+}

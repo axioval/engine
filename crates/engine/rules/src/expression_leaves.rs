@@ -192,6 +192,7 @@ impl<'a> ObjectLeaves<'a> {
                 Some(value) => {
                     let mut leaves = self.measured_member(member);
                     let evaluation = evaluate(value, path, &mut leaves);
+                    self.adopt_reason(&leaves, &evaluation.outcome);
                     (
                         evaluation.outcome,
                         evaluation
@@ -288,6 +289,17 @@ impl<'a> ObjectLeaves<'a> {
     /// Why the first unreadable leaf was unreadable.
     pub(crate) fn first_reason(&self) -> Option<NotEvaluatedReason> {
         self.reasons.borrow().first().cloned()
+    }
+
+    /// Takes over why a member's value was not evaluated, so an aggregate
+    /// left open by a member is open for the member's reason, as reading
+    /// the value on the object itself would leave it.
+    fn adopt_reason<T, E>(&self, member: &Self, outcome: &Result<T, E>) {
+        if outcome.is_err()
+            && let Some(reason) = member.first_reason()
+        {
+            self.reasons.borrow_mut().push(reason);
+        }
     }
 }
 
@@ -428,6 +440,7 @@ impl ExpressionContext for ObjectLeaves<'_> {
                 Some(value) => {
                     let mut leaves = self.member(object);
                     let evaluation = evaluate(value, path, &mut leaves);
+                    self.adopt_reason(&leaves, &evaluation.outcome);
                     evidence.extend(
                         evaluation
                             .reads

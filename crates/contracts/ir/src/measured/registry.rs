@@ -545,6 +545,242 @@ const PAIRED_PLAN_AREA: &[&str] = &[
     "type-hierarchy",
 ];
 
+/// What `level-spacing` orders a level among, shared by the level values.
+const LEVEL_KINDS: MeasuredParameter = MeasuredParameter {
+    key: "levels",
+    kind: MeasuredParameterKind::SourceKind,
+    required: true,
+    default: None,
+    help: &en_de(
+        "The source kinds of the levels, `,`-separated, such as storeys.",
+        "Die Quellarten der Geschosse, durch `,` getrennt, etwa Geschosse eines Gebäudes.",
+    ),
+};
+
+const LEVEL_ORDER: MeasuredParameter = MeasuredParameter {
+    key: "order",
+    kind: MeasuredParameterKind::Property,
+    required: true,
+    default: None,
+    help: &en_de(
+        "The length every level states its elevation in, such as `Levels/Elevation`.",
+        "Die Länge, in der jedes Geschoss seine Höhenlage angibt, etwa `Levels/Elevation`.",
+    ),
+};
+
+const LEVEL_ANCHOR: MeasuredParameter = MeasuredParameter {
+    key: "anchor",
+    kind: MeasuredParameterKind::Path,
+    required: false,
+    default: None,
+    help: &en_de(
+        "The relationship steps from an anchor (a building) to its levels, walked back \
+         from the level; without it, every level of the source.",
+        "Die Beziehungsschritte von einem Anker (einem Gebäude) zu seinen Geschossen, vom \
+         Geschoss zurück gegangen; ohne sie alle Geschosse der Quelle.",
+    ),
+};
+
+const LEVEL_ENDS: [MeasuredParameter; 4] = [
+    MeasuredParameter {
+        key: "lowest",
+        kind: MeasuredParameterKind::Choice {
+            options: &["checked", "ignored"],
+        },
+        required: false,
+        default: Some("checked"),
+        help: &en_de(
+            "Whether the lowest level is `checked` or `ignored` (a basement): an ignored \
+             level has no rise.",
+            "Ob das unterste Geschoss geprüft (`checked`) oder übergangen (`ignored`, ein \
+             Keller) wird: ein übergangenes Geschoss hat keine Steighöhe.",
+        ),
+    },
+    MeasuredParameter {
+        key: "highest",
+        kind: MeasuredParameterKind::Choice {
+            options: &["undecided", "ignored"],
+        },
+        required: false,
+        default: Some("undecided"),
+        help: &en_de(
+            "The highest level, with no level above it: `undecided` unless measured from \
+             its contents, or `ignored`, without a rise.",
+            "Das höchste Geschoss, ohne Geschoss darüber: unentschieden (`undecided`), \
+             sofern nicht aus seinem Inhalt gemessen, oder übergangen (`ignored`), ohne \
+             Steighöhe.",
+        ),
+    },
+    MeasuredParameter {
+        key: "contents",
+        kind: MeasuredParameterKind::Path,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The relationship steps from the highest level to its contents, whose highest \
+             top less its elevation is its rise.",
+            "Die Beziehungsschritte vom höchsten Geschoss zu seinem Inhalt, dessen höchste \
+             Oberkante weniger seiner Höhenlage seine Steighöhe ist.",
+        ),
+    },
+    MeasuredParameter {
+        key: "content_kinds",
+        kind: MeasuredParameterKind::SourceKind,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The source kinds of the contents counted, `,`-separated; without it, every \
+             object reached.",
+            "Die Quellarten des berücksichtigten Inhalts, durch `,` getrennt; ohne sie jedes \
+             erreichte Objekt.",
+        ),
+    },
+];
+
+const LEVEL_UNORDERED: &str = "a level of the anchor states no length to order it by, or the \
+     level reaches several anchors";
+const LEVEL_SERVICES: &[&str] = &[
+    "property-resolution",
+    "relationship-selection",
+    "vertical-extent",
+];
+
+const fn shelf_length(key: &'static str, help: &'static [LocalizedText]) -> MeasuredParameter {
+    MeasuredParameter {
+        key,
+        kind: MeasuredParameterKind::Length { minimum: 0.0 },
+        required: true,
+        default: None,
+        help,
+    }
+}
+
+/// The shelving arrangement and the doors it keeps clear, as
+/// `shelf-capacity` declares them.
+const SHELVING: [MeasuredParameter; 9] = [
+    shelf_length(
+        "depth",
+        &en_de(
+            "The shelves' depth, in metres.",
+            "Die Tiefe der Regale, in Metern.",
+        ),
+    ),
+    shelf_length(
+        "horizontal",
+        &en_de(
+            "The horizontal spacing between shelf runs, in metres.",
+            "Der waagerechte Abstand zwischen Regalreihen, in Metern.",
+        ),
+    ),
+    shelf_length(
+        "vertical",
+        &en_de(
+            "The vertical spacing between shelf boards, in metres.",
+            "Der senkrechte Abstand zwischen Regalböden, in Metern.",
+        ),
+    ),
+    shelf_length(
+        "bottom",
+        &en_de(
+            "The lowest board's elevation above the floor, in metres.",
+            "Die Höhe des untersten Bodens über dem Fußboden, in Metern.",
+        ),
+    ),
+    shelf_length(
+        "top",
+        &en_de(
+            "The shelving's top elevation above the floor, in metres.",
+            "Die Oberkante der Regale über dem Fußboden, in Metern.",
+        ),
+    ),
+    shelf_length(
+        "clearance",
+        &en_de(
+            "The clearance kept in front of each door or opening, in metres.",
+            "Der vor jeder Tür oder Öffnung frei gehaltene Abstand, in Metern.",
+        ),
+    ),
+    MeasuredParameter {
+        key: "access",
+        kind: MeasuredParameterKind::Path,
+        required: true,
+        default: None,
+        help: &en_de(
+            "The relationship steps from a door or opening to the spaces it reaches.",
+            "Die Beziehungsschritte von einer Tür oder Öffnung zu den Räumen, die sie \
+             erreicht.",
+        ),
+    },
+    objects(
+        "doors",
+        false,
+        &en_de(
+            "The source kinds of the doors, `,`-separated.",
+            "Die Quellarten der Türen, durch `,` getrennt.",
+        ),
+    ),
+    objects(
+        "openings",
+        false,
+        &en_de(
+            "The source kinds of the openings, `,`-separated.",
+            "Die Quellarten der Öffnungen, durch `,` getrennt.",
+        ),
+    ),
+];
+
+const SHELVING_UNMEASURED: &[&str] = &[
+    "the linear-quantity service cannot measure the space",
+    "an element that may reach the space has unreadable spaces or an undecided kind",
+];
+
+/// The storeys `slab-contact` orders by their `Elevation` attribute, and the
+/// path to the object's one storey.
+const STOREYS: [MeasuredParameter; 2] = [
+    MeasuredParameter {
+        key: "levels",
+        kind: MeasuredParameterKind::SourceKind,
+        required: true,
+        default: None,
+        help: &en_de(
+            "The source kinds of the storeys, `,`-separated.",
+            "Die Quellarten der Geschosse, durch `,` getrennt.",
+        ),
+    },
+    MeasuredParameter {
+        key: "path",
+        kind: MeasuredParameterKind::Path,
+        required: true,
+        default: None,
+        help: &en_de(
+            "The relationship steps from the object to its one storey.",
+            "Die Beziehungsschritte vom Objekt zu seinem einen Geschoss.",
+        ),
+    },
+];
+
+const STOREYS_UNORDERED: &str = "a storey states no length `Elevation`, or the object reaches no \
+     storey or several";
+
+/// The source a coordinate system is compared with.
+const REFERENCE_SOURCE: MeasuredParameter = MeasuredParameter {
+    key: "reference",
+    kind: MeasuredParameterKind::Text,
+    required: false,
+    default: None,
+    help: &en_de(
+        "The discipline of the one reference source; without it, the first source in \
+         identity order.",
+        "Die Disziplin der einen Referenzquelle; ohne sie die erste Quelle in der \
+         Reihenfolge der Kennungen.",
+    ),
+};
+
+const COORDINATES: &[&str] = &["coordinate-system"];
+const UNCOMPARED: &str = "only one of the two sources makes the statement, or a coordinate \
+     system cannot be read";
+const UNGEOREFERENCED: &str = "a source states no map conversion (not recorded)";
+
 macro_rules! plain {
     ($name:expr, $dimension:expr, $services:expr, $exactness:expr, $not:expr,
      $label:expr, $help:expr) => {
@@ -760,6 +996,39 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         help: &en_de(
             "The plan bearing of an axis, clockwise from north.",
             "Die Grundrissrichtung einer Achse, im Uhrzeigersinn von Norden.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "body_extent",
+        parameters: &[MeasuredParameter {
+            key: "axis",
+            kind: MeasuredParameterKind::Choice {
+                options: &["right", "forward", "up"],
+            },
+            required: true,
+            default: None,
+            help: &en_de(
+                "The placement's own axis: `right` (its first), `forward` (its second, \
+                 across a wall whose layers run along its first) or `up`.",
+                "Die eigene Achse der Platzierung: `right` (ihre erste), `forward` (ihre \
+                 zweite, quer zu einer Wand, deren Schichten entlang der ersten laufen) \
+                 oder `up`.",
+            ),
+        }],
+        dimension: Some(QuantityDimension::Length),
+        services: FACES_AND_FRAMES,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[
+            NO_GEOMETRY,
+            "the object's placement is not stated or not readable",
+        ],
+        label: &en_de("Body extent", "Körperausdehnung"),
+        help: &en_de(
+            "The body's depth along one of its own placement axes, as `body-extent` \
+             measures it: the highest less the lowest point projected onto the axis.",
+            "Die Tiefe des Körpers entlang einer eigenen Achse seiner Platzierung, wie \
+             `body-extent` sie misst: der höchste weniger der tiefste auf die Achse \
+             projizierte Punkt.",
         ),
     },
     plain!(
@@ -1159,6 +1428,26 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ),
     },
     MeasuredDescriptor {
+        name: "contact_gap",
+        parameters: &CONTACT,
+        dimension: Some(QuantityDimension::Length),
+        services: &["contact", "type-hierarchy"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[
+            NO_GEOMETRY,
+            "the body has no direction the service can orient",
+        ],
+        label: &en_de("Contact gap", "Kontaktabstand"),
+        help: &en_de(
+            "How far the nearest object of the kinds named lies from the face, as the \
+             contact service reports it with the contact area; none where it reports \
+             none near.",
+            "Wie weit das nächste Objekt der genannten Arten von der Fläche entfernt ist, \
+             wie der Kontaktdienst es mit der Kontaktfläche meldet; keiner, wo er keines \
+             in der Nähe meldet.",
+        ),
+    },
+    MeasuredDescriptor {
         name: "contact_share",
         parameters: &CONTACT,
         dimension: None,
@@ -1169,6 +1458,76 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         help: &en_de(
             "The share of a face in contact, from 0 to 1, as `slab-contact` judges it.",
             "Der Anteil einer Seite in Kontakt, von 0 bis 1, wie `slab-contact` ihn beurteilt.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "coordinate_shift",
+        parameters: &[
+            MeasuredParameter {
+                key: "of",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["world", "site", "map"],
+                },
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The world frame's origin, the site placement's origin, or the map \
+                     conversion's offset in metres.",
+                    "Der Ursprung des Weltrahmens, der Ursprung der Grundstücksplatzierung \
+                     oder der Versatz der Kartenumrechnung in Metern.",
+                ),
+            },
+            REFERENCE_SOURCE,
+        ],
+        dimension: Some(QuantityDimension::Length),
+        services: COORDINATES,
+        exactness: MeasuredExactness::Stated,
+        not_evaluated: &[
+            UNCOMPARED,
+            "the map unit is not stated exactly",
+            UNGEOREFERENCED,
+        ],
+        label: &en_de("Coordinate shift", "Koordinatenversatz"),
+        help: &en_de(
+            "How far the object's source moves a statement of its coordinate system from \
+             the reference source's, as `coordinate-consistency` compares them; none where \
+             neither states a site.",
+            "Wie weit die Quelle des Objekts eine Angabe ihres Koordinatensystems gegenüber \
+             der Referenzquelle verschiebt, wie `coordinate-consistency` sie vergleicht; \
+             keiner, wo keine ein Grundstück angibt.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "coordinate_turn",
+        parameters: &[
+            MeasuredParameter {
+                key: "of",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["world", "site", "north", "map"],
+                },
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The world frame's axes, the site placement's axes, true north, or the \
+                     map conversion's rotation.",
+                    "Die Achsen des Weltrahmens, die Achsen der Grundstücksplatzierung, \
+                     geografisch Nord oder die Drehung der Kartenumrechnung.",
+                ),
+            },
+            REFERENCE_SOURCE,
+        ],
+        dimension: Some(QuantityDimension::PlaneAngle),
+        services: COORDINATES,
+        exactness: MeasuredExactness::Stated,
+        not_evaluated: &[UNCOMPARED, UNGEOREFERENCED],
+        label: &en_de("Coordinate turn", "Koordinatendrehung"),
+        help: &en_de(
+            "How far the object's source turns a statement of its coordinate system from \
+             the reference source's, as `coordinate-consistency` compares them; none where \
+             neither states a site or true north.",
+            "Wie weit die Quelle des Objekts eine Angabe ihres Koordinatensystems gegenüber \
+             der Referenzquelle dreht, wie `coordinate-consistency` sie vergleicht; keine, \
+             wo keine ein Grundstück oder geografisch Nord angibt.",
         ),
     },
     MeasuredDescriptor {
@@ -2124,6 +2483,127 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ),
     },
     MeasuredDescriptor {
+        name: "level_rise",
+        parameters: &[
+            LEVEL_KINDS,
+            LEVEL_ORDER,
+            LEVEL_ANCHOR,
+            LEVEL_PATH,
+            LEVEL_ENDS[0],
+            LEVEL_ENDS[1],
+            LEVEL_ENDS[2],
+            LEVEL_ENDS[3],
+        ],
+        dimension: Some(QuantityDimension::Length),
+        services: LEVEL_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[
+            LEVEL_UNORDERED,
+            "the highest level's rise is undecided, or its contents cannot be measured",
+        ],
+        label: &en_de("Level rise", "Geschosshöhe"),
+        help: &en_de(
+            "A level's height as `level-spacing` measures it: the rise of its `order` to \
+             the next level up among its anchor's levels, the highest one's from its \
+             contents; none for an ignored level.",
+            "Die Höhe eines Geschosses, wie `level-spacing` sie misst: der Anstieg seiner \
+             Höhenlage (`order`) zum nächsthöheren Geschoss seines Ankers, die des höchsten \
+             aus seinem Inhalt; keine für ein übergangenes Geschoss.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "levels_above",
+        parameters: &STOREYS,
+        dimension: None,
+        services: &["property-resolution", "relationship-selection"],
+        exactness: MeasuredExactness::Stated,
+        not_evaluated: &[STOREYS_UNORDERED],
+        label: &en_de("Storeys above", "Geschosse darüber"),
+        help: &en_de(
+            "How many storeys of the object's source lie above its storey by their \
+             `Elevation` attribute, a whole number: none on the top storey, as \
+             `slab-contact` decides it.",
+            "Wie viele Geschosse der Quelle des Objekts nach ihrem Attribut `Elevation` über \
+             seinem Geschoss liegen, eine ganze Zahl: keines auf dem obersten Geschoss, wie \
+             `slab-contact` es entscheidet.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "levels_below",
+        parameters: &STOREYS,
+        dimension: None,
+        services: &["property-resolution", "relationship-selection"],
+        exactness: MeasuredExactness::Stated,
+        not_evaluated: &[STOREYS_UNORDERED],
+        label: &en_de("Storeys below", "Geschosse darunter"),
+        help: &en_de(
+            "How many storeys of the object's source lie below its storey by their \
+             `Elevation` attribute, a whole number: none on the bottom storey, as \
+             `slab-contact` decides it.",
+            "Wie viele Geschosse der Quelle des Objekts nach ihrem Attribut `Elevation` \
+             unter seinem Geschoss liegen, eine ganze Zahl: keines auf dem untersten \
+             Geschoss, wie `slab-contact` es entscheidet.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "map_conversion",
+        parameters: &[
+            MeasuredParameter {
+                key: "of",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["own", "reference"],
+                },
+                required: false,
+                default: Some("own"),
+                help: &en_de(
+                    "The object's own source, or the reference source.",
+                    "Die eigene Quelle des Objekts oder die Referenzquelle.",
+                ),
+            },
+            REFERENCE_SOURCE,
+        ],
+        dimension: None,
+        services: COORDINATES,
+        exactness: MeasuredExactness::Stated,
+        not_evaluated: &["a coordinate system cannot be read"],
+        label: &en_de("Map conversion stated", "Kartenumrechnung angegeben"),
+        help: &en_de(
+            "1 where the source states a map conversion, 0 where it is not georeferenced.",
+            "1, wo die Quelle eine Kartenumrechnung angibt, 0, wo sie nicht georeferenziert \
+             ist.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "map_scale_change",
+        parameters: &[REFERENCE_SOURCE],
+        dimension: None,
+        services: COORDINATES,
+        exactness: MeasuredExactness::Stated,
+        not_evaluated: &["a coordinate system cannot be read", UNGEOREFERENCED],
+        label: &en_de("Map scale change", "Änderung des Kartenmaßstabs"),
+        help: &en_de(
+            "How far the map conversion's scale of the object's source differs from the \
+             reference source's, a plain number.",
+            "Wie weit der Maßstab der Kartenumrechnung der Quelle des Objekts von dem der \
+             Referenzquelle abweicht, eine reine Zahl.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "map_target_change",
+        parameters: &[REFERENCE_SOURCE],
+        dimension: None,
+        services: COORDINATES,
+        exactness: MeasuredExactness::Stated,
+        not_evaluated: &["a coordinate system cannot be read", UNGEOREFERENCED],
+        label: &en_de("Map target change", "Änderung des Zielsystems"),
+        help: &en_de(
+            "1 where the map conversion of the object's source targets another system than \
+             the reference source's, 0 where both name the same.",
+            "1, wo die Kartenumrechnung der Quelle des Objekts ein anderes Zielsystem nennt \
+             als die der Referenzquelle, 0, wo beide dasselbe nennen.",
+        ),
+    },
+    MeasuredDescriptor {
         name: "middle_face_area",
         parameters: &FACE_AXES,
         dimension: Some(QuantityDimension::Area),
@@ -2398,6 +2878,36 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             "Die Länge des Grundrissrands, Löcher eingeschlossen."
         )
     ),
+    MeasuredDescriptor {
+        name: "plan_area",
+        parameters: &[MeasuredParameter {
+            key: "measure",
+            kind: MeasuredParameterKind::Choice {
+                options: &["footprint", "facade"],
+            },
+            required: false,
+            default: Some("footprint"),
+            help: &en_de(
+                "The plan `footprint`, or the outward-facing `facade` surface.",
+                "Der Grundriss (`footprint`) oder die nach außen weisende Fassadenfläche \
+                 (`facade`).",
+            ),
+        }],
+        dimension: Some(QuantityDimension::Area),
+        services: &["plan-area", "facade-area"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[
+            NO_GEOMETRY,
+            "the footprint is empty, so the object has no body",
+        ],
+        label: &en_de("Plan area", "Planfläche"),
+        help: &en_de(
+            "The object's own area as `plan-area` measures it: its footprint, which an \
+             object with a body never has empty, or its facade area.",
+            "Die eigene Fläche des Objekts, wie `plan-area` sie misst: sein Grundriss, \
+             der bei einem Objekt mit Körper nie leer ist, oder seine Fassadenfläche.",
+        ),
+    },
     plain!(
         "plan_diameter",
         Some(QuantityDimension::Length),
@@ -2442,6 +2952,110 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         help: &en_de(
             "The footprint's overlap in plan with objects of the kinds named; with the footprint `area`, `plan-coverage`'s ratio.",
             "Die Überlappung des Grundrisses mit Objekten der genannten Arten; mit der Grundfläche `area` das Verhältnis von `plan-coverage`.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "prevailing_elevation",
+        parameters: &[
+            MeasuredParameter {
+                key: "side",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["bottom", "top"],
+                },
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The spaces' `bottom` or `top` elevation.",
+                    "Die Unterkante (`bottom`) oder Oberkante (`top`) der Räume.",
+                ),
+            },
+            MeasuredParameter {
+                key: "spaces",
+                kind: MeasuredParameterKind::Path,
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The relationship steps from a level to its spaces; the space's level is \
+                     the one they reach back from it.",
+                    "Die Beziehungsschritte von einem Geschoss zu seinen Räumen; das Geschoss \
+                     des Raums ist das, das sie von ihm zurück erreichen.",
+                ),
+            },
+            objects(
+                "kinds",
+                false,
+                &en_de(
+                    "The source kinds of the spaces compared, `,`-separated; without it, \
+                     every object reached.",
+                    "Die Quellarten der verglichenen Räume, durch `,` getrennt; ohne sie jedes \
+                     erreichte Objekt.",
+                ),
+            ),
+            metres(
+                "tolerance",
+                "0",
+                &en_de(
+                    "Within how many metres elevations count as one when the prevailing one \
+                     is chosen.",
+                    "Innerhalb wie vieler Meter Höhen bei der Wahl der vorherrschenden als \
+                     eine zählen.",
+                ),
+            ),
+        ],
+        dimension: Some(QuantityDimension::Length),
+        services: &["vertical-extent", "relationship-selection"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[
+            NO_GEOMETRY,
+            "no space of the level has an exact elevation, or the space reaches several \
+             levels",
+        ],
+        label: &en_de("Prevailing elevation", "Vorherrschende Höhe"),
+        help: &en_de(
+            "The bottom or top elevation most spaces of the space's level share, the lowest \
+             of equally common ones, from exact elevations only, as `level-spacing`'s \
+             `space_elevation` compares them; none for a level with fewer than two spaces.",
+            "Die Unter- oder Oberkante, die die meisten Räume des Geschosses des Raums \
+             teilen, die niedrigste unter gleich häufigen, nur aus exakten Höhen, wie \
+             `level-spacing` mit `space_elevation` sie vergleicht; keine für ein Geschoss mit \
+             weniger als zwei Räumen.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "prevailing_rise",
+        parameters: &[
+            LEVEL_KINDS,
+            LEVEL_ORDER,
+            LEVEL_ANCHOR,
+            LEVEL_PATH,
+            LEVEL_ENDS[0],
+            LEVEL_ENDS[1],
+            LEVEL_ENDS[2],
+            LEVEL_ENDS[3],
+            metres(
+                "tolerance",
+                "0.001",
+                &en_de(
+                    "Within how many metres rises count as one when the prevailing one is \
+                     chosen.",
+                    "Innerhalb wie vieler Meter Steighöhen bei der Wahl der vorherrschenden \
+                     als eine zählen.",
+                ),
+            ),
+        ],
+        dimension: Some(QuantityDimension::Length),
+        services: LEVEL_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[LEVEL_UNORDERED],
+        label: &en_de("Prevailing rise", "Vorherrschende Geschosshöhe"),
+        help: &en_de(
+            "The level rise most of the anchor's checked levels share, the lowest of equally \
+             common ones, from exact rises only, as `level-spacing`'s `consistent` compares \
+             them; none with fewer than two rises or no exact one.",
+            "Die Geschosshöhe, die die meisten geprüften Geschosse des Ankers teilen, die \
+             niedrigste unter gleich häufigen, nur aus exakten Höhen, wie `level-spacing` mit \
+             `consistent` sie vergleicht; keine bei weniger als zwei Höhen oder keiner \
+             exakten.",
         ),
     },
     MeasuredDescriptor {
@@ -2621,6 +3235,42 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ),
     },
     MeasuredDescriptor {
+        name: "shelf_clear_height",
+        parameters: &SHELVING,
+        dimension: Some(QuantityDimension::Length),
+        services: &["linear-quantity", "relationship-selection"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[
+            SHELVING_UNMEASURED[0],
+            SHELVING_UNMEASURED[1],
+            "the service did not measure the clear height",
+        ],
+        label: &en_de("Shelving clear height", "Lichte Höhe für Regale"),
+        help: &en_de(
+            "The space's clear height the linear-quantity service measures with the \
+             shelving, as `shelf-capacity` compares it with the shelving's top.",
+            "Die lichte Höhe des Raums, die der Mengendienst mit den Regalen misst, wie \
+             `shelf-capacity` sie mit der Oberkante der Regale vergleicht.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "shelf_length",
+        parameters: &SHELVING,
+        dimension: Some(QuantityDimension::Length),
+        services: &["linear-quantity", "relationship-selection"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: SHELVING_UNMEASURED,
+        label: &en_de("Shelf running metres", "Regalmeter"),
+        help: &en_de(
+            "The running metres of shelving the arrangement fits into the space, the \
+             clearances of its doors and openings kept free, as `shelf-capacity` measures \
+             them.",
+            "Die laufenden Meter Regal, die die Anordnung im Raum unterbringt, die \
+             Freiflächen seiner Türen und Öffnungen ausgespart, wie `shelf-capacity` sie \
+             misst.",
+        ),
+    },
+    MeasuredDescriptor {
         name: "sill_height",
         parameters: &[FLOOR_PATH, OVER_FLOORS],
         dimension: Some(QuantityDimension::Length),
@@ -2694,6 +3344,61 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              it is positive.",
             "Das Gefälle der Fläche in einer Grundrissrichtung als Winkel mit \
              Vorzeichen: steigend ist positiv.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "stack_distance",
+        parameters: &[
+            MeasuredParameter {
+                key: "measure",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["top_to_top", "bottom_to_bottom", "top_to_bottom"],
+                },
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The rise from top to top, from bottom to bottom, or the clear gap from \
+                     this slab's top to the next one's underside.",
+                    "Der Anstieg von Oberkante zu Oberkante, von Unterkante zu Unterkante oder \
+                     der lichte Abstand von der Oberkante dieser Platte zur Unterseite der \
+                     nächsten.",
+                ),
+            },
+            objects(
+                "slabs",
+                true,
+                &en_de(
+                    "The source kinds of the slabs stacked, `,`-separated.",
+                    "Die Quellarten der gestapelten Platten, durch `,` getrennt.",
+                ),
+            ),
+            MeasuredParameter {
+                key: "ratio",
+                kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The least share of the smaller footprint two slabs overlap by to stack, \
+                     above 0 and at most 1.",
+                    "Der kleinste Anteil des kleineren Grundrisses, um den sich zwei Platten \
+                     überlappen, um übereinander zu liegen, über 0 und höchstens 1.",
+                ),
+            },
+        ],
+        dimension: Some(QuantityDimension::Length),
+        services: &["vertical-extent", "plan-area", "type-hierarchy"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[
+            NO_GEOMETRY,
+            "whether two slabs stack, or which is the next one up, cannot be decided",
+            "a slab of the kinds has no measurable extent",
+        ],
+        label: &en_de("Stack distance", "Stapelabstand"),
+        help: &en_de(
+            "The distance from the slab to the next slab up in its stack, as \
+             `slab-stack-spacing` pairs and measures them; none where no slab stacks above.",
+            "Der Abstand von der Platte zur nächsthöheren Platte ihres Stapels, wie \
+             `slab-stack-spacing` sie paart und misst; keiner, wo keine Platte darüber liegt.",
         ),
     },
     MeasuredDescriptor {
@@ -2998,6 +3703,26 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              oder ein Startpunkt keinen erreicht.",
         ),
     },
+    plain!(
+        "triangle_count",
+        None,
+        &["triangle-count"],
+        MeasuredExactness::Measured,
+        &[
+            "the host could not mesh the body",
+            "the host does not know the object",
+        ],
+        en_de("Triangle count", "Dreiecksanzahl"),
+        en_de(
+            "How many triangles the host's mesh of the body holds, as `triangle-count` \
+             reads it: a whole number, cited as approximate where the mesh tessellates \
+             curved faces, so the count depends on the host. A bodiless object counts none.",
+            "Wie viele Dreiecke das Netz des Hosts für den Körper enthält, wie \
+             `triangle-count` es liest: eine ganze Zahl, als angenähert belegt, wo das \
+             Netz gekrümmte Flächen zerlegt und die Anzahl damit vom Host abhängt. Ein \
+             Objekt ohne Körper zählt keine."
+        )
+    ),
     plain!(
         "unallocated_share",
         None,

@@ -5,6 +5,10 @@ use axioval_engine::{
     RuleCapability, RuleContext, TriangleCountError, TriangleCountServiceHandle,
 };
 
+mod measured;
+
+pub(crate) use measured::TriangleMeasures;
+
 use crate::selection::select_objects;
 use crate::support::{Parameters, Unavailable, finding, invalid};
 

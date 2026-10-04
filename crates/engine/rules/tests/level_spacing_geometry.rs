@@ -409,3 +409,262 @@ fn space_elevations_are_judged_three_valued_and_declared_with_the_spaces() {
         );
     }
 }
+
+/// `level_rise` measured from contents, each space's height against its
+/// level's, and each space's elevation against the `prevailing_elevation`
+/// of its level's spaces reach `level-spacing`'s verdicts: storeys and
+/// spaces each judged by an expression rule of their own.
+mod as_expressions {
+    use super::*;
+    use axioval_rules::ExpressionRequirement;
+    use common::expressions::{
+        abs, and, assert_parity, at_least, at_most, between, m, measured, merged,
+        rule as expression, subtract, unless_null,
+    };
+    use serde_json::Value;
+
+    const LEVEL: &str = "levels=storey;order=Levels/Elevation;anchor=aggregates";
+    const CONTENTS: &str = ";contents=contains;content_kinds=wall";
+
+    fn rise(options: &str) -> Value {
+        measured(&format!("level_rise;{LEVEL}{options}"))
+    }
+
+    fn rewrite(
+        model: fn() -> Model,
+        extents: Option<fn() -> Extents>,
+        rules: &[(&str, Value)],
+    ) -> CapabilityEvaluation {
+        let evaluations = rules
+            .iter()
+            .map(|(of, requirement)| {
+                model().evaluate_measured(
+                    &ExpressionRequirement,
+                    &expression(kind(of), requirement),
+                    |services| {
+                        if let Some(extents) = extents {
+                            services
+                                .register(VerticalExtentServiceHandle::new(Arc::new(extents())))
+                                .unwrap();
+                        }
+                    },
+                )
+            })
+            .collect();
+        merged(evaluations)
+    }
+
+    fn straddling_wall() -> Extents {
+        extents().with("wall-og", 3.0, 6.5, 0.01)
+    }
+
+    fn straddling_space() -> Extents {
+        extents().with("space-eg", 0.0, 3.05, 0.01)
+    }
+
+    fn at_most_rise(options: &str, maximum: f64) -> Value {
+        let rise = rise(options);
+        unless_null(&rise, at_most(rise.clone(), m(maximum)))
+    }
+
+    #[test]
+    fn the_highest_rise_from_contents_reaches_the_verdicts() {
+        for (extents, maximum) in [
+            (extents as fn() -> Extents, 3.2),
+            (extents, 3.5),
+            (straddling_wall, 3.5),
+            (straddling_wall, 3.6),
+        ] {
+            let mut extra = contents();
+            extra.push(("maximum", metres(maximum)));
+            let found = run(model(), extents(), extra);
+            let rewritten = rewrite(
+                model,
+                Some(extents),
+                &[("storey", at_most_rise(CONTENTS, maximum))],
+            );
+            assert_parity(ID, &found, &rewritten);
+        }
+        // Consistency sees the measured height too.
+        let mut extra = contents();
+        extra.push(("consistent", boolean(true)));
+        let found = run(model(), extents(), extra);
+        let own = rise(CONTENTS);
+        let reference = measured(&format!("prevailing_rise;{LEVEL}{CONTENTS}"));
+        let rewritten = rewrite(
+            model,
+            Some(extents),
+            &[(
+                "storey",
+                unless_null(
+                    &reference,
+                    at_most(abs(subtract(own, reference.clone())), m(0.001)),
+                ),
+            )],
+        );
+        assert_parity(ID, &found, &rewritten);
+    }
+
+    #[test]
+    fn a_highest_rise_without_measurable_contents_is_left_open_alike() {
+        let columns = ";contents=contains;content_kinds=column";
+        let found = run(
+            model(),
+            extents(),
+            vec![
+                ("content_path", strings(&["contains"])),
+                ("content_selector", selector(kind("column"))),
+                ("maximum", metres(4.0)),
+            ],
+        );
+        let rewritten = rewrite(
+            model,
+            Some(extents),
+            &[("storey", at_most_rise(columns, 4.0))],
+        );
+        assert_parity(ID, &found, &rewritten);
+        let mut extra = contents();
+        extra.push(("maximum", metres(4.0)));
+        let found = run(model(), Extents::default(), extra.clone());
+        let rewritten = rewrite(
+            model,
+            Some(Extents::default),
+            &[("storey", at_most_rise(CONTENTS, 4.0))],
+        );
+        assert_parity(ID, &found, &rewritten);
+        let found = model().evaluate(
+            &LevelSpacing,
+            &rule(ID, kind("building"), parameters(extra)),
+        );
+        let rewritten = rewrite(model, None, &[("storey", at_most_rise(CONTENTS, 4.0))]);
+        assert_parity(ID, &found, &rewritten);
+    }
+
+    /// Storeys whose rise is undecided are left open; every other passes.
+    fn storeys_measured(options: &str) -> (&'static str, Value) {
+        let rise = rise(options);
+        ("storey", unless_null(&rise, at_least(rise.clone(), m(0.0))))
+    }
+
+    /// Each space as high as its level within `tolerance`.
+    fn spaces_as_high(options: &str, tolerance: f64) -> (&'static str, Value) {
+        let level = rise(&format!("{options};path=aggregates:backward"));
+        (
+            "space",
+            unless_null(
+                &level,
+                at_most(
+                    abs(subtract(measured("extent_z"), level.clone())),
+                    m(tolerance),
+                ),
+            ),
+        )
+    }
+
+    #[test]
+    fn spaces_as_high_as_their_level_reach_the_verdicts() {
+        for (extents, tolerance) in [
+            (extents as fn() -> Extents, 0.05),
+            (extents, 0.5),
+            (straddling_space, 0.05),
+            (straddling_wall, 0.6),
+        ] {
+            let found = run(model(), extents(), [contents(), spaces(tolerance)].concat());
+            let rewritten = rewrite(
+                model,
+                Some(extents),
+                &[
+                    storeys_measured(CONTENTS),
+                    spaces_as_high(CONTENTS, tolerance),
+                ],
+            );
+            assert_parity(ID, &found, &rewritten);
+        }
+        // Without contents the highest level is open and its spaces are not
+        // compared.
+        let found = run(model(), extents(), spaces(0.05));
+        let rewritten = rewrite(
+            model,
+            Some(extents),
+            &[
+                storeys_measured(""),
+                spaces_as_high(";highest=ignored", 0.05),
+            ],
+        );
+        assert_parity(ID, &found, &rewritten);
+    }
+
+    fn stepped_model() -> Model {
+        stepped_floors().0
+    }
+
+    fn stepped_extents() -> Extents {
+        stepped_floors().1
+    }
+
+    fn stepped_straddling() -> Extents {
+        stepped_floors().1.with("space-level", 0.04, 3.0, 0.02)
+    }
+
+    fn shares(side: &str, tolerance: f64) -> Value {
+        let reference = measured(&format!(
+            "prevailing_elevation;side={side};spaces=aggregates;kinds=space;tolerance={tolerance}"
+        ));
+        unless_null(
+            &reference,
+            at_most(
+                abs(subtract(measured(side), reference.clone())),
+                m(tolerance),
+            ),
+        )
+    }
+
+    #[test]
+    fn spaces_sharing_their_level_elevation_reach_the_verdicts() {
+        for (extents, elevation, tolerance) in [
+            (stepped_extents as fn() -> Extents, "bottom", 0.05),
+            (stepped_extents, "top", 0.05),
+            (stepped_extents, "bottom", 0.3),
+            (stepped_straddling, "both", 0.05),
+            (stepped_straddling, "bottom", 0.01),
+        ] {
+            let mut extra = spaces(tolerance);
+            extra.push(("space_elevation", string(elevation)));
+            extra.push(("space_height", boolean(false)));
+            let found = run(stepped_model(), extents(), extra);
+            let requirement = match elevation {
+                "both" => and(vec![shares("bottom", tolerance), shares("top", tolerance)]),
+                side => shares(side, tolerance),
+            };
+            let (model, _) = stepped_floors();
+            let rewritten = model.evaluate_measured(
+                &ExpressionRequirement,
+                &expression(kind("space"), &requirement),
+                |services| {
+                    services
+                        .register(VerticalExtentServiceHandle::new(Arc::new(extents())))
+                        .unwrap();
+                },
+            );
+            assert_parity(ID, &found, &rewritten);
+        }
+    }
+
+    #[test]
+    fn a_rise_within_bounds_both_ways_reaches_the_verdicts() {
+        let mut extra = contents();
+        extra.push(("minimum", metres(3.2)));
+        extra.push(("maximum", metres(3.6)));
+        let found = run(model(), extents(), extra);
+        let rise = rise(CONTENTS);
+        let rewritten = rewrite(
+            model,
+            Some(extents),
+            &[(
+                "storey",
+                unless_null(&rise, between(rise.clone(), m(3.2), m(3.6))),
+            )],
+        );
+        assert_parity(ID, &found, &rewritten);
+    }
+}

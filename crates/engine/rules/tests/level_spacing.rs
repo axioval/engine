@@ -149,3 +149,120 @@ fn bounds_must_be_lengths() {
         [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
     );
 }
+
+/// Each level's `level_rise` within the bounds, and against the
+/// `prevailing_rise`, reaches `level-spacing`'s verdicts on its storeys.
+mod as_expressions {
+    use super::*;
+    use axioval_rules::ExpressionRequirement;
+    use common::expressions::{
+        abs, assert_parity, at_most, between, differences, m, measured, rule as expression,
+        subtract, unless_null,
+    };
+    use serde_json::Value;
+
+    fn level(name: &str, options: &str) -> Value {
+        measured(&format!(
+            "{name};levels=storey;order=Levels/Elevation;anchor=aggregates{options}"
+        ))
+    }
+
+    fn rewrite(model: Model, requirement: &Value) -> axioval_engine::CapabilityEvaluation {
+        model.evaluate_measured(
+            &ExpressionRequirement,
+            &expression(kind("storey"), requirement),
+            |_| {},
+        )
+    }
+
+    fn bounded(options: &str, minimum: f64, maximum: f64) -> Value {
+        let rise = level("level_rise", options);
+        unless_null(&rise, between(rise.clone(), m(minimum), m(maximum)))
+    }
+
+    fn consistent(options: &str) -> Value {
+        let rise = level("level_rise", options);
+        let reference = level("prevailing_rise", options);
+        unless_null(
+            &reference,
+            unless_null(
+                &rise,
+                at_most(abs(subtract(rise.clone(), reference.clone())), m(0.001)),
+            ),
+        )
+    }
+
+    #[test]
+    fn bounded_heights_reach_the_verdicts() {
+        for (minimum, maximum) in [(2.5, 4.0), (3.0, 4.5), (3.5, 10.0)] {
+            let found = check(
+                storeys(),
+                vec![("minimum", metres(minimum)), ("maximum", metres(maximum))],
+            );
+            let rewritten = rewrite(storeys(), &bounded(";highest=ignored", minimum, maximum));
+            assert_parity(ID, &found, &rewritten);
+            let found = check(
+                storeys(),
+                vec![
+                    ("minimum", metres(minimum)),
+                    ("maximum", metres(maximum)),
+                    ("ignore_lowest", boolean(true)),
+                ],
+            );
+            let rewritten = rewrite(
+                storeys(),
+                &bounded(";highest=ignored;lowest=ignored", minimum, maximum),
+            );
+            assert_parity(ID, &found, &rewritten);
+        }
+        // The highest level, not ignored, has no rise to judge.
+        let found = check(
+            storeys(),
+            vec![
+                ("maximum", metres(10.0)),
+                ("ignore_highest", boolean(false)),
+            ],
+        );
+        let rewritten = rewrite(storeys(), &bounded("", 0.0, 10.0));
+        assert_parity(ID, &found, &rewritten);
+    }
+
+    #[test]
+    fn consistent_heights_reach_the_verdicts() {
+        let found = check(storeys(), vec![("consistent", boolean(true))]);
+        let rewritten = rewrite(storeys(), &consistent(";highest=ignored"));
+        assert_parity(ID, &found, &rewritten);
+        let found = check(
+            storeys(),
+            vec![
+                ("consistent", boolean(true)),
+                ("ignore_lowest", boolean(true)),
+            ],
+        );
+        let rewritten = rewrite(storeys(), &consistent(";highest=ignored;lowest=ignored"));
+        assert_parity(ID, &found, &rewritten);
+        // Two storeys, each its own prevailing candidate: the lower prevails.
+        let two = || building(&[("eg", Some(0.0)), ("og", Some(3.0)), ("dg", Some(7.0))]);
+        let found = check(two(), vec![("consistent", boolean(true))]);
+        let rewritten = rewrite(two(), &consistent(";highest=ignored"));
+        assert_parity(ID, &found, &rewritten);
+    }
+
+    /// A storey without an elevation: the capability leaves the building
+    /// open, unable to order its storeys; the rewrite, judging storeys,
+    /// leaves each storey of that building open.
+    #[test]
+    fn an_unordered_building_leaves_its_storeys_open() {
+        let model = || building(&[("eg", Some(0.0)), ("og", None)]);
+        let found = check(model(), vec![("maximum", metres(4.0))]);
+        let rewritten = rewrite(model(), &bounded(";highest=ignored", 0.0, 4.0));
+        assert_eq!(
+            differences(ID, &found, &rewritten),
+            [
+                "test:model/b: capability not evaluated (IncompleteEvidence), expression passed",
+                "test:model/eg: capability passed, expression not evaluated (IncompleteEvidence)",
+                "test:model/og: capability passed, expression not evaluated (IncompleteEvidence)",
+            ]
+        );
+    }
+}

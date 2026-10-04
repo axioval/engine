@@ -16,6 +16,19 @@ pub(crate) fn objects_of_kinds(
     key: &str,
     object: &ObjectId,
 ) -> Result<BTreeSet<ObjectId>, PropertyResolutionError> {
+    let mut found = every_object_of_kinds(context, call, key)?;
+    found.remove(object);
+    Ok(found)
+}
+
+/// The project's objects of the `,`-separated source kinds `key` names,
+/// matched as [`objects_of_kinds`] matches them, the object measured
+/// included: the population a capability selects by kind.
+pub(crate) fn every_object_of_kinds(
+    context: &RuleContext<'_>,
+    call: &MeasuredCall,
+    key: &str,
+) -> Result<BTreeSet<ObjectId>, PropertyResolutionError> {
     let Some(MeasuredArgument::SourceKind(kinds)) = call.argument(key) else {
         return Err(PropertyResolutionError::InvalidRequest);
     };
@@ -23,9 +36,6 @@ pub(crate) fn objects_of_kinds(
     let hierarchy = context.services.get::<TypeHierarchyServiceHandle>();
     let mut found = BTreeSet::new();
     for candidate in context.project.objects() {
-        if candidate.id == *object {
-            continue;
-        }
         let held = candidate.kind();
         for kind in &kinds {
             let matched =
@@ -99,5 +109,42 @@ pub(crate) fn resolution_error(
         NotEvaluatedReason::NotRecorded => PropertyResolutionError::NotRecorded(message),
         NotEvaluatedReason::InvalidEvidence => PropertyResolutionError::Conflicting(message),
         _ => PropertyResolutionError::Unavailable(message),
+    }
+}
+
+/// A refusal of `name` of `object` as a property-resolution error that maps
+/// back to the capability's reason.
+pub(crate) fn refused(
+    name: &str,
+    object: &ObjectId,
+) -> impl Fn(crate::support::Unavailable) -> PropertyResolutionError {
+    move |(reason, why)| resolution_error((reason, format!("`{name}` of {object}: {why}")))
+}
+
+/// A value sure to lie in `[lower, upper]`, cited as exactly as the
+/// measurement it comes from: an interval of an exact measurement holds
+/// only rounding, so its evidence stays exact, and an approximate one's is
+/// never exact, a point included.
+pub(crate) fn interval(
+    (lower, upper): (f64, f64),
+    dimension: Option<axioval_ir::QuantityDimension>,
+    exact: bool,
+    locator: String,
+) -> axioval_engine::Measurement {
+    if exact {
+        axioval_engine::Measurement::Rounded {
+            lower,
+            upper,
+            dimension,
+            locator,
+        }
+    } else {
+        axioval_engine::Measurement::Cited {
+            lower,
+            upper,
+            dimension,
+            locator,
+            exact: false,
+        }
     }
 }

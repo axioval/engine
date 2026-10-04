@@ -27,6 +27,10 @@ use axioval_ir::{
     ATTRIBUTE_SET, Finding, Object, ObjectId, PropertyValue, QuantityDimension, Severity, SourceId,
 };
 
+mod measured;
+
+pub(crate) use measured::StoreyMeasures;
+
 use crate::selection::select_objects;
 use crate::support::{
     Parameters, PropertyRef, Traversal, Unavailable, invalid, resolve, traversal_parameters,

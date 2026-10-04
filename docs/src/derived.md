@@ -405,6 +405,16 @@ ignoring ASCII case):
 | `rectangle_side;side=width\|length` | the shorter or longer side of the footprint's least-area rectangle, a length | `PlanSpanService::measure_rectangle` |
 | `obstruction_count;obstacles=<kinds>;reach=<m>;at=ends\|sides\|within[;side_zone=<m>]` | how many ends or sides of that rectangle obstacles obstruct, or how many stand within it, a plain number | built in, over `PlanSpanService`, `ProximityService`, `VerticalExtentService` |
 | `band_uncovered_area;members=<kinds>;member_path=<steps>;angle_tolerance=<degrees>;maximum=<m>;footprints=<kinds>;footprint_path=<steps>` | the largest area of a reached footprint outside every band between parallel members at most `maximum` apart | built in, over `PlanSpanService`, `ProximityService`, `VerticalExtentService`, `PlanAreaService::measure_outside_bands` |
+| `plan_area[;measure=footprint\|facade]` | the object's own area as `plan-area` measures it, an empty footprint refused | built in, over `PlanAreaService` or `FacadeAreaService` |
+| `contact_gap;with=<kinds>[;side=…;gap=…;intersection=…;polygon=…]` | the distance to the nearest object of the kinds the contact service reports, none where it reports none | `ContactService` |
+| `level_rise;levels=<kinds>;order=<set/name>[;anchor=<steps>][;path=<steps>][;lowest=…][;highest=…][;contents=<steps>;content_kinds=<kinds>]`, `prevailing_rise;…[;tolerance=<m>]` | a level's rise to the next one up, and the prevailing rise among its anchor's levels, as `level-spacing` measures them | built in, over the order property and `VerticalExtentService` |
+| `prevailing_elevation;side=bottom\|top;spaces=<steps>[;kinds=<kinds>][;tolerance=<m>]` | the prevailing bottom or top elevation among the spaces of the space's level | built in, over `VerticalExtentService` |
+| `levels_above`, `levels_below` `;levels=<kinds>;path=<steps>` | how many storeys of the source lie above or below the object's one storey by their `Elevation` attribute | built in, over the property and relationship services |
+| `stack_distance;measure=top_to_top\|bottom_to_bottom\|top_to_bottom;slabs=<kinds>;ratio=<share>` | the distance to the next slab up in the slab's stack, none where none stacks above | built in, over `VerticalExtentService`, `PlanAreaService` |
+| `shelf_length`, `shelf_clear_height` `;depth=…;horizontal=…;vertical=…;bottom=…;top=…;clearance=…;access=<steps>[;doors=<kinds>][;openings=<kinds>]` | a space's running metres of shelving and its clear height, as `shelf-capacity` measures them | built in, over `LinearQuantityService` |
+| `body_extent;axis=right\|forward\|up` | the body's depth along one of its own placement axes, as `body-extent` measures it | built in, over `ObjectFrameService`, `VerticalExtentService` |
+| `triangle_count` | how many triangles the host's mesh of the body holds | built in, over `TriangleCountService` |
+| `coordinate_shift;of=world\|site\|map`, `coordinate_turn;of=world\|site\|north\|map`, `map_scale_change`, `map_target_change`, `map_conversion[;of=own\|reference]` `[;reference=<discipline>]` | how the object's source's coordinate system departs from the reference source's | built in, over `CoordinateSystemService` |
 
 ### Names with parameters
 
@@ -416,7 +426,8 @@ them unchanged. Keys are matched ignoring ASCII case.
 
 Every measured name is declared once, in `axioval_ir::measured`
 (`MEASURED_VALUES`, sorted by name). A descriptor states the name, its
-typed parameters (`path`, a `sourceKind` or a `length` with a minimum;
+typed parameters (`path`, a `sourceKind`, a `length` with a minimum, a
+`choice`, a `vector`, a `property` or a `text`, such as a discipline;
 required or with a default), the dimension and SI unit of the value, the
 services a run needs, its exactness (`stated` or `measured`), what leaves
 it not evaluated, and an English and German label and help text. Editors
@@ -608,13 +619,13 @@ the same request, so its verdict is an expression ratio:
 
 | Capability | As measured values |
 |---|---|
-| `plan-area` | an `aggregate` `sum` of `area` (or `facade_area`) over the member path |
-| `area-ratio` | the `divide` of two such sums, each filtered by its selector |
+| `plan-area` | `plan_area` (`measure=facade`), or an `aggregate` `sum` of it over the member path, filtered by the member selector |
+| `area-ratio` | the `divide` of two `aggregate` `sum`s of `area`, `facade_area` or a stated area, each filtered by its selector, or over `plan_area` or a stated area of the anchor |
 | light area | `area-ratio`'s light-area numerator is an expression over the stated sizes: a `lookup` of the light area table, or `W × H − 2(W + H) × frame` |
-| `plan-coverage` | `plan_overlap;with=<kinds>` over `area` |
+| `plan-coverage` | `plan_overlap;with=<kinds>` over `plan_area` |
 | `opening-area` | `opening_area;path=…` against the stated gross less net area, or an `aggregate` `sum` of each opening's `opening_section_area` over the path |
 | `empty-host` | `opening_count;path=…` above zero and `opening_area;path=…` not short of `middle_face_area` by more than the tolerance |
-| `slab-contact` | `contact_share;with=<kinds>;side=…` against the minimum ratio |
+| `slab-contact` | `contact_share;with=<kinds>;side=…` against the minimum ratio, one rule per severity band over `contact_area`, `contact_gap` and the share's part of the minimum, and `levels_above` or `levels_below` 0 for a top or bottom storey left out |
 | `counterpart-coverage` | `counterpart_uncovered_share;by=<kinds>;measure=…` at most each band's threshold, one rule per band at its severity (in plan alone, also `uncovered_area;by=<kinds>;growth=<tolerance>` over `area`) |
 | `effective-coverage` | `effect_covered_share;sources=<kinds>;reach=…;range=…` against the minimum |
 | `space-boundary-coverage` | `boundary_covered_share`, `boundary_uncovered_area` and `boundary_overlap_area` against their bounds, and `boundary_off_surface_count = 0` |
@@ -654,6 +665,30 @@ stating only one of its side areas, which `opening-area` leaves open,
 reads the missing side as `null` in an expression, so the comparison is
 false, a finding. The summed `opening_section_area` checks no two openings
 against each other and knows no minimum area.
+
+Expressions over these values reach `plan-area`'s, `area-ratio`'s,
+`plan-coverage`'s and `slab-contact`'s verdicts on their fixtures, check by
+check: own and summed footprints and facade areas within a range, ratios
+of measured, facade and stated areas over a relationship or a path, an
+anchor reaching no numerator object (a `count` of at least one), the
+largest overlap's share of the footprint, the graded shortfall and absence
+of contact, and the top or bottom storey left out. Ratios are rounded to
+`1e-9` before they are compared, as the capability compares the quotient
+the literal bound names. A sum of areas divided by `1 m²` is a plain
+number, so a sum over no member is a plain 0. These differ:
+
+- an `area-ratio` member stating no area leaves its anchor open; an
+  aggregate skips a `null`, so the rewrite requires every member to state
+  one (`all` of `isDefined`) and finds the anchor instead;
+- `plan-area` leaves an anchor with undecided members open unless its sum
+  already exceeds the maximum; the aggregate measures the undecided members
+  too, so a sum that stays within the bounds either way passes;
+- `slab-contact` counterparts named by more than a kind cannot be a
+  measured value's candidates: an undecided one leaves a shortfall open in
+  the capability, and the rewrite finds it;
+- `area-ratio`'s light-area numerator (a stated light area, else a size
+  table row by type pattern, else a frame allowance, with an oversized
+  member reported on its own) stays with the capability.
 
 ### Space aspects
 
@@ -988,6 +1023,91 @@ levels, so "on storeys more than 7 m above ground" is one expression,
 `height_above_ground;path=IfcRelAggregates:backward > 7 m`, over every
 model; restricted to one discipline it reads the source's
 `axioval:source` `discipline` (see [Source facts](#source-facts)).
+
+Level heights are measured as `level-spacing` measures them.
+`level_rise;levels=<kinds>;order=<set/name>` is a level's rise to the next
+level up: its `order` length (`Levels/Elevation`) less the next one's, among
+the levels of its anchor (the one object the `anchor` path, a building to
+its storeys, reaches back from the level) or, without `anchor`, of its
+source. The object is the level, or the one its `path` reaches. With
+`lowest=ignored` the lowest level has no rise; the highest has none with
+`highest=ignored`, is measured from the highest top of what its `contents`
+path reaches (of the `content_kinds`) less its order, and is left open
+otherwise. `prevailing_rise` (same parameters, and `tolerance`, default
+1 mm) is the rise most of the anchor's checked levels share, the lowest of
+equally common ones, from exact rises only; none with fewer than two.
+`prevailing_elevation;side=bottom|top;spaces=<steps>` is the bottom or top
+elevation most spaces of a space's level share (the level its `spaces` path
+reaches back from the space, the spaces of the `kinds` it reaches), from
+exact elevations only, within `tolerance`; none for fewer than two spaces.
+Expressions over them reach `level-spacing`'s verdicts on its fixtures: a
+bounded rise, `abs(rise - prevailing_rise)` within the tolerance, each
+space's `extent_z` against its level's rise (`path` up to the level), and
+each space's `bottom` or `top` against the prevailing elevation, storeys and
+spaces each judged by a rule of their own. A level whose anchor's levels
+cannot be ordered is open in the rewrite, where the capability leaves the
+anchor open.
+
+`levels_above` and `levels_below` (`levels=<kinds>;path=<steps>`) count the
+storeys of the object's source above and below its one storey by their
+`Elevation` attribute, as `slab-contact` leaves out the top or bottom
+storey: 0 on the top or bottom one. An object on no storey or several, or a
+storey without a length elevation, is open.
+
+### Stacks, shelving, extents and meshes
+
+`stack_distance;measure=…;slabs=<kinds>;ratio=<share>` pairs the slabs of
+the kinds as `slab-stack-spacing` does (stacked when their footprints
+overlap by at least `ratio` of the smaller, ordered by their tops) and
+measures the rise from top to top, bottom to bottom, or the clear gap from
+the slab's top to the next one's underside; none where nothing stacks above.
+Whether two slabs stack, or which is the next one up, left open by the
+intervals, and any slab of the kinds without an extent leave it open. A
+bound on it, rounded to the micrometre, reaches each of the capability's
+thresholds on its fixtures; consistency within a stack stays with the
+capability.
+
+`shelf_length` and `shelf_clear_height` are the running metres of shelving
+the arrangement (`depth`, `horizontal`, `vertical`, `bottom`, `top`,
+`clearance`, in metres) fits into a space, and the space's clear height,
+from one request carrying the doors and openings of the kinds the `access`
+path reaches the space from, as `shelf-capacity` measures them; an element
+that may reach the space unreadably leaves both open. `shelf_clear_height`
+at least `top` and `shelf_length` at least the minimum reach the
+capability's verdicts on its fixtures.
+
+`body_extent;axis=right|forward|up` is the body's depth along one of its own
+placement axes, refused as `body-extent` refuses it (an unplaced object is
+incomplete evidence), and cited as exactly as its frame and extent are.
+`abs(body_extent - thickness)`, rounded to the micrometre, within a
+tolerance, or the extent within a range, reaches the capability's verdicts
+on its fixtures; a stated length that is absent fails, one that is no
+length is invalid evidence.
+
+`triangle_count` is the host's count of the body's mesh. A count of a
+tessellation is a point whose evidence is not exact
+(`Measurement::Cited` with `exact: false`), as the capability cites it, so at most the
+maximum reaches `triangle-count`'s verdicts and evidence.
+
+### Coordinate systems
+
+The coordinate system of an object's source is compared with the reference
+source's (the one of the discipline `reference` names, or the first in
+identity order) as `coordinate-consistency` compares them:
+`coordinate_shift` and `coordinate_turn` `of` the `world` frame or the
+`site` placement, `coordinate_turn;of=north` for true north, and
+`coordinate_shift`, `coordinate_turn` `of` the `map` conversion with
+`map_scale_change` and `map_target_change` (1 where the target systems
+differ). A statement only one source makes is open as incomplete evidence,
+and so is a map offset in an inexact unit; a site or true north neither
+states has no value; map comparisons with a source stating no map
+conversion are open as not recorded. `map_conversion` is 1 where the source
+(or, `of=reference`, the reference) states one. Every comparison within its
+tolerance, the map comparisons last (so a missing map conversion is not
+recorded only when nothing else is unknown), and with a required map
+conversion `map_conversion` 1 and the map comparisons only where the
+reference states one, reach the capability's verdicts on its fixtures; the
+capability judges a source, the rewrite each object of it.
 
 ### Stated rather than measured
 

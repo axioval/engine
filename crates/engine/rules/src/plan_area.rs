@@ -10,6 +10,10 @@ use axioval_ir::{
     ReportValue, RuleId,
 };
 
+mod measured;
+
+pub(crate) use measured::AreaMeasures;
+
 use crate::counts::{Population, relation_text, tally};
 use crate::light_area::LightArea;
 use crate::selection::select_objects;

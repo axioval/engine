@@ -101,7 +101,10 @@ compared come from the same evidence. A capability run directly, as its
 fixture tests run it, is compared with its rewrite by
 `compare_evaluations((capability, evaluation), (expression, rewritten))`,
 which reads each `CapabilityEvaluation` as `outcomes` reads a rule
-(`evaluation_outcomes`) and lists the same differences. The harness runs in two places:
+(`evaluation_outcomes`) and lists the same differences. A capability
+rewritten as several rules (one per severity band, or one for each kind of
+object it judges) is compared with their evaluations merged, and one judging
+a source with its outcome read for each object of the source. The harness runs in two places:
 
 - **Fixtures, in CI.** `crates/engine/rules/tests/parity.rs` runs the
   `property-predicate` capability against its expression rewrite over a

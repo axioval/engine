@@ -20,6 +20,10 @@ use axioval_engine::{
 };
 use axioval_ir::{Evidence, ObjectId, QuantityDimension};
 
+mod measured;
+
+pub(crate) use measured::StackMeasures;
+
 use crate::level_spacing::{metres, prevailing};
 use crate::pairs::{Unevaluated, refuse_all};
 use crate::selection::select_objects;

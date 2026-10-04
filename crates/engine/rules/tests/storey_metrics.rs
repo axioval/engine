@@ -529,3 +529,296 @@ fn the_measured_facade_areas_reach_the_window_to_wall_verdicts() {
         assert_eq!(ratio > 0.1, found, "{storey}: {ratio}");
     }
 }
+
+/// The storey metrics rewritten as expressions over measured and stated
+/// areas, compared object by object with `area-ratio` and `plan-area`.
+mod parity {
+    use super::*;
+    use axioval_rules::ExpressionRequirement;
+    use common::expressions::{
+        assert_parity, at_least, at_most, divide, m2, measured, over_path, plain,
+        rule as expression, stated,
+    };
+    use serde_json::{Value, json};
+
+    fn rewrite(
+        fixture: fn() -> (Model, Areas),
+        slack: Option<(&str, f64)>,
+        selector: Selector,
+        requirement: &Value,
+    ) -> CapabilityEvaluation {
+        let areas = || {
+            let (_, areas) = fixture();
+            Arc::new(match slack {
+                Some((object, slack)) => {
+                    let area = areas.0[&id(object)].0;
+                    areas.with(object, area, slack)
+                }
+                None => areas,
+            })
+        };
+        fixture().0.evaluate_measured(
+            &ExpressionRequirement,
+            &expression(selector, requirement),
+            |services| {
+                services
+                    .register(FacadeAreaServiceHandle::new(areas()))
+                    .unwrap();
+                services
+                    .register(PlanAreaServiceHandle::new(areas()))
+                    .unwrap();
+            },
+        )
+    }
+
+    fn capability(
+        fixture: fn() -> (Model, Areas),
+        slack: Option<(&str, f64)>,
+        check: &dyn RuleCapability,
+        capability: &str,
+        selector: Selector,
+        parameters: Vec<(&str, ParameterValue)>,
+    ) -> CapabilityEvaluation {
+        let (model, areas) = fixture();
+        let areas = match slack {
+            Some((object, slack)) => {
+                let area = areas.0[&id(object)].0;
+                areas.with(object, area, slack)
+            }
+            None => areas,
+        };
+        run(model, areas, check, &rule(capability, selector, parameters))
+    }
+
+    /// `value`, an area, summed in square metres over the objects `path`
+    /// reaches, those `filter` selects.
+    fn summed(path: &[&str], filter: &Selector, value: Value) -> Value {
+        over_path("sum", path, filter, Some(divide(value, m2(1.0))))
+    }
+
+    fn ratio(numerator: Value, denominator: Value) -> Value {
+        json!({"kind": "round", "operand": divide(numerator, denominator),
+            "step": plain(1e-9)})
+    }
+
+    fn window_to_wall_share(path: &[&str]) -> Value {
+        let facade = || measured("facade_area");
+        ratio(
+            summed(path, &kind("window"), facade()),
+            summed(path, &gross(), facade()),
+        )
+    }
+
+    #[test]
+    fn window_to_wall_ratios_reach_the_verdicts() {
+        for (slack, maximum) in [
+            (None, 0.1),
+            (None, 0.12),
+            (Some(("w1", 1.0)), 0.12),
+            (Some(("w4", 1.0)), 0.1),
+        ] {
+            let found = capability(
+                building,
+                slack,
+                &AreaRatio,
+                RATIO,
+                kind("storey"),
+                window_to_wall(maximum),
+            );
+            let rewritten = rewrite(
+                building,
+                slack,
+                kind("storey"),
+                &at_most(window_to_wall_share(&["contains"]), plain(maximum)),
+            );
+            assert_parity(RATIO, &found, &rewritten);
+        }
+        let path = ["aggregates:forward", "contains:forward"];
+        for maximum in [0.07, 0.08] {
+            let mut parameters = window_to_wall(maximum);
+            parameters.retain(|(name, _)| *name != "relationship");
+            parameters.push(("path", strings(&path)));
+            let found = capability(
+                building,
+                None,
+                &AreaRatio,
+                RATIO,
+                kind("building"),
+                parameters,
+            );
+            let rewritten = rewrite(
+                building,
+                None,
+                kind("building"),
+                &at_most(window_to_wall_share(&path), plain(maximum)),
+            );
+            assert_parity(RATIO, &found, &rewritten);
+        }
+    }
+
+    #[test]
+    fn without_a_facade_service_both_leave_every_storey_open() {
+        let (model, _) = building();
+        let found = model.evaluate(
+            &AreaRatio,
+            &rule(RATIO, kind("storey"), window_to_wall(0.1)),
+        );
+        let (model, _) = building();
+        let rewritten = model.evaluate_measured(
+            &ExpressionRequirement,
+            &expression(
+                kind("storey"),
+                &at_most(window_to_wall_share(&["contains"]), plain(0.1)),
+            ),
+            |_| {},
+        );
+        assert_parity(RATIO, &found, &rewritten);
+    }
+
+    #[test]
+    fn the_summed_facade_area_reaches_the_verdicts() {
+        for minimum in [40.0, 30.0, 44.5] {
+            let found = capability(
+                building,
+                None,
+                &PlanAreaRange,
+                RANGE,
+                kind("storey"),
+                vec![
+                    ("measure", string("facade")),
+                    ("member_selector", selector(external())),
+                    ("relationship", string("contains")),
+                    ("minimum", number(minimum)),
+                ],
+            );
+            let rewritten = rewrite(
+                building,
+                None,
+                kind("storey"),
+                &at_least(
+                    summed(
+                        &["contains"],
+                        &external(),
+                        measured("plan_area;measure=facade"),
+                    ),
+                    plain(minimum),
+                ),
+            );
+            assert_parity(RANGE, &found, &rewritten);
+        }
+    }
+
+    #[test]
+    fn ratios_against_a_stated_gross_area_reach_the_verdicts() {
+        let gross = || property(Some("Qto_BuildingStoreyBaseQuantities"), "GrossFloorArea");
+        let stated_gross = || {
+            divide(
+                stated("Qto_BuildingStoreyBaseQuantities", "GrossFloorArea"),
+                m2(1.0),
+            )
+        };
+        let net = || Selector::AnyOf {
+            operands: vec![kind("space"), kind("void")],
+        };
+        for minimum in [0.75, 0.7, 0.6] {
+            let found = capability(
+                floors,
+                None,
+                &AreaRatio,
+                RATIO,
+                kind("storey"),
+                vec![
+                    ("numerator_selector", selector(net())),
+                    ("denominator_property", gross()),
+                    ("minimum", number(minimum)),
+                    ("relationship", string("aggregates")),
+                ],
+            );
+            let rewritten = rewrite(
+                floors,
+                None,
+                kind("storey"),
+                &at_least(
+                    ratio(
+                        summed(&["aggregates"], &net(), measured("area")),
+                        stated_gross(),
+                    ),
+                    plain(minimum),
+                ),
+            );
+            assert_parity(RATIO, &found, &rewritten);
+        }
+        for maximum in [0.05, 0.1] {
+            let found = capability(
+                floors,
+                None,
+                &AreaRatio,
+                RATIO,
+                kind("storey"),
+                vec![
+                    ("numerator_selector", selector(kind("void"))),
+                    ("denominator_property", gross()),
+                    ("maximum", number(maximum)),
+                    ("relationship", string("aggregates")),
+                ],
+            );
+            let rewritten = rewrite(
+                floors,
+                None,
+                kind("storey"),
+                &at_most(
+                    ratio(
+                        summed(&["aggregates"], &kind("void"), measured("area")),
+                        stated_gross(),
+                    ),
+                    plain(maximum),
+                ),
+            );
+            assert_parity(RATIO, &found, &rewritten);
+        }
+    }
+
+    fn with_slabs() -> (Model, Areas) {
+        let (model, areas) = building();
+        let model = model
+            .object("s1", "slab")
+            .object("s2", "slab")
+            .edge("contains", "eg", "s1")
+            .edge("contains", "og", "s2");
+        (model, areas.with("s1", 100.0, 0.0).with("s2", 100.0, 0.0))
+    }
+
+    #[test]
+    fn a_facade_over_a_footprint_ratio_reaches_the_verdicts() {
+        for maximum in [0.4, 0.3, 0.44] {
+            let found = capability(
+                with_slabs,
+                None,
+                &AreaRatio,
+                RATIO,
+                kind("storey"),
+                vec![
+                    ("numerator_measure", string("facade")),
+                    ("denominator_measure", string("footprint")),
+                    ("numerator_selector", selector(external())),
+                    ("denominator_selector", selector(kind("slab"))),
+                    ("maximum", number(maximum)),
+                    ("relationship", string("contains")),
+                ],
+            );
+            let rewritten = rewrite(
+                with_slabs,
+                None,
+                kind("storey"),
+                &at_most(
+                    ratio(
+                        summed(&["contains"], &external(), measured("facade_area")),
+                        summed(&["contains"], &kind("slab"), measured("area")),
+                    ),
+                    plain(maximum),
+                ),
+            );
+            assert_parity(RATIO, &found, &rewritten);
+        }
+    }
+}

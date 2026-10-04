@@ -17,6 +17,7 @@ use axioval_ir::contract::{ParameterValue, Selector, Severity};
 use axioval_ir::{Evidence, Object, ObjectId, Project, Property, PropertyValue, RuleId, SourceId};
 
 pub mod doors;
+pub mod expressions;
 pub mod runtime;
 
 pub fn source() -> SourceId {

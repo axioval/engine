@@ -13,15 +13,21 @@
 //! could take shelving away.
 
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, LinearInterval, LinearQuantityError, LinearQuantityKind,
-    LinearQuantityRequest, LinearQuantityServiceHandle, NotEvaluatedReason, ParameterDescriptor,
-    ParameterType, RuleCapability, RuleContext, ShelfGeometry,
+    CapabilityEvaluation, CompiledRule, LinearInterval, LinearQuantityError,
+    LinearQuantityEvidence, LinearQuantityKind, LinearQuantityRequest, LinearQuantityServiceHandle,
+    NotEvaluatedReason, ParameterDescriptor, ParameterType, RuleCapability, RuleContext,
+    ShelfGeometry,
 };
 use axioval_ir::contract::ParameterValue;
+use axioval_ir::{Evidence, ObjectId};
+
+mod measured;
+
+pub(crate) use measured::ShelfMeasures;
 
 use crate::level_spacing::shown;
 use crate::selection::select_objects;
-use crate::space_access::AccessDeclaration;
+use crate::space_access::{AccessDeclaration, AccessIndex};
 use crate::support::{Parameters, Unavailable, finding, invalid};
 
 /// Minimum running metres of shelving a space must provide.
@@ -79,43 +85,17 @@ impl RuleCapability for ShelfCapacity {
 
         let index = access.index(context);
         for object in selected {
-            let (doors, door_evidence) = match index.reaching(&object.id) {
-                Ok(reached) => reached,
-                Err(why) => {
-                    evaluation.push_object_not_evaluated(
-                        object.id.clone(),
-                        NotEvaluatedReason::IncompleteEvidence,
-                        format!("the doors and openings of {} are unknown: {why}", object.id),
-                    );
+            let Shelving {
+                measured,
+                doors,
+                evidence,
+            } = match measure(service, &index, geometry, &object.id) {
+                Ok(shelving) => shelving,
+                Err((reason, message)) => {
+                    evaluation.push_object_not_evaluated(object.id.clone(), reason, message);
                     continue;
                 }
             };
-            let request = LinearQuantityRequest::new(
-                object.id.clone(),
-                LinearQuantityKind::ShelfRunningLength(geometry),
-            )
-            .with_doors(doors.clone());
-            let measured = match service.measure_linear_quantity(&request) {
-                Ok(measured) if measured.request() == &request => measured,
-                Ok(_) => {
-                    evaluation.push_object_not_evaluated(
-                        object.id.clone(),
-                        NotEvaluatedReason::InvalidEvidence,
-                        "the shelf length answers another request",
-                    );
-                    continue;
-                }
-                Err(error) => {
-                    evaluation.push_object_not_evaluated(
-                        object.id.clone(),
-                        reason(error),
-                        error.to_string(),
-                    );
-                    continue;
-                }
-            };
-            let mut evidence = vec![measured.evidence().clone()];
-            evidence.extend(door_evidence);
             judge_height(
                 &mut evaluation,
                 rule,
@@ -136,6 +116,52 @@ impl RuleCapability for ShelfCapacity {
         }
         evaluation
     }
+}
+
+/// What the service measured of one space's shelving, with the doors and
+/// openings sent and the evidence of both.
+struct Shelving {
+    measured: LinearQuantityEvidence,
+    doors: Vec<ObjectId>,
+    evidence: Vec<Evidence>,
+}
+
+/// Measures the shelving of `space`, its doors and openings sent in the
+/// request; refused when they are unknown or the service cannot answer.
+fn measure(
+    service: &LinearQuantityServiceHandle,
+    index: &AccessIndex,
+    geometry: ShelfGeometry,
+    space: &ObjectId,
+) -> Result<Shelving, Unavailable> {
+    let (doors, door_evidence) = index.reaching(space).map_err(|why| {
+        (
+            NotEvaluatedReason::IncompleteEvidence,
+            format!("the doors and openings of {space} are unknown: {why}"),
+        )
+    })?;
+    let request = LinearQuantityRequest::new(
+        space.clone(),
+        LinearQuantityKind::ShelfRunningLength(geometry),
+    )
+    .with_doors(doors.clone());
+    let measured = match service.measure_linear_quantity(&request) {
+        Ok(measured) if measured.request() == &request => measured,
+        Ok(_) => {
+            return Err((
+                NotEvaluatedReason::InvalidEvidence,
+                "the shelf length answers another request".into(),
+            ));
+        }
+        Err(error) => return Err((reason(error), error.to_string())),
+    };
+    let mut evidence = vec![measured.evidence().clone()];
+    evidence.extend(door_evidence);
+    Ok(Shelving {
+        measured,
+        doors,
+        evidence,
+    })
 }
 
 /// The minimum, the arrangement and where the doors are read from.

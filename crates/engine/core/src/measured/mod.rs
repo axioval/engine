@@ -3,8 +3,11 @@
 //!
 //! Each value is an interval sure to hold the exact value: a point is a
 //! quantity with exact evidence, anything wider a
-//! [`PropertyValue::Measured`] whose evidence is never exact. A missing
-//! service is a fact of the run, never of the object.
+//! [`PropertyValue::Measured`] whose evidence is never exact, unless built-in
+//! code rounded an exact measurement. A value of an approximation (a
+//! tessellation's count) is a [`PropertyValue::Measured`] with inexact
+//! evidence, a point included. A missing service is a fact of the run,
+//! never of the object.
 //!
 //! Two names take parameters after the name, `;`-separated `key=value`
 //! pairs: `bottom_above_level;path=<steps>` and

@@ -10,7 +10,7 @@ use axioval_ir::{ObjectId, QuantityDimension};
 
 use super::{Answer, Measures};
 use crate::boundary_coverage::BoundaryCoverageRequest;
-use crate::contact::{ContactRequest, ContactSide, ContactTolerance};
+use crate::contact::{ContactError, ContactRequest, ContactSide, ContactTolerance};
 use crate::coverage::{CoverageRequest, EffectReach, Participant};
 use crate::properties::PropertyResolutionError;
 
@@ -21,6 +21,7 @@ pub(super) const NAMES: &[&str] = &[
     "boundary_overlap_area",
     "boundary_uncovered_area",
     "contact_area",
+    "contact_gap",
     "contact_share",
     "effect_covered_area",
     "effect_covered_share",
@@ -90,7 +91,7 @@ impl Measures {
                 ))
             }
             "plan_overlap" | "uncovered_area" => self.plan_measure(call, object),
-            "contact_area" | "contact_share" => self.contact(call, object),
+            "contact_area" | "contact_gap" | "contact_share" => self.contact(call, object),
             "effect_covered_area" | "effect_covered_share" => self.effect(call, object),
             _ => {
                 let request =
@@ -189,7 +190,8 @@ impl Measures {
         ))
     }
 
-    /// The contact area on a side, or its share of the whole face.
+    /// The contact area on a side, its share of the whole face, or the
+    /// distance to the nearest candidate.
     fn contact(
         &self,
         call: &MeasuredCall,
@@ -222,11 +224,17 @@ impl Measures {
                 side,
                 tolerance,
             ))
-            .map_err(|error| unavailable(error.to_string()))?;
+            .map_err(|error| refused_contact(name, object, error))?;
         let locator = contact.evidence().locator.clone();
         let area = contact.contact_area_square_metres();
         if name == "contact_area" {
             return Ok(Answer::Value(area, area, AREA, locator));
+        }
+        if name == "contact_gap" {
+            return Ok(match contact.nearest_distance_metres() {
+                Some(gap) => Answer::Value(gap, gap, QuantityDimension::Length, locator),
+                None => Answer::Absent(format!("{locator}: no candidate is reported near")),
+            });
         }
         let whole = contact.whole_area_square_metres();
         share_answer((area, area), (whole, whole), locator).map_err(unavailable)
@@ -285,5 +293,23 @@ impl Measures {
             locator,
         )
         .map_err(unavailable)
+    }
+}
+
+/// A contact measurement's refusal, for the reason `slab-contact` gives: a
+/// body the service could not measure or orient is missing evidence, never
+/// a clean face, and an answer it cannot stand behind is invalid evidence.
+fn refused_contact(name: &str, object: &ObjectId, error: ContactError) -> PropertyResolutionError {
+    let message = format!(
+        "`{}` value `{name}` of {object}: {error}",
+        axioval_ir::MEASURED_SET
+    );
+    match error {
+        ContactError::Unavailable | ContactError::UncheckableOrientation => {
+            PropertyResolutionError::Incomplete(message)
+        }
+        ContactError::InexactEvidence
+        | ContactError::InvalidAreas
+        | ContactError::UnrequestedCandidate => PropertyResolutionError::Conflicting(message),
     }
 }

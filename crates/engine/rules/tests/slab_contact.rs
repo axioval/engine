@@ -621,3 +621,358 @@ fn the_measured_contact_share_reaches_the_verdict() {
         );
     }
 }
+
+/// `slab-contact` as one expression rule per severity band over
+/// `contact_share`, `contact_area` and `contact_gap`, with `levels_above`
+/// and `levels_below` leaving out the top or bottom storey: merged, they
+/// reach the capability's verdicts and its graded severities.
+#[allow(clippy::needless_pass_by_value)]
+mod as_expressions {
+    use super::*;
+    use axioval_ir::ATTRIBUTE_SET;
+    use axioval_ir::{PropertyValue, QuantityDimension};
+    use axioval_rules::ExpressionRequirement;
+    use common::expressions::{
+        above, and, assert_parity, at_least, at_most, below, compare, defined, differences, divide,
+        graded, m, m2, measured, merged, not, or, plain,
+    };
+    use serde_json::Value;
+
+    const ID: &str = "axioval:capability.slab-contact";
+    const CONTACT: &str = "with=slab;side=above;gap=0.01;intersection=0.01;polygon=0.001";
+
+    fn value(name: &str) -> Value {
+        measured(&format!("{name};{CONTACT}"))
+    }
+
+    /// The bands a shortfall falls in, by its severity: an absent contact by
+    /// the nearest candidate's distance, a partial one by its share of the
+    /// minimum.
+    fn band(severity: Severity, minimum: f64) -> Value {
+        let gap = || value("contact_gap");
+        let relative = || divide(value("contact_share"), plain(minimum));
+        let absent = || compare("equals", value("contact_area"), m2(0.0));
+        let (absent_band, partial_band) = match severity {
+            Severity::Info => (
+                and(vec![defined(&gap()), below(gap(), m(0.1))]),
+                above(relative(), plain(0.9)),
+            ),
+            Severity::Error => (
+                or(vec![not(defined(&gap())), above(gap(), m(0.5))]),
+                below(relative(), plain(0.3)),
+            ),
+            Severity::Warning => (
+                and(vec![
+                    defined(&gap()),
+                    at_least(gap(), m(0.1)),
+                    at_most(gap(), m(0.5)),
+                ]),
+                and(vec![
+                    at_least(relative(), plain(0.3)),
+                    at_most(relative(), plain(0.9)),
+                ]),
+            ),
+        };
+        and(vec![
+            below(value("contact_share"), plain(minimum)),
+            or(vec![
+                and(vec![absent(), absent_band]),
+                and(vec![not(absent()), partial_band]),
+            ]),
+        ])
+    }
+
+    fn rule_severity(severity: &Severity) -> RuleSeverity {
+        match severity {
+            Severity::Error => RuleSeverity::Error,
+            Severity::Warning => RuleSeverity::Warning,
+            Severity::Info => RuleSeverity::Info,
+        }
+    }
+
+    /// One rule per band, each found where the shortfall falls in its band,
+    /// passed where the face meets the minimum or `skipped` holds.
+    fn rewrite(
+        model: &dyn Fn() -> common::Model,
+        service: &dyn Fn() -> Arc<dyn ContactService>,
+        minimum: f64,
+        skipped: Option<(Value, Value)>,
+    ) -> axioval_engine::CapabilityEvaluation {
+        let evaluations = [Severity::Info, Severity::Warning, Severity::Error]
+            .iter()
+            .map(|severity| {
+                let found = band(severity.clone(), minimum);
+                let requirement = match &skipped {
+                    None => not(found),
+                    Some((placed, skipped)) => {
+                        and(vec![placed.clone(), or(vec![skipped.clone(), not(found)])])
+                    }
+                };
+                model().evaluate_measured(
+                    &ExpressionRequirement,
+                    &graded(kind_of("wall"), &requirement, rule_severity(severity)),
+                    |services| {
+                        services
+                            .register(ContactServiceHandle::new(service()))
+                            .unwrap();
+                    },
+                )
+            })
+            .collect();
+        merged(evaluations)
+    }
+
+    fn kind_of(kind: &str) -> Selector {
+        Selector::EntityType {
+            object_type: kind.into(),
+            include_subtypes: false,
+        }
+    }
+
+    fn slabs() -> common::Model {
+        common::Model::default()
+            .object("wall", "wall")
+            .object("slab", "slab")
+            .object("slab-a", "slab")
+            .object("slab-b", "slab")
+    }
+
+    /// whole area, contact area, nearest distance, touching slabs
+    type Answer = Result<(f64, f64, Option<f64>, Vec<&'static str>), ContactError>;
+
+    fn stub(answer: &Answer) -> Arc<dyn ContactService> {
+        Arc::new(Stub(answer.clone().map(
+            |(whole, contact, gap, touching)| {
+                (
+                    whole,
+                    contact,
+                    gap,
+                    touching.into_iter().map(common::id).collect(),
+                )
+            },
+        )))
+    }
+
+    #[test]
+    fn shares_and_their_graded_shortfalls_reach_the_verdicts() {
+        let answers: [Answer; 13] = [
+            Ok((10.0, 6.0, None, vec![])),
+            Ok((1000.0, 495.0, None, vec![])),
+            Ok((100.0, 0.5, None, vec!["slab"])),
+            Ok((10.0, 0.0, Some(0.05), vec![])),
+            Ok((10.0, 0.0, Some(0.3), vec![])),
+            Ok((10.0, 0.0, Some(0.9), vec![])),
+            Ok((10.0, 0.0, None, vec![])),
+            Ok((100.0, 48.0, None, vec![])),
+            Ok((100.0, 10.0, None, vec!["slab-a", "slab-b"])),
+            Ok((100.0, 10.0, None, vec!["wall", "slab-a"])),
+            Err(ContactError::UncheckableOrientation),
+            Err(ContactError::Unavailable),
+            Err(ContactError::InvalidAreas),
+        ];
+        for answer in answers {
+            for minimum in [0.5, 0.05, 0.9] {
+                let capability = slabs().evaluate_with(
+                    &SlabContact,
+                    &rule_with(&[(
+                        "minimum_contact_ratio",
+                        ParameterValue::Number { value: minimum },
+                    )]),
+                    |services| {
+                        services
+                            .register(ContactServiceHandle::new(stub(&answer)))
+                            .unwrap();
+                    },
+                );
+                let rewritten = rewrite(&slabs, &|| stub(&answer), minimum, None);
+                assert_parity(ID, &capability, &rewritten);
+            }
+        }
+        // Without the service, nothing is judged either way.
+        let capability = slabs().evaluate(&SlabContact, &rule());
+        let rewritten = merged(vec![slabs().evaluate_measured(
+            &ExpressionRequirement,
+            &graded(
+                kind_of("wall"),
+                &not(band(Severity::Error, 0.5)),
+                RuleSeverity::Error,
+            ),
+            |_| {},
+        )]);
+        assert_parity(ID, &capability, &rewritten);
+    }
+
+    /// Storeys at 0, 3 and 6 m, a wall on each, and two slabs.
+    fn building() -> common::Model {
+        let mut model = common::Model::default()
+            .object("slab-a", "slab")
+            .object("slab-b", "slab");
+        for (storey, wall, height) in [("s0", "w0", 0.0), ("s1", "w1", 3.0), ("s2", "w2", 6.0)] {
+            model = model
+                .object(storey, "storey")
+                .value(
+                    storey,
+                    ATTRIBUTE_SET,
+                    "Elevation",
+                    PropertyValue::Quantity {
+                        value: height,
+                        dimension: QuantityDimension::Length,
+                    },
+                )
+                .object(wall, "wall")
+                .edge("contains", storey, wall);
+        }
+        model
+    }
+
+    fn skipping(top: bool, bottom: bool) -> Vec<(&'static str, ParameterValue)> {
+        vec![
+            ("skip_top_storey", ParameterValue::Boolean { value: top }),
+            (
+                "skip_bottom_storey",
+                ParameterValue::Boolean { value: bottom },
+            ),
+            (
+                "counterparts",
+                ParameterValue::Selector {
+                    value: Box::new(kind_of("slab")),
+                },
+            ),
+            (
+                "storey_selector",
+                ParameterValue::Selector {
+                    value: Box::new(kind_of("storey")),
+                },
+            ),
+            (
+                "relationship",
+                ParameterValue::String {
+                    value: "contains".into(),
+                },
+            ),
+            (
+                "direction",
+                ParameterValue::String {
+                    value: "backward".into(),
+                },
+            ),
+        ]
+    }
+
+    /// Whether the face's storey is placed among the storeys, and whether
+    /// it is the top storey (`top`) or the bottom one, so left out. The
+    /// capability measures nothing while a storey is unplaced, so neither
+    /// does a passing face pass then.
+    fn skipped(top: bool, bottom: bool) -> Option<(Value, Value)> {
+        let count = |name: &str| measured(&format!("{name};levels=storey;path=contains:backward"));
+        let zero = || common::expressions::integer(0);
+        let mut placed = Vec::new();
+        let mut ends = Vec::new();
+        for (end, name) in [(top, "levels_above"), (bottom, "levels_below")] {
+            if end {
+                placed.push(at_least(count(name), zero()));
+                ends.push(compare("equals", count(name), zero()));
+            }
+        }
+        (!ends.is_empty()).then(|| (and(placed), or(ends)))
+    }
+
+    fn untouched(contact: f64) -> Arc<dyn ContactService> {
+        Arc::new(Stub(Ok((10.0, contact, None, Vec::new()))))
+    }
+
+    #[test]
+    fn storeys_left_out_by_elevation_reach_the_verdicts() {
+        let basement = || {
+            building()
+                .object("basement", "storey")
+                .value(
+                    "basement",
+                    ATTRIBUTE_SET,
+                    "Elevation",
+                    PropertyValue::Quantity {
+                        value: -3.0,
+                        dimension: QuantityDimension::Length,
+                    },
+                )
+                .object("wb", "wall")
+                .edge("contains", "basement", "wb")
+        };
+        let unordered = || {
+            building()
+                .object("s3", "storey")
+                .object("w3", "wall")
+                .edge("contains", "s3", "w3")
+        };
+        let loose = || {
+            building()
+                .object("loose", "wall")
+                .object("tall", "wall")
+                .edge("contains", "s0", "tall")
+                .edge("contains", "s1", "tall")
+        };
+        let models: [&dyn Fn() -> common::Model; 4] = [&building, &basement, &unordered, &loose];
+        for model in models {
+            for (top, bottom) in [(true, false), (false, true), (true, true)] {
+                for contact in [0.0, 6.0] {
+                    let mut capability_rule = rule();
+                    capability_rule.selector = kind_of("wall");
+                    for (name, value) in skipping(top, bottom) {
+                        capability_rule.parameters.insert(name.into(), value);
+                    }
+                    let capability = model().evaluate_with(&SlabContact, &capability_rule, |s| {
+                        s.register(ContactServiceHandle::new(untouched(contact)))
+                            .unwrap();
+                    });
+                    let rewritten =
+                        rewrite(model, &|| untouched(contact), 0.5, skipped(top, bottom));
+                    assert_parity(ID, &capability, &rewritten);
+                }
+            }
+        }
+    }
+
+    /// A counterpart named by a property, not a kind, cannot be a measured
+    /// value's candidate: the rewrite sends every slab, so an undecided one
+    /// counts as a candidate where the capability leaves the face open.
+    #[test]
+    fn an_undecided_counterpart_is_a_candidate_of_the_rewrite() {
+        use axioval_ir::contract::ComparisonOperator;
+        let load_bearing = Selector::AllOf {
+            operands: vec![
+                kind_of("slab"),
+                Selector::property(
+                    Some("P".into()),
+                    "LoadBearing",
+                    ComparisonOperator::Equals,
+                    Some(ParameterValue::Boolean { value: true }),
+                ),
+            ],
+        };
+        let model = || {
+            building()
+                .value("slab-a", "P", "LoadBearing", PropertyValue::Boolean(true))
+                .unreadable("slab-b")
+        };
+        let mut capability_rule = rule();
+        capability_rule.selector = kind_of("wall");
+        capability_rule.parameters.insert(
+            "counterparts".into(),
+            ParameterValue::Selector {
+                value: Box::new(load_bearing),
+            },
+        );
+        let capability = model().evaluate_with(&SlabContact, &capability_rule, |s| {
+            s.register(ContactServiceHandle::new(untouched(1.0)))
+                .unwrap();
+        });
+        let rewritten = rewrite(&model, &|| untouched(1.0), 0.5, None);
+        assert_eq!(
+            differences(ID, &capability, &rewritten),
+            ["w0", "w1", "w2"].map(|wall| format!(
+                "test:model/{wall}: capability not evaluated (IncompleteEvidence), \
+                 expression finding (Error, exact evidence)"
+            ))
+        );
+    }
+}

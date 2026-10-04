@@ -8,6 +8,10 @@ use axioval_engine::{
 };
 use axioval_ir::{Evidence, Object, PropertyValue, QuantityDimension};
 
+mod measured;
+
+pub(crate) use measured::ExtentMeasures;
+
 use crate::level_spacing::{metres, shown};
 use crate::plan_area::{Verdict, judge};
 use crate::selection::select_objects;

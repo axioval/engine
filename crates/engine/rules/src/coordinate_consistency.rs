@@ -21,6 +21,10 @@ use axioval_engine::{
 };
 use axioval_ir::{Finding, Scope, SourceId};
 
+mod measured;
+
+pub(crate) use measured::CoordinateMeasures;
+
 use crate::comparison::{distance, plan_angle, rotation};
 use crate::pairs::severity;
 use crate::support::{Parameters, Unavailable, invalid, sources};
@@ -134,6 +138,114 @@ impl CoordinateConsistency {
     }
 }
 
+/// How one statement of two coordinate systems compares.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum Compared<T> {
+    /// Both state it: how far apart they are.
+    Both(T),
+    /// Neither states it, and that is no unknown.
+    Neither,
+    /// It cannot be compared, and why.
+    Unknown(String),
+}
+
+/// How far apart two frames are: the shift of their origins in metres and
+/// the turn of their axes in radians.
+fn frame_apart(a: &CoordinateFrame, b: &CoordinateFrame) -> (f64, f64) {
+    (
+        distance(a.origin_metres(), b.origin_metres()),
+        rotation(a.axes(), b.axes()),
+    )
+}
+
+/// The world frames' shift and turn; one or neither stated is unknown.
+pub(crate) fn world_frames(
+    reference: &SourceCoordinateSystem,
+    other: &SourceCoordinateSystem,
+) -> Compared<(f64, f64)> {
+    match (reference.world(), other.world()) {
+        (Some(a), Some(b)) => Compared::Both(frame_apart(a, b)),
+        (a, b) => Compared::Unknown(format!(
+            "the world frame is {}",
+            one_sided(a.is_some(), b.is_some())
+        )),
+    }
+}
+
+/// The turn of true north; neither stating it is no unknown.
+pub(crate) fn true_norths(
+    reference: &SourceCoordinateSystem,
+    other: &SourceCoordinateSystem,
+) -> Compared<f64> {
+    match (reference.true_north(), other.true_north()) {
+        (Some(a), Some(b)) => Compared::Both(plan_angle(a, b)),
+        (None, None) => Compared::Neither,
+        (a, b) => Compared::Unknown(format!(
+            "true north is {}",
+            one_sided(a.is_some(), b.is_some())
+        )),
+    }
+}
+
+/// The site placements' shift and turn; both stating none is no unknown.
+pub(crate) fn sites(
+    reference: &SourceCoordinateSystem,
+    other: &SourceCoordinateSystem,
+) -> Compared<(f64, f64)> {
+    match (reference.site(), other.site()) {
+        (SitePlacement::Stated(a), SitePlacement::Stated(b)) => Compared::Both(frame_apart(a, b)),
+        (SitePlacement::Absent, SitePlacement::Absent) => Compared::Neither,
+        (SitePlacement::Unknown(reason), _) => Compared::Unknown(format!(
+            "the reference's site placement is unknown: {reason}"
+        )),
+        (_, SitePlacement::Unknown(reason)) => {
+            Compared::Unknown(format!("the site placement is unknown: {reason}"))
+        }
+        (a, _) => Compared::Unknown(format!(
+            "a site is {}",
+            one_sided(
+                matches!(a, SitePlacement::Stated(_)),
+                !matches!(a, SitePlacement::Stated(_))
+            )
+        )),
+    }
+}
+
+/// How two map conversions compare.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct MapsCompared {
+    /// Whether their target systems differ.
+    pub(crate) target_differs: bool,
+    /// The shift of their offsets in metres, or why it cannot be measured.
+    pub(crate) shift: Compared<f64>,
+    /// The turn of their map x axes, in radians.
+    pub(crate) turn: f64,
+    /// The absolute difference of their scales.
+    pub(crate) scale: f64,
+}
+
+/// Compares two map conversions statement by statement.
+pub(crate) fn map_conversions(a: &MapConversion, b: &MapConversion) -> MapsCompared {
+    let shift = match (a.offset_metres(), b.offset_metres()) {
+        (Some(x), Some(y)) => Compared::Both(distance(x, y)),
+        // Identical statements in one unit are equal whatever the unit.
+        #[allow(clippy::float_cmp)] // Identical statements, not measurements.
+        _ if a.offset() == b.offset() && a.metres_per_map_unit() == b.metres_per_map_unit() => {
+            Compared::Both(0.0)
+        }
+        _ => Compared::Unknown(
+            "the map unit is not stated exactly, so the map offsets cannot be compared in metres"
+                .into(),
+        ),
+    };
+    MapsCompared {
+        target_differs: a.target() != b.target(),
+        shift,
+        turn: plan_angle(a.x_axis(), b.x_axis()),
+        scale: (a.scale() - b.scale()).abs(),
+    }
+}
+
 /// Compares `other`'s coordinate system with `reference`'s, statement by
 /// statement, within `tolerance`. A difference is reported only when it
 /// exceeds the tolerance; a statement one side makes and the other does not
@@ -148,68 +260,31 @@ pub fn compare_coordinate_systems(
         georeferenced: (reference.map().is_some(), other.map().is_some()),
         ..CoordinateConsistency::default()
     };
-    match (reference.world(), other.world()) {
-        (Some(a), Some(b)) => frames(
-            CoordinateAspect::WorldFrame,
-            "world frame",
-            a,
-            b,
-            tolerance,
-            &mut result,
-        ),
-        (a, b) => result.unknown.push((
-            CoordinateAspect::WorldFrame,
-            format!("the world frame is {}", one_sided(a.is_some(), b.is_some())),
-        )),
-    }
-    match (reference.true_north(), other.true_north()) {
-        (Some(a), Some(b)) => {
-            let angle = plan_angle(a, b);
-            if angle > tolerance.angle_radians {
-                result.differences.push((
-                    CoordinateAspect::TrueNorth,
-                    format!("true north turned by {}", degrees(angle)),
-                ));
-            }
-        }
-        (None, None) => {}
-        (a, b) => result.unknown.push((
+    frames(
+        CoordinateAspect::WorldFrame,
+        "world frame",
+        world_frames(reference, other),
+        tolerance,
+        &mut result,
+    );
+    match true_norths(reference, other) {
+        Compared::Both(angle) if angle > tolerance.angle_radians => result.differences.push((
             CoordinateAspect::TrueNorth,
-            format!("true north is {}", one_sided(a.is_some(), b.is_some())),
+            format!("true north turned by {}", degrees(angle)),
         )),
+        Compared::Unknown(reason) => result.unknown.push((CoordinateAspect::TrueNorth, reason)),
+        _ => {}
     }
     if let (Some(a), Some(b)) = (reference.map(), other.map()) {
         maps(a, b, tolerance, &mut result);
     }
-    match (reference.site(), other.site()) {
-        (SitePlacement::Stated(a), SitePlacement::Stated(b)) => frames(
-            CoordinateAspect::Site,
-            "site placement",
-            a,
-            b,
-            tolerance,
-            &mut result,
-        ),
-        (SitePlacement::Absent, SitePlacement::Absent) => {}
-        (SitePlacement::Unknown(reason), _) => result.unknown.push((
-            CoordinateAspect::Site,
-            format!("the reference's site placement is unknown: {reason}"),
-        )),
-        (_, SitePlacement::Unknown(reason)) => result.unknown.push((
-            CoordinateAspect::Site,
-            format!("the site placement is unknown: {reason}"),
-        )),
-        (a, _) => result.unknown.push((
-            CoordinateAspect::Site,
-            format!(
-                "a site is {}",
-                one_sided(
-                    matches!(a, SitePlacement::Stated(_)),
-                    !matches!(a, SitePlacement::Stated(_))
-                )
-            ),
-        )),
-    }
+    frames(
+        CoordinateAspect::Site,
+        "site placement",
+        sites(reference, other),
+        tolerance,
+        &mut result,
+    );
     result
 }
 
@@ -232,18 +307,23 @@ fn degrees(radians: f64) -> String {
 fn frames(
     aspect: CoordinateAspect,
     name: &str,
-    a: &CoordinateFrame,
-    b: &CoordinateFrame,
+    compared: Compared<(f64, f64)>,
     tolerance: CoordinateTolerance,
     result: &mut CoordinateConsistency,
 ) {
-    let shift = distance(a.origin_metres(), b.origin_metres());
+    let (shift, turn) = match compared {
+        Compared::Both(apart) => apart,
+        Compared::Neither => return,
+        Compared::Unknown(reason) => {
+            result.unknown.push((aspect, reason));
+            return;
+        }
+    };
     if shift > tolerance.length_metres {
         result
             .differences
             .push((aspect, format!("{name} moved by {}", metres(shift))));
     }
-    let turn = rotation(a.axes(), b.axes());
     if turn > tolerance.angle_radians {
         result
             .differences
@@ -258,52 +338,41 @@ fn maps(
     result: &mut CoordinateConsistency,
 ) {
     let aspect = CoordinateAspect::MapConversion;
-    if a.target() != b.target() {
+    let compared = map_conversions(a, b);
+    if compared.target_differs {
         let name = |map: &MapConversion| map.target().unwrap_or("(unnamed)").to_owned();
         result.differences.push((
             aspect,
             format!("map target `{}` instead of `{}`", name(b), name(a)),
         ));
     }
-    match (a.offset_metres(), b.offset_metres()) {
-        (Some(x), Some(y)) => {
-            let shift = distance(x, y);
-            if shift > tolerance.length_metres {
-                // A unit the source did not state is named as the default
-                // it is, never presented as stated.
-                let default = match (a.map_unit_by_default(), b.map_unit_by_default()) {
-                    (false, false) => "",
-                    (true, true) => " (both map units are the standard's default, not stated)",
-                    (true, false) => {
-                        " (the reference's map unit is the standard's default, not stated)"
-                    }
-                    (false, true) => {
-                        " (this source's map unit is the standard's default, not stated)"
-                    }
-                };
-                result.differences.push((
-                    aspect,
-                    format!("map offset moved by {}{default}", metres(shift)),
-                ));
-            }
+    match compared.shift {
+        Compared::Both(shift) if shift > tolerance.length_metres => {
+            // A unit the source did not state is named as the default
+            // it is, never presented as stated.
+            let default = match (a.map_unit_by_default(), b.map_unit_by_default()) {
+                (false, false) => "",
+                (true, true) => " (both map units are the standard's default, not stated)",
+                (true, false) => {
+                    " (the reference's map unit is the standard's default, not stated)"
+                }
+                (false, true) => " (this source's map unit is the standard's default, not stated)",
+            };
+            result.differences.push((
+                aspect,
+                format!("map offset moved by {}{default}", metres(shift)),
+            ));
         }
-        // Identical statements in one unit are equal whatever the unit.
-        #[allow(clippy::float_cmp)] // Identical statements, not measurements.
-        _ if a.offset() == b.offset() && a.metres_per_map_unit() == b.metres_per_map_unit() => {}
-        _ => result.unknown.push((
+        Compared::Unknown(reason) => result.unknown.push((aspect, reason)),
+        _ => {}
+    }
+    if compared.turn > tolerance.angle_radians {
+        result.differences.push((
             aspect,
-            "the map unit is not stated exactly, so the map offsets cannot be compared in metres"
-                .into(),
-        )),
+            format!("map rotation turned by {}", degrees(compared.turn)),
+        ));
     }
-    let turn = plan_angle(a.x_axis(), b.x_axis());
-    if turn > tolerance.angle_radians {
-        result
-            .differences
-            .push((aspect, format!("map rotation turned by {}", degrees(turn))));
-    }
-    let scale = (a.scale() - b.scale()).abs();
-    if scale > tolerance.scale {
+    if compared.scale > tolerance.scale {
         result.differences.push((
             aspect,
             format!("map scale {} instead of {}", b.scale(), a.scale()),

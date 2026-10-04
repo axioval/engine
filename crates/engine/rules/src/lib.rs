@@ -267,5 +267,13 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(parking_bay::BayMeasures))
         .and_then(|registry| registry.register_measured(wall_spacing::SpacingMeasures))
         .and_then(|registry| registry.register_measured(counterpart_coverage::CoverageMeasures))
+        .and_then(|registry| registry.register_measured(triangle_count::TriangleMeasures))
+        .and_then(|registry| registry.register_measured(body_extent::ExtentMeasures))
+        .and_then(|registry| registry.register_measured(plan_area::AreaMeasures))
+        .and_then(|registry| registry.register_measured(level_spacing::LevelMeasures))
+        .and_then(|registry| registry.register_measured(slab_stack::StackMeasures))
+        .and_then(|registry| registry.register_measured(shelf_capacity::ShelfMeasures))
+        .and_then(|registry| registry.register_measured(slab_contact::StoreyMeasures))
+        .and_then(|registry| registry.register_measured(coordinate_consistency::CoordinateMeasures))
         .map(|registry| registry.with_refiner(Refiner))
 }

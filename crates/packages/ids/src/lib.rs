@@ -1010,7 +1010,8 @@ impl<'o> Writer<'o> {
             | Selector::Discipline { .. }
             | Selector::Source { .. }
             | Selector::RuleOutcome { .. }
-            | Selector::Expression { .. } => filter.clone(),
+            | Selector::Expression { .. }
+            | Selector::Objects { .. } => filter.clone(),
         }
     }
 

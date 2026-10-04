@@ -400,14 +400,14 @@ impl RuleCapability for PropertyPredicate {
             ParameterDescriptor::required("property_set", ParameterType::String),
             ParameterDescriptor::required("property", ParameterType::String),
             ParameterDescriptor::required("operator", ParameterType::String),
-            ParameterDescriptor::optional("value", ParameterType::Integer),
-            ParameterDescriptor::optional("number", ParameterType::Number),
-            ParameterDescriptor::optional("quantity", ParameterType::Quantity),
-            ParameterDescriptor::optional("text", ParameterType::String),
+            ParameterDescriptor::optional("value", ParameterType::Integer).per_object(),
+            ParameterDescriptor::optional("number", ParameterType::Number).per_object(),
+            ParameterDescriptor::optional("quantity", ParameterType::Quantity).per_object(),
+            ParameterDescriptor::optional("text", ParameterType::String).per_object(),
             ParameterDescriptor::optional("texts", ParameterType::StringList),
-            ParameterDescriptor::optional("boolean", ParameterType::Boolean),
-            ParameterDescriptor::optional("date", ParameterType::Date),
-            ParameterDescriptor::optional("date_time", ParameterType::DateTime),
+            ParameterDescriptor::optional("boolean", ParameterType::Boolean).per_object(),
+            ParameterDescriptor::optional("date", ParameterType::Date).per_object(),
+            ParameterDescriptor::optional("date_time", ParameterType::DateTime).per_object(),
             ParameterDescriptor::optional("precision", ParameterType::String),
             ParameterDescriptor::optional("case_sensitive", ParameterType::Boolean),
         ]
@@ -417,6 +417,9 @@ impl RuleCapability for PropertyPredicate {
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
+        if crate::object_parameters::has_object_parameters(rule) {
+            return crate::object_parameters::per_object(self, context, rule);
+        }
         let parameters = Parameters(rule);
         let parsed = (|| {
             let property = PropertyRef {

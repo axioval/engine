@@ -922,3 +922,24 @@ fn the_signature_declares_modes_projections_and_scoping() {
         .unwrap();
     assert_eq!(count.parameter_type.package_kind(), "integer");
 }
+
+#[test]
+fn a_computed_minimum_judges_as_the_literal_it_computes() {
+    let mut literal = at_least(2, 1.0);
+    literal.push(("minimum_metres", number(0.6)));
+    let mut computed = at_least(2, 1.0);
+    computed.push((
+        "minimum_metres",
+        common::expression(serde_json::json!({"kind": "divide",
+            "left": {"kind": "literal", "value": {"type": "number", "value": 1.2}},
+            "right": {"kind": "literal", "value": {"type": "integer", "value": 2}}})),
+    ));
+    let expected = run(model(), walls(), literal);
+    let found = run(model(), walls(), computed);
+    assert_eq!(found.findings(), expected.findings());
+    assert!(
+        found.findings()[0]
+            .message
+            .contains("between 0.6000 and 1.0000 m")
+    );
+}

@@ -2090,3 +2090,40 @@ fn a_clear_width_known_as_an_interval_decides_only_where_it_agrees() {
             .any(|evidence| evidence.locator.ends_with("d1:step=stated") && !evidence.exact)
     );
 }
+
+#[test]
+fn a_computed_limit_cell_judges_as_the_literal_it_computes() {
+    let model = || {
+        building(
+            Some("1"),
+            &[
+                ("c1", "dry", "Office"),
+                ("c2", "wet", "Office"),
+                ("c3", "wet", "Office"),
+                ("c4", "dry", "Office"),
+            ],
+        )
+    };
+    let areas = || {
+        Areas::default()
+            .with("c1", 500.0, 0.0)
+            .with("c2", 500.0, 0.0)
+            .with("c3", 900.0, 0.0)
+            .with("c4", 400.0, 0.0)
+    };
+    let mut computed = fire_limits();
+    computed[0].insert(
+        "maximum".into(),
+        common::expression(serde_json::json!({"kind": "multiply",
+            "left": {"kind": "literal", "value": {"type": "number", "value": 200.0}},
+            "right": {"kind": "literal", "value": {"type": "integer", "value": 2}}})),
+    );
+    let expected = run(model(), areas(), fire_keys(fire_limits()));
+    let found = run(model(), areas(), fire_keys(computed));
+    assert_eq!(found.findings(), expected.findings());
+    assert!(!found.findings().is_empty());
+    assert_eq!(
+        found.not_evaluated_outcomes().len(),
+        expected.not_evaluated_outcomes().len()
+    );
+}

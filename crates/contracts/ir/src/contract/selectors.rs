@@ -210,6 +210,13 @@ pub enum Selector {
     Expression {
         expression: Box<Expression>,
     },
+    /// Exactly these objects: an engine-internal narrowing (a rule run per
+    /// group of objects whose computed parameters agree). It is never read
+    /// from or written to a package.
+    #[serde(skip)]
+    Objects {
+        objects: std::collections::BTreeSet<crate::ObjectId>,
+    },
 }
 /// Which judgement of another rule a `ruleOutcome` selector selects.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]

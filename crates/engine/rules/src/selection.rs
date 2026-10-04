@@ -207,6 +207,7 @@ pub(crate) fn selector_matches(
         Selector::Expression { expression } => {
             expression_matches(context, object, expression, evidence)
         }
+        Selector::Objects { objects } => verdict(objects.contains(&object.id)),
     }
 }
 

@@ -19,6 +19,34 @@ At runtime, missing evidence does not become a pass. `CapabilityEvaluation` carr
 
 A capability may return findings and not-evaluated outcomes together when only part of its selected universe was computable. Consumers must not interpret an empty findings list as a pass while `not_evaluated` is non-empty.
 
+## Computed parameters
+
+A parameter may depend on the object it judges: a minimum distance that depends on the fire-resistance class, an area limit per use. A parameter a capability declares *per object* may be given as an [expression](./expressions.md) of its kind instead of a literal, `{"type": "expression", "value": {…}}`, evaluated for each checked object; a per-object table may hold expression cells in its scalar columns.
+
+```json
+{"minimum_metres": {"type": "expression", "value": {"kind": "if",
+   "branches": [{"when": {"kind": "compare", "operator": "equals",
+                          "left": {"kind": "property", "propertySet": "Pset_DoorCommon", "property": "FireRating"},
+                          "right": {"kind": "literal", "value": {"type": "string", "value": "EI30"}}},
+                 "then": {"kind": "literal", "value": {"type": "number", "value": 1.0}}}],
+   "else": {"kind": "literal", "value": {"type": "number", "value": 0.5}}}}}
+```
+
+- The compiler checks the expression's type against the parameter's kind: a truth for a `boolean`, an integer for an `integer`, a plain number for a `number`, a quantity of any unit for a `quantity` (a plain number is refused), text or an enumeration value for a `string` or an `enum`, and a date or a date-time; a table cell against its column's kind. An expression may read the rule's other literal parameters.
+- Every other parameter is constant for the rule (selectors, switches that change what is measured, keys, counts over a population) and refuses an expression with `EngineError::InvalidExpression` ("constant for the rule").
+- For each selected object the expressions are evaluated to literals; objects whose literals agree are judged together, as one rule over exactly them, so the capability itself reads literals only. An expression that cannot be decided for an object, or computes an interval rather than one value, leaves that object not evaluated with the reason; a `null` result is a parameter not given (an optional bound then does not apply; a required one leaves the object not evaluated).
+
+These parameters are computed per object today:
+
+| Capability | Parameters |
+| --- | --- |
+| `property-predicate` | `value`, `number`, `quantity`, `text`, `boolean`, `date`, `date_time` |
+| `distance` | `minimum_metres`, `maximum_metres` |
+| `keyed-limit` | the `limits` table (`minimum`, `maximum` and the key cells) |
+| `stair-geometry` | `minimum_risers`, `maximum_risers`, `maximum_rise`, `riser_tolerance`, `going_tolerance`, `winder_angle_minimum`, `winder_angle_maximum`, `slope_tolerance`, `end_landing_depth_minimum`, `end_landing_width_minimum` |
+
+A capability opts a parameter in with `ParameterDescriptor::per_object` and starts its `evaluate` with the shared per-object dispatch (`object_parameters::per_object` in `axioval-rules`).
+
 ## Table parameters
 
 Many checks are naturally a table: rows of patterns and limits, such as a minimum area per space type or the components required per class. A `table` parameter carries such a table in one rule instead of one rule per row.
@@ -2233,4 +2261,5 @@ rows with their groups, and `--csv` exports the table (see
 4. Declare all evidence requirements.
 5. Add deterministic and missing-evidence tests.
 6. Register in the built-in registry.
+   Mark every bound that may sensibly differ per checked object `per_object`, and keep population bounds constant.
 7. Record legacy parity and cutover in the migration ledger when applicable.

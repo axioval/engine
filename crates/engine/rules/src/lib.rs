@@ -52,6 +52,7 @@ mod manual_issue;
 mod name_sequence;
 mod numbering_consistency;
 mod object_count;
+mod object_parameters;
 mod opening_area;
 mod opening_spaces;
 mod opening_zone;

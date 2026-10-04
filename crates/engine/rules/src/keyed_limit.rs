@@ -895,7 +895,7 @@ impl RuleCapability for KeyedLimit {
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
         let mut parameters = vec![
-            ParameterDescriptor::required("limits", ParameterType::Table(COLUMNS)),
+            ParameterDescriptor::required("limits", ParameterType::Table(COLUMNS)).per_object(),
             ParameterDescriptor::required("quantity", ParameterType::String),
             ParameterDescriptor::optional("quantity_property", ParameterType::PropertyReference),
             ParameterDescriptor::optional("floor_path", ParameterType::StringList),
@@ -931,6 +931,9 @@ impl RuleCapability for KeyedLimit {
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
+        if crate::object_parameters::has_object_parameters(rule) {
+            return crate::object_parameters::per_object(self, context, rule);
+        }
         let (keys, limits, quantity) = match parse(&Parameters(rule)) {
             Ok(parsed) => parsed,
             Err((reason, message)) => {

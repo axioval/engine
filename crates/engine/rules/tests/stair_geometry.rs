@@ -3705,3 +3705,35 @@ fn ramp_rails_reaching_over_an_accessible_surface_are_found() {
         );
     }
 }
+
+#[test]
+fn computed_bounds_judge_as_the_literals_they_compute() {
+    let literal = check_stairs(
+        model(),
+        stairs(),
+        vec![
+            ("maximum_risers", ParameterValue::Integer { value: 3 }),
+            ("maximum_rise", metres(0.6)),
+        ],
+    );
+    let computed = check_stairs(
+        model(),
+        stairs(),
+        vec![
+            (
+                "maximum_risers",
+                common::expression(serde_json::json!({"kind": "add",
+                    "left": {"kind": "literal", "value": {"type": "integer", "value": 1}},
+                    "right": {"kind": "literal", "value": {"type": "integer", "value": 2}}})),
+            ),
+            (
+                "maximum_rise",
+                common::expression(serde_json::json!({"kind": "literal",
+                    "value": {"type": "quantity", "value": 600.0, "unit": "mm"}})),
+            ),
+        ],
+    );
+    assert_eq!(findings(&computed), findings(&literal));
+    assert_eq!(findings(&computed).len(), findings(&literal).len());
+    assert!(!findings(&computed).is_empty());
+}

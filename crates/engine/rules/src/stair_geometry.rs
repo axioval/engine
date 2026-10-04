@@ -1225,14 +1225,16 @@ impl RuleCapability for StairGeometryCheck {
             parameters.extend(range_descriptors(name));
         }
         parameters.extend([
-            ParameterDescriptor::optional("minimum_risers", ParameterType::Integer),
-            ParameterDescriptor::optional("maximum_risers", ParameterType::Integer),
-            ParameterDescriptor::optional("maximum_rise", ParameterType::Quantity),
-            ParameterDescriptor::optional("riser_tolerance", ParameterType::Quantity),
-            ParameterDescriptor::optional("going_tolerance", ParameterType::Quantity),
+            ParameterDescriptor::optional("minimum_risers", ParameterType::Integer).per_object(),
+            ParameterDescriptor::optional("maximum_risers", ParameterType::Integer).per_object(),
+            ParameterDescriptor::optional("maximum_rise", ParameterType::Quantity).per_object(),
+            ParameterDescriptor::optional("riser_tolerance", ParameterType::Quantity).per_object(),
+            ParameterDescriptor::optional("going_tolerance", ParameterType::Quantity).per_object(),
             ParameterDescriptor::optional("walking_line_offset", ParameterType::Quantity),
-            ParameterDescriptor::optional("winder_angle_maximum", ParameterType::Quantity),
-            ParameterDescriptor::optional("winder_angle_minimum", ParameterType::Quantity),
+            ParameterDescriptor::optional("winder_angle_maximum", ParameterType::Quantity)
+                .per_object(),
+            ParameterDescriptor::optional("winder_angle_minimum", ParameterType::Quantity)
+                .per_object(),
             ParameterDescriptor::optional("forbid_open_risers", ParameterType::Boolean),
             ParameterDescriptor::optional("handrail_extension_from", ParameterType::String),
         ]);
@@ -1245,6 +1247,9 @@ impl RuleCapability for StairGeometryCheck {
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
+        if crate::object_parameters::has_object_parameters(rule) {
+            return crate::object_parameters::per_object(self, context, rule);
+        }
         let config = match StairConfig::parse(rule) {
             Ok(config) => config,
             Err((reason, message)) => {
@@ -1832,13 +1837,15 @@ impl RuleCapability for RampGeometryCheck {
     fn parameters(&self) -> Vec<ParameterDescriptor> {
         let mut parameters = vec![
             ParameterDescriptor::optional("slope_limits", ParameterType::Table(SLOPE_LIMITS)),
-            ParameterDescriptor::optional("slope_tolerance", ParameterType::Number),
+            ParameterDescriptor::optional("slope_tolerance", ParameterType::Number).per_object(),
         ];
         parameters.extend(headroom_descriptors());
         parameters.extend(walking_descriptors());
         parameters.extend([
-            ParameterDescriptor::optional("end_landing_depth_minimum", ParameterType::Quantity),
-            ParameterDescriptor::optional("end_landing_width_minimum", ParameterType::Quantity),
+            ParameterDescriptor::optional("end_landing_depth_minimum", ParameterType::Quantity)
+                .per_object(),
+            ParameterDescriptor::optional("end_landing_width_minimum", ParameterType::Quantity)
+                .per_object(),
         ]);
         parameters.extend(handrails::ramp_descriptors());
         parameters

@@ -68,7 +68,7 @@ pub fn compile(
             .get(rule.definition_id.as_str())
             .ok_or_else(|| EngineError::UnknownDefinition(rule.definition_id.clone()))?;
         let parameters = bind_parameters(registry, rule, definition)?;
-        validate_bound(&vocabulary, &rule.id, &parameters, definition)?;
+        validate_bound(&vocabulary, registry, &rule.id, &parameters, definition)?;
         let id = RuleId::new(rule.id.clone())
             .map_err(|_| EngineError::InvalidRuleId(rule.id.clone()))?;
         let refinement = refinement(registry, &concepts, rule, &definition.capability)?;
@@ -1056,6 +1056,9 @@ fn bind_parameters(
                 }
             }
         };
+        if computed(&rule.id, name, descriptor, value)? {
+            continue;
+        }
         if !descriptor.parameter_type.accepts(value) {
             return Err(EngineError::InvalidParameterType {
                 capability: definition.capability.clone(),
@@ -1112,6 +1115,17 @@ fn bind_authored(
             .map(|column| (column.id.as_str(), column.kind, column.required))
             .collect();
         for (row, cells) in rows.iter().enumerate() {
+            if cells
+                .values()
+                .any(|cell| matches!(cell, ParameterValue::Expression { .. }))
+            {
+                return Err(EngineError::InvalidTableRow {
+                    capability: capability.into(),
+                    parameter: name.into(),
+                    row,
+                    detail: "a table the rule's expressions read holds no expression cell".into(),
+                });
+            }
             validate_row(&columns, cells).map_err(|detail| EngineError::InvalidTableRow {
                 capability: capability.into(),
                 parameter: name.into(),
@@ -1339,7 +1353,8 @@ fn validate_selector_concepts(
         Selector::All
         | Selector::Classification { .. }
         | Selector::Discipline { .. }
-        | Selector::RuleOutcome { .. } => Ok(()),
+        | Selector::RuleOutcome { .. }
+        | Selector::Objects { .. } => Ok(()),
         // Its types are checked once the ruleset's values are known.
         Selector::Expression { expression } => {
             crate::expression_binding::expression_concepts(concepts, rule, expression)
@@ -1450,10 +1465,15 @@ fn vocabulary_properties<'a>(
 /// expressions' structure and types.
 fn validate_bound(
     vocabulary: &crate::expression_binding::Vocabulary<'_>,
+    registry: &CapabilityRegistry,
     rule: &str,
     parameters: &BTreeMap<String, ParameterValue>,
     definition: &RuleDefinition,
 ) -> Result<(), EngineError> {
+    let descriptors = registry
+        .get(&definition.capability)
+        .map(|capability| capability.parameters())
+        .unwrap_or_default();
     for value in parameters.values() {
         validate_parameter_concepts(vocabulary.concepts, rule, value)?;
     }
@@ -1462,6 +1482,7 @@ fn validate_bound(
         rule,
         parameters,
         &definition.parameters,
+        &descriptors,
     )
 }
 
@@ -1705,7 +1726,67 @@ fn validate_row(columns: &[(&str, ColumnKind, bool)], row: &TableRow) -> Result<
     }
 }
 
+/// Whether `value` is an expression a per-object parameter computes, so
+/// its type is checked with the rule's expressions; refused on a parameter
+/// constant for the rule, as is a table with expression cells.
+fn computed(
+    rule: &str,
+    name: &str,
+    descriptor: &ParameterDescriptor,
+    value: &ParameterValue,
+) -> Result<bool, EngineError> {
+    let constant = |path: String, what: &str| EngineError::InvalidExpression {
+        rule: rule.into(),
+        parameter: name.into(),
+        path,
+        detail: format!("`{name}` is constant for the rule and takes no {what}"),
+    };
+    match value {
+        ParameterValue::Expression { .. }
+            if descriptor.parameter_type != ParameterType::Expression =>
+        {
+            if descriptor.per_object && computable(descriptor.parameter_type) {
+                Ok(true)
+            } else {
+                Err(constant(name.into(), "expression"))
+            }
+        }
+        ParameterValue::Table { value: rows } if !descriptor.per_object => {
+            match rows.iter().position(|cells| {
+                cells
+                    .values()
+                    .any(|cell| matches!(cell, ParameterValue::Expression { .. }))
+            }) {
+                Some(row) => Err(constant(format!("{name}[{row}]"), "expression cell")),
+                None => Ok(false),
+            }
+        }
+        _ => Ok(false),
+    }
+}
+
+/// Whether a parameter of this type may be computed per object.
+fn computable(parameter_type: ParameterType) -> bool {
+    matches!(
+        parameter_type,
+        ParameterType::Boolean
+            | ParameterType::Integer
+            | ParameterType::Number
+            | ParameterType::Quantity
+            | ParameterType::String
+            | ParameterType::Enum
+            | ParameterType::Date
+            | ParameterType::DateTime
+            | ParameterType::Table(_)
+    )
+}
+
 fn cell_fits(kind: ColumnKind, cell: &ParameterValue) -> bool {
+    // A scalar cell may be an expression where its table is computed per
+    // object; whether it may is checked with the table.
+    if let ParameterValue::Expression { .. } = cell {
+        return !matches!(kind, ColumnKind::Selector | ColumnKind::Reference);
+    }
     match (kind, cell) {
         (ColumnKind::String, ParameterValue::String { .. })
         | (ColumnKind::Integer, ParameterValue::Integer { .. })

@@ -646,3 +646,160 @@ fn an_ill_typed_selector_expression_fails_compilation() {
         Err(EngineError::InvalidExpression { .. })
     ));
 }
+
+#[test]
+fn a_rule_constant_parameter_refuses_an_expression_and_a_computed_one_its_type() {
+    let registry = registry();
+    let package = vocabulary(&registry, &[]);
+    let predicate = |parameters: Value| {
+        rule(
+            "p",
+            PREDICATE,
+            "error",
+            entity("slab"),
+            parameters,
+            json!({}),
+        )
+    };
+    let mut parameters = json!({
+        "property_set": {"type": "string", "value": "t.Pset"},
+        "property": {"type": "string", "value": "t.Cover"},
+        "operator": {"type": "string", "value": "greater_or_equal"},
+        "quantity": {"type": "expression", "value": mm(30.0)},
+    });
+    assert!(compiled(&package, predicate(parameters.clone())).is_ok());
+    // The property is constant for the rule.
+    let mut constant = parameters.clone();
+    constant["property"] = json!({"type": "expression", "value":
+        {"kind": "literal", "value": {"type": "string", "value": "t.Cover"}}});
+    match compiled(&package, predicate(constant)) {
+        Err(EngineError::InvalidExpression {
+            parameter, detail, ..
+        }) => {
+            assert_eq!(parameter, "property");
+            assert!(detail.contains("constant for the rule"), "{detail}");
+        }
+        other => panic!("{other:?}"),
+    }
+    // A quantity bound computed as text is ill-typed.
+    parameters["quantity"] = json!({"type": "expression", "value": property("Class")});
+    match compiled(&package, predicate(parameters)) {
+        Err(EngineError::InvalidExpression {
+            parameter, path, ..
+        }) => {
+            assert_eq!(
+                (parameter.as_str(), path.as_str()),
+                ("quantity", "quantity")
+            );
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+/// The required parameters of each capability that takes a parameter per
+/// object, besides that parameter: enough to compile a rule.
+fn required_besides(capability: &str) -> Value {
+    match capability {
+        PREDICATE => json!({
+            "property_set": {"type": "string", "value": "t.Pset"},
+            "property": {"type": "string", "value": "t.Cover"},
+            "operator": {"type": "string", "value": "greater_or_equal"},
+        }),
+        "axioval:capability.distance" => json!({
+            "counterparts": {"type": "selector", "value": {"kind": "all"}},
+        }),
+        "axioval:capability.keyed-limit" => json!({
+            "limits": {"type": "table", "value": []},
+            "quantity": {"type": "string", "value": "plan-area"},
+            "key_1": {"type": "propertyReference", "property": "t.Class"},
+        }),
+        "axioval:capability.stair-geometry" | "axioval:capability.ramp-geometry" => json!({}),
+        other => panic!("give `{other}` its required parameters here"),
+    }
+}
+
+#[test]
+fn every_per_object_numeric_parameter_takes_a_well_typed_expression_and_refuses_another() {
+    use axioval_engine::{ColumnKind, ParameterType};
+    let registry = registry();
+    let literal = |kind: &str, value: Value| {
+        let mut literal = json!({"kind": "literal", "value": {"type": kind, "value": value}});
+        if kind == "quantity" {
+            literal["value"]["unit"] = json!("m");
+        }
+        json!({"type": "expression", "value": literal})
+    };
+    let text = literal("string", json!("wide"));
+    let mut checked = 0;
+    for capability in registry.ids().map(str::to_owned).collect::<Vec<_>>() {
+        let descriptors = registry.get(&capability).unwrap().parameters();
+        let computed: Vec<_> = descriptors
+            .iter()
+            .filter(|descriptor| descriptor.per_object)
+            .collect();
+        if computed.is_empty() {
+            continue;
+        }
+        let package = definitions(
+            &registry,
+            &[&capability],
+            &["slab"],
+            &["Cover", "Class"],
+            &["Pset"],
+        );
+        for descriptor in computed {
+            // A well-typed value and an ill-typed one, as the parameter or
+            // as a cell of each numeric column.
+            let cases: Vec<(Value, Value)> = match descriptor.parameter_type {
+                ParameterType::Integer => vec![(literal("integer", json!(2)), text.clone())],
+                ParameterType::Number => vec![(literal("number", json!(0.5)), text.clone())],
+                ParameterType::Quantity => vec![(literal("quantity", json!(0.5)), text.clone())],
+                ParameterType::Table(columns) => columns
+                    .iter()
+                    .filter_map(|column| {
+                        let good = match column.kind {
+                            ColumnKind::Integer => literal("integer", json!(2)),
+                            ColumnKind::Number => literal("number", json!(0.5)),
+                            ColumnKind::Quantity => literal("quantity", json!(0.5)),
+                            _ => return None,
+                        };
+                        let row =
+                            |cell: Value| json!({"type": "table", "value": [{column.id: cell}]});
+                        Some((row(good), row(text.clone())))
+                    })
+                    .collect(),
+                _ => Vec::new(),
+            };
+            for (good, bad) in cases {
+                let parameters = |value: Value| {
+                    let mut parameters = required_besides(&capability);
+                    parameters[descriptor.name.as_str()] = value;
+                    rule(
+                        "r",
+                        &capability,
+                        "error",
+                        json!({"kind": "all"}),
+                        parameters,
+                        json!({}),
+                    )
+                };
+                let label = format!("{capability} {}", descriptor.name);
+                if let Err(error) = compiled(&package, parameters(good)) {
+                    panic!("{label}: a well-typed expression is refused: {error}");
+                }
+                assert!(
+                    matches!(
+                        compiled(&package, parameters(bad)),
+                        Err(EngineError::InvalidExpression { .. })
+                    ),
+                    "{label}: an ill-typed expression is accepted"
+                );
+                checked += 1;
+            }
+        }
+    }
+    assert!(
+        checked >= 10,
+        "only {checked} parameters are computed per object"
+    );
+}

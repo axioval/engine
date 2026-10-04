@@ -175,3 +175,22 @@ fn a_quantity_is_never_compared_with_a_bare_number() {
         [("q".to_owned(), NotEvaluatedReason::InvalidEvidence)]
     );
 }
+
+/// A bound computed per object: load-bearing walls at most 0.3, others 2.
+#[test]
+fn a_bound_computed_per_object_judges_each_object_by_its_own() {
+    let bound = common::expression(serde_json::json!({"kind": "if",
+        "branches": [{"when": {"kind": "property", "propertySet": "Pset", "property": "LoadBearing"},
+                      "then": {"kind": "literal", "value": {"type": "number", "value": 0.3}}}],
+        "else": {"kind": "literal", "value": {"type": "number", "value": 2.0}}}));
+    let evaluation = check("Width", "less_or_equal", vec![("number", bound)]);
+    // `b` is 1 wide but not load-bearing; `c` states no width.
+    assert_eq!(flagged(&evaluation), ["c"]);
+    // A bound computed as `null` is no bound, and `number` is the only
+    // target: the declaration is incomplete, never a pass.
+    let absent = common::expression(serde_json::json!(
+        {"kind": "property", "propertySet": "Pset", "property": "Missing"}));
+    let evaluation = check("Width", "less_or_equal", vec![("number", absent)]);
+    assert!(evaluation.findings().is_empty());
+    assert!(!evaluation.not_evaluated_outcomes().is_empty());
+}

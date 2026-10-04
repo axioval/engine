@@ -1189,8 +1189,8 @@ impl RuleCapability for Distance {
     fn parameters(&self) -> Vec<ParameterDescriptor> {
         let mut parameters = vec![
             ParameterDescriptor::required("counterparts", ParameterType::Selector),
-            ParameterDescriptor::optional("minimum_metres", ParameterType::Number),
-            ParameterDescriptor::optional("maximum_metres", ParameterType::Number),
+            ParameterDescriptor::optional("minimum_metres", ParameterType::Number).per_object(),
+            ParameterDescriptor::optional("maximum_metres", ParameterType::Number).per_object(),
             ParameterDescriptor::optional("mode", ParameterType::String),
             ParameterDescriptor::optional("count", ParameterType::Integer),
             ParameterDescriptor::optional("projection", ParameterType::String),
@@ -1213,6 +1213,9 @@ impl RuleCapability for Distance {
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
+        if crate::object_parameters::has_object_parameters(rule) {
+            return crate::object_parameters::per_object(self, context, rule);
+        }
         let declared = match declaration(rule) {
             Ok(declared) => declared,
             Err((_, message)) => return refuse_declaration(context, rule, &message),

@@ -540,3 +540,11 @@ pub fn assert_deviation(found: (f64, f64), expected: (f64, f64)) {
         "{found:?} is wider than {expected:?}"
     );
 }
+
+/// A parameter given as an expression, written in its package form.
+#[allow(dead_code)]
+pub fn expression(value: serde_json::Value) -> ParameterValue {
+    ParameterValue::Expression {
+        value: Box::new(serde_json::from_value(value).unwrap()),
+    }
+}

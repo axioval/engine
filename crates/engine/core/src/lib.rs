@@ -297,6 +297,10 @@ pub struct ParameterDescriptor {
     pub name: String,
     pub parameter_type: ParameterType,
     pub required: bool,
+    /// Whether a rule may give the parameter as an expression evaluated per
+    /// checked object, or, for a table, any scalar cell. Every other
+    /// parameter is constant for the whole rule and refuses one.
+    pub per_object: bool,
 }
 impl ParameterDescriptor {
     /// Required parameter descriptor.
@@ -305,6 +309,7 @@ impl ParameterDescriptor {
             name: name.into(),
             parameter_type,
             required: true,
+            per_object: false,
         }
     }
     /// Optional parameter descriptor.
@@ -313,7 +318,15 @@ impl ParameterDescriptor {
             name: name.into(),
             parameter_type,
             required: false,
+            per_object: false,
         }
+    }
+    /// The parameter may be computed per checked object: given as an
+    /// expression of its kind or, for a table, with expression cells.
+    #[must_use]
+    pub fn per_object(mut self) -> Self {
+        self.per_object = true;
+        self
     }
 }
 
@@ -389,6 +402,20 @@ impl CapabilityNotEvaluated {
 }
 
 impl CapabilityEvaluation {
+    /// Adds every outcome of `other`: its findings with their deviations,
+    /// its not-evaluated outcomes and its tables.
+    pub fn absorb(&mut self, other: Self) {
+        let offset = self.findings.len();
+        self.findings.extend(other.findings);
+        self.graded.extend(
+            other
+                .graded
+                .into_iter()
+                .map(|(index, deviation)| (index + offset, deviation)),
+        );
+        self.not_evaluated.extend(other.not_evaluated);
+        self.tables.extend(other.tables);
+    }
     /// Conclusive findings emitted by this capability.
     #[must_use]
     pub fn findings(&self) -> &[Finding] {
@@ -597,6 +624,10 @@ impl CapabilityRegistry {
             return Err(EngineError::DuplicateCapability(id));
         }
         Ok(self)
+    }
+    /// Every registered capability ID, sorted.
+    pub fn ids(&self) -> impl Iterator<Item = &str> {
+        self.capabilities.keys().map(String::as_str)
     }
     /// Gets trusted code by exact ID.
     pub fn get(&self, id: &str) -> Option<&Arc<dyn RuleCapability>> {

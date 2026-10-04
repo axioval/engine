@@ -350,7 +350,8 @@ impl ResourceObjects {
             | Selector::DerivedClass { .. }
             | Selector::Discipline { .. }
             | Selector::Source { .. }
-            | Selector::Expression { .. } => {}
+            | Selector::Expression { .. }
+            | Selector::Objects { .. } => {}
         }
     }
 }

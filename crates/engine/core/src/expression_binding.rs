@@ -158,6 +158,7 @@ pub(crate) fn check_rule_expressions(
     rule: &str,
     parameters: &BTreeMap<String, ParameterValue>,
     declared: &BTreeMap<String, ParameterDefinition>,
+    descriptors: &[crate::ParameterDescriptor],
 ) -> Result<(), EngineError> {
     let environment = RuleEnvironment {
         concepts: vocabulary.concepts,
@@ -168,22 +169,102 @@ pub(crate) fn check_rule_expressions(
         declared,
     };
     for (name, value) in parameters {
-        let ParameterValue::Expression { value: expression } = value else {
-            continue;
-        };
+        let parameter_type = descriptors
+            .iter()
+            .find(|descriptor| descriptor.name == *name)
+            .map(|descriptor| descriptor.parameter_type);
         let invalid = |path: String, detail: String| EngineError::InvalidExpression {
             rule: rule.into(),
             parameter: name.clone(),
             path,
             detail,
         };
-        expression
-            .validate()
-            .map_err(|error| invalid(name.clone(), error.to_string()))?;
-        check_as(expression, name, &Type::Boolean, &environment)
-            .map_err(|error| invalid(error.path.clone(), error.to_string()))?;
+        let check = |expression: &Expression, path: &str, expected: Option<Type>| {
+            expression
+                .validate()
+                .map_err(|error| invalid(path.to_owned(), error.to_string()))?;
+            let found = crate::expression::check(expression, path, &environment)
+                .map_err(|error| invalid(error.path.clone(), error.to_string()))?;
+            match expected {
+                Some(expected) if !fits(&expected, &found) => Err(invalid(
+                    path.to_owned(),
+                    format!("`{path}`: {expected} is needed, not {found}"),
+                )),
+                _ => Ok(()),
+            }
+        };
+        match (value, parameter_type) {
+            (ParameterValue::Expression { value: expression }, kind) => {
+                let expected = match kind {
+                    None | Some(crate::ParameterType::Expression) => Some(Type::Boolean),
+                    Some(kind) => parameter_type_of(kind),
+                };
+                check(expression, name, expected)?;
+            }
+            (ParameterValue::Table { value: rows }, Some(crate::ParameterType::Table(columns))) => {
+                for (index, row) in rows.iter().enumerate() {
+                    for (column, cell) in row {
+                        let ParameterValue::Expression { value: expression } = cell else {
+                            continue;
+                        };
+                        let expected = columns
+                            .iter()
+                            .find(|declared| declared.id == column)
+                            .and_then(|declared| column_kind_type(declared.kind));
+                        check(expression, &format!("{name}[{index}].{column}"), expected)?;
+                    }
+                }
+            }
+            _ => {}
+        }
     }
     Ok(())
+}
+
+/// Whether a value of type `found` may stand where `expected` is needed: a
+/// quantity of any unit where a quantity is, text or an enumeration value
+/// where either is, and a value known only when read anywhere.
+fn fits(expected: &Type, found: &Type) -> bool {
+    match (expected, found) {
+        (_, Type::Any | Type::Null) | (Type::Text | Type::Enum(_), Type::Text | Type::Enum(_)) => {
+            true
+        }
+        // A quantity parameter takes any unit but a plain number's.
+        (Type::Number(unit), Type::Number(found)) if !unit.is_plain() => !found.is_plain(),
+        (Type::Number(unit), Type::Integer) => unit.is_plain(),
+        (expected, found) => expected == found,
+    }
+}
+
+/// The type a computed parameter of `kind` must have.
+fn parameter_type_of(kind: crate::ParameterType) -> Option<Type> {
+    use crate::ParameterType as P;
+    Some(match kind {
+        P::Boolean => Type::Boolean,
+        P::Integer => Type::Integer,
+        P::Number => Type::NUMBER,
+        // Any non-plain unit; `fits` accepts every one.
+        P::Quantity => Type::Number(Unit::of(Some(QuantityDimension::Length))),
+        P::String => Type::Text,
+        P::Enum => Type::Enum(None),
+        P::Date => Type::Date,
+        P::DateTime => Type::DateTime,
+        _ => return None,
+    })
+}
+
+/// The type a computed cell of a column of `kind` must have.
+fn column_kind_type(kind: ColumnKind) -> Option<Type> {
+    Some(match kind {
+        ColumnKind::String | ColumnKind::TextPattern => Type::Text,
+        ColumnKind::Integer => Type::Integer,
+        ColumnKind::Number => Type::NUMBER,
+        ColumnKind::Quantity => Type::Number(Unit::of(Some(QuantityDimension::Length))),
+        ColumnKind::Boolean => Type::Boolean,
+        ColumnKind::Date => Type::Date,
+        ColumnKind::DateTime => Type::DateTime,
+        ColumnKind::Selector | ColumnKind::Reference => return None,
+    })
 }
 
 /// What a ruleset's expressions may read: its concepts, the vocabulary's

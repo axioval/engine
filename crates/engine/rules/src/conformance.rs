@@ -225,6 +225,7 @@ fn consulted_properties<'a>(selector: &'a Selector, found: &mut Vec<PropertyRef<
         | Selector::Discipline { .. }
         | Selector::Source { .. }
         | Selector::RuleOutcome { .. }
+        | Selector::Objects { .. }
         | Selector::Related { .. } => {}
     }
 }

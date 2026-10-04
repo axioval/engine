@@ -57,6 +57,10 @@ use crate::support::{Parameters, Unavailable, finding, invalid, si_quantity};
 /// undecided: the object is not evaluated unless another row fits.
 pub struct AllowedProfile;
 
+mod measured;
+
+pub(crate) use measured::ProfileMeasures;
+
 /// One dimension column: a length, or a plane angle; a length that may be
 /// negative is an offset.
 struct Dimension {

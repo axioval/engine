@@ -481,3 +481,143 @@ fn per_dimension_names_types_and_an_unknown_match() {
         [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
     );
 }
+
+/// `table()` as an expression: some row's type, name and every dimension
+/// it states within `tolerance` of the measured profile dimension.
+#[allow(clippy::type_complexity)]
+fn table_expression(tolerance: f64) -> serde_json::Value {
+    use serde_json::json;
+    let body = |name: &str| json!({"kind": "property", "propertySet": BODY_SET, "property": name});
+    let text =
+        |value: &str| json!({"kind": "literal", "value": {"type": "string", "value": value}});
+    let metres = |value: f64| json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": "m"}});
+    let rows: [(&str, Option<&str>, &[(&str, f64)]); 3] = [
+        ("i-shape", Some("HEA*"), &[("width", 0.3), ("depth", 0.29)]),
+        (
+            "i-shape",
+            Some("HEB*"),
+            &[("width", 0.3), ("depth", 0.3), ("web_thickness", 0.011)],
+        ),
+        ("rectangle", None, &[("width", 0.3), ("depth", 0.3)]),
+    ];
+    let rows: Vec<_> = rows
+        .iter()
+        .map(|(family, name, dimensions)| {
+            let mut operands = vec![json!({"kind": "compare", "operator": "equals",
+                "left": body("Profile.Type"), "right": text(family)})];
+            if let Some(name) = name {
+                operands.push(json!({"kind": "compare", "operator": "like",
+                    "left": body("Profile.Name"), "right": text(name)}));
+            }
+            for (column, nominal) in *dimensions {
+                operands.push(json!({"kind": "compare", "operator": "lessThanOrEquals",
+                    "left": {"kind": "abs", "operand": {"kind": "subtract",
+                        "left": {"kind": "property", "propertySet": "axioval:measured",
+                                 "property": format!("profile_dimension;name={column}")},
+                        "right": metres(*nominal)}},
+                    "right": metres(tolerance)}));
+            }
+            json!({"kind": "and", "operands": operands})
+        })
+        .collect();
+    json!({"kind": "or", "operands": rows})
+}
+
+/// The profile table rewritten as an expression over the profile values
+/// finds what `allowed-profile` finds.
+#[test]
+fn the_profile_table_as_an_expression_finds_alike() {
+    use axioval_rules::ExpressionRequirement;
+    let fixtures: [fn() -> Model; 3] = [
+        || {
+            let model = i_shape(Model::default(), "c1", "HEA300", 0.3, 0.2905);
+            i_shape(model, "c2", "HEA300", 0.3, 0.295)
+        },
+        || {
+            let model = member(
+                Model::default(),
+                "square",
+                "rectangle",
+                None,
+                &[("XDim", 0.3), ("YDim", 0.3)],
+            );
+            member(model, "angle", "l-shape", Some("L100"), &[("Depth", 0.1)])
+        },
+        || i_shape(Model::default(), "heb", "HEB300", 0.3, 0.3),
+    ];
+    let rule = rule(
+        "axioval:capability.expression",
+        kind("column"),
+        vec![(
+            "requirement",
+            ParameterValue::Expression {
+                value: serde_json::from_value(table_expression(0.001)).unwrap(),
+            },
+        )],
+    );
+    for (index, model) in fixtures.into_iter().enumerate() {
+        let mut expected: Vec<String> = findings(&check(model(), Some(0.001)))
+            .into_iter()
+            .map(|(object, _)| object)
+            .collect();
+        expected.sort();
+        let evaluation = model().evaluate_measured(&ExpressionRequirement, &rule, |_| {});
+        let mut found: Vec<String> = findings(&evaluation)
+            .into_iter()
+            .map(|(object, _)| object)
+            .collect();
+        found.sort();
+        assert_eq!(
+            found,
+            expected,
+            "fixture {index}: {:?}",
+            evaluation.not_evaluated_outcomes()
+        );
+    }
+}
+
+/// Section areas and moduli where the family defines them.
+#[test]
+#[allow(clippy::float_cmp)]
+fn section_values_follow_the_profile() {
+    let model = member(
+        Model::default(),
+        "beam",
+        "rectangle",
+        None,
+        &[("XDim", 0.2), ("YDim", 0.4)],
+    );
+    let model = member(model, "rod", "circle", None, &[("Radius", 0.1)]);
+    let model = i_shape(model, "i", "HEA300", 0.3, 0.29);
+    let model = member(model, "angle", "l-shape", None, &[("Depth", 0.1)]);
+    let (project, services) = model.services();
+    let read =
+        |object: &str, name: &str| common::measured(&services, &project, &common::id(object), name);
+    let near = |value: Option<(f64, f64)>, expected: f64| {
+        value.is_some_and(|(lower, upper)| (lower - expected).abs() < 1e-12 && lower == upper)
+    };
+    assert!(near(read("beam", "section_area").unwrap(), 0.08));
+    assert!(near(
+        read("beam", "section_modulus").unwrap(),
+        0.2 * 0.16 / 6.0
+    ));
+    assert!(near(
+        read("beam", "section_modulus;axis=weak").unwrap(),
+        0.4 * 0.04 / 6.0
+    ));
+    assert!(near(
+        read("rod", "section_area").unwrap(),
+        std::f64::consts::PI * 0.01
+    ));
+    // 2 × 0.3 × 0.014 + (0.29 − 0.028) × 0.0085.
+    assert!(near(
+        read("i", "section_area").unwrap(),
+        2.0 * 0.3 * 0.014 + 0.262 * 0.0085
+    ));
+    assert!(read("angle", "section_area").is_err());
+    assert!(near(
+        read("i", "profile_dimension;name=web_thickness").unwrap(),
+        0.0085
+    ));
+    assert_eq!(read("i", "profile_dimension;name=radius").unwrap(), None);
+}

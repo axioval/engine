@@ -394,6 +394,8 @@ ignoring ASCII case):
 | `door_clear_width[;stated=<set/name>][;from_leaves=passage\|widest-leaf][;overall=<set/name>;deduction=<m>]`, `door_clear_height[;stated=…][;overall=…][;lining=…][;threshold=…]` | a door's clear width or height, as `keyed-limit` reads it | built in, over the door's properties and leaves |
 | `sill_height;floor_path=<steps>[;measure=greatest\|least]`, `threshold_step;floor_path=<steps>[;threshold=<set/name>][;measure=…]` | above the floors a path reaches | built in, over `VerticalExtentService` |
 | `leaf_count`, `leaf_width[;measure=widest\|narrowest\|total]`, `swing_area`, `swings_into;path=<steps>` | a door's or window's leaves and swing | built in, over `ObjectFrameService::leaves` and `FreeSpaceService` |
+| `profile_dimension;name=<column>`, `profile_slope;name=<column>` | a dimension or slope of the member's swept profile, by `allowed-profile`'s column names | built in, over the body set |
+| `section_area`, `section_modulus[;axis=strong\|weak]` | the profile's section area and elastic section modulus, where its family defines them | built in, over the body set |
 | `angle_to;path=<steps>[;between=axis\|face_normal]` | the angle to the objects a path reaches, an angle | `PlanSpanService::measure_rectangle` or `VerticalExtentService::measure_face_normals`, `RelationshipSelectionService` |
 | `skew;path=<steps>` | how far the long axis is from square to the reached objects', an angle | `PlanSpanService::measure_rectangle`, `RelationshipSelectionService` |
 | `bearing;axis=own_x\|own_y\|long[;reference=project_north\|true_north]` | an axis's plan bearing clockwise from north, an angle | `ObjectFrameService` or `PlanSpanService`, `CoordinateSystemService` for true north |
@@ -553,6 +555,22 @@ the door states. A glazing ratio is a stated property and is read as one.
 plan area they sweep, bracketed by inscribed and circumscribed polygons.
 `swings_into` counts the spaces the path reaches that a leaf swings into,
 probed as `door-swing` probes them.
+
+### Profiles
+
+A member's swept profile is read as `allowed-profile` reads it: one item,
+a mirrored profile followed to its parent, a derived one refused. Its type
+and name are stated (`axioval:body` `Profile.Type` and `Profile.Name`) and
+are read as properties; each dimension and slope is a measured value under
+the column names `allowed-profile` uses for every family, with none when
+the family has no such dimension or the source leaves it unset. A profile
+table is therefore an expression: an `or` over its rows, each an `and` of
+the type, a `like` on the name and every dimension within the tolerance.
+
+`section_area` is defined for rectangles, hollow rectangles without
+fillets, circles, hollow circles, ellipses and I-sections without flange
+slopes (fillets counted); `section_modulus` for solid and hollow
+rectangles and circles. Any other family leaves it not evaluated.
 
 ### Areas, shares and coverage
 

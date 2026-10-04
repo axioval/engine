@@ -300,6 +300,8 @@ const OVER_FLOORS: MeasuredParameter = MeasuredParameter {
     ),
 };
 
+const PROFILE_UNREAD: &str = "the body is no single swept profile, or a derived one";
+
 const OWN_AXIS: MeasuredParameterKind = MeasuredParameterKind::Choice {
     options: &["own_x", "own_y", "own_z", "x", "y", "z"],
 };
@@ -1455,6 +1457,119 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         help: &en_de(
             "The footprint's overlap in plan with objects of the kinds named; with the footprint `area`, `plan-coverage`'s ratio.",
             "Die Überlappung des Grundrisses mit Objekten der genannten Arten; mit der Grundfläche `area` das Verhältnis von `plan-coverage`.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "profile_dimension",
+        parameters: &[MeasuredParameter {
+            key: "name",
+            kind: MeasuredParameterKind::Choice {
+                options: &[
+                    "width",
+                    "depth",
+                    "web_thickness",
+                    "flange_thickness",
+                    "thickness",
+                    "wall_thickness",
+                    "radius",
+                    "girth",
+                    "fillet_radius",
+                    "semi_axis_1",
+                    "semi_axis_2",
+                    "top_width",
+                    "top_offset",
+                    "top_flange_thickness",
+                    "top_fillet_radius",
+                    "edge_radius",
+                    "top_edge_radius",
+                    "web_edge_radius",
+                    "outer_fillet_radius",
+                ],
+            },
+            required: true,
+            default: None,
+            help: &en_de(
+                "The dimension, named alike for every profile family as `allowed-profile` \
+                 names it.",
+                "Die Abmessung, für jede Profilfamilie gleich benannt wie in \
+                 `allowed-profile`.",
+            ),
+        }],
+        dimension: Some(QuantityDimension::Length),
+        services: &["property-resolution"],
+        exactness: MeasuredExactness::Stated,
+        not_evaluated: &[PROFILE_UNREAD],
+        label: &en_de("Profile dimension", "Profilabmessung"),
+        help: &en_de(
+            "A dimension of the member's swept profile, its parent's for a mirrored one; \
+             none when its family has no such dimension or the source leaves it unset.",
+            "Eine Abmessung des Profils des Bauteils, bei einem gespiegelten die seines \
+             Ursprungs; keine, wenn die Familie sie nicht hat oder die Quelle sie nicht \
+             angibt.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "profile_slope",
+        parameters: &[MeasuredParameter {
+            key: "name",
+            kind: MeasuredParameterKind::Choice {
+                options: &["flange_slope", "top_flange_slope", "leg_slope", "web_slope"],
+            },
+            required: true,
+            default: None,
+            help: &en_de(
+                "The slope, as `allowed-profile` names it.",
+                "Die Neigung, wie `allowed-profile` sie benennt.",
+            ),
+        }],
+        dimension: Some(QuantityDimension::PlaneAngle),
+        services: &["property-resolution"],
+        exactness: MeasuredExactness::Stated,
+        not_evaluated: &[PROFILE_UNREAD],
+        label: &en_de("Profile slope", "Profilneigung"),
+        help: &en_de(
+            "A slope of the member's swept profile, an angle.",
+            "Eine Neigung des Profils des Bauteils, ein Winkel.",
+        ),
+    },
+    plain!(
+        "section_area",
+        Some(QuantityDimension::Area),
+        &["property-resolution"],
+        MeasuredExactness::Stated,
+        &[PROFILE_UNREAD, "the family defines no section area here"],
+        en_de("Section area", "Querschnittsfläche"),
+        en_de(
+            "The area of the member's profile: rectangles, hollow rectangles without \
+             fillets, circles, hollow circles, ellipses and I-sections without slopes.",
+            "Die Fläche des Profils: Rechtecke, Hohlrechtecke ohne Ausrundung, Kreise, \
+             Hohlkreise, Ellipsen und I-Profile ohne Neigung."
+        )
+    ),
+    MeasuredDescriptor {
+        name: "section_modulus",
+        parameters: &[MeasuredParameter {
+            key: "axis",
+            kind: MeasuredParameterKind::Choice {
+                options: &["strong", "weak"],
+            },
+            required: false,
+            default: Some("strong"),
+            help: &en_de(
+                "About the `strong` or `weak` axis.",
+                "Um die starke (`strong`) oder schwache (`weak`) Achse.",
+            ),
+        }],
+        dimension: Some(QuantityDimension::Volume),
+        services: &["property-resolution"],
+        exactness: MeasuredExactness::Stated,
+        not_evaluated: &[PROFILE_UNREAD, "the family defines no section modulus here"],
+        label: &en_de("Section modulus", "Widerstandsmoment"),
+        help: &en_de(
+            "The elastic section modulus of rectangular and circular profiles, solid or \
+             hollow.",
+            "Das elastische Widerstandsmoment rechteckiger und kreisförmiger Profile, voll \
+             oder hohl.",
         ),
     },
     MeasuredDescriptor {

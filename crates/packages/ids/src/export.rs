@@ -20,9 +20,16 @@
 //!   and its capability as one requirement (`property-required`,
 //!   `property-data-type`, `property-value`, `property-requirements`,
 //!   `classification`, `selector-conformance` over an entity, attribute,
-//!   material or part-of selector), or `object-count` as the
-//!   applicability's cardinality. That reading is only a candidate: it is
-//!   exported only when its translation is the rule.
+//!   material or part-of selector, `expression` stating an integer
+//!   attribute facet), or `object-count` as the applicability's
+//!   cardinality. That reading is only a candidate: it is exported only
+//!   when its translation is the rule.
+//!
+//! An `expression` rule reads as a facet only when every node is one
+//! [`IdsProfile`] declares ([`ExportProfile::expression_kinds`]) and the
+//! nodes sit as the translation writes them; otherwise it is refused with
+//! [`Refusal::Expression`], naming the first node no facet states by the
+//! path the engine names it with (`requirement.and[1]`).
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -32,8 +39,9 @@ use axioval_export::compare::{self, Comparison};
 use axioval_export::precheck::{self, PreCheck};
 use axioval_export::{ExportOutcome, ExportProfile, Loss};
 use axioval_ir::contract::{
-    ComparisonOperator, DefinitionPackage, ExternalName, ParameterValue, Quantifier,
-    RelatedQuantifier, RuleFolder, RuleInstance, RuleSetPackage, Selector, Severity,
+    ComparisonOperator, DefinitionPackage, Expression, ExpressionComparison, ExternalName,
+    ParameterValue, PropertyValueKind, Quantifier, RelatedQuantifier, RuleFolder, RuleInstance,
+    RuleSetPackage, ScalarValue, Selector, Severity,
 };
 use axioval_ir::{ATTRIBUTE_SET, MATERIAL_KIND, MATERIAL_NAMES, MATERIAL_SET, TYPE_ATTRIBUTE_SET};
 use openbim_ids::{
@@ -158,6 +166,16 @@ pub enum Refusal {
     Parameter(String),
     /// A concept not named as IDS names things.
     Concept(String),
+    /// An expression rule whose requirement holds a node no IDS facet
+    /// states: the first such node, by the path the engine names it with.
+    Expression {
+        /// Where the node sits, such as `requirement.and[1]`.
+        path: String,
+        /// The node's kind, such as `aggregate`.
+        kind: String,
+        /// Why no facet states it.
+        why: String,
+    },
     /// The nearest specification has no exact translation.
     Gaps(String),
     /// The nearest specification translates to different rules.
@@ -221,6 +239,10 @@ impl fmt::Display for Refusal {
             Refusal::Selector(why)
             | Refusal::Parameter(why)
             | Refusal::Concept(why) => f.write_str(why),
+            Refusal::Expression { path, kind, why } => write!(
+                f,
+                "expression node `{path}` (`{kind}`) has no IDS facet: {why}"
+            ),
             Refusal::Gaps(gaps) => write!(
                 f,
                 "the IDS specification it reads as has no exact translation: {gaps}"
@@ -347,7 +369,26 @@ impl ExportProfile for IdsProfile {
     fn export(&self, definitions: &[DefinitionPackage], ruleset: &RuleSetPackage) -> ExportOutcome {
         export(definitions, ruleset).into()
     }
+
+    fn expression_kinds(&self) -> &[&str] {
+        &EXPRESSION_KINDS
+    }
 }
+
+/// The expression nodes an IDS facet may state, those the translation
+/// writes for an attribute facet: `and` of `isDefined` and the restriction
+/// facets as `oneOf`, `compare` and `between` of the attribute and integer
+/// literals, negated by `not` when prohibited.
+const EXPRESSION_KINDS: [&str; 8] = [
+    "and",
+    "between",
+    "compare",
+    "isDefined",
+    "literal",
+    "not",
+    "oneOf",
+    "property",
+];
 
 impl From<Export> for ExportOutcome {
     /// The document and its losses; a document IDS 1.0 cannot write or the
@@ -503,6 +544,7 @@ struct Catalog<'p> {
 fn comparison() -> Comparison {
     Comparison::default()
         .presentation_parameter(axioval_rules::SelectorConformance.id(), "message")
+        .presentation_parameter(axioval_rules::ExpressionRequirement.id(), "message")
         .case_insensitive_object_types()
 }
 
@@ -793,6 +835,13 @@ impl<'p> Catalog<'p> {
         }
         if mentions(selector, ATTRIBUTE_SET) {
             return self.attribute(selector).map(Facet::Attribute);
+        }
+        if let Selector::Expression { expression } = selector {
+            return Err(Refusal::Expression {
+                path: "selector.expression".to_owned(),
+                kind: expression.kind().to_owned(),
+                why: "IDS states no expression as a facet of a selection".to_owned(),
+            });
         }
         Err(Refusal::Selector(format!(
             "no IDS facet states the selector {}",
@@ -1162,6 +1211,9 @@ impl<'p> Catalog<'p> {
         if capability == axioval_rules::ObjectCount.id() {
             return count(parameters);
         }
+        if capability == axioval_rules::ExpressionRequirement.id() {
+            return self.expression(parameters);
+        }
         Err(Refusal::Capability(capability.to_owned()))
     }
 
@@ -1223,6 +1275,221 @@ impl<'p> Catalog<'p> {
                 )),
                 facet => Ok(requirement(facet, Occurrence::Required)),
             },
+        }
+    }
+
+    /// An `expression` rule: the attribute facet its requirement states,
+    /// `and(isDefined(a), …)` with the restriction facets as `oneOf`,
+    /// `compare` and `between` of `a` and integer literals, or its
+    /// negation when prohibited, as the translation writes it.
+    ///
+    /// Every other expression is refused at the first node no facet
+    /// states, by the path the engine names it with: first any node of a
+    /// kind outside [`EXPRESSION_KINDS`], then any node of those kinds in a
+    /// place or with operands no facet has. A reading is still only a
+    /// candidate, exported when its translation is the rule.
+    fn expression(
+        &self,
+        parameters: &BTreeMap<String, ParameterValue>,
+    ) -> Result<Reading, Refusal> {
+        if parameters.contains_key("deviation") {
+            return Err(Refusal::Parameter(
+                "a `deviation` grades its findings, which IDS cannot state".to_owned(),
+            ));
+        }
+        let Some(ParameterValue::Expression { value: stated }) = parameters.get("requirement")
+        else {
+            return Err(Refusal::Parameter(
+                "an expression rule without a requirement".to_owned(),
+            ));
+        };
+        if let Some(node) =
+            precheck::unsupported_expression_node(stated, "requirement", &EXPRESSION_KINDS)
+        {
+            return Err(Refusal::Expression {
+                path: node.path,
+                kind: node.kind.to_owned(),
+                why: "IDS states no such computation".to_owned(),
+            });
+        }
+        let refuse = |path: &str, node: &Expression, why: &str| Refusal::Expression {
+            path: path.to_owned(),
+            kind: node.kind().to_owned(),
+            why: why.to_owned(),
+        };
+        let (occurrence, path, holds) = match stated.as_ref() {
+            Expression::Not { operand, .. } => (
+                Occurrence::Prohibited,
+                "requirement.not.operand",
+                operand.as_ref(),
+            ),
+            other => (Occurrence::Required, "requirement", other),
+        };
+        let Expression::And { operands, .. } = holds else {
+            return Err(refuse(
+                path,
+                holds,
+                "IDS states an attribute facet as `and` of the attribute's presence and its restriction facets, or its negation",
+            ));
+        };
+        let item = |index: usize| format!("{path}.and[{index}]");
+        let Some((
+            Expression::IsDefined {
+                operand: attribute,
+                label: None,
+            },
+            tests,
+        )) = operands.split_first()
+        else {
+            let found = operands.first().unwrap_or(holds);
+            let at = if operands.is_empty() {
+                path.to_owned()
+            } else {
+                item(0)
+            };
+            return Err(refuse(
+                &at,
+                found,
+                "the facet's first operand is the attribute's presence, `isDefined`",
+            ));
+        };
+        let name = self
+            .integer_attribute(attribute)
+            .map_err(|why| refuse(&format!("{}.isDefined.operand", item(0)), attribute, &why))?;
+        let mut restriction = restriction("integer");
+        for (index, test) in tests.iter().enumerate() {
+            let at = item(index + 1);
+            Self::restriction_facet(test, attribute, &mut restriction)
+                .map_err(|why| refuse(&at, test, &why))?;
+        }
+        let value = (restriction != self::restriction("integer"))
+            .then(|| Value::Restriction(Box::new(restriction)));
+        Ok(requirement(
+            Facet::Attribute(Attribute {
+                name: Value::Simple(name),
+                value,
+            }),
+            occurrence,
+        ))
+    }
+
+    /// The IDS name of the attribute an expression reads: a property of the
+    /// reserved attribute set, through a concept declared an integer, read
+    /// as itself.
+    fn integer_attribute(&self, attribute: &Expression) -> Result<String, String> {
+        let Expression::Property {
+            property_set: Some(set),
+            property,
+            of: None,
+            label: None,
+        } = attribute
+        else {
+            return Err(
+                "IDS reads the checked object's attribute, unlabelled, in the reserved attribute set"
+                    .to_owned(),
+            );
+        };
+        if set != ATTRIBUTE_SET {
+            return Err(format!(
+                "it reads the set {set}; IDS compares an expression's value as an integer attribute only"
+            ));
+        }
+        // The comparator compares concepts by their names only, but the
+        // value kind decides how the expression is type checked.
+        let declared = self
+            .shared
+            .properties
+            .get(property.as_str())
+            .map(|concept| &concept.value_kind);
+        if declared != Some(&PropertyValueKind::Integer) {
+            return Err(format!(
+                "property {property} is not declared an integer, the only attribute an IDS facet compares as an expression"
+            ));
+        }
+        self.property(property)
+            .map_err(|refusal| refusal.to_string())
+    }
+
+    /// Adds the restriction facet `test` states of `attribute` to
+    /// `restriction`: an enumeration, a bound, or `totalDigits`.
+    fn restriction_facet(
+        test: &Expression,
+        attribute: &Expression,
+        restriction: &mut Restriction,
+    ) -> Result<(), String> {
+        let integer = |node: &Expression| match node {
+            Expression::Literal {
+                value: ScalarValue::Integer { value },
+                label: None,
+            } => Some(*value),
+            _ => None,
+        };
+        let same = |operand: &Expression| operand == attribute;
+        let once = |slot: &mut Option<String>, value: i64| {
+            if slot.is_some() {
+                return Err("the facet states each restriction facet once".to_owned());
+            }
+            *slot = Some(value.to_string());
+            Ok(())
+        };
+        match test {
+            Expression::OneOf {
+                operand,
+                values,
+                case_sensitive: true,
+                label: None,
+            } if same(operand) && restriction.enumeration.is_empty() => {
+                let values: Option<Vec<i64>> = values.iter().map(integer).collect();
+                let values = values.ok_or("an enumeration lists integer literals")?;
+                if values.is_empty() {
+                    return Err("an enumeration lists at least one value".to_owned());
+                }
+                restriction.enumeration = values.iter().map(ToString::to_string).collect();
+                Ok(())
+            }
+            Expression::Compare {
+                operator,
+                left,
+                right,
+                case_sensitive: true,
+                label: None,
+            } if same(left) => {
+                let bound = integer(right).ok_or("a bound is an integer literal")?;
+                let slot = match operator {
+                    ExpressionComparison::GreaterThanOrEquals => &mut restriction.min_inclusive,
+                    ExpressionComparison::LessThanOrEquals => &mut restriction.max_inclusive,
+                    ExpressionComparison::GreaterThan => &mut restriction.min_exclusive,
+                    ExpressionComparison::LessThan => &mut restriction.max_exclusive,
+                    _ => {
+                        return Err(
+                            "an XML Schema bound is `<`, `<=`, `>` or `>=` the attribute's value"
+                                .to_owned(),
+                        );
+                    }
+                };
+                once(slot, bound)
+            }
+            Expression::Between {
+                operand,
+                low,
+                high,
+                low_inclusive: true,
+                high_inclusive: true,
+                label: None,
+            } if same(operand) && restriction.total_digits.is_none() => {
+                let (Some(low), Some(high)) = (integer(low), integer(high)) else {
+                    return Err("`totalDigits` is a range of integer literals".to_owned());
+                };
+                let digits = (0..19)
+                    .find(|digits| crate::digits_bound(*digits) == high)
+                    .filter(|_| low == -high)
+                    .ok_or("a range is `totalDigits` only from -(10^n - 1) to 10^n - 1")?;
+                restriction.total_digits = Some(digits);
+                Ok(())
+            }
+            _ => Err(
+                "no IDS restriction facet states it of the attribute the facet names".to_owned(),
+            ),
         }
     }
 

@@ -73,6 +73,17 @@
 //!   `Names` list, every name and category the material goes by; one
 //!   restricted by several facets that one name must meet together becomes
 //!   `property-value` over that list with `quantifier` `any`.
+//! - An attribute facet restricting the digits (`totalDigits`,
+//!   `fractionDigits`) of an attribute every applicable class declares an
+//!   integer, which no selector states, becomes an `expression` rule where
+//!   a selector would otherwise test it: `and(isDefined(a), …)` with the
+//!   enumeration as `oneOf`, the bounds as comparisons and `totalDigits` n
+//!   as `between(-(10^n - 1), 10^n - 1)`, read through a concept declared
+//!   an integer. It is negated (`not`) when prohibited, and an auxiliary
+//!   rule in the applicability; a required or optional one stays
+//!   `property-value`, which counts digits alike. Digits or bounds on any
+//!   other attribute in those places stay a gap: no expression compares
+//!   them as IDS casts.
 //! - A classification requirement becomes `classification`: systems and
 //!   codes as literals or patterns, a system alone, optional or prohibited.
 //!   In the applicability a literal or enumerated system becomes
@@ -116,11 +127,12 @@ use std::fmt;
 
 use axioval_engine::{ParameterType, RuleCapability};
 use axioval_ir::contract::{
-    ComparisonOperator, DefinitionPackage, ExternalName, LocalizedText, ObjectTypeDefinition,
-    PackageMetadata, ParameterDefinition, ParameterKind, ParameterValue, PropertyDefinition,
-    PropertySetDefinition, PropertyValueKind, Quantifier, RelatedQuantifier, RuleApplicability,
-    RuleDefinition, RuleFolder, RuleInstance, RuleOutcomeKind, RuleSetPackage, Selector, Severity,
-    SourceField, TableColumnDefinition, TableRow,
+    ComparisonOperator, DefinitionPackage, Expression, ExpressionComparison, ExternalName,
+    LocalizedText, ObjectTypeDefinition, PackageMetadata, ParameterDefinition, ParameterKind,
+    ParameterValue, PropertyDefinition, PropertySetDefinition, PropertyValueKind, Quantifier,
+    RelatedQuantifier, RuleApplicability, RuleDefinition, RuleFolder, RuleInstance,
+    RuleOutcomeKind, RuleSetPackage, ScalarValue, Selector, Severity, SourceField,
+    TableColumnDefinition, TableRow,
 };
 use axioval_ir::{ATTRIBUTE_SET, MATERIAL_KIND, MATERIAL_NAMES, MATERIAL_SET, TYPE_ATTRIBUTE_SET};
 use ifc_schema::{Schema, TypeKind};
@@ -899,11 +911,17 @@ impl<'o> Writer<'o> {
                 continue;
             }
             // Being applicable means meeting the facet as a requirement would.
-            let translated = self.attempt(|writer| match writer.facet_selector(facet, &scope)? {
-                Some(selector) => Ok(Ok(selector)),
-                None => writer
+            let translated = self.attempt(|writer| match writer.facet_selector(facet, &scope) {
+                Ok(Some(selector)) => Ok(Ok(selector)),
+                Ok(None) => writer
                     .requirement(facet, Occurrence::Required, &scope)
                     .map(Err),
+                // A digit facet on an integer attribute: an expression
+                // states what the selector would, digits included.
+                Err(Reason::RestrictionFacet(restriction)) => writer
+                    .integer_expression(facet, Occurrence::Required, &scope, restriction)
+                    .map(|check| Err(Some(check))),
+                Err(reason) => Err(reason),
             });
             match translated {
                 Ok(Ok(selector)) => operands.push(selector),
@@ -1337,7 +1355,21 @@ impl<'o> Writer<'o> {
                 }));
             }
             (Some(value), Occurrence::Prohibited) => {
-                let selector = self.attribute_selector(attribute, scope)?;
+                let selector = match self.attribute_selector(attribute, scope) {
+                    // A digit facet on an integer attribute: the expression
+                    // negates the test the selector would state.
+                    Err(Reason::RestrictionFacet(restriction)) => {
+                        return self
+                            .integer_expression(
+                                &Facet::Attribute(attribute.clone()),
+                                occurrence,
+                                scope,
+                                restriction,
+                            )
+                            .map(Some);
+                    }
+                    other => other?,
+                };
                 return Ok(Some(conformance(
                     selector,
                     occurrence,
@@ -1581,6 +1613,78 @@ impl<'o> Writer<'o> {
         let mut operands = vec![any_of(filled_any)];
         operands.extend(valued);
         Ok(all_of(operands))
+    }
+
+    /// An attribute facet whose selector is refused only for a digit facet
+    /// (`totalDigits`, `fractionDigits`), on one attribute every applicable
+    /// class declares an integer, as an `expression` rule: the selector's
+    /// own test, `and(isDefined(a), …)` with the digits as a range, as
+    /// required, and its negation as prohibited. Any other facet keeps
+    /// `refused`, the restriction facet the selector refused.
+    ///
+    /// The expression reads the attribute through a concept declared an
+    /// integer, so it is type checked as one; an integer has no fraction
+    /// digits and at most `n` digits below `10^n`, exactly as
+    /// `property-value` counts them.
+    fn integer_expression(
+        &mut self,
+        facet: &Facet,
+        occurrence: Occurrence,
+        scope: &Scope<'_>,
+        refused: &'static str,
+    ) -> Result<Check, Reason> {
+        let refuse = || Reason::RestrictionFacet(refused);
+        let Facet::Attribute(Attribute {
+            name: Value::Simple(name),
+            value: Some(value @ Value::Restriction(restriction)),
+        }) = facet
+        else {
+            return Err(refuse());
+        };
+        if !matches!(refused, "totalDigits" | "fractionDigits")
+            || occurrence == Occurrence::Optional
+            || attribute_kind(name, scope)? != Some(AttributeKind::Integer)
+        {
+            return Err(refuse());
+        }
+        attribute_case(name, scope)?;
+        let attribute = Expression::Property {
+            property_set: Some(ATTRIBUTE_SET.to_owned()),
+            property: self.integer_attribute(name, scope.releases),
+            of: None,
+            label: None,
+        };
+        let mut operands = vec![Expression::IsDefined {
+            operand: Box::new(attribute.clone()),
+            label: None,
+        }];
+        operands.extend(integer_tests(&attribute, restriction)?);
+        let holds = Expression::And {
+            operands,
+            label: None,
+        };
+        let subject = format!("attribute {name}");
+        let (requirement, title) = if occurrence == Occurrence::Prohibited {
+            (
+                Expression::Not {
+                    operand: Box::new(holds),
+                    label: None,
+                },
+                format!("prohibited: has {subject} {}", shown_value(value)),
+            )
+        } else {
+            (holds, Kind::Value.title(&subject, false))
+        };
+        Ok(Check::Capability {
+            kind: Kind::Expression,
+            title,
+            parameters: BTreeMap::from([(
+                "requirement".to_owned(),
+                ParameterValue::Expression {
+                    value: Box::new(requirement),
+                },
+            )]),
+        })
     }
 
     /// The selector a material facet stands for; `None` for a value
@@ -1832,6 +1936,31 @@ impl<'o> Writer<'o> {
         id
     }
 
+    /// An attribute every applicable class declares an integer, as a
+    /// concept declared an integer for an expression to read: the nominal
+    /// `string` of [`Writer::attribute`] would not type check against an
+    /// integer. It binds to the same names.
+    fn integer_attribute(&mut self, name: &str, releases: &[IfcVersion]) -> String {
+        let (id, new) = self.concept("integer-attribute", releases, name);
+        if new {
+            self.concepts.properties.insert(
+                id.clone(),
+                PropertyDefinition {
+                    id: id.clone(),
+                    name: LocalizedText::plain(name),
+                    description: Some(LocalizedText::plain(format!(
+                        "{name}, read in a reserved set, an integer as every applicable class declares it."
+                    ))),
+                    value_kind: PropertyValueKind::Integer,
+                    unit_dimension: None,
+                    external_names: names(releases, name),
+                    citations: Vec::new(),
+                },
+            );
+        }
+        id
+    }
+
     fn property_set(&mut self, set: &str, releases: &[IfcVersion]) -> String {
         let (id, new) = self.concept("property-set", releases, set);
         if new {
@@ -2065,6 +2194,8 @@ enum Kind {
     Count,
     /// `classification`.
     Classification,
+    /// `expression`.
+    Expression,
 }
 
 impl Kind {
@@ -2111,6 +2242,11 @@ impl Kind {
                 "Classification is required",
                 "An IDS classification requirement: an assignment in a matching system with a matching code or ancestor code, none when prohibited, or none at all when optional.",
             ),
+            Kind::Expression => (
+                "expression",
+                "Expression holds",
+                "An IDS attribute facet restricting an integer attribute's digits, which no selector states: the attribute holds a value meeting every restriction facet, or, when prohibited, does not.",
+            ),
         }
     }
 
@@ -2124,6 +2260,7 @@ impl Kind {
             Kind::Forbidden | Kind::Present => &axioval_rules::PropertyRequirements,
             Kind::Count => &axioval_rules::ObjectCount,
             Kind::Classification => &axioval_rules::ClassificationRequirement,
+            Kind::Expression => &axioval_rules::ExpressionRequirement,
         }
     }
 
@@ -3175,6 +3312,97 @@ fn integer_test(slot: &Slot, value: &Value) -> Result<Selector, Reason> {
         return Err(Reason::EmptyRestriction);
     }
     Ok(all_of(operands))
+}
+
+/// The tests an integer restriction states of `attribute`, as expressions:
+/// `oneOf` its enumeration, a comparison per bound, and `totalDigits` `n`
+/// as `between(-(10^n - 1), 10^n - 1)`. An integer has no fraction digits,
+/// so `fractionDigits` always holds, and so does `totalDigits` from 19 on,
+/// which every `i64` meets. Literals are integers, as [`integer_test`]
+/// reads them; patterns and lengths stay refused.
+fn integer_tests(
+    attribute: &Expression,
+    restriction: &Restriction,
+) -> Result<Vec<Expression>, Reason> {
+    for (facet, present) in [
+        ("pattern", !restriction.patterns.is_empty()),
+        ("length", restriction.length.is_some()),
+        ("minLength", restriction.min_length.is_some()),
+        ("maxLength", restriction.max_length.is_some()),
+    ] {
+        if present {
+            return Err(Reason::RestrictionFacet(facet));
+        }
+    }
+    let literal = |value: i64| Expression::Literal {
+        value: ScalarValue::Integer { value },
+        label: None,
+    };
+    let integer = |text: &str| {
+        parse_integer(text)
+            .map(literal)
+            .ok_or_else(|| Reason::ValueLiteral(text.to_owned()))
+    };
+    let operand = || Box::new(attribute.clone());
+    let mut tests = Vec::new();
+    if !restriction.enumeration.is_empty() {
+        tests.push(Expression::OneOf {
+            operand: operand(),
+            values: restriction
+                .enumeration
+                .iter()
+                .map(|text| integer(text))
+                .collect::<Result<_, _>>()?,
+            case_sensitive: true,
+            label: None,
+        });
+    }
+    for (bound, operator) in [
+        (
+            &restriction.min_inclusive,
+            ExpressionComparison::GreaterThanOrEquals,
+        ),
+        (
+            &restriction.max_inclusive,
+            ExpressionComparison::LessThanOrEquals,
+        ),
+        (
+            &restriction.min_exclusive,
+            ExpressionComparison::GreaterThan,
+        ),
+        (&restriction.max_exclusive, ExpressionComparison::LessThan),
+    ] {
+        if let Some(bound) = bound {
+            tests.push(Expression::Compare {
+                operator,
+                left: operand(),
+                right: Box::new(integer(bound)?),
+                case_sensitive: true,
+                label: None,
+            });
+        }
+    }
+    if let Some(digits) = restriction.total_digits.filter(|digits| *digits < 19) {
+        let largest = digits_bound(digits);
+        tests.push(Expression::Between {
+            operand: operand(),
+            low: Box::new(literal(-largest)),
+            high: Box::new(literal(largest)),
+            low_inclusive: true,
+            high_inclusive: true,
+            label: None,
+        });
+    }
+    Ok(tests)
+}
+
+/// The largest integer of at most `digits` digits, `10^digits - 1`, for
+/// `digits` below 19.
+pub(crate) fn digits_bound(digits: u64) -> i64 {
+    let exponent = u32::try_from(digits).unwrap_or(u32::MAX);
+    10_i64
+        .checked_pow(exponent)
+        .map_or(i64::MAX, |power| power - 1)
 }
 
 /// The `xs:integer` lexical form: an optional sign and digits.

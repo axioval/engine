@@ -36,6 +36,18 @@ back as a document. See `docs/src/ids.md` for the mapping of every facet.
   writes keeps its specification in the `ids:specification` annotation
   and the root the `<info>` under `ids:info.*`; changing what `translate`
   writes for a facet must keep the corpus round trip passing.
+- Expressions only where they are the exact form. `translate` writes an
+  `expression` rule for one case: digit facets on an attribute every
+  applicable class declares an integer, where a selector would test it
+  (applicability, prohibited with a value), read through an
+  `integer-attribute` concept declared an integer. Never translate a
+  property value as an expression: `property-value` judges lists, bounded
+  values, units and data types, which an expression does not read. The
+  export reads back exactly the shapes `integer_expression` writes, and
+  `IdsProfile::expression_kinds` (`EXPRESSION_KINDS` in `src/export.rs`)
+  must list every node they use; anything else is `Refusal::Expression`
+  naming the first node by its engine path. The comparator ignores a
+  concept's value kind, so the reading checks it itself.
 - IDS is written by `openbim_ids::to_string` only, reached through
   `src/write.rs` (`document`, `specification`, `read_specification`).
   That module keeps only what upstream lacks: cutting one

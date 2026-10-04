@@ -70,6 +70,45 @@ A property value is judged as IDS judges list, bounded, table and enumerated val
 
 Values keep IDS casting where a capability casts: `property-value` casts literals to the resolved value's kind, including `totalDigits` and `fractionDigits`, which is why a property facet in the applicability is decided by an auxiliary `property-value` rule rather than a selector, which compares one declared type. An attribute value in a selector is translated only when every applicable class declares the attribute as text, an enumeration, a boolean or an integer; XML Schema patterns go through `axioval_rules::translate_xsd_pattern`, which refuses what it cannot map exactly.
 
+### Expressions
+
+Where an attribute facet is tested by a selector (in the applicability,
+and prohibited with a value), a selector cannot state `totalDigits` or
+`fractionDigits`. On an attribute every applicable class declares an
+integer (`IfcTask.Priority`), the facet becomes an
+[expression](./expressions.md) rule (`axioval:capability.expression`,
+definition `<package>.expression`) instead of a gap, stating exactly the
+test the selector would:
+
+```json
+{"kind": "not", "operand": {"kind": "and", "operands": [
+  {"kind": "isDefined", "operand": {"kind": "property", "propertySet": "axioval:attributes", "property": "ids:x.integer-attribute-1"}},
+  {"kind": "compare", "operator": "greaterThanOrEquals", "left": …, "right": {"kind": "literal", "value": {"type": "integer", "value": 0}}},
+  {"kind": "between", "operand": …, "low": {"kind": "literal", "value": {"type": "integer", "value": -99}}, "high": {"kind": "literal", "value": {"type": "integer", "value": 99}}}]}}
+```
+
+That is a prohibited `<xs:minInclusive value="0"/><xs:totalDigits value="2"/>`:
+the attribute holds a value, the enumeration is `oneOf`, each bound a
+comparison, and `totalDigits` n the range `-(10^n - 1)` to `10^n - 1`
+(from 19 on every integer meets it, so nothing is written); an integer has
+no fraction digits, so `fractionDigits` always holds. Prohibited, the
+whole is negated by `not`; in the applicability it is the auxiliary rule
+`spec<n>.applicability<k>`. A required or optional facet stays
+`property-value`, which counts digits the same way, so a prohibited facet
+fails exactly the objects its required form passes. The expression reads
+the attribute through its own concept, `integer-attribute`, declared an
+integer so it type checks; it binds to the same names as the attribute's
+nominal `string` concept. An absent or `$` attribute is `null`, which
+`isDefined` reads as no value, and a value that cannot be read leaves the
+object not evaluated.
+
+Everything else stays as it was. A property's value restrictions, bounds
+and digits included, are `property-value`, which judges lists, bounded
+values, tables, units and data types as IDS does; an expression reads none
+of those (a list or bounded value is no single value to it). Digits or
+bounds on a text, enumeration or boolean attribute in those places stay a
+`RestrictionFacet` gap: no expression compares them as IDS casts.
+
 ## Command line
 
 `axioval check --ids rules.ids --model model.ifc` translates a document in
@@ -159,7 +198,9 @@ A specification comes from one of two places:
   lengths and digits; `optional`), `property-requirements` rows forbidding
   a value or requiring every property a pattern matches, `classification`
   (`optional`, `prohibited`), and `selector-conformance` over an entity,
-  attribute, material or part-of selector, negated when prohibited.
+  attribute, material or part-of selector, negated when prohibited, and
+  `expression` stating an integer attribute facet as the translation
+  writes it ([Expressions](#expressions)).
   `object-count` is the applicability's `minOccurs`/`maxOccurs` with no
   requirement. The specification is named after the rule, identified by
   its id, and lists all three releases, since every concept a translation
@@ -173,6 +214,37 @@ a disabled, auxiliary, gated or graded rule, target groups, and a reading
 whose translation differs (`Refusal::Differs` names the first differing
 path, such as `rules[0].parameters.si_units` for a `property-value` rule
 that reads values in the model's units rather than SI).
+
+### Expression rules
+
+`IdsProfile` declares the expression nodes an IDS facet may state
+(`expression_kinds`): `and`, `between`, `compare`, `isDefined`, `literal`,
+`not`, `oneOf` and `property`. An expression rule is read as one attribute
+facet only in the form the translation writes: `and` whose first operand
+is `isDefined` of an attribute in `axioval:attributes` read through a
+concept declared an integer, and whose others are `oneOf`, an ordered
+`compare` or a `totalDigits` `between` of that attribute and integer
+literals, negated by `not` when prohibited. The reading is then checked
+like any other: exported only when translating it gives the rule again.
+A prohibited one is exported and round-trips, alone or in its folder; a
+required one reads as a required facet, which translates to
+`property-value`, and is refused as `Differs`; a `deviation` is refused as
+a parameter, and a `message` is presentation.
+
+Every other expression rule is refused with `Refusal::Expression { path,
+kind, why }`, naming the first node no facet states by the path the
+engine names it with: first any node of a kind outside the declared set
+(an `aggregate`, arithmetic, a rule outcome), then any declared node in a
+place or with operands no facet has (a measured value, a `like`
+comparison, a range that is no digit count, a concept declared as text):
+
+```text
+expression node `requirement.and[1]` (`aggregate`) has no IDS facet: IDS states no such computation
+expression node `requirement.and[0].isDefined.operand` (`property`) has no IDS facet: it reads the set axioval:measured; …
+```
+
+An expression inside a selector (an `expression` selector in the
+applicability) is refused as a selector, as before.
 
 ### Round trip
 
@@ -240,6 +312,7 @@ package authored in MCS to carry it.
 These parts stay explicit gaps:
 
 - an attribute facet whose name is a restriction, with a value or a cardinality other than required, and one whose named attributes a selector cannot compare;
+- in the applicability, or prohibited with a value, an attribute facet whose restriction a selector cannot apply (`RestrictionFacet`): bounds or digits on a text, enumeration or boolean attribute, lengths or patterns on an integer one, and a length beyond 1000 characters; digits on an integer attribute become an [expression](#expressions);
 - an applicability without an entity facet, which in IDS covers every resource of every class;
 - a part-of whole that is neither an `IfcObject` occurrence, an `IfcContext` nor an `IfcTypeObject`, which no relationship traversal reaches.
 

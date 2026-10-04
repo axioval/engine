@@ -877,3 +877,375 @@ fn a_rule_reading_as_an_invalid_specification_is_refused() {
         refused.not_exported[0]
     );
 }
+
+/// Tasks of priority 12, 123, none and -7.
+const TASKS: &str = "ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION((''),'2;1');
+FILE_NAME('n','t',(''),(''),'p','o','a');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCTASK('0000000000000000000041',$,'T1',$,$,$,$,$,$,.F.,12,$,$);
+#2=IFCTASK('0000000000000000000042',$,'T2',$,$,$,$,$,$,.F.,123,$,$);
+#3=IFCTASK('0000000000000000000043',$,'T3',$,$,$,$,$,$,.F.,$,$,$);
+#4=IFCTASK('0000000000000000000044',$,'T4','D',$,$,$,$,$,.F.,-7,$,$);
+ENDSEC;
+END-ISO-10303-21;
+";
+
+fn run_tasks(definitions: &DefinitionPackage, ruleset: &RuleSetPackage) -> Report {
+    let registry = default_registry().unwrap();
+    let plan = compile(&registry, std::slice::from_ref(definitions), ruleset).unwrap();
+    let session = import_ifc_session("model.ifc", TASKS.as_bytes()).unwrap();
+    Runtime::new(registry).run_session(&session, plan).unwrap()
+}
+
+/// The objects a report flags, sorted, with nothing left not evaluated.
+fn flagged(report: &Report) -> Vec<String> {
+    assert!(
+        report.not_evaluated().is_empty(),
+        "{:?}",
+        report.not_evaluated()
+    );
+    let mut flagged: Vec<String> = report
+        .findings()
+        .iter()
+        .filter_map(|finding| finding.object_id().map(|id| id.local_id.clone()))
+        .collect();
+    flagged.sort();
+    flagged
+}
+
+/// A prohibited digit restriction (an expression rule) and one in the
+/// applicability (an auxiliary expression rule).
+const DIGITS: &str = r#"<ids xmlns="http://standards.buildingsmart.org/IDS" xmlns:xs="http://www.w3.org/2001/XMLSchema"><info><title>Tasks</title></info><specifications>
+  <specification name="Priorities" ifcVersion="IFC4"><applicability minOccurs="0" maxOccurs="unbounded"><entity><name><simpleValue>IFCTASK</simpleValue></name></entity></applicability><requirements><attribute cardinality="prohibited"><name><simpleValue>Priority</simpleValue></name><value><xs:restriction base="xs:integer"><xs:minInclusive value="0"/><xs:totalDigits value="2"/></xs:restriction></value></attribute></requirements></specification>
+  <specification name="Low priorities" ifcVersion="IFC4"><applicability minOccurs="0" maxOccurs="unbounded"><entity><name><simpleValue>IFCTASK</simpleValue></name></entity><attribute><name><simpleValue>Priority</simpleValue></name><value><xs:restriction base="xs:integer"><xs:totalDigits value="2"/></xs:restriction></value></attribute></applicability><requirements><attribute><name><simpleValue>Description</simpleValue></name></attribute></requirements></specification>
+</specifications></ids>"#;
+
+#[test]
+fn expression_rules_round_trip_through_ids() {
+    let ids = openbim_ids::from_str(DIGITS).unwrap();
+    let translation = translate(&ids, &Options::new("ids:tasks", "1.0.0")).unwrap();
+    assert!(translation.is_complete());
+    let definitions = std::slice::from_ref(&translation.definitions);
+    let expression = "axioval:capability.expression";
+    let capability = |rule: &axioval::ir::contract::RuleInstance| {
+        translation.definitions.definitions[&rule.definition_id]
+            .capability
+            .clone()
+    };
+    let folders = &translation.ruleset.root.folders;
+    assert_eq!(capability(&folders[0].rules[0]), expression);
+    assert_eq!(capability(&folders[1].rules[0]), expression);
+    // 12 breaks the prohibition; -7 is below 0 and 123 has three digits.
+    // #1 and #4 are low priorities, and only #4 has a description.
+    let original = run_tasks(&translation.definitions, &translation.ruleset);
+    assert_eq!(flagged(&original), ["#1", "#1"]);
+
+    // Exported as written, specification by specification.
+    let kept = export(definitions, &translation.ruleset);
+    assert!(kept.is_complete(), "{:?}", kept.not_exported);
+    let xml = kept.to_xml().unwrap().unwrap();
+    let again = openbim_ids::from_str(&xml).unwrap();
+    assert_eq!(again.specifications, ids.specifications);
+    let back = translate(&again, &Options::new("ids:tasks", "1.0.0")).unwrap();
+    assert_eq!(back.definitions, translation.definitions);
+    assert_eq!(back.ruleset, translation.ruleset);
+
+    // Without its origin, the plain expression rule is read on its own;
+    // the applicability's auxiliary rule and the rule reading it are not.
+    let mut detached = translation.ruleset.clone();
+    for folder in &mut detached.root.folders {
+        folder.annotations.clear();
+    }
+    let alone = export(definitions, &detached);
+    assert_eq!(alone.specifications.len(), 1);
+    assert_eq!(alone.specifications[0].rules, ["spec1.facet1"]);
+    let reasons = reasons(&alone);
+    assert_eq!(reasons["spec2.applicability2"], &Refusal::Auxiliary);
+    assert!(matches!(reasons["spec2.facet1"], Refusal::Selector(_)));
+    let requirement = &alone.specifications[0]
+        .specification
+        .requirements
+        .as_ref()
+        .unwrap()
+        .facets[0];
+    assert_eq!(requirement.occurrence, Occurrence::Prohibited);
+    assert_eq!(
+        requirement.facet,
+        ids.specifications[0].requirements.as_ref().unwrap().facets[0].facet
+    );
+    // Translated back, it flags what the rule did.
+    let read = openbim_ids::from_str(&alone.to_xml().unwrap().unwrap()).unwrap();
+    let read = translate(&read, &Options::new("ids:back", "1.0.0")).unwrap();
+    assert!(read.is_complete());
+    let mut only_first = translation.ruleset.clone();
+    only_first.root.folders.truncate(1);
+    assert_eq!(
+        flagged(&run_tasks(&read.definitions, &read.ruleset)),
+        flagged(&run_tasks(&translation.definitions, &only_first))
+    );
+}
+
+/// The definitions with an `expression` definition, tasks, and
+/// `Priority` declared an integer (`t:priority`) and as a string
+/// (`t:priority-text`).
+fn expression_definitions() -> DefinitionPackage {
+    let mut package = serde_json::to_value(definitions()).unwrap();
+    package["definitions"]["t:expression"] = definition("expression");
+    package["objectTypes"]["t:task"] = concept("t:task", "IfcTask");
+    let mut priority = property_concept("t:priority", "Priority");
+    priority["valueKind"] = json!("integer");
+    package["properties"]["t:priority"] = priority;
+    package["properties"]["t:priority-text"] = property_concept("t:priority-text", "Priority");
+    serde_json::from_value(package).unwrap()
+}
+
+fn tasks() -> Json {
+    json!({ "kind": "entityType", "objectType": "t:task", "includeSubtypes": false })
+}
+
+fn attribute(concept: &str) -> Json {
+    json!({ "kind": "property", "propertySet": "axioval:attributes", "property": concept })
+}
+
+fn integer(value: i64) -> Json {
+    json!({ "kind": "literal", "value": { "type": "integer", "value": value } })
+}
+
+/// `isDefined(concept)` and `tests`, negated when `prohibited`.
+fn facet(concept: &str, tests: Vec<Json>, prohibited: bool) -> Json {
+    let mut operands = vec![json!({ "kind": "isDefined", "operand": attribute(concept) })];
+    operands.extend(tests);
+    let holds = json!({ "kind": "and", "operands": operands });
+    if prohibited {
+        json!({ "kind": "not", "operand": holds })
+    } else {
+        holds
+    }
+}
+
+fn digits(concept: &str, largest: i64) -> Json {
+    json!({ "kind": "between", "operand": attribute(concept), "low": integer(-largest), "high": integer(largest) })
+}
+
+fn expression_rule(id: &str, requirement: Json) -> Json {
+    let mut parameters = json!({ "requirement": { "type": "expression" } });
+    parameters["requirement"]["value"] = requirement;
+    rule(id, "expression", tasks(), parameters)
+}
+
+#[test]
+fn an_authored_expression_rule_ids_states_is_exported() {
+    let definitions = expression_definitions();
+    let mut labelled = expression_rule(
+        "with-message",
+        facet("t:priority", vec![digits("t:priority", 99)], true),
+    );
+    labelled["parameters"]["message"] = string("too low a priority");
+    let package = ruleset(vec![
+        expression_rule(
+            "prohibited",
+            facet(
+                "t:priority",
+                vec![
+                    json!({ "kind": "compare", "operator": "greaterThanOrEquals", "left": attribute("t:priority"), "right": integer(0) }),
+                    digits("t:priority", 99),
+                ],
+                true,
+            ),
+        ),
+        // A message is presentation.
+        labelled,
+    ]);
+    let export = export(std::slice::from_ref(&definitions), &package);
+    assert!(export.is_complete(), "{:?}", export.not_exported);
+    let xml = export.to_xml().unwrap().unwrap();
+    assert!(xml.contains("<xs:totalDigits value=\"2\"/>"), "{xml}");
+    let read = translate(
+        &openbim_ids::from_str(&xml).unwrap(),
+        &Options::new("ids:back", "1.0.0"),
+    )
+    .unwrap();
+    assert!(read.is_complete());
+    let original = run_tasks(&definitions, &package);
+    assert_eq!(flagged(&original), ["#1", "#1", "#4"]);
+    assert_eq!(
+        flagged(&run_tasks(&read.definitions, &read.ruleset)),
+        flagged(&original)
+    );
+}
+
+/// Expression rules no IDS facet states, each by its id.
+fn unstated_expression_rules() -> Vec<Json> {
+    let mut graded = expression_rule(
+        "graded",
+        facet("t:priority", vec![digits("t:priority", 99)], true),
+    );
+    graded["parameters"]["deviation"] = json!({ "type": "expression", "value": integer(1) });
+    vec![
+        expression_rule(
+            "aggregate",
+            facet(
+                "t:priority",
+                vec![json!({ "kind": "aggregate", "function": "any",
+                    "over": { "kind": "path", "path": ["IfcRelAggregates:forward"] },
+                    "value": { "kind": "isDefined", "operand": attribute("t:priority") } })],
+                false,
+            ),
+        ),
+        expression_rule(
+            "arithmetic",
+            facet(
+                "t:priority",
+                vec![json!({ "kind": "compare", "operator": "lessThanOrEquals",
+                    "left": { "kind": "multiply", "left": attribute("t:priority"), "right": integer(2) },
+                    "right": integer(30) })],
+                true,
+            ),
+        ),
+        expression_rule(
+            "measured",
+            json!({ "kind": "and", "operands": [{ "kind": "isDefined", "operand":
+                { "kind": "property", "propertySet": "axioval:measured", "property": "extent_z" } }] }),
+        ),
+        expression_rule(
+            "text",
+            facet("t:priority-text", vec![digits("t:priority-text", 99)], true),
+        ),
+        expression_rule(
+            "pattern",
+            facet(
+                "t:priority",
+                vec![
+                    json!({ "kind": "compare", "operator": "like", "left": attribute("t:priority"), "right": integer(1) }),
+                ],
+                true,
+            ),
+        ),
+        expression_rule(
+            "not-digits",
+            facet("t:priority", vec![digits("t:priority", 50)], true),
+        ),
+        expression_rule(
+            "comparison",
+            json!({ "kind": "compare", "operator": "greaterThan", "left": attribute("t:priority"), "right": integer(1) }),
+        ),
+        graded,
+        // Equivalent, but IDS translates a required facet to
+        // `property-value`, so the export cannot show it.
+        expression_rule(
+            "required",
+            facet("t:priority", vec![digits("t:priority", 99)], false),
+        ),
+    ]
+}
+
+#[test]
+fn expression_rules_ids_cannot_state_are_refused_naming_the_node() {
+    let definitions = expression_definitions();
+    let export = export(
+        std::slice::from_ref(&definitions),
+        &ruleset(unstated_expression_rules()),
+    );
+    assert!(export.specifications.is_empty());
+    let reasons = reasons(&export);
+    let node = |rule: &str| match reasons[rule] {
+        Refusal::Expression { path, kind, .. } => (path.as_str(), kind.as_str()),
+        other => panic!("{rule}: {other}"),
+    };
+    assert_eq!(node("aggregate"), ("requirement.and[1]", "aggregate"));
+    assert_eq!(
+        reasons["aggregate"].to_string(),
+        "expression node `requirement.and[1]` (`aggregate`) has no IDS facet: IDS states no such computation"
+    );
+    assert_eq!(
+        node("arithmetic"),
+        ("requirement.not.operand.and[1].compare.left", "multiply")
+    );
+    assert_eq!(
+        node("measured"),
+        ("requirement.and[0].isDefined.operand", "property")
+    );
+    assert!(reasons["measured"].to_string().contains("axioval:measured"));
+    assert_eq!(
+        node("text"),
+        (
+            "requirement.not.operand.and[0].isDefined.operand",
+            "property"
+        )
+    );
+    assert!(
+        reasons["text"]
+            .to_string()
+            .contains("not declared an integer")
+    );
+    assert_eq!(
+        node("pattern"),
+        ("requirement.not.operand.and[1]", "compare")
+    );
+    assert_eq!(
+        node("not-digits"),
+        ("requirement.not.operand.and[1]", "between")
+    );
+    assert_eq!(node("comparison"), ("requirement", "compare"));
+    assert!(matches!(reasons["graded"], Refusal::Parameter(why) if why.contains("deviation")));
+    assert!(
+        matches!(reasons["required"], Refusal::Differs(_)),
+        "{}",
+        reasons["required"]
+    );
+}
+
+#[test]
+fn the_ids_profile_declares_its_expression_nodes_and_refuses_naming_the_node() {
+    let profile = IdsProfile;
+    assert!(profile.expression_kinds().contains(&"between"));
+    assert!(!profile.expression_kinds().contains(&"aggregate"));
+    let outcome = profile.export(
+        std::slice::from_ref(&expression_definitions()),
+        &ruleset(vec![expression_rule(
+            "aggregate",
+            facet(
+                "t:priority",
+                vec![json!({ "kind": "aggregate", "function": "count",
+                    "over": { "kind": "path", "path": ["IfcRelAggregates:forward"] } })],
+                false,
+            ),
+        )]),
+    );
+    let loss = &outcome.losses[0];
+    assert_eq!(loss.kind, LossKind::Refused);
+    assert_eq!(loss.path, "aggregate");
+    assert!(
+        loss.reason
+            .starts_with("expression node `requirement.and[1]` (`aggregate`)"),
+        "{loss}"
+    );
+}
+
+#[test]
+fn an_expression_selecting_the_objects_is_refused_naming_the_node() {
+    let definitions = expression_definitions();
+    let selected = json!({ "kind": "allOf", "operands": [tasks(), { "kind": "expression",
+        "expression": { "kind": "compare", "operator": "greaterThan",
+            "left": attribute("t:priority"), "right": integer(1) } }] });
+    let mut parameters = json!({ "requirement": { "type": "expression" } });
+    parameters["requirement"]["value"] = facet("t:priority", vec![digits("t:priority", 99)], true);
+    let export = export(
+        std::slice::from_ref(&definitions),
+        &ruleset(vec![rule("selected", "expression", selected, parameters)]),
+    );
+    let reasons = reasons(&export);
+    match reasons["selected"] {
+        Refusal::Expression { path, kind, .. } => {
+            assert_eq!(
+                (path.as_str(), kind.as_str()),
+                ("selector.expression", "compare")
+            );
+        }
+        other => panic!("{other}"),
+    }
+}

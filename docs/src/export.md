@@ -15,6 +15,8 @@ An `ExportProfile` writes one format:
 pub trait ExportProfile {
     fn id(&self) -> &str;
     fn format(&self) -> &str { self.id() }
+    // Optional; defaults to none.
+    fn expression_kinds(&self) -> &[&str] { &[] }
     fn export(&self, definitions: &[DefinitionPackage], ruleset: &RuleSetPackage)
         -> ExportOutcome;
     // Optional; each defaults to an unsupported outcome.
@@ -28,6 +30,9 @@ pub trait ExportProfile {
 - `id` is an open string (`ids`), never a closed enum: no crate lists the
   formats that exist, so a new target changes no other crate.
 - `format` is the name a person reads (`IDS`), used in messages.
+- `expression_kinds` declares the [expression](./expressions.md) node
+  kinds the format can state, as packages write them (`and`, `compare`,
+  `property`, ...); see [Expression rules](#expression-rules).
 - `export` writes a ruleset. Report, takeoff and classification exports are
   optional; a profile that does not override one returns no artifact and a
   refused loss at `report`, `takeoff` or `classification`.
@@ -106,6 +111,31 @@ group-targeted rule, and `is_gated`, `is_folder_gated`, `is_graded`,
 `severity_name` and `selector` are there for a profile that states some of
 those.
 
+## Expression rules
+
+An `expression` rule (`axioval:capability.expression`) computes its
+requirement, and most formats can state few of its nodes. A profile
+declares the node kinds it can state with `expression_kinds`; the default
+is none, so a profile that says nothing refuses every expression rule.
+`precheck::unsupported_expression_node(expression, "requirement",
+profile.expression_kinds())` walks the tree, parents before operands and in
+written order, and returns the first node of another kind as an
+`ExpressionNode { path, kind }`, named by the path the engine names it
+with in type errors and not-evaluated outcomes
+(`requirement.and[2].compare.left`, see
+[Expressions](./expressions.md#paths)); `expression_nodes` lists every
+node with its path. The profile refuses the rule naming that node, for
+example "expression node `requirement.and[1]` (`aggregate`) has no IDS
+facet".
+
+Declaring a kind only says the format may hold such a node: where it sits
+and what it reads still decide, and the profile still proves every rule it
+writes exact as any other, by reading it back. An expression the profile
+cannot prove is refused, never degraded: a reduced expression decides
+differently. A `deviation` grades findings and is refused like any
+grading; a `message` only words a finding, which a profile leaves out of
+the comparison as a presentation parameter.
+
 ## A host-owned format
 
 A host application implements its own format's profile in its own crate,
@@ -116,8 +146,9 @@ enumerates such formats, and none needs to change for one to be added.
 
 A profile for a host's format typically:
 
-1. walks the ruleset, running `pre_check` on each rule and refusing what the
-   format cannot state;
+1. walks the ruleset, running `pre_check` on each rule (and
+   `unsupported_expression_node` on an expression rule's requirement) and
+   refusing what the format cannot state;
 2. writes each remaining rule, and records a degraded loss for structure it
    flattens or presentation it drops;
 3. where it can read the format back, compares the read-back rules with

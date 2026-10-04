@@ -33,7 +33,9 @@
 //! package again) compares the result with the original this way, and
 //! refuses every rule that comes back different. [`precheck`] holds the
 //! checks on a rule's gate, grading, severity and target groups that most
-//! formats cannot state.
+//! formats cannot state, and [`precheck::unsupported_expression_node`]
+//! names the first node of an expression a profile's
+//! [`ExportProfile::expression_kinds`] leave out.
 //!
 //! # A profile outside this repository
 //!
@@ -65,6 +67,18 @@ pub trait ExportProfile {
     /// the id.
     fn format(&self) -> &str {
         self.id()
+    }
+
+    /// The expression node kinds the format can state, as packages write
+    /// them (`and`, `compare`, `property`, ...). An expression rule holding
+    /// any other node is refused, naming the first one
+    /// ([`precheck::unsupported_expression_node`]). Defaults to none: a
+    /// profile states no expression unless it says which nodes it can.
+    ///
+    /// Declaring a kind only says the format may hold such a node; the
+    /// profile still judges every rule it writes exactly, as any other.
+    fn expression_kinds(&self) -> &[&str] {
+        &[]
     }
 
     /// Writes `ruleset`, whose definitions are among `definitions`.

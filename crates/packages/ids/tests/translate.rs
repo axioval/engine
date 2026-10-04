@@ -1999,3 +1999,228 @@ fn a_prefilter_naming_a_rule_is_refused() {
         TranslateError::Options(OptionsError::FilterRuleOutcome("spec1.facet1".into()))
     );
 }
+
+/// Stair flights with 12, 123, no and -7 risers (`NumberOfRisers`, an
+/// `IfcInteger` attribute).
+const FLIGHTS_MODEL: &str = "ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION((''),'2;1');
+FILE_NAME('n','t',(''),(''),'p','o','a');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCSTAIRFLIGHT('0000000000000000000041',$,'F1',$,$,$,$,$,12,11,$,$,$);
+#2=IFCSTAIRFLIGHT('0000000000000000000042',$,'F2',$,$,$,$,$,123,$,$,$,$);
+#3=IFCSTAIRFLIGHT('0000000000000000000043',$,'F3',$,$,$,$,$,$,$,$,$,$);
+#4=IFCSTAIRFLIGHT('0000000000000000000044',$,'F4',$,$,$,$,$,-7,$,$,$,$);
+ENDSEC;
+END-ISO-10303-21;
+";
+
+const FLIGHT: &str = "<entity><name><simpleValue>IFCSTAIRFLIGHT</simpleValue></name></entity>";
+
+/// A `NumberOfRisers` attribute facet restricted by `facets`.
+fn risers(attributes: &str, facets: &str) -> String {
+    format!(
+        "<attribute {attributes}><name><simpleValue>NumberOfRisers</simpleValue></name><value><xs:restriction base=\"xs:integer\">{facets}</xs:restriction></value></attribute>"
+    )
+}
+
+/// The capability of each rule of a one-specification translation.
+fn capabilities(translation: &Translation) -> Vec<&str> {
+    translation.ruleset.root.folders[0]
+        .rules
+        .iter()
+        .map(|rule| {
+            translation.definitions.definitions[&rule.definition_id]
+                .capability
+                .as_str()
+        })
+        .collect()
+}
+
+#[test]
+fn a_prohibited_digit_restriction_on_an_integer_attribute_is_an_expression() {
+    let prohibited = |facets: &str| {
+        flagged_in(
+            FLIGHTS_MODEL,
+            "IFC4",
+            FLIGHT,
+            &risers("cardinality=\"prohibited\"", facets),
+        )
+    };
+    // 12 and -7 have at most two digits, which IDS prohibits; 123 has
+    // three, and #3 has none at all.
+    assert_eq!(prohibited("<xs:totalDigits value=\"2\"/>"), ["#1", "#4"]);
+    assert_eq!(
+        prohibited("<xs:minInclusive value=\"0\"/><xs:totalDigits value=\"2\"/>"),
+        ["#1"]
+    );
+    assert_eq!(
+        prohibited(
+            "<xs:enumeration value=\"123\"/><xs:enumeration value=\"-7\"/><xs:totalDigits value=\"3\"/>"
+        ),
+        ["#2", "#4"]
+    );
+    // Every integer has no fraction digits, and every i64 at most 19
+    // digits: any value at all breaks the prohibition.
+    assert_eq!(
+        prohibited("<xs:fractionDigits value=\"0\"/>"),
+        ["#1", "#2", "#4"]
+    );
+    assert_eq!(
+        prohibited("<xs:totalDigits value=\"25\"/>"),
+        ["#1", "#2", "#4"]
+    );
+    // The rule reads the attribute through a concept declared an integer.
+    let translation = one(
+        "IFC4",
+        OPTIONAL,
+        FLIGHT,
+        &risers(
+            "cardinality=\"prohibited\"",
+            "<xs:totalDigits value=\"2\"/>",
+        ),
+    );
+    assert_eq!(
+        capabilities(&translation),
+        ["axioval:capability.expression"]
+    );
+    let rule = &translation.ruleset.root.folders[0].rules[0];
+    let ParameterValue::Expression { value } = &rule.parameters["requirement"] else {
+        panic!("{:?}", rule.parameters)
+    };
+    let written = serde_json::to_value(value).unwrap();
+    let concept = written["operand"]["operands"][0]["operand"]["property"]
+        .as_str()
+        .unwrap();
+    assert_eq!(
+        written,
+        serde_json::json!({"kind": "not", "operand": {"kind": "and", "operands": [
+            {"kind": "isDefined", "operand": {"kind": "property", "propertySet": "axioval:attributes", "property": concept}},
+            {"kind": "between",
+             "operand": {"kind": "property", "propertySet": "axioval:attributes", "property": concept},
+             "low": {"kind": "literal", "value": {"type": "integer", "value": -99}},
+             "high": {"kind": "literal", "value": {"type": "integer", "value": 99}}}
+        ]}})
+    );
+    let declared = &translation.definitions.properties[concept];
+    assert_eq!(
+        declared.value_kind,
+        axioval::ir::contract::PropertyValueKind::Integer
+    );
+    assert_eq!(declared.external_names[1].name, "NumberOfRisers");
+}
+
+#[test]
+fn a_digit_restriction_on_an_integer_attribute_in_the_applicability_is_an_expression() {
+    let applicable = |facets: &str| {
+        flagged_in(
+            FLIGHTS_MODEL,
+            "IFC4",
+            &format!("{FLIGHT}{}", risers("", facets)),
+            &every_applicable(),
+        )
+    };
+    assert_eq!(applicable("<xs:totalDigits value=\"2\"/>"), ["#1", "#4"]);
+    assert_eq!(
+        applicable("<xs:maxExclusive value=\"0\"/><xs:totalDigits value=\"2\"/>"),
+        ["#4"]
+    );
+    assert_eq!(
+        applicable("<xs:fractionDigits value=\"1\"/>"),
+        ["#1", "#2", "#4"]
+    );
+    let translation = one(
+        "IFC4",
+        OPTIONAL,
+        &format!("{FLIGHT}{}", risers("", "<xs:totalDigits value=\"2\"/>")),
+        &every_applicable(),
+    );
+    let rules = &translation.ruleset.root.folders[0].rules;
+    assert_eq!(rules[0].id, "spec1.applicability2");
+    assert!(rules[0].auxiliary);
+    assert_eq!(
+        capabilities(&translation)[0],
+        "axioval:capability.expression"
+    );
+}
+
+#[test]
+fn a_digit_restriction_decides_alike_required_and_prohibited() {
+    // The required facet stays `property-value`; the prohibited one is its
+    // exact negation, object for object.
+    for facets in [
+        "<xs:totalDigits value=\"2\"/>",
+        "<xs:totalDigits value=\"1\"/>",
+        "<xs:minInclusive value=\"-10\"/><xs:totalDigits value=\"2\"/>",
+        "<xs:fractionDigits value=\"0\"/>",
+    ] {
+        let required = flagged_in(FLIGHTS_MODEL, "IFC4", FLIGHT, &risers("", facets));
+        let prohibited = flagged_in(
+            FLIGHTS_MODEL,
+            "IFC4",
+            FLIGHT,
+            &risers("cardinality=\"prohibited\"", facets),
+        );
+        let mut both: Vec<String> = required.iter().chain(&prohibited).cloned().collect();
+        both.sort();
+        assert_eq!(both, ["#1", "#2", "#3", "#4"], "{facets}");
+    }
+    let required = one(
+        "IFC4",
+        OPTIONAL,
+        FLIGHT,
+        &risers("", "<xs:totalDigits value=\"2\"/>"),
+    );
+    assert_eq!(
+        capabilities(&required),
+        ["axioval:capability.property-value"]
+    );
+}
+
+#[test]
+fn digit_restrictions_no_expression_decides_as_ids_does_stay_gaps() {
+    // A text attribute: no expression compares its digits as IDS does.
+    let named = |facets: &str| {
+        one(
+            "IFC4",
+            OPTIONAL,
+            &format!(
+                "{FLIGHT}<attribute><name><simpleValue>Name</simpleValue></name><value><xs:restriction base=\"xs:string\">{facets}</xs:restriction></value></attribute>"
+            ),
+            &every_applicable(),
+        )
+    };
+    assert_eq!(
+        reasons(&named("<xs:totalDigits value=\"2\"/>")),
+        [(
+            Part::Applicability { facet: 2 },
+            Reason::RestrictionFacet("totalDigits")
+        )]
+    );
+    assert_eq!(
+        reasons(&named("<xs:minInclusive value=\"2\"/>")),
+        [(
+            Part::Applicability { facet: 2 },
+            Reason::RestrictionFacet("minInclusive")
+        )]
+    );
+    // A length on an integer, beside digits: still the length's gap.
+    let length = one(
+        "IFC4",
+        OPTIONAL,
+        FLIGHT,
+        &risers(
+            "cardinality=\"prohibited\"",
+            "<xs:length value=\"2\"/><xs:totalDigits value=\"2\"/>",
+        ),
+    );
+    assert_eq!(
+        reasons(&length),
+        [(
+            Part::Requirement { facet: 1 },
+            Reason::RestrictionFacet("length")
+        )]
+    );
+}

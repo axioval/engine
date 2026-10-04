@@ -21,6 +21,11 @@ exactness with. See `docs/src/export.md`.
 - `precheck` is the order profiles refuse non-plain rules in (disabled,
   auxiliary, gated, graded, severity, groups). `PreCheck` is exhaustive on
   purpose, so a new reason reaches every profile's mapping.
+- `ExportProfile::expression_kinds` declares the expression nodes a
+  profile states (default none). `precheck::expression_nodes` must name
+  every node by the path the engine's checker and evaluator use
+  (`requirement.and[2].compare.left`); a new `Expression` variant needs
+  its arm in `operands`, and `tests/expressions.rs` pins the paths.
 - `axioval-ids` depends on this crate: changing `canonical`,
   `first_difference` or `pre_check` must keep the IDS corpus round trip
   complete (`IDS_TEST_CASES=… ./scripts/check.sh test`).

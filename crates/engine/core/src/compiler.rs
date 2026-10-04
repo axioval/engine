@@ -42,7 +42,7 @@ pub fn compile(
     let (classifications, groupings, relations) = derivations(registry, &concepts, ruleset)?;
     let properties = vocabulary_properties(ruleset, &packages);
     let (vocabulary, values) =
-        crate::expression_binding::check_values(&concepts, &properties, &ruleset.values)?;
+        crate::expression_binding::check_values(&concepts, &properties, ruleset)?;
     let mut authored = Vec::new();
     flatten(&ruleset.root, &[], &mut authored);
     authored.sort_by(|(left, _), (right, _)| left.id.cmp(&right.id));
@@ -1340,6 +1340,10 @@ fn validate_selector_concepts(
         | Selector::Classification { .. }
         | Selector::Discipline { .. }
         | Selector::RuleOutcome { .. } => Ok(()),
+        // Its types are checked once the ruleset's values are known.
+        Selector::Expression { expression } => {
+            crate::expression_binding::expression_concepts(concepts, rule, expression)
+        }
         Selector::EntityType { object_type, .. } => {
             require_concept(concepts, rule, ConceptKind::ObjectType, object_type)
         }

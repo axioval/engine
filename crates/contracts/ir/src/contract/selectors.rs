@@ -1,5 +1,5 @@
 #![allow(missing_docs)]
-use super::ParameterValue;
+use super::{Expression, ParameterValue};
 use crate::{Discipline, TemporalPrecision};
 use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -199,6 +199,17 @@ pub enum Selector {
         rule: String,
         outcome: RuleOutcomeKind,
     },
+    /// Objects for which `expression`, a truth, holds.
+    ///
+    /// It is evaluated per candidate object with three-valued truth: true
+    /// selects, false and `null` do not, and a value that cannot be read
+    /// or decided (a measured interval straddling a bound) leaves the object
+    /// not evaluated, never skipped. It reads properties, measured and
+    /// derived values, never a rule's parameters; it is type checked when
+    /// the ruleset is compiled.
+    Expression {
+        expression: Box<Expression>,
+    },
 }
 /// Which judgement of another rule a `ruleOutcome` selector selects.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -244,6 +255,21 @@ impl Default for Selector {
     }
 }
 impl Selector {
+    /// Every expression this selector holds, in its own `expression`
+    /// operands and those of its nested selectors, in written order.
+    #[must_use]
+    pub fn expressions(&self) -> Vec<&Expression> {
+        match self {
+            Self::Expression { expression } => vec![expression],
+            Self::AllOf { operands } | Self::AnyOf { operands } => {
+                operands.iter().flat_map(Self::expressions).collect()
+            }
+            Self::Not { operand } => operand.expressions(),
+            Self::Related { selector, .. } => selector.expressions(),
+            _ => Vec::new(),
+        }
+    }
+
     /// A property selector with case-sensitive, untrimmed text comparison.
     #[must_use]
     pub fn property(

@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use axioval_ir::contract::{
     ColumnKind, Expression, ParameterDefinition, ParameterKind, ParameterValue, PropertyDefinition,
-    PropertyValueKind, ValueDefinition,
+    PropertyValueKind,
 };
 
 use axioval_ir::QuantityDimension;
@@ -194,14 +194,15 @@ pub(crate) struct Vocabulary<'a> {
     pub(crate) values: BTreeMap<String, Type>,
 }
 
-/// Checks a ruleset's derived values in dependency order and gives their
-/// expressions: each well formed, reading only declared concepts and
-/// values, and of a type a property can state.
+/// Checks a ruleset's derived values in dependency order, then every
+/// expression selector it holds, and gives the values' expressions: each
+/// well formed, reading only declared concepts and values.
 pub(crate) fn check_values<'a>(
     concepts: &'a ConceptCatalog,
     properties: &'a BTreeMap<&'a str, &'a PropertyDefinition>,
-    values: &BTreeMap<String, ValueDefinition>,
+    ruleset: &axioval_ir::RuleSetPackage,
 ) -> Result<(Vocabulary<'a>, BTreeMap<String, Expression>), EngineError> {
+    let values = &ruleset.values;
     let mut types = BTreeMap::new();
     let none = BTreeMap::new();
     let undeclared = BTreeMap::new();
@@ -230,12 +231,141 @@ pub(crate) fn check_values<'a>(
         .iter()
         .map(|(name, definition)| (name.clone(), definition.expression.clone()))
         .collect();
-    Ok((
-        Vocabulary {
-            concepts,
-            properties,
-            values: types,
-        },
-        expressions,
-    ))
+    let vocabulary = Vocabulary {
+        concepts,
+        properties,
+        values: types,
+    };
+    check_ruleset_selectors(&vocabulary, ruleset)?;
+    Ok((vocabulary, expressions))
+}
+
+/// Checks an expression's structure and that every property it reads is a
+/// declared concept, a measured name the registry accepts or a value the
+/// ruleset derives; its types are checked once the values are known.
+pub(crate) fn expression_concepts(
+    concepts: &ConceptCatalog,
+    rule: &str,
+    expression: &Expression,
+) -> Result<(), EngineError> {
+    let invalid = |detail: String| EngineError::InvalidExpression {
+        rule: rule.into(),
+        parameter: "selector".into(),
+        path: "selector.expression".into(),
+        detail,
+    };
+    expression
+        .validate()
+        .map_err(|error| invalid(error.to_string()))?;
+    let mut pending = vec![expression];
+    while let Some(node) = pending.pop() {
+        if let Expression::Property {
+            property_set,
+            property,
+            ..
+        } = node
+        {
+            crate::compiler::require_property(concepts, rule, property_set.as_deref(), property)?;
+        }
+        pending.extend(node.children());
+    }
+    Ok(())
+}
+
+/// Checks that every expression of `selector` is a truth over what the
+/// ruleset declares, reading no rule parameter. `owner` and `place` name
+/// where the selector sits (a rule and its applicability, a classification
+/// and its row).
+pub(crate) fn check_selector(
+    vocabulary: &Vocabulary<'_>,
+    owner: &str,
+    place: &str,
+    selector: &axioval_ir::contract::Selector,
+) -> Result<(), EngineError> {
+    let none = BTreeMap::new();
+    let undeclared = BTreeMap::new();
+    let environment = RuleEnvironment {
+        concepts: vocabulary.concepts,
+        properties: vocabulary.properties,
+        values: &vocabulary.values,
+        rule: owner,
+        parameters: &none,
+        declared: &undeclared,
+    };
+    for expression in selector.expressions() {
+        check_as(
+            expression,
+            "selector.expression",
+            &Type::Boolean,
+            &environment,
+        )
+        .map_err(|error| EngineError::InvalidExpression {
+            rule: owner.into(),
+            parameter: place.into(),
+            path: error.path.clone(),
+            detail: error.to_string(),
+        })?;
+    }
+    Ok(())
+}
+
+/// Checks every expression selector of `ruleset`: in its rules'
+/// applicability and selector parameters (table cells included), its
+/// classifications' rows, its groupings' members and its relations' ends.
+pub(crate) fn check_ruleset_selectors(
+    vocabulary: &Vocabulary<'_>,
+    ruleset: &axioval_ir::RuleSetPackage,
+) -> Result<(), EngineError> {
+    use axioval_ir::contract::{RuleApplicability, RuleFolder, Selector};
+    fn values<'a>(value: &'a ParameterValue, out: &mut Vec<&'a Selector>) {
+        match value {
+            ParameterValue::Selector { value } => out.push(value),
+            ParameterValue::Table { value: rows } => {
+                for cell in rows.iter().flat_map(std::collections::BTreeMap::values) {
+                    values(cell, out);
+                }
+            }
+            _ => {}
+        }
+    }
+    fn folder(vocabulary: &Vocabulary<'_>, folder_: &RuleFolder) -> Result<(), EngineError> {
+        for rule in &folder_.rules {
+            let applicability: Vec<&Selector> = match &rule.applicability {
+                RuleApplicability::Selector(selector) => vec![selector],
+                RuleApplicability::Groups(groups) => groups
+                    .groups
+                    .values()
+                    .map(|group| &group.selector)
+                    .collect(),
+            };
+            for selector in applicability {
+                check_selector(vocabulary, &rule.id, "applicability", selector)?;
+            }
+            for (name, value) in &rule.parameters {
+                let mut selectors = Vec::new();
+                values(value, &mut selectors);
+                for selector in selectors {
+                    check_selector(vocabulary, &rule.id, name, selector)?;
+                }
+            }
+        }
+        folder_
+            .folders
+            .iter()
+            .try_for_each(|inner| folder(vocabulary, inner))
+    }
+    folder(vocabulary, &ruleset.root)?;
+    for (id, classification) in &ruleset.classifications {
+        for (index, row) in classification.rows.iter().enumerate() {
+            check_selector(vocabulary, id, &format!("rows[{index}]"), &row.selector)?;
+        }
+    }
+    for (id, grouping) in &ruleset.groupings {
+        check_selector(vocabulary, id, "members", &grouping.members)?;
+    }
+    for (id, relation) in &ruleset.relations {
+        check_selector(vocabulary, id, "from", &relation.from)?;
+        check_selector(vocabulary, id, "to", &relation.to)?;
+    }
+    Ok(())
 }

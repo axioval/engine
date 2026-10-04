@@ -499,3 +499,150 @@ fn values_reading_one_another_in_a_cycle_fail_compilation_naming_it() {
         .unwrap_err();
     assert!(error.to_string().contains("`missing`"), "{error}");
 }
+
+fn thick(minimum: f64) -> Value {
+    json!({"kind": "expression", "expression": {"kind": "compare",
+        "operator": "greaterThan", "left": property("Cover"), "right": mm(minimum)}})
+}
+
+/// A rule flagging every object its applicability selects.
+fn flag(id: &str, applicability: Value) -> Value {
+    rule(
+        id,
+        EXPRESSION,
+        "error",
+        applicability,
+        json!({"requirement": {"type": "expression", "value":
+            {"kind": "literal", "value": {"type": "boolean", "value": false}}}}),
+        json!({}),
+    )
+}
+
+#[test]
+fn an_expression_selector_composes_with_every_selector_combinator() {
+    let registry = registry();
+    let package = vocabulary(&registry, &[]);
+    // s1 45 mm, s2 35 mm, s3 and s4 30 mm, s5 20 mm; s1 hosts s5.
+    let model = slabs().edge("Hosts", "s1", "s5");
+    let slab = entity("slab");
+    let rules = vec![
+        flag(
+            "all",
+            json!({"kind": "allOf", "operands": [slab, thick(30.0)]}),
+        ),
+        flag(
+            "any",
+            json!({"kind": "anyOf", "operands": [thick(40.0), class_is_selector("XC1")]}),
+        ),
+        flag(
+            "not",
+            json!({"kind": "allOf", "operands": [slab, {"kind": "not", "operand": thick(25.0)}]}),
+        ),
+        flag(
+            "related",
+            json!({"kind": "related", "path": ["Hosts"], "selector": {"kind": "not", "operand": thick(25.0)}}),
+        ),
+    ];
+    let report = check(&package, rules, &session(model));
+    assert!(
+        report.not_evaluated.is_empty(),
+        "{:?}",
+        report.not_evaluated
+    );
+    assert_eq!(subjects(&report, "all"), ["s1", "s2"]);
+    assert_eq!(subjects(&report, "any"), ["s1", "s4", "s5"]);
+    assert_eq!(subjects(&report, "not"), ["s5"]);
+    assert_eq!(subjects(&report, "related"), ["s1"]);
+}
+
+fn class_is_selector(class: &str) -> Value {
+    json!({"kind": "property", "propertySet": "t.Pset", "property": "t.Class",
+        "operator": "equals", "value": {"type": "string", "value": class}})
+}
+
+#[test]
+fn a_straddling_measured_value_leaves_the_object_open_in_every_rule_selecting_by_it() {
+    let model = Model::default()
+        .object("p40", "pipe")
+        .object("p100", "pipe")
+        .object("p50", "pipe");
+    let extents = Extents(
+        [
+            ("p40", [(1.0, 1.0), (1.04, 1.04)]),
+            ("p100", [(1.0, 1.0), (1.1, 1.1)]),
+            ("p50", [(0.9975, 1.0025), (1.0475, 1.0525)]),
+        ]
+        .into_iter()
+        .map(|(local, extent)| (id(local), extent))
+        .collect(),
+    );
+    let session = session(model)
+        .with_host_service(
+            VerticalExtentServiceHandle::new(Arc::new(extents)),
+            &[snapshot()],
+        )
+        .unwrap();
+    let small = json!({"kind": "allOf", "operands": [entity("pipe"), {"kind": "expression",
+        "expression": {"kind": "compare", "operator": "lessThan",
+            "left": {"kind": "property", "propertySet": "axioval:measured", "property": "extent_z"},
+            "right": mm(50.0)}}]});
+    let predicate = rule(
+        "labelled",
+        PREDICATE,
+        "error",
+        small.clone(),
+        json!({
+            "property_set": {"type": "string", "value": "t.Pset"},
+            "property": {"type": "string", "value": "t.Class"},
+            "operator": {"type": "string", "value": "is_defined"},
+        }),
+        json!({}),
+    );
+    let registry = registry();
+    let report = check(
+        &vocabulary(&registry, &[]),
+        vec![flag("small", small), predicate],
+        &session,
+    );
+    assert_eq!(subjects(&report, "small"), ["p40"]);
+    assert_eq!(subjects(&report, "labelled"), ["p40"]);
+    for rule in ["small", "labelled"] {
+        let open: Vec<_> = report
+            .not_evaluated
+            .iter()
+            .filter(|outcome| outcome.rule_id.to_string() == rule)
+            .map(|outcome| (outcome.object_id().cloned(), outcome.reason.clone()))
+            .collect();
+        assert_eq!(
+            open,
+            [(Some(id("p50")), NotEvaluatedReason::IncompleteEvidence)],
+            "{rule}"
+        );
+    }
+}
+
+#[test]
+fn an_ill_typed_selector_expression_fails_compilation() {
+    let registry = registry();
+    let package = vocabulary(&registry, &[]);
+    let selector = json!({"kind": "allOf", "operands": [entity("slab"),
+        {"kind": "expression", "expression": property("Cover")}]});
+    match compiled(&package, flag("r", selector)) {
+        Err(EngineError::InvalidExpression {
+            rule,
+            parameter,
+            path,
+            ..
+        }) => {
+            assert_eq!((rule.as_str(), parameter.as_str()), ("r", "applicability"));
+            assert_eq!(path, "selector.expression");
+        }
+        other => panic!("{other:?}"),
+    }
+    let reads_parameter = json!({"kind": "expression", "expression": {"kind": "compare",
+        "operator": "lessThan", "left": property("Cover"), "right": {"kind": "parameter", "name": "minimum"}}});
+    assert!(matches!(
+        compiled(&package, flag("r", reads_parameter)),
+        Err(EngineError::InvalidExpression { .. })
+    ));
+}

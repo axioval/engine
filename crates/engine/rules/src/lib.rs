@@ -32,6 +32,7 @@ mod effective_coverage;
 mod empty_host;
 mod escape_route;
 mod exit_separation;
+mod expression_leaves;
 mod expression_requirement;
 mod external_wall_validation;
 mod free_floor;

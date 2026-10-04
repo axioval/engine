@@ -204,6 +204,44 @@ pub(crate) fn selector_matches(
         Selector::RuleOutcome { rule, outcome } => {
             rule_outcome_matches(context, object, rule, *outcome)
         }
+        Selector::Expression { expression } => {
+            expression_matches(context, object, expression, evidence)
+        }
+    }
+}
+
+/// Whether `expression` holds for `object`: true selects, false and `null`
+/// do not, and an expression that cannot be decided leaves it not
+/// evaluated with the reason and the subexpression's path.
+fn expression_matches(
+    context: &RuleContext<'_>,
+    object: &Object,
+    expression: &axioval_ir::contract::Expression,
+    evidence: &mut Vec<Evidence>,
+) -> Selection {
+    use axioval_engine::expression::{Reason, Value, evaluate};
+    let mut leaves = crate::expression_leaves::ObjectLeaves::new(context, object, None);
+    let evaluation = evaluate(expression, "selector.expression", &mut leaves);
+    evidence.extend(
+        evaluation
+            .reads
+            .iter()
+            .flat_map(|read| read.leaf.evidence.iter().cloned()),
+    );
+    match evaluation.outcome {
+        Ok(Value::Boolean(holds)) => verdict(holds),
+        Ok(Value::Null) => Selection::NoMatch,
+        Ok(other) => Selection::NotEvaluated(
+            NotEvaluatedReason::InvalidDeclaration,
+            format!("the selector's expression is {}, not a truth", other.kind()),
+        ),
+        Err(why) => Selection::NotEvaluated(
+            leaves
+                .first_reason()
+                .filter(|_| matches!(why.reason, Reason::Unreadable(_)))
+                .unwrap_or_else(|| crate::expression_requirement::reason_of(&why)),
+            format!("the selector's expression: {why}"),
+        ),
     }
 }
 

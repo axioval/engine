@@ -1,21 +1,16 @@
 //! A requirement stated as an expression over each selected object.
 
-use std::cell::RefCell;
-use std::collections::BTreeMap;
-
-use axioval_engine::expression::{
-    Evaluation, ExpressionContext, Leaf, NotEvaluated, Reason, Value, derived_value, evaluate,
-};
+use axioval_engine::expression::{Evaluation, NotEvaluated, Reason, Value, evaluate};
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, ParameterDescriptor, ParameterType, RuleCapability,
     RuleContext,
 };
-use axioval_ir::contract::{Expression, ParameterValue, ScalarValue, TableRow};
-use axioval_ir::{NotEvaluatedReason, Object};
+use axioval_ir::NotEvaluatedReason;
+use axioval_ir::contract::{Expression, ParameterValue};
 
+use crate::expression_leaves::ObjectLeaves;
 use crate::selection::select_objects;
-use crate::support::table::{Matched, RowSelection, RowTest, TextPattern, match_rows};
-use crate::support::{PropertyRef, Resolved, finding, resolve};
+use crate::support::finding;
 
 /// Requires the expression `requirement` to hold for each selected object.
 ///
@@ -56,12 +51,7 @@ impl RuleCapability for ExpressionRequirement {
         };
         let (selected, mut evaluation) = select_objects(context, &rule.selector);
         for object in selected {
-            let mut leaves = ObjectLeaves {
-                context,
-                object,
-                rule,
-                reasons: RefCell::new(Vec::new()),
-            };
+            let mut leaves = ObjectLeaves::new(context, object, Some(&rule.parameters));
             let result = evaluate(requirement, REQUIREMENT, &mut leaves);
             match &result.outcome {
                 Ok(Value::Boolean(true)) => {}
@@ -88,10 +78,7 @@ impl RuleCapability for ExpressionRequirement {
                 ),
                 Err(why) => {
                     let reason = leaves
-                        .reasons
-                        .borrow()
-                        .first()
-                        .cloned()
+                        .first_reason()
                         .filter(|_| matches!(why.reason, Reason::Unreadable(_)))
                         .unwrap_or_else(|| reason_of(why));
                     evaluation.push_object_not_evaluated(
@@ -107,7 +94,7 @@ impl RuleCapability for ExpressionRequirement {
 }
 
 /// Why an outcome is not evaluated, in the report's terms.
-fn reason_of(why: &NotEvaluated) -> NotEvaluatedReason {
+pub(crate) fn reason_of(why: &NotEvaluated) -> NotEvaluatedReason {
     match &why.reason {
         Reason::Straddles { .. } | Reason::UndecidedCondition(_) | Reason::Unreadable(_) => {
             NotEvaluatedReason::IncompleteEvidence
@@ -183,173 +170,4 @@ fn evidence(evaluation: &Evaluation) -> Vec<axioval_ir::Evidence> {
         .iter()
         .flat_map(|read| read.leaf.evidence.iter().cloned())
         .collect()
-}
-
-/// Answers an expression's leaves for one selected object.
-struct ObjectLeaves<'a> {
-    context: &'a RuleContext<'a>,
-    object: &'a Object,
-    rule: &'a CompiledRule,
-    /// Why each unreadable leaf was unreadable, in reading order.
-    reasons: RefCell<Vec<NotEvaluatedReason>>,
-}
-
-impl ExpressionContext for ObjectLeaves<'_> {
-    fn property(&mut self, set: Option<&str>, name: &str) -> Leaf {
-        if set == Some(axioval_ir::VALUE_SET) {
-            return self.derived(name);
-        }
-        match resolve(self.context, self.object, PropertyRef { set, name }) {
-            Ok(resolved) => {
-                let evidence = resolved.evidence();
-                let value = match &resolved {
-                    // A stated absence is `null`, never a value not read.
-                    Resolved::Absent(_) => Ok(Value::Null),
-                    Resolved::Present(property) => Value::from_property(&property.value),
-                };
-                if value.is_err() {
-                    self.reasons
-                        .borrow_mut()
-                        .push(NotEvaluatedReason::InvalidEvidence);
-                }
-                Leaf { value, evidence }
-            }
-            Err((reason, message)) => {
-                self.reasons.borrow_mut().push(reason);
-                Leaf::unreadable(message)
-            }
-        }
-    }
-
-    fn derived(&mut self, name: &str) -> Leaf {
-        let leaf = derived_value(self.context.services, &self.object.id, name);
-        if leaf.value.is_err() {
-            self.reasons
-                .borrow_mut()
-                .push(NotEvaluatedReason::IncompleteEvidence);
-        }
-        leaf
-    }
-
-    fn parameter(&mut self, name: &str) -> Leaf {
-        match self
-            .rule
-            .parameters
-            .get(name)
-            .cloned()
-            .map(ScalarValue::try_from)
-        {
-            Some(Ok(scalar)) => match Value::from_literal(&scalar) {
-                Ok(value) => Leaf::stated(value),
-                Err(why) => Leaf::unreadable(why),
-            },
-            Some(Err(_)) => Leaf::unreadable(format!("parameter `{name}` is no single value")),
-            None => Leaf::unreadable(format!("the rule has no parameter `{name}`")),
-        }
-    }
-
-    fn lookup(&mut self, table: &str, keys: &BTreeMap<String, Value>, column: &str) -> Leaf {
-        let Some(ParameterValue::Table { value: rows }) = self.rule.parameters.get(table) else {
-            return Leaf::unreadable(format!("the rule has no table `{table}`"));
-        };
-        lookup(rows, keys, column).map_or_else(Leaf::unreadable, Leaf::stated)
-    }
-}
-
-/// The `column` cell of the most specific row whose key cells match `keys`:
-/// a text cell is a wildcard pattern matched against the key's text, any
-/// other cell must equal the key, and a blank cell accepts any key. No
-/// matching row, or one leaving `column` blank, is `null`; tied or undecided
-/// rows have no value.
-fn lookup(
-    rows: &[TableRow],
-    keys: &BTreeMap<String, Value>,
-    column: &str,
-) -> Result<Value, String> {
-    let mut problem = None;
-    let matched = match_rows(rows, RowSelection::MostSpecific, |row| {
-        let mut verdict = RowTest::Match(0);
-        for (key, value) in keys {
-            let Some(cell) = row.get(key) else {
-                continue;
-            };
-            let outcome = match (cell, value) {
-                (_, Value::Null) => RowTest::NoMatch,
-                (ParameterValue::String { value: pattern }, value) => match key_text(value) {
-                    Some(text) => match TextPattern::new(pattern, true) {
-                        Ok(pattern) => pattern.test(&text),
-                        Err(why) => {
-                            problem.get_or_insert(why);
-                            RowTest::Undecided
-                        }
-                    },
-                    None => RowTest::NoMatch,
-                },
-                (cell, value) => match ScalarValue::try_from(cell.clone())
-                    .ok()
-                    .and_then(|cell| Value::from_literal(&cell).ok())
-                {
-                    Some(cell) => equal(&cell, value),
-                    None => RowTest::NoMatch,
-                },
-            };
-            verdict = verdict.and(outcome);
-        }
-        verdict
-    });
-    match matched {
-        Matched::Rows(found) => Ok(match found.first() {
-            None => Value::Null,
-            Some((_, row)) => match row.get(column) {
-                None => Value::Null,
-                Some(cell) => {
-                    let scalar = ScalarValue::try_from(cell.clone())
-                        .map_err(|_| format!("column `{column}` holds no single value"))?;
-                    Value::from_literal(&scalar)?
-                }
-            },
-        }),
-        Matched::Undecided => Err(problem.unwrap_or_else(|| "a row cannot be decided".into())),
-        Matched::Ambiguous(tied) => Err(format!(
-            "rows {} tie for the most specific",
-            tied.iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(", ")
-        )),
-    }
-}
-
-/// A key read as text, as `keyed-limit` reads keys.
-fn key_text(value: &Value) -> Option<String> {
-    match value {
-        Value::Text(text) | Value::Enum(text) => Some(text.clone()),
-        Value::Boolean(value) => Some(value.to_string()),
-        Value::Number { value, unit } if unit.is_plain() && value.is_point() => {
-            Some(value.lower.to_string())
-        }
-        _ => None,
-    }
-}
-
-fn equal(cell: &Value, value: &Value) -> RowTest {
-    match (cell, value) {
-        (
-            Value::Number {
-                value: cell,
-                unit: cell_unit,
-            },
-            Value::Number { value, unit },
-        ) if cell_unit == unit => {
-            if cell.upper < value.lower || cell.lower > value.upper {
-                RowTest::NoMatch
-            } else if cell.is_point() && value.is_point() {
-                RowTest::Match(1)
-            } else {
-                RowTest::Undecided
-            }
-        }
-        (cell, value) if cell == value => RowTest::Match(1),
-        _ => RowTest::NoMatch,
-    }
 }

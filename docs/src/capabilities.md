@@ -256,6 +256,22 @@ Fire-wall doors are doors whose wall states `Compartmentation` true; with IFC:
 
 The other direction, walls holding at least one unrated door, is `IfcRelVoidsElement` then `IfcRelFillsElement` forward from the wall. A `related` selector fails closed as well: a relationship answer the service refuses (an unknown relationship, an unresolved relationship end, an unavailable backend) leaves the object not evaluated, since the objects it would reach are unknown. So does a reached object the nested selector cannot decide, unless the others already settle the verdict: one match settles `any` and `none`, one non-match settles `all`. An empty or malformed `path` is an invalid declaration. Relationship names are the source's own, as in capability parameters; the nested selector names concepts like any selector and is bound per source. In `selector-conformance`, the properties of related objects are not among the checked object's consulted properties.
 
+### Expression selectors
+
+An `expression` selector selects the objects for which an [expression](./expressions.md) holds: `{"kind": "expression", "expression": {…}}`. It lets applicability depend on computed and measured values, such as walls whose height exceeds twenty times their thickness:
+
+```json
+{"kind": "allOf", "operands": [
+  {"kind": "entityType", "objectType": "Wall"},
+  {"kind": "expression", "expression": {"kind": "compare", "operator": "greaterThan",
+    "left": {"kind": "divide",
+      "left": {"kind": "property", "propertySet": "axioval:measured", "property": "extent_z"},
+      "right": {"kind": "property", "propertySet": "Pset_WallCommon", "property": "Width"}},
+    "right": {"kind": "literal", "value": {"type": "number", "value": 20.0}}}}]}
+```
+
+It follows the selectors' three-valued rules: true selects, false and `null` do not, and an expression that cannot be decided leaves the object not evaluated in every rule using the selector, never skipped (a measured height straddling the ratio). It composes with `allOf`, `anyOf`, `not` and `related` like any selector, and reaches no resource object: as for a property selector, only an `entityType` names those. It reads properties, measured values and the ruleset's derived values, never a rule's parameters; the compiler type checks it wherever selectors appear (rule applicability, selector parameters and table cells, classification rows, grouping members and relation ends) and refuses one that is not a truth with `EngineError::InvalidExpression`. `selector-conformance` reports the properties it reads as consulted.
+
 ### Discipline selectors
 
 A `discipline` selector selects the objects of the sources that play a discipline in the check, such as `architecture` or `structure`:

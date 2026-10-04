@@ -998,7 +998,10 @@ impl<'o> Writer<'o> {
                 selector: Box::new(self.bind_filter(selector, releases)),
             },
             // Names no concept: patterns, classification systems, source
-            // facts. A rule outcome was refused before translating.
+            // facts. A rule outcome was refused before translating. An
+            // expression keeps its names unbound, so a source name in it is
+            // an unknown concept when the ruleset is compiled, never read
+            // as another property.
             Selector::All
             | Selector::PropertyPattern { .. }
             | Selector::Classification { .. }
@@ -1006,7 +1009,8 @@ impl<'o> Writer<'o> {
             | Selector::DerivedGroup { .. }
             | Selector::Discipline { .. }
             | Selector::Source { .. }
-            | Selector::RuleOutcome { .. } => filter.clone(),
+            | Selector::RuleOutcome { .. }
+            | Selector::Expression { .. } => filter.clone(),
         }
     }
 

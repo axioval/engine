@@ -189,6 +189,30 @@ fn consulted_properties<'a>(selector: &'a Selector, found: &mut Vec<PropertyRef<
             }
         }
         Selector::Not { operand } => consulted_properties(operand, found),
+        Selector::Expression { expression } => {
+            let mut pending: Vec<&'a axioval_ir::contract::Expression> = vec![expression];
+            while let Some(node) = pending.pop() {
+                if let axioval_ir::contract::Expression::Property {
+                    property_set,
+                    property,
+                    ..
+                } = node
+                {
+                    let set = property_set.as_deref();
+                    if !found
+                        .iter()
+                        .any(|seen| seen.set == set && seen.name == property)
+                    {
+                        found.push(PropertyRef {
+                            set,
+                            name: property,
+                        });
+                    }
+                }
+                // Operands in written order: the stack takes them reversed.
+                pending.extend(node.children().into_iter().rev());
+            }
+        }
         // A related selector consults the properties of other objects, not
         // of the one being judged.
         // A pattern names no one property to report.

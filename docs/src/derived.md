@@ -699,6 +699,24 @@ it, and a source stating none leaves the object not evaluated.
 with a run's services, outside a run, for a host previewing a value or a
 test comparing it with a capability's judgement.
 
+### Levels
+
+`level_elevation`, `level_index` and `height_above_ground` place an object
+among its source's levels. The level is the object itself, or the one level
+its `path` reaches (a space up its aggregating storey,
+`["IfcRelAggregates:backward"]`); a path reaching levels at different
+elevations is a conflict, and one reaching none has no value. A source's
+levels are its objects of that level's kind, at the elevations of their
+placement origins, read through the object-frame service. The ground level
+is the lowest at or above `datum` (default `0`, the source's own zero): its
+`level_index` is 0, the levels above count up and those below count down
+(levels at one elevation share an index), and `height_above_ground` is the
+level's elevation above it. Each model of a federation counts its own
+levels, so "on storeys more than 7 m above ground" is one expression,
+`height_above_ground;path=IfcRelAggregates:backward > 7 m`, over every
+model; restricted to one discipline it reads the source's
+`axioval:source` `discipline` (see [Source facts](#source-facts)).
+
 ### Stated rather than measured
 
 `level_height` is a storey's height to the next storey of the same spatial
@@ -732,6 +750,27 @@ Without the service a value needs, the resolver answers
 runtime reports it once per rule and source (`missing_service`), as it
 collapses every object-level missing service. A body the service cannot
 measure is unavailable for that object.
+
+## Source facts
+
+The set `axioval:source` (`axioval_ir::SOURCE_SET`) states what an evidence
+session knows about an object's source, as text (several values as a list):
+`discipline` (`SOURCE_DISCIPLINE`), the discipline the session declares for
+the source, and the metadata the `source` selector reads, `fileName`,
+`application`, `schema`, `project` and `timestamp`. A source with no declared
+discipline has none (an exact absence); a metadata field the source never
+records is not recorded. Outside an evidence session the set is a missing
+service. Any other name in the set is refused when the ruleset compiles.
+Expressions read it like any property, so a rule over a federation can
+judge each discipline on its own:
+
+```json
+{"kind": "implies",
+ "antecedent": {"kind": "compare", "operator": "equals",
+                "left": {"kind": "property", "propertySet": "axioval:source", "property": "discipline"},
+                "right": {"kind": "literal", "value": {"type": "string", "value": "architecture"}}},
+ "consequent": "…"}
+```
 
 ## Derived values
 

@@ -667,6 +667,16 @@ pub const DERIVED_GROUP_KIND: &str = "axioval:group";
 /// concept. Reserved like [`ATTRIBUTE_SET`].
 pub const VALUE_SET: &str = "axioval:value";
 
+/// Property set holding what a session knows about an object's source: its
+/// declared `discipline` and the source metadata the `source` selector reads
+/// (`fileName`, `application`, `schema`, `project`, `timestamp`), as text,
+/// several values as a list. A field the source never records is not
+/// recorded, never absent. Reserved like [`ATTRIBUTE_SET`].
+pub const SOURCE_SET: &str = "axioval:source";
+
+/// The declared discipline of the object's source, in [`SOURCE_SET`].
+pub const SOURCE_DISCIPLINE: &str = "discipline";
+
 /// Whether `set` is one of the reserved sets, which bind to themselves.
 #[must_use]
 pub fn is_reserved_set(set: &str) -> bool {
@@ -761,7 +771,11 @@ pub const MEASURED_NAMES: [&str; 11] = [
 /// no concept.
 #[must_use]
 pub fn is_derived_set(set: &str) -> bool {
-    set == CLASSIFICATION_SET || set == MEASURED_SET || set == GROUP_SET || set == VALUE_SET
+    set == CLASSIFICATION_SET
+        || set == MEASURED_SET
+        || set == GROUP_SET
+        || set == VALUE_SET
+        || set == SOURCE_SET
 }
 
 /// A named semantic property.

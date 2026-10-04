@@ -302,6 +302,33 @@ const OVER_FLOORS: MeasuredParameter = MeasuredParameter {
 
 const PROFILE_UNREAD: &str = "the body is no single swept profile, or a derived one";
 
+const LEVEL_PATH: MeasuredParameter = MeasuredParameter {
+    key: "path",
+    kind: MeasuredParameterKind::Path,
+    required: false,
+    default: None,
+    help: &en_de(
+        "The relationship steps from the object to its level; without it, the object \
+         is the level.",
+        "Die Beziehungsschritte vom Objekt zu seinem Geschoss; ohne sie ist das Objekt \
+         das Geschoss.",
+    ),
+};
+
+const DATUM: MeasuredParameter = MeasuredParameter {
+    key: "datum",
+    kind: MeasuredParameterKind::Length { minimum: -1.0e6 },
+    required: false,
+    default: Some("0"),
+    help: &en_de(
+        "The elevation the ground level lies at or above, in metres.",
+        "Die Höhe, auf oder über der das Erdgeschoss liegt, in Metern.",
+    ),
+};
+
+const LEVELS: &[&str] = &["object-frame", "relationship-selection"];
+const LEVEL_UNPLACED: &str = "a level's placement is not stated exactly";
+
 const OWN_AXIS: MeasuredParameterKind = MeasuredParameterKind::Choice {
     options: &["own_x", "own_y", "own_z", "x", "y", "z"],
 };
@@ -1152,6 +1179,21 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ),
     },
     MeasuredDescriptor {
+        name: "height_above_ground",
+        parameters: &[LEVEL_PATH, DATUM],
+        dimension: Some(QuantityDimension::Length),
+        services: LEVELS,
+        exactness: MeasuredExactness::Stated,
+        not_evaluated: &[LEVEL_UNPLACED, "no level lies at or above the datum"],
+        label: &en_de("Height above ground", "Höhe über Erdgeschoss"),
+        help: &en_de(
+            "The level's elevation above the source's ground level: the lowest of its \
+             levels at or above the datum.",
+            "Die Höhe des Geschosses über dem Erdgeschoss der Quelle: dem niedrigsten \
+             Geschoss auf oder über der Bezugshöhe.",
+        ),
+    },
+    MeasuredDescriptor {
         name: INCLINATION,
         parameters: &[MeasuredParameter {
             key: "axis",
@@ -1283,6 +1325,24 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              eigenen Achse.",
         ),
     },
+    MeasuredDescriptor {
+        name: "level_elevation",
+        parameters: &[LEVEL_PATH],
+        dimension: Some(QuantityDimension::Length),
+        services: LEVELS,
+        exactness: MeasuredExactness::Stated,
+        not_evaluated: &[
+            LEVEL_UNPLACED,
+            "the path reaches levels at different elevations",
+        ],
+        label: &en_de("Level elevation", "Geschosshöhe über Null"),
+        help: &en_de(
+            "The elevation of the level's placement origin; none when the path reaches no \
+             level.",
+            "Die Höhe des Platzierungsursprungs des Geschosses; keine, wenn der Pfad kein \
+             Geschoss erreicht.",
+        ),
+    },
     plain!(
         MEASURED_LEVEL_HEIGHT,
         Some(QuantityDimension::Length),
@@ -1297,6 +1357,21 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              Elternteils, wie die Quelle sie angibt; keine für das oberste Geschoss."
         )
     ),
+    MeasuredDescriptor {
+        name: "level_index",
+        parameters: &[LEVEL_PATH, DATUM],
+        dimension: None,
+        services: LEVELS,
+        exactness: MeasuredExactness::Stated,
+        not_evaluated: &[LEVEL_UNPLACED, "no level lies at or above the datum"],
+        label: &en_de("Level index", "Geschossindex"),
+        help: &en_de(
+            "The level's index counted from the ground level: 0 on it, up above and \
+             negative below; levels at one elevation share an index.",
+            "Der Index des Geschosses vom Erdgeschoss aus: 0 auf ihm, aufwärts darüber, \
+             negativ darunter; Geschosse gleicher Höhe teilen einen Index.",
+        ),
+    },
     MeasuredDescriptor {
         name: "opening_area",
         parameters: &[

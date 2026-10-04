@@ -280,11 +280,119 @@ fn classify_one(
     }
 }
 
+/// A field of [`axioval_ir::SOURCE_SET`].
+#[derive(Clone, Copy)]
+pub(crate) enum SourceFact {
+    /// The declared discipline.
+    Discipline,
+    /// One metadata field.
+    Metadata(axioval_ir::contract::SourceField),
+}
+
+/// What a field of [`axioval_ir::SOURCE_SET`] reads; `None` for any other
+/// name.
+pub(crate) fn source_field(name: &str) -> Option<SourceFact> {
+    use axioval_ir::contract::SourceField;
+    if name == axioval_ir::SOURCE_DISCIPLINE {
+        return Some(SourceFact::Discipline);
+    }
+    [
+        SourceField::FileName,
+        SourceField::Application,
+        SourceField::Schema,
+        SourceField::Project,
+        SourceField::Timestamp,
+    ]
+    .into_iter()
+    .find(|field| field.as_str() == name)
+    .map(SourceFact::Metadata)
+}
+
+/// What the session knows about each source, answering
+/// [`axioval_ir::SOURCE_SET`].
+#[derive(Clone, Default)]
+pub(crate) struct SourceFacts {
+    disciplines: Option<crate::SourceDisciplines>,
+    metadata: Option<crate::SourceMetadataIndex>,
+}
+
+impl SourceFacts {
+    pub(crate) fn of(services: &crate::ServiceRegistry) -> Self {
+        Self {
+            disciplines: services.get::<crate::SourceDisciplines>().cloned(),
+            metadata: services.get::<crate::SourceMetadataIndex>().cloned(),
+        }
+    }
+
+    fn resolve(
+        &self,
+        request: &PropertyRequest,
+    ) -> Result<PropertyResolution, PropertyResolutionError> {
+        let source = &request.object_id().source;
+        let field =
+            source_field(request.property()).ok_or(PropertyResolutionError::InvalidRequest)?;
+        let evidence = || {
+            axioval_ir::Evidence::exact(
+                source.clone(),
+                format!("{}/{}", axioval_ir::SOURCE_SET, request.property()),
+            )
+        };
+        let values: Vec<String> = match field {
+            SourceFact::Discipline => {
+                let disciplines = self.disciplines.as_ref().ok_or_else(|| {
+                    PropertyResolutionError::MissingService(
+                        "source disciplines are not available outside an evidence session".into(),
+                    )
+                })?;
+                disciplines
+                    .of(source)
+                    .map(|discipline| vec![discipline.as_str().to_owned()])
+                    .unwrap_or_default()
+            }
+            SourceFact::Metadata(field) => self
+                .metadata
+                .as_ref()
+                .ok_or_else(|| {
+                    PropertyResolutionError::MissingService(
+                        "source metadata is not available outside an evidence session".into(),
+                    )
+                })?
+                .values(source, field)
+                .ok_or_else(|| {
+                    PropertyResolutionError::NotRecorded(format!(
+                        "source `{source}` does not record its {}",
+                        field.as_str()
+                    ))
+                })?
+                .to_vec(),
+        };
+        let value = match &values[..] {
+            [] => {
+                return Ok(PropertyResolution::Absent(
+                    CompletePropertyAbsenceEvidence::try_new(request.clone(), evidence())?,
+                ));
+            }
+            [one] => PropertyValue::String(one.clone()),
+            several => {
+                PropertyValue::List(several.iter().cloned().map(PropertyValue::String).collect())
+            }
+        };
+        let property = Property::new(axioval_ir::SOURCE_SET, request.property(), value)
+            .map_err(|_| PropertyResolutionError::InvalidRequest)?
+            .with_evidence(evidence());
+        Ok(PropertyResolution::Present(ResolvedProperty::try_new(
+            request.clone(),
+            property,
+        )?))
+    }
+}
+
 /// The run's property resolver: derived sets answered by the engine, every
 /// other request by the host's resolver.
 pub(crate) struct DerivedProperties {
     pub(crate) inner: Option<PropertyResolutionServiceHandle>,
     pub(crate) measures: Measures,
+    pub(crate) sources: SourceFacts,
     pub(crate) classifications: Arc<Classifications>,
     pub(crate) groups: Arc<DerivedGroups>,
     pub(crate) values: Arc<DerivedValues>,
@@ -316,6 +424,9 @@ impl PropertyResolutionService for DerivedProperties {
         }
         if request.property_set() == Some(MEASURED_SET) {
             return self.measures.resolve(request);
+        }
+        if request.property_set() == Some(axioval_ir::SOURCE_SET) {
+            return self.sources.resolve(request);
         }
         match &self.inner {
             Some(inner) => inner.resolve(request),
@@ -365,6 +476,7 @@ pub(crate) fn install(
         DerivedProperties {
             inner: host.cloned(),
             measures: Measures::of(services, host, project),
+            sources: SourceFacts::of(services),
             classifications: classifications.clone(),
             groups,
             values: values.clone(),

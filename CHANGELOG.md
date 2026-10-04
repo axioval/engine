@@ -115,6 +115,13 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- The IFC crates move to `ifc-geometry` 0.10, `openbim-ifc` 0.16,
+  `ifc-properties` 0.8.1 and `ifc-schema` 0.3.2. The IFC adapter's property
+  service resolves through `ifc-properties`' `PropertyIndex`
+  (openbimrs/ifc#352), built once per session, instead of free functions
+  that validate every property relationship on each call: the same answers
+  and refusals, linear instead of quadratic over a model (one property of
+  each of 3,000 walls: 4.4 s before, 42 ms after).
 - The IFC crates move to `ifc-geometry` 0.9 and `openbim-ifc` 0.15 (its
   new `authoring` feature stays off). IFC4X3 stations
   (`IfcPointByDistanceExpression`, `IfcAxis2PlacementLinear` with `Axis`

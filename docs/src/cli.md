@@ -1106,7 +1106,7 @@ compiler refuses is unmeasured, and its space is not evaluated. Surfaces, face
 surfaces (`IfcFaceSurface`, `IfcAdvancedFace`) and face-based surface models
 are lowered through `ifc-geometry` (openbimrs/ifc#155).
 
-IFC4X3 geometry families are lowered by `ifc-geometry` (0.9) or refused by
+IFC4X3 geometry families are lowered by `ifc-geometry` (0.10) or refused by
 name: alignment curves, gradient curves, open cross profiles and
 `IfcTriangulatedIrregularNetwork` terrains are measured. `CUBIC` transitions
 and vertical circular arcs and clothoids lower exactly (openbimrs/ifc#90,

@@ -118,24 +118,27 @@ openbim-ids = { version = "0.2.1", features = ["audit-schema"] }
 # Door and window operation geometry (openbimrs/ifc#148, #170) is published
 # only in the IFC facade, which joins `ifc-geometry` and `ifc-properties`; `geometry-select`
 # compiles no geometry kernel.
-# 0.15 re-exports `ifc-geometry` 0.9; its `authoring` feature stays off.
-openbim_ifc = { package = "openbim-ifc", version = "0.15.0", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
+# 0.16 re-exports `ifc-geometry` 0.10; its `authoring` feature stays off.
+openbim_ifc = { package = "openbim-ifc", version = "0.16.0", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
 ifc-classification = "0.4.0"
 # Test-only: reads a linear placement's `IfcPointByDistanceExpression` to
 # pin that `ifc-geometry` refuses an alignment parameter (openbimrs/ifc#347).
 ifc-alignment = "0.6.0"
 # 0.9 lowers IFC4X3 stations, offset curves by distances and sectioned
 # solids and surfaces (openbimrs/ifc#307) and, since 0.8.2, refuses an
-# `IfcParameterValue` along an alignment by name (openbimrs/ifc#347).
-ifc-geometry ={ version = "0.9.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
+# `IfcParameterValue` along an alignment by name (openbimrs/ifc#347). 0.10
+# can take Reference View openings as applied (#351) and derive a linear
+# placement through a caller's curve evaluator (#353, #354), in the IFC4.3
+# (tangent, left, up) frame (#355).
+ifc-geometry = { version = "0.10.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
 # Map conversions only: without the default `transform` feature it links no
 # geometry crate (never Axiolid).
 ifc-georef = { version = "0.6.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
 ifc-material = "0.5.0"
 ifc-spatial = "0.5.0"
 ifc-model = "0.3.1"
-ifc-properties = "0.8.0"
-ifc-schema = "0.3.1"
+ifc-properties = "0.8.1"
+ifc-schema = "0.3.2"
 ifc-step = "0.5.0"
 # ifcXML: the codec's own layout and the buildingSMART XSD configuration,
 # both read schema-strict.
@@ -149,6 +152,9 @@ regex = "1.11.2"
 sha2 = "0.11.0"
 # ifcZIP archives; deflate is the only compression method they use.
 zip = { version = "8.6", default-features = false }
+# Holds `ifc-properties`' `PropertyIndex`, which borrows the model, beside
+# the `Arc<Model>` it borrows (the IFC adapter's property service).
+yoke = { version = "0.8.3", default-features = false, features = ["alloc", "derive"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

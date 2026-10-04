@@ -1,5 +1,5 @@
 use std::fmt::Write as _;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use axioval_engine::{
     ClassificationServiceHandle, CompletePropertyAbsenceEvidence, CoordinateSystemServiceHandle,
@@ -16,12 +16,12 @@ use axioval_ir::{
 use ifc_model::{EntityId, Model};
 use ifc_properties::{
     ExactLogical, ExactProperty, ExactPropertyEntry, ExactPropertyError, ExactPropertySetEntry,
-    ExactResolution, ExactSource, ExactTableValue, ExactTypedValue, ExactValue,
+    ExactResolution, ExactSource, ExactTableValue, ExactTypedValue, ExactValue, PropertyIndex,
     exact_material_properties_where, exact_material_property, exact_material_property_sets_where,
-    exact_properties_where, exact_property, exact_property_sets_where,
 };
 use sha2::{Digest, Sha256};
 use thiserror::Error;
+use yoke::{Yoke, Yokeable};
 
 use crate::attributes::Attributes;
 use crate::classifications::IfcClassificationService;
@@ -96,12 +96,36 @@ impl TypeHierarchyService for IfcTypeHierarchy {
 struct IfcPropertyService {
     release: Release,
     model: Arc<Model>,
+    /// `ifc-properties`' index of the model's property assignments, built on
+    /// the first request (`index`).
+    index: OnceLock<Yoke<Index<'static>, Arc<Model>>>,
     snapshots: Arc<[SourceSnapshot]>,
     attributes: Attributes,
     levels: crate::levels::Levels,
 }
 
+/// A `PropertyIndex` borrowing the session's model, held beside the
+/// `Arc<Model>` it borrows.
+#[derive(Yokeable)]
+struct Index<'m>(PropertyIndex<'m>);
+
 impl IfcPropertyService {
+    /// The property index of the model (`ifc-properties` >= 0.8.1,
+    /// openbimrs/ifc#352): every property relationship validated once, so
+    /// resolving every object is linear in objects plus relationships. It
+    /// answers exactly what the free functions answer, refusals included.
+    fn index(&self) -> &PropertyIndex<'_> {
+        &self
+            .index
+            .get_or_init(|| {
+                Yoke::attach_to_cart(self.model.clone(), |model| {
+                    Index(PropertyIndex::build(model))
+                })
+            })
+            .get()
+            .0
+    }
+
     fn entity_id(object: &ObjectId) -> Result<EntityId, PropertyResolutionError> {
         let local = object
             .local_id
@@ -692,7 +716,7 @@ impl IfcPropertyService {
         if self.is_resource(object) {
             exact_material_property(&self.model, object, set, name)
         } else {
-            exact_property(&self.model, object, set, name)
+            self.index().exact_property(object, set, name)
         }
     }
 
@@ -707,7 +731,8 @@ impl IfcPropertyService {
         if self.is_resource(object) {
             exact_material_properties_where(&self.model, object, select_set, select_property)
         } else {
-            exact_properties_where(&self.model, object, select_set, select_property)
+            self.index()
+                .exact_properties_where(object, select_set, select_property)
         }
     }
 
@@ -721,7 +746,7 @@ impl IfcPropertyService {
         if self.is_resource(object) {
             exact_material_property_sets_where(&self.model, object, select)
         } else {
-            exact_property_sets_where(&self.model, object, select)
+            self.index().exact_property_sets_where(object, select)
         }
     }
 
@@ -886,6 +911,7 @@ pub(crate) fn session(
     let service = PropertyResolutionServiceHandle::new(Arc::new(IfcPropertyService {
         release,
         model: model.clone(),
+        index: OnceLock::new(),
         snapshots: snapshots.clone(),
         attributes: Attributes::new(release),
         levels: crate::levels::Levels::new(release),

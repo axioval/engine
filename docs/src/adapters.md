@@ -8,6 +8,12 @@ Adapters are peers around the source-neutral engine. No adapter receives special
 strict bytes become a SHA-256 fingerprinted `EvidenceSession`; IFC objects become
 source-qualified Axioval objects; and `ifc-properties::exact_property` backs the
 session's property service with occurrence/type provenance and exact absence.
+The service asks `ifc-properties`' `PropertyIndex` (0.8.1, openbimrs/ifc#352),
+built once per session on the first request: it validates every property
+relationship once and answers exactly what the free functions answer,
+refusals included, so resolving a property of every object is linear in
+objects plus relationships instead of their product (3,000 walls with one
+property set each: 4.4 s before, 42 ms after).
 The property resolver owns and declares the same source/revision/fingerprint/schema
 snapshot registered by the session; mismatched service composition is rejected.
 Parser diagnostics, unsupported schemas, malformed traversal, conflicts, and

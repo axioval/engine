@@ -29,8 +29,10 @@ parameters, the measured values, expression node kinds, operators,
 selector kinds, relationships and units, labelled in English and German,
 as versioned JSON a rule editor is generated from. `--definitions` (repeat
 for several) adds each package's concept vocabulary; `--output FILE`
-writes to a file instead of standard output. Exit status: 0 written, 1
-nothing written (an unreadable package, or a capability without texts).
+writes to a file instead of standard output; `--locale de` writes every
+text in German only, listing on stderr any that fell back to English.
+Exit status: 0 written, 1 nothing written (an unreadable package, an
+unsupported locale, or a capability without texts).
 
 ## `axioval check`
 

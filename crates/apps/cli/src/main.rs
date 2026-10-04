@@ -77,6 +77,11 @@ enum Command {
         /// Write to this file instead of standard output.
         #[arg(long, value_name = "FILE")]
         output: Option<PathBuf>,
+        /// Write every text in one language (`en` or `de`) instead of all:
+        /// a text missing in it falls back to English, and each that did
+        /// is listed on stderr.
+        #[arg(long, value_name = "LOCALE")]
+        locale: Option<String>,
     },
     /// Check a model against a ruleset.
     ///
@@ -722,13 +727,24 @@ fn run() -> Result<Outcome, Box<dyn Error>> {
         Command::Catalogue {
             definitions,
             output,
+            locale,
         } => {
             let packages = definitions
                 .iter()
                 .map(|path| load_definitions(path))
                 .collect::<Result<Vec<_>, _>>()?;
             let catalogue = axioval::catalogue(&packages).map_err(|error| error.to_string())?;
-            let mut json = serde_json::to_string_pretty(&catalogue)?;
+            let mut json = match locale {
+                Some(locale) => {
+                    let (value, fallbacks) =
+                        axioval::engine::catalogue::localized(&catalogue, &locale)?;
+                    for pointer in fallbacks {
+                        eprintln!("not translated into {locale}, English used: {pointer}");
+                    }
+                    serde_json::to_string_pretty(&value)?
+                }
+                None => serde_json::to_string_pretty(&catalogue)?,
+            };
             json.push('\n');
             match output {
                 Some(path) => fs::write(&path, json)?,

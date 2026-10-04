@@ -68,6 +68,119 @@ pub enum CatalogueError {
     /// A text is not stated in English and German, or is blank.
     #[error("{0} is not labelled in English and German")]
     Untranslated(String),
+    /// A locale the catalogue is not written in.
+    #[error("locale `{0}` is not supported; the catalogue is written in {LANGUAGES:?}")]
+    UnsupportedLocale(String),
+}
+
+/// The languages every catalogue text is stated in, English first: the
+/// language a missing translation falls back to.
+pub const LANGUAGES: &[&str] = &["en", "de"];
+
+/// A catalogue in one language: every list of texts (`[{"language",
+/// "text"}, …]`) replaced by the text in `locale`, or, where none is
+/// stated in it, by the English one, and every package text by its
+/// translation into `locale`, else its default. Returns the JSON and the
+/// JSON pointer of every built-in text that fell back, in document order.
+///
+/// # Errors
+///
+/// [`CatalogueError::UnsupportedLocale`] for a locale outside
+/// [`LANGUAGES`].
+pub fn localized(
+    catalogue: &Catalogue,
+    locale: &str,
+) -> Result<(serde_json::Value, Vec<String>), CatalogueError> {
+    if !LANGUAGES.contains(&locale) {
+        return Err(CatalogueError::UnsupportedLocale(locale.to_owned()));
+    }
+    let mut value = serde_json::to_value(catalogue).unwrap_or_default();
+    let mut fallbacks = Vec::new();
+    localize(&mut value, locale, &mut String::new(), &mut fallbacks);
+    if let Some(languages) = value.get_mut("languages") {
+        *languages = serde_json::json!([locale]);
+    }
+    Ok((value, fallbacks))
+}
+
+/// The texts of `value` if it is a list of localized texts.
+fn texts(value: &serde_json::Value) -> Option<Vec<(&str, &str)>> {
+    let items = value.as_array()?;
+    if items.is_empty() {
+        return None;
+    }
+    items
+        .iter()
+        .map(|item| {
+            let object = item.as_object()?;
+            if object.len() != 2 {
+                return None;
+            }
+            Some((
+                object.get("language")?.as_str()?,
+                object.get("text")?.as_str()?,
+            ))
+        })
+        .collect()
+}
+
+fn localize(
+    value: &mut serde_json::Value,
+    locale: &str,
+    pointer: &mut String,
+    fallbacks: &mut Vec<String>,
+) {
+    if let Some(stated) = texts(value) {
+        let chosen = stated
+            .iter()
+            .find(|(language, _)| *language == locale)
+            .or_else(|| {
+                fallbacks.push(pointer.clone());
+                stated
+                    .iter()
+                    .find(|(language, _)| *language == LANGUAGES[0])
+            })
+            .map_or("", |(_, text)| *text)
+            .to_owned();
+        *value = serde_json::Value::String(chosen);
+        return;
+    }
+    // A package's own text: its translation, else its default.
+    if let Some(object) = value.as_object()
+        && object.len() == 2
+        && let (
+            Some(serde_json::Value::String(default)),
+            Some(serde_json::Value::Object(translations)),
+        ) = (object.get("default"), object.get("translations"))
+    {
+        let chosen = translations
+            .get(locale)
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or(default)
+            .to_owned();
+        *value = serde_json::Value::String(chosen);
+        return;
+    }
+    let length = pointer.len();
+    match value {
+        serde_json::Value::Array(items) => {
+            for (index, item) in items.iter_mut().enumerate() {
+                pointer.push('/');
+                pointer.push_str(&index.to_string());
+                localize(item, locale, pointer, fallbacks);
+                pointer.truncate(length);
+            }
+        }
+        serde_json::Value::Object(fields) => {
+            for (key, item) in fields.iter_mut() {
+                pointer.push('/');
+                pointer.push_str(&key.replace('~', "~0").replace('/', "~1"));
+                localize(item, locale, pointer, fallbacks);
+                pointer.truncate(length);
+            }
+        }
+        _ => {}
+    }
 }
 
 /// The authoring catalogue, in its JSON form.
@@ -339,7 +452,7 @@ const DECLARED_RELATION: DeclaredRelation = DeclaredRelation {
 };
 
 /// Whether `texts` states English then German, none blank.
-fn localized(texts: &[LocalizedText]) -> bool {
+fn bilingual(texts: &[LocalizedText]) -> bool {
     texts.iter().map(|text| text.language).eq(["en", "de"])
         && texts.iter().all(|text| !text.text.trim().is_empty())
 }
@@ -348,7 +461,7 @@ fn checked(
     texts: &'static [LocalizedText],
     what: impl FnOnce() -> String,
 ) -> Result<&'static [LocalizedText], CatalogueError> {
-    if localized(texts) {
+    if bilingual(texts) {
         Ok(texts)
     } else {
         Err(CatalogueError::Untranslated(what()))
@@ -493,7 +606,7 @@ pub fn catalogue(
     let capabilities = capability_entries(registry, texts)?;
     Ok(Catalogue {
         schema_version: CATALOGUE_SCHEMA_VERSION,
-        languages: &["en", "de"],
+        languages: LANGUAGES,
         value_types: VALUE_TYPES,
         units: Units {
             bases: &["m", "kg", "s", "A", "K", "mol", "cd", "rad"],
@@ -548,23 +661,45 @@ mod tests {
         check_measured().unwrap();
         for kind in RelationshipKind::ALL {
             let (label, help) = stated_texts(kind);
-            assert!(localized(label) && localized(help), "{}", kind.name());
+            assert!(bilingual(label) && bilingual(help), "{}", kind.name());
         }
         for derivation in DERIVATIONS {
-            assert!(localized(derivation.label) && localized(derivation.help));
+            assert!(bilingual(derivation.label) && bilingual(derivation.help));
             assert!(
                 derivation
                     .parameters
                     .iter()
-                    .all(|parameter| localized(parameter.help))
+                    .all(|parameter| bilingual(parameter.help))
             );
         }
-        assert!(UNIT_SYMBOLS.iter().all(|unit| localized(unit.label)));
+        assert!(UNIT_SYMBOLS.iter().all(|unit| bilingual(unit.label)));
         assert!(
             DIMENSIONS
                 .iter()
-                .all(|dimension| localized(dimension.label))
+                .all(|dimension| bilingual(dimension.label))
         );
+    }
+
+    #[test]
+    fn a_missing_translation_falls_back_to_english_and_is_listed() {
+        let mut value = serde_json::json!({
+            "label": [{"language": "en", "text": "Wall"}, {"language": "de", "text": "Wand"}],
+            "items": [{"help": [{"language": "en", "text": "Only English"}]}],
+            "name": {"default": "Door", "translations": {"de": "Tür"}},
+            "other": {"default": "Kept", "translations": {}},
+        });
+        let mut fallbacks = Vec::new();
+        localize(&mut value, "de", &mut String::new(), &mut fallbacks);
+        assert_eq!(
+            value,
+            serde_json::json!({
+                "label": "Wand",
+                "items": [{"help": "Only English"}],
+                "name": "Tür",
+                "other": "Kept",
+            })
+        );
+        assert_eq!(fallbacks, ["/items/0/help"]);
     }
 
     #[test]

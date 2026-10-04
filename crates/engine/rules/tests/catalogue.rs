@@ -85,3 +85,31 @@ fn the_catalogue_lists_a_package_s_concepts() {
         package.definitions.len()
     );
 }
+
+#[test]
+fn the_german_catalogue_translates_every_built_in_entry() {
+    use axioval_engine::catalogue::{CatalogueError, localized};
+    let built = catalogue(&built_ins(), &[]).unwrap();
+    for locale in ["en", "de"] {
+        let (value, fallbacks) = localized(&built, locale).unwrap();
+        assert!(fallbacks.is_empty(), "{locale}: {fallbacks:?}");
+        assert_eq!(value["languages"], serde_json::json!([locale]));
+    }
+    let (german, _) = localized(&built, "de").unwrap();
+    assert_eq!(german["valueTypes"][0]["label"], "Wahrheitswert");
+    let stair = german["capabilities"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|capability| capability["id"] == "axioval:capability.stair-geometry")
+        .unwrap();
+    assert_eq!(stair["label"], "Treppengeometrie");
+    assert!(stair["parameters"][0]["help"].is_string());
+    // No list of texts survives localization.
+    let text = serde_json::to_string(&german).unwrap();
+    assert!(!text.contains("\"language\":\"en\""));
+    assert_eq!(
+        localized(&built, "fr").unwrap_err(),
+        CatalogueError::UnsupportedLocale("fr".into())
+    );
+}

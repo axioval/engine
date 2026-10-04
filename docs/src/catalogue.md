@@ -39,6 +39,17 @@ member lists as their registries order them, node kinds and selector kinds
 in the order of the contract, packages as given. Two runs over the same
 inputs write the same bytes.
 
+## Languages
+
+Every built-in text is stated in English and German, and the gate refuses
+a catalogue missing either. `--locale de` (or
+`axioval_engine::catalogue::localized`) writes the catalogue in one
+language: each list of texts becomes the text in that language, and each
+package text its translation, else its default. A built-in text missing
+in the locale falls back to English, deterministically, and is listed on
+stderr by its JSON pointer; for the built-ins there is none. A locale
+other than `en` and `de` is refused.
+
 ## Versioning
 
 `schemaVersion` is `major.minor.patch`. A reader accepts any catalogue of

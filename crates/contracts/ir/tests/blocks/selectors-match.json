@@ -1,0 +1,160 @@
+{
+  "expression": {
+    "kind": "aggregate",
+    "function": "count",
+    "over": {
+      "kind": "path",
+      "path": [
+        "IfcRelAggregates:forward"
+      ]
+    },
+    "where": {
+      "kind": "allOf",
+      "operands": [
+        {
+          "kind": "all"
+        },
+        {
+          "kind": "entityType",
+          "objectType": "Wall",
+          "includeSubtypes": false
+        },
+        {
+          "kind": "property",
+          "propertySet": "Pset_WallCommon",
+          "property": "FireRating",
+          "operator": "equals",
+          "value": {
+            "type": "string",
+            "value": "F30"
+          },
+          "caseSensitive": false,
+          "trim": true,
+          "quantifier": "any"
+        },
+        {
+          "kind": "property",
+          "propertySet": null,
+          "property": "Status",
+          "operator": "exists",
+          "value": null
+        },
+        {
+          "kind": "propertyPattern",
+          "propertySetPattern": "Pset_.*Common",
+          "propertyPattern": "Is.*",
+          "matched": "all",
+          "operator": "equals",
+          "value": {
+            "type": "boolean",
+            "value": true
+          }
+        },
+        {
+          "kind": "classification",
+          "system": "Uniclass",
+          "codePattern": "Ss_25_.*",
+          "includeDescendants": true
+        },
+        {
+          "kind": "derivedClass",
+          "classification": "fire-zones",
+          "class": "zone-a",
+          "includeDescendants": true
+        }
+      ]
+    },
+    "label": "matching parts"
+  },
+  "blocks": {
+    "type": "expression.aggregate",
+    "label": "matching parts",
+    "fields": {
+      "function": "count"
+    },
+    "inputs": {
+      "over": {
+        "block": {
+          "type": "source.path",
+          "fields": {
+            "path": [
+              "IfcRelAggregates:forward"
+            ]
+          }
+        }
+      },
+      "where": {
+        "block": {
+          "type": "selector.allOf",
+          "inputs": {
+            "operands": {
+              "blocks": [
+                {
+                  "type": "selector.all"
+                },
+                {
+                  "type": "selector.entityType",
+                  "fields": {
+                    "includeSubtypes": false,
+                    "objectType": "Wall"
+                  }
+                },
+                {
+                  "type": "selector.property",
+                  "fields": {
+                    "caseSensitive": false,
+                    "operator": "equals",
+                    "property": "FireRating",
+                    "propertySet": "Pset_WallCommon",
+                    "quantifier": "any",
+                    "trim": true,
+                    "value": {
+                      "type": "string",
+                      "value": "F30"
+                    }
+                  }
+                },
+                {
+                  "type": "selector.property",
+                  "fields": {
+                    "operator": "exists",
+                    "property": "Status"
+                  }
+                },
+                {
+                  "type": "selector.propertyPattern",
+                  "fields": {
+                    "matched": "all",
+                    "operator": "equals",
+                    "propertyPattern": "Is.*",
+                    "propertySetPattern": "Pset_.*Common",
+                    "value": {
+                      "type": "boolean",
+                      "value": true
+                    }
+                  }
+                },
+                {
+                  "type": "selector.classification",
+                  "fields": {
+                    "codePattern": "Ss_25_.*",
+                    "includeDescendants": true,
+                    "system": "Uniclass"
+                  }
+                },
+                {
+                  "type": "selector.derivedClass",
+                  "fields": {
+                    "class": "zone-a",
+                    "classification": "fire-zones",
+                    "includeDescendants": true
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

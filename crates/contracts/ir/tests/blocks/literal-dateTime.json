@@ -1,0 +1,18 @@
+{
+  "expression": {
+    "kind": "literal",
+    "value": {
+      "type": "dateTime",
+      "value": "2026-10-04T12:00:00+02:00"
+    }
+  },
+  "blocks": {
+    "type": "expression.literal",
+    "fields": {
+      "value": {
+        "type": "dateTime",
+        "value": "2026-10-04T12:00:00+02:00"
+      }
+    }
+  }
+}

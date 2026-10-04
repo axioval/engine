@@ -1,0 +1,60 @@
+{
+  "expression": {
+    "kind": "concat",
+    "operands": [
+      {
+        "kind": "property",
+        "propertySet": "Pset_WallCommon",
+        "property": "Reference"
+      },
+      {
+        "kind": "literal",
+        "value": {
+          "type": "string",
+          "value": "/"
+        }
+      },
+      {
+        "kind": "literal",
+        "value": {
+          "type": "enum",
+          "value": "NOTDEFINED"
+        }
+      }
+    ]
+  },
+  "blocks": {
+    "type": "expression.concat",
+    "inputs": {
+      "operands": {
+        "blocks": [
+          {
+            "type": "expression.property",
+            "fields": {
+              "property": "Reference",
+              "propertySet": "Pset_WallCommon"
+            }
+          },
+          {
+            "type": "expression.literal",
+            "fields": {
+              "value": {
+                "type": "string",
+                "value": "/"
+              }
+            }
+          },
+          {
+            "type": "expression.literal",
+            "fields": {
+              "value": {
+                "type": "enum",
+                "value": "NOTDEFINED"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

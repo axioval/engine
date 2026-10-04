@@ -1,0 +1,18 @@
+{
+  "expression": {
+    "kind": "literal",
+    "value": {
+      "type": "number",
+      "value": 0.5
+    }
+  },
+  "blocks": {
+    "type": "expression.literal",
+    "fields": {
+      "value": {
+        "type": "number",
+        "value": 0.5
+      }
+    }
+  }
+}

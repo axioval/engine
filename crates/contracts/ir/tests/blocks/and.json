@@ -1,0 +1,40 @@
+{
+  "expression": {
+    "kind": "and",
+    "operands": [
+      {
+        "kind": "property",
+        "propertySet": "Pset_WallCommon",
+        "property": "IsExternal"
+      },
+      {
+        "kind": "property",
+        "propertySet": "Pset_WallCommon",
+        "property": "LoadBearing"
+      }
+    ]
+  },
+  "blocks": {
+    "type": "expression.and",
+    "inputs": {
+      "operands": {
+        "blocks": [
+          {
+            "type": "expression.property",
+            "fields": {
+              "property": "IsExternal",
+              "propertySet": "Pset_WallCommon"
+            }
+          },
+          {
+            "type": "expression.property",
+            "fields": {
+              "property": "LoadBearing",
+              "propertySet": "Pset_WallCommon"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

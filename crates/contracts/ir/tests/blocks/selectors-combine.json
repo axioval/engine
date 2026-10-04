@@ -1,0 +1,218 @@
+{
+  "expression": {
+    "kind": "aggregate",
+    "function": "any",
+    "over": {
+      "kind": "selector",
+      "selector": {
+        "kind": "derivedGroup",
+        "grouping": "storeys"
+      }
+    },
+    "where": {
+      "kind": "anyOf",
+      "operands": [
+        {
+          "kind": "not",
+          "operand": {
+            "kind": "related",
+            "path": [
+              "IfcRelFillsElement:backward"
+            ],
+            "quantifier": "none",
+            "selector": {
+              "kind": "entityType",
+              "objectType": "Door",
+              "includeSubtypes": true
+            }
+          }
+        },
+        {
+          "kind": "discipline",
+          "value": "structure"
+        },
+        {
+          "kind": "source",
+          "field": "application",
+          "operator": "contains",
+          "value": {
+            "type": "string",
+            "value": "modeller"
+          },
+          "quantifier": "any"
+        },
+        {
+          "kind": "ruleOutcome",
+          "rule": "fire-rating",
+          "outcome": "failed"
+        },
+        {
+          "kind": "expression",
+          "expression": {
+            "kind": "compare",
+            "operator": "greaterThan",
+            "left": {
+              "kind": "property",
+              "propertySet": "Qto_WallBaseQuantities",
+              "property": "Length"
+            },
+            "right": {
+              "kind": "literal",
+              "value": {
+                "type": "quantity",
+                "value": 2.5,
+                "unit": "m"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "value": {
+      "kind": "isDefined",
+      "operand": {
+        "kind": "property",
+        "propertySet": "Pset_WallCommon",
+        "property": "FireRating"
+      }
+    }
+  },
+  "blocks": {
+    "type": "expression.aggregate",
+    "fields": {
+      "function": "any"
+    },
+    "inputs": {
+      "over": {
+        "block": {
+          "type": "source.selector",
+          "inputs": {
+            "selector": {
+              "block": {
+                "type": "selector.derivedGroup",
+                "fields": {
+                  "grouping": "storeys"
+                }
+              }
+            }
+          }
+        }
+      },
+      "value": {
+        "block": {
+          "type": "expression.isDefined",
+          "inputs": {
+            "operand": {
+              "block": {
+                "type": "expression.property",
+                "fields": {
+                  "property": "FireRating",
+                  "propertySet": "Pset_WallCommon"
+                }
+              }
+            }
+          }
+        }
+      },
+      "where": {
+        "block": {
+          "type": "selector.anyOf",
+          "inputs": {
+            "operands": {
+              "blocks": [
+                {
+                  "type": "selector.not",
+                  "inputs": {
+                    "operand": {
+                      "block": {
+                        "type": "selector.related",
+                        "fields": {
+                          "path": [
+                            "IfcRelFillsElement:backward"
+                          ],
+                          "quantifier": "none"
+                        },
+                        "inputs": {
+                          "selector": {
+                            "block": {
+                              "type": "selector.entityType",
+                              "fields": {
+                                "includeSubtypes": true,
+                                "objectType": "Door"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "type": "selector.discipline",
+                  "fields": {
+                    "value": "structure"
+                  }
+                },
+                {
+                  "type": "selector.source",
+                  "fields": {
+                    "field": "application",
+                    "operator": "contains",
+                    "quantifier": "any",
+                    "value": {
+                      "type": "string",
+                      "value": "modeller"
+                    }
+                  }
+                },
+                {
+                  "type": "selector.ruleOutcome",
+                  "fields": {
+                    "outcome": "failed",
+                    "rule": "fire-rating"
+                  }
+                },
+                {
+                  "type": "selector.expression",
+                  "inputs": {
+                    "expression": {
+                      "block": {
+                        "type": "expression.compare",
+                        "fields": {
+                          "operator": "greaterThan"
+                        },
+                        "inputs": {
+                          "left": {
+                            "block": {
+                              "type": "expression.property",
+                              "fields": {
+                                "property": "Length",
+                                "propertySet": "Qto_WallBaseQuantities"
+                              }
+                            }
+                          },
+                          "right": {
+                            "block": {
+                              "type": "expression.literal",
+                              "fields": {
+                                "value": {
+                                  "type": "quantity",
+                                  "unit": "m",
+                                  "value": 2.5
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

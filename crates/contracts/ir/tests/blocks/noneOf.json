@@ -1,0 +1,50 @@
+{
+  "expression": {
+    "kind": "noneOf",
+    "operand": {
+      "kind": "property",
+      "propertySet": "Pset_WallCommon",
+      "property": "Status"
+    },
+    "values": [
+      {
+        "kind": "literal",
+        "value": {
+          "type": "string",
+          "value": "demolish"
+        }
+      }
+    ],
+    "caseSensitive": false
+  },
+  "blocks": {
+    "type": "expression.noneOf",
+    "fields": {
+      "caseSensitive": false
+    },
+    "inputs": {
+      "operand": {
+        "block": {
+          "type": "expression.property",
+          "fields": {
+            "property": "Status",
+            "propertySet": "Pset_WallCommon"
+          }
+        }
+      },
+      "values": {
+        "blocks": [
+          {
+            "type": "expression.literal",
+            "fields": {
+              "value": {
+                "type": "string",
+                "value": "demolish"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

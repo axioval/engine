@@ -1,0 +1,24 @@
+{
+  "expression": {
+    "kind": "lower",
+    "operand": {
+      "kind": "property",
+      "propertySet": "Pset_WallCommon",
+      "property": "Reference"
+    }
+  },
+  "blocks": {
+    "type": "expression.lower",
+    "inputs": {
+      "operand": {
+        "block": {
+          "type": "expression.property",
+          "fields": {
+            "property": "Reference",
+            "propertySet": "Pset_WallCommon"
+          }
+        }
+      }
+    }
+  }
+}

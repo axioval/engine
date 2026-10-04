@@ -1,0 +1,30 @@
+{
+  "expression": {
+    "kind": "subtract",
+    "left": {
+      "kind": "property",
+      "propertySet": "axioval:measured",
+      "property": "top"
+    },
+    "right": {
+      "kind": "property",
+      "propertySet": "axioval:measured",
+      "property": "bottom"
+    }
+  },
+  "blocks": {
+    "type": "expression.subtract",
+    "inputs": {
+      "left": {
+        "block": {
+          "type": "measured.top"
+        }
+      },
+      "right": {
+        "block": {
+          "type": "measured.bottom"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "expression": {
+    "kind": "atan2",
+    "y": {
+      "kind": "literal",
+      "value": {
+        "type": "quantity",
+        "value": 0.5,
+        "unit": "m"
+      }
+    },
+    "x": {
+      "kind": "literal",
+      "value": {
+        "type": "quantity",
+        "value": 6.0,
+        "unit": "m"
+      }
+    }
+  },
+  "blocks": {
+    "type": "expression.atan2",
+    "inputs": {
+      "x": {
+        "block": {
+          "type": "expression.literal",
+          "fields": {
+            "value": {
+              "type": "quantity",
+              "unit": "m",
+              "value": 6.0
+            }
+          }
+        }
+      },
+      "y": {
+        "block": {
+          "type": "expression.literal",
+          "fields": {
+            "value": {
+              "type": "quantity",
+              "unit": "m",
+              "value": 0.5
+            }
+          }
+        }
+      }
+    }
+  }
+}

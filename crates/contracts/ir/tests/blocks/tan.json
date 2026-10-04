@@ -1,0 +1,22 @@
+{
+  "expression": {
+    "kind": "tan",
+    "operand": {
+      "kind": "parameter",
+      "name": "slope_angle"
+    }
+  },
+  "blocks": {
+    "type": "expression.tan",
+    "inputs": {
+      "operand": {
+        "block": {
+          "type": "expression.parameter",
+          "fields": {
+            "name": "slope_angle"
+          }
+        }
+      }
+    }
+  }
+}

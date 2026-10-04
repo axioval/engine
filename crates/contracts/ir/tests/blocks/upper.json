@@ -1,0 +1,24 @@
+{
+  "expression": {
+    "kind": "upper",
+    "operand": {
+      "kind": "property",
+      "propertySet": "Pset_WallCommon",
+      "property": "Reference"
+    }
+  },
+  "blocks": {
+    "type": "expression.upper",
+    "inputs": {
+      "operand": {
+        "block": {
+          "type": "expression.property",
+          "fields": {
+            "property": "Reference",
+            "propertySet": "Pset_WallCommon"
+          }
+        }
+      }
+    }
+  }
+}

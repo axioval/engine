@@ -1,0 +1,34 @@
+{
+  "expression": {
+    "kind": "convertSlope",
+    "operand": {
+      "kind": "literal",
+      "value": {
+        "type": "number",
+        "value": 0.06
+      }
+    },
+    "from": "ratio",
+    "to": "percent"
+  },
+  "blocks": {
+    "type": "expression.convertSlope",
+    "fields": {
+      "from": "ratio",
+      "to": "percent"
+    },
+    "inputs": {
+      "operand": {
+        "block": {
+          "type": "expression.literal",
+          "fields": {
+            "value": {
+              "type": "number",
+              "value": 0.06
+            }
+          }
+        }
+      }
+    }
+  }
+}

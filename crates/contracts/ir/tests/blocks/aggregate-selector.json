@@ -1,0 +1,76 @@
+{
+  "expression": {
+    "kind": "aggregate",
+    "function": "all",
+    "over": {
+      "kind": "selector",
+      "selector": {
+        "kind": "entityType",
+        "objectType": "Door",
+        "includeSubtypes": true
+      }
+    },
+    "value": {
+      "kind": "compare",
+      "operator": "lessThan",
+      "left": {
+        "kind": "property",
+        "propertySet": "axioval:measured",
+        "property": "z"
+      },
+      "right": {
+        "kind": "property",
+        "propertySet": "axioval:measured",
+        "property": "z",
+        "of": "subject"
+      }
+    }
+  },
+  "blocks": {
+    "type": "expression.aggregate",
+    "fields": {
+      "function": "all"
+    },
+    "inputs": {
+      "over": {
+        "block": {
+          "type": "source.selector",
+          "inputs": {
+            "selector": {
+              "block": {
+                "type": "selector.entityType",
+                "fields": {
+                  "includeSubtypes": true,
+                  "objectType": "Door"
+                }
+              }
+            }
+          }
+        }
+      },
+      "value": {
+        "block": {
+          "type": "expression.compare",
+          "fields": {
+            "operator": "lessThan"
+          },
+          "inputs": {
+            "left": {
+              "block": {
+                "type": "measured.z"
+              }
+            },
+            "right": {
+              "block": {
+                "type": "measured.z",
+                "fields": {
+                  "propertyOf": "subject"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "expression": {
+    "kind": "ruleOutcome",
+    "rule": "fire-resistance",
+    "label": "fire rule passed"
+  },
+  "blocks": {
+    "type": "expression.ruleOutcome",
+    "label": "fire rule passed",
+    "fields": {
+      "rule": "fire-resistance"
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "expression": {
+    "kind": "aggregate",
+    "function": "count",
+    "over": {
+      "kind": "measured",
+      "name": "runs; landing = IfcSlab"
+    }
+  },
+  "blocks": {
+    "type": "expression.aggregate",
+    "fields": {
+      "function": "count"
+    },
+    "inputs": {
+      "over": {
+        "block": {
+          "type": "source.measured",
+          "fields": {
+            "name": "runs; landing = IfcSlab"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "expression": {
+    "kind": "derived",
+    "name": "clear_width"
+  },
+  "blocks": {
+    "type": "expression.derived",
+    "fields": {
+      "name": "clear_width"
+    }
+  }
+}

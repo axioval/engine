@@ -1,0 +1,42 @@
+{
+  "expression": {
+    "kind": "compare",
+    "operator": "lessThan",
+    "left": {
+      "kind": "property",
+      "propertySet": "axioval:measured",
+      "property": "distance;projection=horizontal;to=IfcDoor"
+    },
+    "right": {
+      "kind": "property",
+      "propertySet": "axioval:measured",
+      "property": "Area"
+    }
+  },
+  "blocks": {
+    "type": "expression.compare",
+    "fields": {
+      "operator": "lessThan"
+    },
+    "inputs": {
+      "left": {
+        "block": {
+          "type": "expression.property",
+          "fields": {
+            "property": "distance;projection=horizontal;to=IfcDoor",
+            "propertySet": "axioval:measured"
+          }
+        }
+      },
+      "right": {
+        "block": {
+          "type": "expression.property",
+          "fields": {
+            "property": "Area",
+            "propertySet": "axioval:measured"
+          }
+        }
+      }
+    }
+  }
+}

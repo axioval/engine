@@ -1,0 +1,44 @@
+{
+  "expression": {
+    "kind": "lookup",
+    "table": "limits",
+    "keys": {
+      "key_1": {
+        "kind": "property",
+        "propertySet": "Pset_WallCommon",
+        "property": "FireClass"
+      },
+      "key_2": {
+        "kind": "property",
+        "property": "OccupancyType"
+      }
+    },
+    "column": "maximum"
+  },
+  "blocks": {
+    "type": "expression.lookup",
+    "fields": {
+      "column": "maximum",
+      "table": "limits"
+    },
+    "inputs": {
+      "keys": {
+        "map": {
+          "key_1": {
+            "type": "expression.property",
+            "fields": {
+              "property": "FireClass",
+              "propertySet": "Pset_WallCommon"
+            }
+          },
+          "key_2": {
+            "type": "expression.property",
+            "fields": {
+              "property": "OccupancyType"
+            }
+          }
+        }
+      }
+    }
+  }
+}

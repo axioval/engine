@@ -1,0 +1,48 @@
+{
+  "expression": {
+    "kind": "compare",
+    "operator": "like",
+    "left": {
+      "kind": "property",
+      "propertySet": "Pset_WallCommon",
+      "property": "Reference"
+    },
+    "right": {
+      "kind": "literal",
+      "value": {
+        "type": "string",
+        "value": "W-*"
+      }
+    },
+    "caseSensitive": false
+  },
+  "blocks": {
+    "type": "expression.compare",
+    "fields": {
+      "caseSensitive": false,
+      "operator": "like"
+    },
+    "inputs": {
+      "left": {
+        "block": {
+          "type": "expression.property",
+          "fields": {
+            "property": "Reference",
+            "propertySet": "Pset_WallCommon"
+          }
+        }
+      },
+      "right": {
+        "block": {
+          "type": "expression.literal",
+          "fields": {
+            "value": {
+              "type": "string",
+              "value": "W-*"
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "expression": {
+    "kind": "aggregate",
+    "function": "sum",
+    "over": {
+      "kind": "path",
+      "path": [
+        "IfcRelVoidsElement:forward"
+      ]
+    },
+    "where": {
+      "kind": "entityType",
+      "objectType": "Opening",
+      "includeSubtypes": true
+    },
+    "value": {
+      "kind": "property",
+      "propertySet": "axioval:measured",
+      "property": "area"
+    },
+    "label": "opening area"
+  },
+  "blocks": {
+    "type": "expression.aggregate",
+    "label": "opening area",
+    "fields": {
+      "function": "sum"
+    },
+    "inputs": {
+      "over": {
+        "block": {
+          "type": "source.path",
+          "fields": {
+            "path": [
+              "IfcRelVoidsElement:forward"
+            ]
+          }
+        }
+      },
+      "value": {
+        "block": {
+          "type": "measured.area"
+        }
+      },
+      "where": {
+        "block": {
+          "type": "selector.entityType",
+          "fields": {
+            "includeSubtypes": true,
+            "objectType": "Opening"
+          }
+        }
+      }
+    }
+  }
+}

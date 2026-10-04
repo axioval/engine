@@ -1,0 +1,20 @@
+{
+  "expression": {
+    "kind": "abs",
+    "operand": {
+      "kind": "property",
+      "propertySet": "axioval:measured",
+      "property": "z"
+    }
+  },
+  "blocks": {
+    "type": "expression.abs",
+    "inputs": {
+      "operand": {
+        "block": {
+          "type": "measured.z"
+        }
+      }
+    }
+  }
+}

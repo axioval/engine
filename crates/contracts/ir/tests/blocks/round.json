@@ -1,0 +1,40 @@
+{
+  "expression": {
+    "kind": "round",
+    "operand": {
+      "kind": "property",
+      "propertySet": "axioval:measured",
+      "property": "extent_z"
+    },
+    "step": {
+      "kind": "literal",
+      "value": {
+        "type": "quantity",
+        "value": 5.0,
+        "unit": "mm"
+      }
+    }
+  },
+  "blocks": {
+    "type": "expression.round",
+    "inputs": {
+      "operand": {
+        "block": {
+          "type": "measured.extent_z"
+        }
+      },
+      "step": {
+        "block": {
+          "type": "expression.literal",
+          "fields": {
+            "value": {
+              "type": "quantity",
+              "unit": "mm",
+              "value": 5.0
+            }
+          }
+        }
+      }
+    }
+  }
+}

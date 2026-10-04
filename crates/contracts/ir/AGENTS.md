@@ -9,6 +9,15 @@ Keep this crate serializable and deterministic. It must not depend on a source f
   and selector kind, with fields and labels in English and German. Adding a
   kind to the contract fails its tests until it is catalogued here; never
   hand-maintain a list an editor reads anywhere else.
+- `blocks.rs` maps expressions onto the editor-neutral block tree
+  (`to_blocks`/`from_blocks`), driven by the catalogue's field tables:
+  `FieldKind` decides field or input, so a new kind needs no code here.
+  The mapping is lossless both ways and never rewrites a measured name (a
+  non-canonical one stays a `property`/`source.measured` block). Every
+  catalogued kind needs a pair in `tests/blocks` (bless with
+  `AXIOVAL_BLESS=1 cargo test -p axioval-ir --test blocks`); keep
+  `docs/src/block-editors.md` in step. A block tree is data: never map a
+  block onto anything that runs code.
 
 - `identity.rs` derives `FindingId`s: UUIDv5 over rule, the objects' aliases
   in a host-named stable scheme (source-qualified id without one), scope kind

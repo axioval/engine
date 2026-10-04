@@ -1,0 +1,22 @@
+{
+  "expression": {
+    "kind": "literal",
+    "value": {
+      "type": "quantity",
+      "value": 0.04,
+      "unit": "m"
+    },
+    "label": "minimum cover"
+  },
+  "blocks": {
+    "type": "expression.literal",
+    "label": "minimum cover",
+    "fields": {
+      "value": {
+        "type": "quantity",
+        "unit": "m",
+        "value": 0.04
+      }
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "expression": {
+    "kind": "cos",
+    "operand": {
+      "kind": "parameter",
+      "name": "slope_angle"
+    }
+  },
+  "blocks": {
+    "type": "expression.cos",
+    "inputs": {
+      "operand": {
+        "block": {
+          "type": "expression.parameter",
+          "fields": {
+            "name": "slope_angle"
+          }
+        }
+      }
+    }
+  }
+}

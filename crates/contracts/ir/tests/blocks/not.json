@@ -1,0 +1,24 @@
+{
+  "expression": {
+    "kind": "not",
+    "operand": {
+      "kind": "property",
+      "propertySet": "Pset_WallCommon",
+      "property": "IsExternal"
+    }
+  },
+  "blocks": {
+    "type": "expression.not",
+    "inputs": {
+      "operand": {
+        "block": {
+          "type": "expression.property",
+          "fields": {
+            "property": "IsExternal",
+            "propertySet": "Pset_WallCommon"
+          }
+        }
+      }
+    }
+  }
+}

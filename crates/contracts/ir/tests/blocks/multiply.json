@@ -1,0 +1,38 @@
+{
+  "expression": {
+    "kind": "multiply",
+    "left": {
+      "kind": "property",
+      "propertySet": "axioval:measured",
+      "property": "area"
+    },
+    "right": {
+      "kind": "literal",
+      "value": {
+        "type": "integer",
+        "value": 2
+      }
+    }
+  },
+  "blocks": {
+    "type": "expression.multiply",
+    "inputs": {
+      "left": {
+        "block": {
+          "type": "measured.area"
+        }
+      },
+      "right": {
+        "block": {
+          "type": "expression.literal",
+          "fields": {
+            "value": {
+              "type": "integer",
+              "value": 2
+            }
+          }
+        }
+      }
+    }
+  }
+}

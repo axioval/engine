@@ -1,0 +1,30 @@
+{
+  "expression": {
+    "kind": "divide",
+    "left": {
+      "kind": "property",
+      "propertySet": "axioval:measured",
+      "property": "volume"
+    },
+    "right": {
+      "kind": "property",
+      "propertySet": "axioval:measured",
+      "property": "area"
+    }
+  },
+  "blocks": {
+    "type": "expression.divide",
+    "inputs": {
+      "left": {
+        "block": {
+          "type": "measured.volume"
+        }
+      },
+      "right": {
+        "block": {
+          "type": "measured.area"
+        }
+      }
+    }
+  }
+}

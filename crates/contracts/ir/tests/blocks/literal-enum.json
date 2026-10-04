@@ -1,0 +1,18 @@
+{
+  "expression": {
+    "kind": "literal",
+    "value": {
+      "type": "enum",
+      "value": "NOTDEFINED"
+    }
+  },
+  "blocks": {
+    "type": "expression.literal",
+    "fields": {
+      "value": {
+        "type": "enum",
+        "value": "NOTDEFINED"
+      }
+    }
+  }
+}

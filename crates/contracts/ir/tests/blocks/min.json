@@ -1,0 +1,32 @@
+{
+  "expression": {
+    "kind": "min",
+    "operands": [
+      {
+        "kind": "property",
+        "propertySet": "axioval:measured",
+        "property": "extent_x"
+      },
+      {
+        "kind": "property",
+        "propertySet": "axioval:measured",
+        "property": "extent_y"
+      }
+    ]
+  },
+  "blocks": {
+    "type": "expression.min",
+    "inputs": {
+      "operands": {
+        "blocks": [
+          {
+            "type": "measured.extent_x"
+          },
+          {
+            "type": "measured.extent_y"
+          }
+        ]
+      }
+    }
+  }
+}

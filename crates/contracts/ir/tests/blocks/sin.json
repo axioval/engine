@@ -1,0 +1,22 @@
+{
+  "expression": {
+    "kind": "sin",
+    "operand": {
+      "kind": "parameter",
+      "name": "slope_angle"
+    }
+  },
+  "blocks": {
+    "type": "expression.sin",
+    "inputs": {
+      "operand": {
+        "block": {
+          "type": "expression.parameter",
+          "fields": {
+            "name": "slope_angle"
+          }
+        }
+      }
+    }
+  }
+}

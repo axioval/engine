@@ -1,0 +1,12 @@
+{
+  "expression": {
+    "kind": "parameter",
+    "name": "minimum_width"
+  },
+  "blocks": {
+    "type": "expression.parameter",
+    "fields": {
+      "name": "minimum_width"
+    }
+  }
+}

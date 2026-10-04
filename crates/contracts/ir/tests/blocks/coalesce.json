@@ -1,0 +1,36 @@
+{
+  "expression": {
+    "kind": "coalesce",
+    "operands": [
+      {
+        "kind": "property",
+        "propertySet": "Pset_WallCommon",
+        "property": "NominalWidth"
+      },
+      {
+        "kind": "property",
+        "propertySet": "axioval:measured",
+        "property": "extent_x"
+      }
+    ]
+  },
+  "blocks": {
+    "type": "expression.coalesce",
+    "inputs": {
+      "operands": {
+        "blocks": [
+          {
+            "type": "expression.property",
+            "fields": {
+              "property": "NominalWidth",
+              "propertySet": "Pset_WallCommon"
+            }
+          },
+          {
+            "type": "measured.extent_x"
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "expression": {
+    "kind": "aggregate",
+    "function": "max",
+    "over": {
+      "kind": "measured",
+      "name": "runs;landing=IfcSlab"
+    },
+    "value": {
+      "kind": "property",
+      "propertySet": "axioval:member",
+      "property": "slope"
+    }
+  },
+  "blocks": {
+    "type": "expression.aggregate",
+    "fields": {
+      "function": "max"
+    },
+    "inputs": {
+      "over": {
+        "block": {
+          "type": "members.runs",
+          "fields": {
+            "landing": "IfcSlab"
+          }
+        }
+      },
+      "value": {
+        "block": {
+          "type": "expression.property",
+          "fields": {
+            "property": "slope",
+            "propertySet": "axioval:member"
+          }
+        }
+      }
+    }
+  }
+}

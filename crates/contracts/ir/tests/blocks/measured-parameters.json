@@ -1,0 +1,75 @@
+{
+  "expression": {
+    "kind": "aggregate",
+    "function": "all",
+    "over": {
+      "kind": "path",
+      "path": [
+        "IfcRelContainedInSpatialStructure:backward"
+      ]
+    },
+    "value": {
+      "kind": "compare",
+      "operator": "lessThan",
+      "left": {
+        "kind": "property",
+        "propertySet": "axioval:measured",
+        "property": "distance;to=IfcDoor;projection=horizontal",
+        "label": "distance to the nearest door"
+      },
+      "right": {
+        "kind": "property",
+        "propertySet": "axioval:measured",
+        "property": "bottom_above_level;path=IfcRelContainedInSpatialStructure:backward",
+        "of": "subject"
+      }
+    }
+  },
+  "blocks": {
+    "type": "expression.aggregate",
+    "fields": {
+      "function": "all"
+    },
+    "inputs": {
+      "over": {
+        "block": {
+          "type": "source.path",
+          "fields": {
+            "path": [
+              "IfcRelContainedInSpatialStructure:backward"
+            ]
+          }
+        }
+      },
+      "value": {
+        "block": {
+          "type": "expression.compare",
+          "fields": {
+            "operator": "lessThan"
+          },
+          "inputs": {
+            "left": {
+              "block": {
+                "type": "measured.distance",
+                "label": "distance to the nearest door",
+                "fields": {
+                  "projection": "horizontal",
+                  "to": "IfcDoor"
+                }
+              }
+            },
+            "right": {
+              "block": {
+                "type": "measured.bottom_above_level",
+                "fields": {
+                  "path": "IfcRelContainedInSpatialStructure:backward",
+                  "propertyOf": "subject"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

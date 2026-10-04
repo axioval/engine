@@ -1,0 +1,20 @@
+{
+  "expression": {
+    "kind": "negate",
+    "operand": {
+      "kind": "property",
+      "propertySet": "axioval:measured",
+      "property": "z"
+    }
+  },
+  "blocks": {
+    "type": "expression.negate",
+    "inputs": {
+      "operand": {
+        "block": {
+          "type": "measured.z"
+        }
+      }
+    }
+  }
+}

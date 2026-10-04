@@ -1,0 +1,40 @@
+{
+  "expression": {
+    "kind": "aggregate",
+    "function": "distinctCount",
+    "over": {
+      "kind": "group",
+      "grouping": "flights-of-storey"
+    },
+    "value": {
+      "kind": "property",
+      "propertySet": "Pset_StairFlightCommon",
+      "property": "RiserHeight"
+    }
+  },
+  "blocks": {
+    "type": "expression.aggregate",
+    "fields": {
+      "function": "distinctCount"
+    },
+    "inputs": {
+      "over": {
+        "block": {
+          "type": "source.group",
+          "fields": {
+            "grouping": "flights-of-storey"
+          }
+        }
+      },
+      "value": {
+        "block": {
+          "type": "expression.property",
+          "fields": {
+            "property": "RiserHeight",
+            "propertySet": "Pset_StairFlightCommon"
+          }
+        }
+      }
+    }
+  }
+}

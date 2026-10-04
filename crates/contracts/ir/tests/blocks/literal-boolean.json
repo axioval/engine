@@ -1,0 +1,18 @@
+{
+  "expression": {
+    "kind": "literal",
+    "value": {
+      "type": "boolean",
+      "value": true
+    }
+  },
+  "blocks": {
+    "type": "expression.literal",
+    "fields": {
+      "value": {
+        "type": "boolean",
+        "value": true
+      }
+    }
+  }
+}

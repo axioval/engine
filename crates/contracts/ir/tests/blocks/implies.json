@@ -1,0 +1,48 @@
+{
+  "expression": {
+    "kind": "implies",
+    "antecedent": {
+      "kind": "property",
+      "propertySet": "Pset_WallCommon",
+      "property": "IsExternal"
+    },
+    "consequent": {
+      "kind": "isDefined",
+      "operand": {
+        "kind": "property",
+        "propertySet": "Pset_WallCommon",
+        "property": "ThermalTransmittance"
+      }
+    }
+  },
+  "blocks": {
+    "type": "expression.implies",
+    "inputs": {
+      "antecedent": {
+        "block": {
+          "type": "expression.property",
+          "fields": {
+            "property": "IsExternal",
+            "propertySet": "Pset_WallCommon"
+          }
+        }
+      },
+      "consequent": {
+        "block": {
+          "type": "expression.isDefined",
+          "inputs": {
+            "operand": {
+              "block": {
+                "type": "expression.property",
+                "fields": {
+                  "property": "ThermalTransmittance",
+                  "propertySet": "Pset_WallCommon"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

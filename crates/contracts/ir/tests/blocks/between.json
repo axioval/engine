@@ -1,0 +1,64 @@
+{
+  "expression": {
+    "kind": "between",
+    "operand": {
+      "kind": "property",
+      "propertySet": "axioval:measured",
+      "property": "extent_z"
+    },
+    "low": {
+      "kind": "literal",
+      "value": {
+        "type": "quantity",
+        "value": 2.4,
+        "unit": "m"
+      }
+    },
+    "high": {
+      "kind": "literal",
+      "value": {
+        "type": "quantity",
+        "value": 4.0,
+        "unit": "m"
+      }
+    },
+    "highInclusive": false
+  },
+  "blocks": {
+    "type": "expression.between",
+    "fields": {
+      "highInclusive": false
+    },
+    "inputs": {
+      "high": {
+        "block": {
+          "type": "expression.literal",
+          "fields": {
+            "value": {
+              "type": "quantity",
+              "unit": "m",
+              "value": 4.0
+            }
+          }
+        }
+      },
+      "low": {
+        "block": {
+          "type": "expression.literal",
+          "fields": {
+            "value": {
+              "type": "quantity",
+              "unit": "m",
+              "value": 2.4
+            }
+          }
+        }
+      },
+      "operand": {
+        "block": {
+          "type": "measured.extent_z"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "expression": {
+    "kind": "add",
+    "left": {
+      "kind": "property",
+      "propertySet": "axioval:measured",
+      "property": "extent_z"
+    },
+    "right": {
+      "kind": "literal",
+      "value": {
+        "type": "quantity",
+        "value": 0.1,
+        "unit": "m"
+      }
+    }
+  },
+  "blocks": {
+    "type": "expression.add",
+    "inputs": {
+      "left": {
+        "block": {
+          "type": "measured.extent_z"
+        }
+      },
+      "right": {
+        "block": {
+          "type": "expression.literal",
+          "fields": {
+            "value": {
+              "type": "quantity",
+              "unit": "m",
+              "value": 0.1
+            }
+          }
+        }
+      }
+    }
+  }
+}

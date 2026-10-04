@@ -1,0 +1,24 @@
+{
+  "expression": {
+    "kind": "isDefined",
+    "operand": {
+      "kind": "property",
+      "propertySet": "Pset_WallCommon",
+      "property": "FireRating"
+    }
+  },
+  "blocks": {
+    "type": "expression.isDefined",
+    "inputs": {
+      "operand": {
+        "block": {
+          "type": "expression.property",
+          "fields": {
+            "property": "FireRating",
+            "propertySet": "Pset_WallCommon"
+          }
+        }
+      }
+    }
+  }
+}

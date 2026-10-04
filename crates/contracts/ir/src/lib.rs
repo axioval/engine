@@ -24,6 +24,9 @@ pub mod measured;
 /// The authoring vocabulary: node kinds, operators and selector kinds.
 pub mod catalogue;
 
+/// The editor-neutral block tree of expressions and its lossless mapping.
+pub mod blocks;
+
 /// Explanations of expression verdicts in findings and outcomes.
 pub mod explanation;
 pub use explanation::{Explanation, ExplanationEntry, MAX_EXPLANATION_ENTRIES};

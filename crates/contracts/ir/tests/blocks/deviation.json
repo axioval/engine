@@ -1,0 +1,12 @@
+{
+  "expression": {
+    "kind": "deviation",
+    "rule": "ramp-slope"
+  },
+  "blocks": {
+    "type": "expression.deviation",
+    "fields": {
+      "rule": "ramp-slope"
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "expression": {
+    "kind": "findingCount",
+    "rule": "escape-route"
+  },
+  "blocks": {
+    "type": "expression.findingCount",
+    "fields": {
+      "rule": "escape-route"
+    }
+  }
+}

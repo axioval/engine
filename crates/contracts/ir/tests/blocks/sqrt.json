@@ -1,0 +1,20 @@
+{
+  "expression": {
+    "kind": "sqrt",
+    "operand": {
+      "kind": "property",
+      "propertySet": "axioval:measured",
+      "property": "area"
+    }
+  },
+  "blocks": {
+    "type": "expression.sqrt",
+    "inputs": {
+      "operand": {
+        "block": {
+          "type": "measured.area"
+        }
+      }
+    }
+  }
+}

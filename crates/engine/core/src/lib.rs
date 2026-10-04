@@ -113,6 +113,14 @@ pub enum EngineError {
         kind: String,
         concept: String,
     },
+    /// A rule reads an `axioval:measured` name the registry
+    /// (`axioval_ir::measured`) refuses: unknown, or with a wrong parameter.
+    #[error("rule `{rule}` reads measured value `{property}`: {detail}")]
+    InvalidMeasured {
+        rule: String,
+        property: String,
+        detail: String,
+    },
     /// One rule reported two tables of one name.
     #[error("rule `{rule}` reported table `{table}` twice")]
     DuplicateReportTable { rule: String, table: String },

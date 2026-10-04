@@ -1250,6 +1250,15 @@ fn require_property(
     set: Option<&str>,
     property: &str,
 ) -> Result<(), EngineError> {
+    if set == Some(axioval_ir::MEASURED_SET) {
+        return crate::measured::parse(property)
+            .map(drop)
+            .map_err(|detail| EngineError::InvalidMeasured {
+                rule: rule.into(),
+                property: property.into(),
+                detail,
+            });
+    }
     if let Some(set) = set {
         match concepts.derives(set, property) {
             Some(true) => return Ok(()),

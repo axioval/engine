@@ -15,6 +15,9 @@ use thiserror::Error;
 pub mod contract;
 pub use contract::{DefinitionPackage, RuleSetPackage};
 
+/// The registry of measured values: descriptors, parameters and parsing.
+pub mod measured;
+
 /// Calendar dates and date-times with a UTC offset.
 pub mod temporal;
 pub use temporal::{Date, DateTime, TemporalError, TemporalPrecision};
@@ -719,7 +722,9 @@ pub const MEASURED_BOTTOM_ABOVE_LEVEL: &str = "bottom_above_level";
 pub const MEASURED_BOUNDARY_AREA: &str = "boundary_area";
 /// A storey's height to the next storey in [`MEASURED_SET`].
 pub const MEASURED_LEVEL_HEIGHT: &str = "level_height";
-/// Every name in [`MEASURED_SET`] that takes no parameter.
+/// Every name in [`MEASURED_SET`] that takes no parameter, as the first
+/// registry ([`measured::MEASURED_VALUES`]) listed them. New measured values
+/// are registered there only.
 pub const MEASURED_NAMES: [&str; 11] = [
     MEASURED_EXTENT_X,
     MEASURED_EXTENT_Y,

@@ -51,60 +51,38 @@ pub(crate) enum MeasuredName {
     BoundaryArea { kind: String, plane: f64 },
 }
 
-const PLAIN: [&str; 11] = axioval_ir::MEASURED_NAMES;
-
-/// Parses a name in the measured set, or says why it is none.
+/// Parses a name in the measured set through the registry
+/// ([`axioval_ir::measured`]), or says why it is none.
 pub(crate) fn parse(name: &str) -> Result<MeasuredName, String> {
-    let mut parts = name.split(';');
-    let base = parts.next().unwrap_or_default().trim().to_ascii_lowercase();
-    let mut parameters = BTreeMap::new();
-    for part in parts {
-        let (key, value) = part
-            .split_once('=')
-            .ok_or_else(|| format!("`{part}` is not `key=value`"))?;
-        let key = key.trim().to_ascii_lowercase();
-        if parameters
-            .insert(key.clone(), value.trim().to_owned())
-            .is_some()
-        {
-            return Err(format!("`{key}` is stated twice"));
-        }
-    }
-    let mut take = |key: &str| parameters.remove(key);
-    let parsed = match base.as_str() {
+    use axioval_ir::measured::MeasuredArgument;
+    let call = axioval_ir::measured::parse(name).map_err(|error| error.to_string())?;
+    Ok(match call.descriptor.name {
         MEASURED_BOTTOM_ABOVE_LEVEL => {
-            let path = take("path").ok_or("`bottom_above_level` needs `path`")?;
-            let steps = path
-                .split(',')
-                .map(PathSegment::parse)
-                .collect::<Result<Vec<_>, _>>()?;
-            MeasuredName::BottomAboveLevel(steps)
+            let Some(MeasuredArgument::Path(steps)) = call.argument("path") else {
+                return Err("`bottom_above_level` needs `path`".into());
+            };
+            MeasuredName::BottomAboveLevel(
+                steps
+                    .iter()
+                    .map(|step| PathSegment::parse(step))
+                    .collect::<Result<_, _>>()?,
+            )
         }
         MEASURED_BOUNDARY_AREA => {
-            let kind = take("kind")
-                .filter(|kind| !kind.is_empty())
-                .ok_or("`boundary_area` needs `kind`")?;
-            let plane = match take("plane") {
-                None => 0.0,
-                Some(text) => text
-                    .parse::<f64>()
-                    .ok()
-                    .filter(|plane| plane.is_finite() && *plane >= 0.0)
-                    .ok_or_else(|| format!("`plane` `{text}` is no length of at least zero"))?,
+            let Some(MeasuredArgument::SourceKind(kind)) = call.argument("kind") else {
+                return Err("`boundary_area` needs `kind`".into());
             };
-            MeasuredName::BoundaryArea { kind, plane }
+            let Some(MeasuredArgument::Length(plane)) = call.argument("plane") else {
+                return Err("`boundary_area` needs `plane`".into());
+            };
+            MeasuredName::BoundaryArea {
+                kind: kind.clone(),
+                plane: *plane,
+            }
         }
-        base => MeasuredName::Plain(
-            PLAIN
-                .into_iter()
-                .find(|plain| *plain == base)
-                .ok_or_else(|| format!("`{base}` is no measured value"))?,
-        ),
-    };
-    match parameters.keys().next() {
-        Some(key) => Err(format!("`{base}` takes no parameter `{key}`")),
-        None => Ok(parsed),
-    }
+        name if call.descriptor.parameters.is_empty() => MeasuredName::Plain(name),
+        name => return Err(format!("`{name}` is registered but not measured")),
+    })
 }
 
 /// A measured answer before it becomes a property.

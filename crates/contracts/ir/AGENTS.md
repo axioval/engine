@@ -74,3 +74,7 @@ Keep this crate serializable and deterministic. It must not depend on a source f
   `tests/fixtures/expression` together; never add a loop, recursion, a
   user-defined function or anything that runs package code. The MCS
   expression schema must mirror it.
+- `measured.rs` is the registry of `axioval:measured` values: one
+  `MeasuredDescriptor` per name, sorted, labelled in English and German.
+  Register a new measured value there (and nowhere else), with its
+  parameters, dimension, services, exactness and not-evaluated causes.

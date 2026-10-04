@@ -417,17 +417,36 @@ fn boundary_areas_are_summed_per_kind_of_bounding_element() {
 fn an_unknown_or_malformed_measured_name_is_refused() {
     let registry = registry();
     let definitions = definitions(&registry, &[EXISTS], &["pipe"], &["Label"], &[]);
-    for name in ["height", "bottom_above_level", "boundary_area;plane=1"] {
-        assert!(
-            matches!(
-                plan(
-                    &registry,
-                    &definitions,
-                    vec![labelled_where(name, "lessThan", 1.0, "m", "pipe")]
-                ),
-                Err(EngineError::UnknownConcept { .. })
-            ),
-            "{name}"
-        );
+    for (name, message) in [
+        (
+            "height",
+            "`height` is no measured value; known: area, bottom,",
+        ),
+        ("bottom_above_level", "`bottom_above_level` needs `path`"),
+        ("boundary_area;plane=1", "`boundary_area` needs `kind`"),
+        ("extent_x;path=a", "`extent_x` takes no parameter `path`"),
+        (
+            "boundary_area;kind=wall;plane=-1",
+            "`boundary_area` parameter `plane`: `-1` is no length of at least 0 m",
+        ),
+        (
+            "boundary_area;kind=wall;depth=1",
+            "`boundary_area` takes no parameter `depth`; it takes `kind`, `plane`",
+        ),
+    ] {
+        match plan(
+            &registry,
+            &definitions,
+            vec![labelled_where(name, "lessThan", 1.0, "m", "pipe")],
+        ) {
+            Err(EngineError::InvalidMeasured {
+                property, detail, ..
+            }) => {
+                assert_eq!(property, name);
+                assert!(detail.starts_with(message), "{name}: {detail}");
+            }
+            Err(other) => panic!("{name}: {other}"),
+            Ok(_) => panic!("{name} compiled"),
+        }
     }
 }

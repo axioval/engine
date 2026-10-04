@@ -372,8 +372,29 @@ ignoring ASCII case):
 
 Two names take `;`-separated `key=value` parameters, part of the property
 name so that every selector, property reference and table key can carry
-them unchanged. Compilation checks their syntax; a malformed name is an
-unknown concept.
+them unchanged. Keys are matched ignoring ASCII case.
+
+### The registry
+
+Every measured name is declared once, in `axioval_ir::measured`
+(`MEASURED_VALUES`, sorted by name). A descriptor states the name, its
+typed parameters (`path`, a `sourceKind` or a `length` with a minimum;
+required or with a default), the dimension and SI unit of the value, the
+services a run needs, its exactness (`stated` or `measured`), what leaves
+it not evaluated, and an English and German label and help text. Editors
+and catalogues read the same descriptors; a new measured value is
+registered there, never parsed anywhere else.
+
+`axioval_ir::measured::parse` reads a name against the registry, and the
+engine resolves only what it accepts. Compilation refuses a rule reading
+an unknown name, an undeclared or repeated parameter, a missing required
+one or a value of the wrong kind with `EngineError::InvalidMeasured`,
+whose detail is the registry's message:
+
+```text
+rule `r` reads measured value `boundary_area;kind=wall;depth=1`:
+`boundary_area` takes no parameter `depth`; it takes `kind`, `plane`
+```
 
 - `bottom_above_level;path=<steps>`: the containment path is the rule's to
   state, never a host default, because only the package knows which

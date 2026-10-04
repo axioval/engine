@@ -113,7 +113,7 @@ openbim-ids = { version = "0.2.1", features = ["audit-schema"] }
 # compiles no geometry kernel.
 openbim_ifc = { package = "openbim-ifc", version = "0.14.0", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
 ifc-classification = "0.4.0"
-ifc-geometry = { version = "0.8.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
+ifc-geometry = { version = "0.8.2", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
 # Map conversions only: without the default `transform` feature it links no
 # geometry crate (never Axiolid).
 ifc-georef = { version = "0.6.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }

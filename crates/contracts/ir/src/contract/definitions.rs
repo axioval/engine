@@ -160,6 +160,8 @@ pub enum ParameterKind {
     ObjectTypeReference,
     PropertyReference,
     Selector,
+    /// An expression; the capability states the type its value must have.
+    Expression,
     StringList,
     ReferenceList,
     /// Rows of typed cells; the definition declares the columns.

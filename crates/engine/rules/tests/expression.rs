@@ -1,0 +1,374 @@
+//! `axioval:capability.expression`: a requirement stated as an expression
+//! over each selected object.
+#![allow(missing_docs)]
+
+mod common;
+
+use std::collections::BTreeMap;
+use std::sync::Arc;
+
+use axioval_engine::{
+    CapabilityRegistry, ElevationInterval, EngineError, EvidenceSession, VerticalExtent,
+    VerticalExtentError, VerticalExtentService, VerticalExtentServiceHandle,
+};
+use axioval_ir::contract::{ParameterDefinition, PropertyValueKind};
+use axioval_ir::{
+    DefinitionPackage, Evidence, NotEvaluatedReason, ObjectId, PropertyValue, QuantityDimension,
+    Report,
+};
+use axioval_rules::register_builtins;
+use common::runtime::{definition, definitions, entity, plan, rule, run, session, snapshot};
+use common::{Model, id, source};
+use serde_json::{Value, json};
+
+const EXPRESSION: &str = "axioval:capability.expression";
+const PREDICATE: &str = "axioval:capability.property-predicate";
+
+fn registry() -> CapabilityRegistry {
+    register_builtins(CapabilityRegistry::new()).unwrap()
+}
+
+/// Definitions where `Cover` is a quantity and `Class` text, with the
+/// expression definition declaring `extra` authored parameters.
+fn vocabulary(registry: &CapabilityRegistry, extra: &[Value]) -> DefinitionPackage {
+    let mut package = definitions(
+        registry,
+        &[EXPRESSION, PREDICATE],
+        &["slab", "pipe"],
+        &["Cover", "Class"],
+        &["Pset"],
+    );
+    let cover = package.properties.get_mut("t.Cover").unwrap();
+    cover.value_kind = PropertyValueKind::Quantity;
+    cover.unit_dimension = Some("length".into());
+    let expression = package
+        .definitions
+        .get_mut(&definition(EXPRESSION))
+        .unwrap();
+    for parameter in extra {
+        let parameter: ParameterDefinition = serde_json::from_value(parameter.clone()).unwrap();
+        expression
+            .parameters
+            .insert(parameter.id.clone(), parameter);
+    }
+    package
+}
+
+fn text(value: &str) -> Value {
+    json!({ "default": value, "translations": {} })
+}
+
+fn mm(value: f64) -> Value {
+    json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": "mm"}})
+}
+
+fn property(name: &str) -> Value {
+    json!({"kind": "property", "propertySet": "t.Pset", "property": format!("t.{name}")})
+}
+
+fn class_is(class: &str) -> Value {
+    json!({"kind": "compare", "operator": "equals", "left": property("Class"),
+        "right": {"kind": "literal", "value": {"type": "string", "value": class}}})
+}
+
+/// Slabs with an exposure class and a concrete cover.
+fn slabs() -> Model {
+    let mut model = Model::default();
+    for (local, class, cover) in [
+        ("s1", "XC4", 0.045),
+        ("s2", "XC4", 0.035),
+        ("s3", "XC3", 0.030),
+        ("s4", "XC1", 0.030),
+        ("s5", "XC1", 0.020),
+    ] {
+        model = model
+            .object(local, "slab")
+            .value(local, "Pset", "Class", PropertyValue::String(class.into()))
+            .value(
+                local,
+                "Pset",
+                "Cover",
+                PropertyValue::Quantity {
+                    value: cover,
+                    dimension: QuantityDimension::Length,
+                },
+            );
+    }
+    model
+}
+
+fn subjects(report: &Report, rule: &str) -> Vec<String> {
+    let mut subjects: Vec<String> = report
+        .findings()
+        .iter()
+        .filter(|finding| finding.rule_id.to_string() == rule)
+        .map(common::subject)
+        .collect();
+    subjects.sort();
+    subjects
+}
+
+fn check(package: &DefinitionPackage, rules: Vec<Value>, session: &EvidenceSession) -> Report {
+    let registry = registry();
+    let plan = plan(&registry, package, rules).unwrap();
+    run(registry, plan, session, |runtime| runtime).unwrap()
+}
+
+/// Cover at least 40 mm for XC4, 35 mm for XC3, 25 mm otherwise.
+fn cover_rule() -> Value {
+    let required = json!({"kind": "if", "label": "required cover",
+        "branches": [
+            {"when": class_is("XC4"), "then": mm(40.0)},
+            {"when": class_is("XC3"), "then": mm(35.0)}],
+        "else": mm(25.0)});
+    rule(
+        "cover",
+        EXPRESSION,
+        "error",
+        entity("slab"),
+        json!({"requirement": {"type": "expression", "value": {
+            "kind": "compare", "operator": "greaterThanOrEquals", "label": "cover",
+            "left": property("Cover"), "right": required}}}),
+        json!({}),
+    )
+}
+
+/// The same requirement as three single rules, one per exposure class.
+fn single_rules() -> Vec<Value> {
+    let class = |operator: &str, value: &str| {
+        json!({"kind": "property", "propertySet": "t.Pset", "property": "t.Class",
+            "operator": operator, "value": {"type": "string", "value": value}})
+    };
+    let predicate = |id: &str, selector: Value, minimum: f64| {
+        rule(
+            id,
+            PREDICATE,
+            "error",
+            json!({"kind": "allOf", "operands": [entity("slab"), selector]}),
+            json!({
+                "property_set": {"type": "string", "value": "t.Pset"},
+                "property": {"type": "string", "value": "t.Cover"},
+                "operator": {"type": "string", "value": "greater_or_equal"},
+                "quantity": {"type": "quantity", "value": minimum, "unit": "mm"},
+            }),
+            json!({}),
+        )
+    };
+    vec![
+        predicate("xc4", class("equals", "XC4"), 40.0),
+        predicate("xc3", class("equals", "XC3"), 35.0),
+        predicate(
+            "other",
+            json!({"kind": "allOf", "operands": [class("notEquals", "XC4"), class("notEquals", "XC3")]}),
+            25.0,
+        ),
+    ]
+}
+
+#[test]
+fn a_three_branch_requirement_finds_what_three_single_rules_find() {
+    let registry = registry();
+    let package = vocabulary(&registry, &[]);
+    let session = session(slabs());
+    let combined = check(&package, vec![cover_rule()], &session);
+    let separate = check(&package, single_rules(), &session);
+    let mut single: Vec<String> = ["xc4", "xc3", "other"]
+        .iter()
+        .flat_map(|rule| subjects(&separate, rule))
+        .collect();
+    single.sort();
+    assert_eq!(subjects(&combined, "cover"), single);
+    assert_eq!(single, ["s2", "s3", "s5"]);
+    assert!(combined.not_evaluated.is_empty());
+    let message = &combined
+        .findings()
+        .iter()
+        .find(|finding| common::subject(finding) == "s2")
+        .unwrap()
+        .message;
+    assert!(message.contains("`cover` is false"), "{message}");
+    assert!(message.contains("t.Pset.t.Cover = 0.035 m"), "{message}");
+    assert!(message.contains("t.Pset.t.Class = `XC4`"), "{message}");
+}
+
+/// Bottom and top elevations per object.
+struct Extents(BTreeMap<ObjectId, [(f64, f64); 2]>);
+
+impl VerticalExtentService for Extents {
+    fn measure_vertical_extent(
+        &self,
+        object: &ObjectId,
+    ) -> Result<VerticalExtent, VerticalExtentError> {
+        let [bottom, top] = self
+            .0
+            .get(object)
+            .copied()
+            .ok_or_else(|| VerticalExtentError::UnknownObject(object.clone()))?;
+        let mut evidence = Evidence::exact(source(), format!("extent:{object}"));
+        evidence.exact =
+            bottom.0.to_bits() == bottom.1.to_bits() && top.0.to_bits() == top.1.to_bits();
+        VerticalExtent::try_new(
+            object.clone(),
+            ElevationInterval::try_new(bottom.0, bottom.1)?,
+            ElevationInterval::try_new(top.0, top.1)?,
+            evidence,
+        )
+    }
+}
+
+#[test]
+fn an_undecidable_measured_input_is_not_evaluated_never_passed() {
+    let model = Model::default()
+        .object("p40", "pipe")
+        .object("p100", "pipe")
+        .object("p50", "pipe");
+    let extents = Extents(
+        [
+            ("p40", [(1.0, 1.0), (1.04, 1.04)]),
+            ("p100", [(1.0, 1.0), (1.1, 1.1)]),
+            ("p50", [(0.9975, 1.0025), (1.0475, 1.0525)]),
+        ]
+        .into_iter()
+        .map(|(local, extent)| (id(local), extent))
+        .collect(),
+    );
+    let session = session(model)
+        .with_host_service(
+            VerticalExtentServiceHandle::new(Arc::new(extents)),
+            &[snapshot()],
+        )
+        .unwrap();
+    let small = rule(
+        "small",
+        EXPRESSION,
+        "error",
+        entity("pipe"),
+        json!({"requirement": {"type": "expression", "value": {
+            "kind": "compare", "operator": "lessThan",
+            "left": {"kind": "property", "propertySet": "axioval:measured", "property": "extent_z"},
+            "right": mm(50.0)}}}),
+        json!({}),
+    );
+    let registry = registry();
+    let report = check(&vocabulary(&registry, &[]), vec![small], &session);
+    assert_eq!(subjects(&report, "small"), ["p100"]);
+    let open: Vec<_> = report
+        .not_evaluated
+        .iter()
+        .map(|outcome| (outcome.object_id().cloned(), outcome.reason.clone()))
+        .collect();
+    assert_eq!(
+        open,
+        [(Some(id("p50")), NotEvaluatedReason::IncompleteEvidence)]
+    );
+    assert!(
+        report.not_evaluated[0].message.contains("`requirement`"),
+        "{}",
+        report.not_evaluated[0].message
+    );
+}
+
+fn expression_rule(requirement: &Value, extra: Value) -> Value {
+    let mut parameters = json!({"requirement": {"type": "expression", "value": requirement}});
+    if let (Value::Object(parameters), Value::Object(extra)) = (&mut parameters, extra) {
+        parameters.extend(extra);
+    }
+    rule(
+        "r",
+        EXPRESSION,
+        "error",
+        entity("slab"),
+        parameters,
+        json!({}),
+    )
+}
+
+fn compiled(package: &DefinitionPackage, rule: Value) -> Result<(), EngineError> {
+    plan(&registry(), package, vec![rule]).map(drop)
+}
+
+#[test]
+fn ill_typed_or_unknown_expressions_fail_compilation_with_their_path() {
+    let registry = registry();
+    let package = vocabulary(&registry, &[]);
+    let cases = [
+        (
+            json!({"kind": "and", "operands": [class_is("XC4"), property("Height")]}),
+            "requirement.and[1]",
+        ),
+        (
+            json!({"kind": "compare", "operator": "lessThan", "left": property("Cover"),
+                "right": {"kind": "literal", "value": {"type": "number", "value": 1.0}}}),
+            "requirement",
+        ),
+        (mm(40.0), "requirement"),
+        (
+            json!({"kind": "compare", "operator": "lessThan",
+                "left": {"kind": "property", "propertySet": "axioval:measured", "property": "height"},
+                "right": mm(1.0)}),
+            "requirement.compare.left",
+        ),
+    ];
+    for (requirement, path) in cases {
+        match compiled(&package, expression_rule(&requirement, json!({}))) {
+            Err(EngineError::InvalidExpression { path: found, .. }) => {
+                assert_eq!(found, path, "{requirement}");
+            }
+            other => panic!("{requirement}: {other:?}"),
+        }
+    }
+    // Cover is a quantity: the type checker accepts a length bound.
+    assert!(compiled(
+        &package,
+        expression_rule(
+            &json!({"kind": "compare", "operator": "lessThan", "left": property("Cover"), "right": mm(1.0)}),
+            json!({})
+        )
+    )
+    .is_ok());
+}
+
+fn table_parameter() -> Value {
+    let column =
+        |id: &str, kind: &str| json!({"id": id, "name": text(id), "kind": kind, "required": false});
+    json!({"id": "minimum_cover", "name": text("minimum cover"), "kind": "table", "required": true,
+        "columns": [column("class", "textPattern"), {"id": "cover", "name": text("cover"), "kind": "quantity", "required": false, "unitDimension": "length"}]})
+}
+
+#[test]
+fn authored_parameters_are_read_and_checked() {
+    let registry = registry();
+    let tolerance =
+        json!({"id": "tolerance", "name": text("tolerance"), "kind": "quantity", "required": true});
+    let package = vocabulary(&registry, &[table_parameter(), tolerance]);
+    let row = |class: &str, cover: f64| json!({"class": {"type": "string", "value": class}, "cover": {"type": "quantity", "value": cover, "unit": "mm"}});
+    let required = json!({"kind": "lookup", "table": "minimum_cover", "column": "cover",
+        "keys": {"class": property("Class")}});
+    let requirement = json!({"kind": "compare", "operator": "greaterThanOrEquals",
+        "left": {"kind": "add", "left": property("Cover"), "right": {"kind": "parameter", "name": "tolerance"}},
+        "right": required});
+    let parameters = json!({
+        "minimum_cover": {"type": "table", "value": [row("XC4", 40.0), row("XC3", 35.0), row("*", 25.0)]},
+        "tolerance": {"type": "quantity", "value": 0.0, "unit": "mm"},
+    });
+    let report = check(
+        &package,
+        vec![expression_rule(&requirement, parameters.clone())],
+        &session(slabs()),
+    );
+    assert_eq!(subjects(&report, "r"), ["s2", "s3", "s5"]);
+    // A tolerance stated as text is refused by its declared kind.
+    let mut wrong = parameters.clone();
+    wrong["tolerance"] = json!({"type": "string", "value": "5 mm"});
+    assert!(matches!(
+        compiled(&package, expression_rule(&requirement, wrong)),
+        Err(EngineError::InvalidParameterType { .. })
+    ));
+    // A parameter no definition declares stays unknown.
+    let mut extra = parameters;
+    extra["undeclared"] = json!({"type": "integer", "value": 1});
+    assert!(matches!(
+        compiled(&package, expression_rule(&requirement, extra)),
+        Err(EngineError::UnknownParameter { .. })
+    ));
+}

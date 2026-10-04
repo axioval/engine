@@ -1,5 +1,5 @@
 #![allow(missing_docs)]
-use super::{ColumnKind, Selector};
+use super::{ColumnKind, Expression, Selector};
 use crate::{Date, DateTime};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -55,6 +55,11 @@ pub enum ParameterValue {
     },
     Selector {
         value: Box<Selector>,
+    },
+    /// An expression the capability evaluates per object
+    /// ([`Expression`]); type checked when the ruleset is compiled.
+    Expression {
+        value: Box<Expression>,
     },
     StringList {
         value: Vec<String>,

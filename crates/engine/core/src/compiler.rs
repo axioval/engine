@@ -38,6 +38,7 @@ pub fn compile(
         }
     }
     let catalog = definition_catalog(ruleset, &packages)?;
+    let properties = vocabulary_properties(ruleset, &packages);
     let mut concepts = concept_catalog(ruleset, &packages)?;
     concepts.declare_classifications(class_trees(ruleset.classifications.iter())?);
     concepts.declare_groupings(ruleset.groupings.keys().cloned());
@@ -67,9 +68,7 @@ pub fn compile(
             .get(rule.definition_id.as_str())
             .ok_or_else(|| EngineError::UnknownDefinition(rule.definition_id.clone()))?;
         let parameters = bind_parameters(registry, rule, definition)?;
-        for value in parameters.values() {
-            validate_parameter_concepts(&concepts, &rule.id, value)?;
-        }
+        validate_bound(&concepts, &properties, &rule.id, &parameters, definition)?;
         let id = RuleId::new(rule.id.clone())
             .map_err(|_| EngineError::InvalidRuleId(rule.id.clone()))?;
         let refinement = refinement(registry, &concepts, rule, &definition.capability)?;
@@ -277,7 +276,7 @@ pub(crate) fn supplied_columns(
 /// and `to` cell.
 pub(crate) fn check_pair_rows(rows: &[TableRow]) -> Result<(), String> {
     for (index, row) in rows.iter().enumerate() {
-        validate_row(RELATION_PAIR_COLUMNS, row)
+        validate_row(&trusted_columns(RELATION_PAIR_COLUMNS), row)
             .map_err(|detail| format!("pairs row {}: {detail}", index + 1))?;
         if row
             .values()
@@ -1005,11 +1004,13 @@ fn bind_parameters(
         .get(&definition.capability)
         .ok_or_else(|| EngineError::UnknownCapability(definition.capability.clone()))?;
     let descriptors = capability.parameters();
+    let authored = capability.takes_authored_parameters();
     validate_signature(
         &rule.definition_id,
         &definition.capability,
         &descriptors,
         &definition.parameters,
+        authored,
     )?;
     let mut parameters = rule.parameters.clone();
     for (name, parameter) in &definition.parameters {
@@ -1036,12 +1037,20 @@ fn bind_parameters(
         }
     }
     for (name, value) in &parameters {
-        let descriptor = known
-            .get(name.as_str())
-            .ok_or_else(|| EngineError::UnknownParameter {
-                capability: definition.capability.clone(),
-                parameter: name.clone(),
-            })?;
+        let Some(descriptor) = known.get(name.as_str()) else {
+            match definition.parameters.get(name) {
+                Some(declared) if authored => {
+                    bind_authored(&definition.capability, name, declared, value)?;
+                    continue;
+                }
+                _ => {
+                    return Err(EngineError::UnknownParameter {
+                        capability: definition.capability.clone(),
+                        parameter: name.clone(),
+                    });
+                }
+            }
+        };
         if !descriptor.parameter_type.accepts(value) {
             return Err(EngineError::InvalidParameterType {
                 capability: definition.capability.clone(),
@@ -1051,8 +1060,9 @@ fn bind_parameters(
         if let (ParameterType::Table(columns), ParameterValue::Table { value: rows }) =
             (descriptor.parameter_type, value)
         {
+            let columns = trusted_columns(columns);
             for (row, cells) in rows.iter().enumerate() {
-                validate_row(columns, cells).map_err(|detail| EngineError::InvalidTableRow {
+                validate_row(&columns, cells).map_err(|detail| EngineError::InvalidTableRow {
                     capability: definition.capability.clone(),
                     parameter: name.clone(),
                     row,
@@ -1072,6 +1082,45 @@ fn bind_parameters(
         }
     }
     Ok(parameters)
+}
+
+/// Checks a parameter a definition declares beyond the capability's own
+/// (`RuleCapability::takes_authored_parameters`) against its declared kind,
+/// and a table's rows against its declared columns.
+fn bind_authored(
+    capability: &str,
+    name: &str,
+    declared: &axioval_ir::contract::ParameterDefinition,
+    value: &ParameterValue,
+) -> Result<(), EngineError> {
+    let invalid = || EngineError::InvalidParameterType {
+        capability: capability.into(),
+        parameter: name.into(),
+    };
+    if declared.kind == ParameterKind::Table {
+        let ParameterValue::Table { value: rows } = value else {
+            return Err(invalid());
+        };
+        let columns: Vec<_> = declared
+            .columns
+            .iter()
+            .map(|column| (column.id.as_str(), column.kind, column.required))
+            .collect();
+        for (row, cells) in rows.iter().enumerate() {
+            validate_row(&columns, cells).map_err(|detail| EngineError::InvalidTableRow {
+                capability: capability.into(),
+                parameter: name.into(),
+                row,
+                detail,
+            })?;
+        }
+        return Ok(());
+    }
+    if from_kind(&declared.kind).accepts(value) {
+        Ok(())
+    } else {
+        Err(invalid())
+    }
 }
 
 /// The rows of a loaded table file, bound as the same rows written inline.
@@ -1244,7 +1293,7 @@ fn require_set_concept(
 
 /// A property reference: a declared property concept in a declared set or
 /// a reserved one, or, in a derived set, a name the engine derives there.
-fn require_property(
+pub(crate) fn require_property(
     concepts: &ConceptCatalog,
     rule: &str,
     set: Option<&str>,
@@ -1338,6 +1387,40 @@ fn validate_selector_concepts(
         Selector::Not { operand } => validate_selector_concepts(concepts, rule, operand),
         Selector::Related { selector, .. } => validate_selector_concepts(concepts, rule, selector),
     }
+}
+
+/// Every property the ruleset's definition packages declare, by id.
+fn vocabulary_properties<'a>(
+    ruleset: &RuleSetPackage,
+    packages: &BTreeMap<&str, &'a DefinitionPackage>,
+) -> BTreeMap<&'a str, &'a axioval_ir::contract::PropertyDefinition> {
+    ruleset
+        .definition_packages
+        .iter()
+        .flat_map(|id| packages[id.as_str()].properties.iter())
+        .map(|(id, property)| (id.as_str(), property))
+        .collect()
+}
+
+/// Checks a rule's bound parameters: the concepts they name, and its
+/// expressions' structure and types.
+fn validate_bound(
+    concepts: &ConceptCatalog,
+    properties: &BTreeMap<&str, &axioval_ir::contract::PropertyDefinition>,
+    rule: &str,
+    parameters: &BTreeMap<String, ParameterValue>,
+    definition: &RuleDefinition,
+) -> Result<(), EngineError> {
+    for value in parameters.values() {
+        validate_parameter_concepts(concepts, rule, value)?;
+    }
+    crate::expression_binding::check_rule_expressions(
+        concepts,
+        properties,
+        rule,
+        parameters,
+        &definition.parameters,
+    )
 }
 
 fn validate_parameter_concepts(
@@ -1434,8 +1517,58 @@ fn validate_signature(
     capability_id: &str,
     descriptors: &[ParameterDescriptor],
     parameters: &BTreeMap<String, axioval_ir::contract::ParameterDefinition>,
+    authored: bool,
 ) -> Result<(), EngineError> {
-    if descriptors.len() != parameters.len() {
+    if authored {
+        for (name, parameter) in parameters {
+            if descriptors
+                .iter()
+                .any(|descriptor| descriptor.name == *name)
+            {
+                continue;
+            }
+            let scalar = matches!(
+                parameter.kind,
+                ParameterKind::String
+                    | ParameterKind::Boolean
+                    | ParameterKind::Integer
+                    | ParameterKind::Number
+                    | ParameterKind::Quantity
+                    | ParameterKind::Enum
+                    | ParameterKind::Date
+                    | ParameterKind::DateTime
+                    | ParameterKind::StringList
+            );
+            let table = parameter.kind == ParameterKind::Table;
+            if !(scalar || table) {
+                return contract_error(
+                    definition_id,
+                    capability_id,
+                    &format!(
+                        "authored parameter `{name}` must be a scalar value, a string list or a \
+                         table"
+                    ),
+                );
+            }
+            let mut ids: Vec<_> = parameter.columns.iter().map(|column| &column.id).collect();
+            ids.sort_unstable();
+            ids.dedup();
+            if table && (ids.is_empty() || ids.len() != parameter.columns.len()) {
+                return contract_error(
+                    definition_id,
+                    capability_id,
+                    &format!("table parameter `{name}` needs distinct columns"),
+                );
+            }
+            if !table && !parameter.columns.is_empty() {
+                return contract_error(
+                    definition_id,
+                    capability_id,
+                    &format!("only a table parameter declares columns, not `{name}`"),
+                );
+            }
+        }
+    } else if descriptors.len() != parameters.len() {
         return contract_error(definition_id, capability_id, "parameter count differs");
     }
     for descriptor in descriptors {
@@ -1502,25 +1635,30 @@ fn same_columns(trusted: &[TableColumn], declared: &[TableColumnDefinition]) -> 
     distinct && trusted == declared
 }
 
-/// Checks one table row against the trusted columns.
-fn validate_row(columns: &[TableColumn], row: &TableRow) -> Result<(), String> {
+/// A capability's table columns as `validate_row` reads them.
+fn trusted_columns(columns: &[TableColumn]) -> Vec<(&str, ColumnKind, bool)> {
+    columns
+        .iter()
+        .map(|column| (column.id, column.kind, column.required))
+        .collect()
+}
+
+/// Checks one table row against columns: id, kind, whether required.
+fn validate_row(columns: &[(&str, ColumnKind, bool)], row: &TableRow) -> Result<(), String> {
     for (id, cell) in row {
-        let column = columns
+        let (_, kind, _) = columns
             .iter()
-            .find(|column| column.id == id)
+            .find(|(column, _, _)| column == id)
             .ok_or_else(|| format!("unknown column `{id}`"))?;
-        if !cell_fits(column.kind, cell) {
-            return Err(format!(
-                "column `{id}` takes a {} cell",
-                column.kind.as_str()
-            ));
+        if !cell_fits(*kind, cell) {
+            return Err(format!("column `{id}` takes a {} cell", kind.as_str()));
         }
     }
     match columns
         .iter()
-        .find(|column| column.required && !row.contains_key(column.id))
+        .find(|(id, _, required)| *required && !row.contains_key(*id))
     {
-        Some(column) => Err(format!("required column `{}` is empty", column.id)),
+        Some((id, _, _)) => Err(format!("required column `{id}` is empty")),
         None => Ok(()),
     }
 }
@@ -1584,6 +1722,7 @@ fn from_kind(kind: &ParameterKind) -> ParameterType {
         ParameterKind::ObjectTypeReference => ParameterType::ObjectTypeReference,
         ParameterKind::PropertyReference => ParameterType::PropertyReference,
         ParameterKind::Selector => ParameterType::Selector,
+        ParameterKind::Expression => ParameterType::Expression,
         ParameterKind::StringList => ParameterType::StringList,
         ParameterKind::ReferenceList => ParameterType::ReferenceList,
         ParameterKind::Table => ParameterType::Table(&[]),

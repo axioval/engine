@@ -124,6 +124,15 @@ pub enum EngineError {
         property: String,
         detail: String,
     },
+    /// A rule's expression parameter is malformed or ill-typed.
+    #[error("rule `{rule}` parameter `{parameter}`: {detail}")]
+    InvalidExpression {
+        rule: String,
+        parameter: String,
+        /// The path into the expression, such as `requirement.and[2]`.
+        path: String,
+        detail: String,
+    },
     /// One rule reported two tables of one name.
     #[error("rule `{rule}` reported table `{table}` twice")]
     DuplicateReportTable { rule: String, table: String },
@@ -216,6 +225,9 @@ pub enum ParameterType {
     ObjectTypeReference,
     PropertyReference,
     Selector,
+    /// An expression whose value must be a truth, type checked when the
+    /// ruleset is compiled.
+    Expression,
     StringList,
     ReferenceList,
     /// Rows of typed cells in the given columns.
@@ -238,6 +250,7 @@ impl ParameterType {
             Self::ObjectTypeReference => "objectTypeReference",
             Self::PropertyReference => "propertyReference",
             Self::Selector => "selector",
+            Self::Expression => "expression",
             Self::StringList => "stringList",
             Self::ReferenceList => "referenceList",
             Self::Table(_) => "table",
@@ -264,6 +277,7 @@ impl ParameterType {
                     schema::ParameterValue::PropertyReference { .. }
                 )
                 | (Self::Selector, schema::ParameterValue::Selector { .. })
+                | (Self::Expression, schema::ParameterValue::Expression { .. })
                 | (Self::StringList, schema::ParameterValue::StringList { .. })
                 | (
                     Self::ReferenceList,
@@ -542,6 +556,14 @@ pub trait RuleCapability: Send + Sync {
     fn grades_deviation(&self) -> bool {
         false
     }
+    /// Whether a rule definition may declare parameters beyond
+    /// [`RuleCapability::parameters`]: scalar values, string lists and
+    /// tables with the columns the definition declares, which the rule's
+    /// expressions read. The compiler checks each against its declared kind
+    /// and columns; the capability's own parameters stay strict.
+    fn takes_authored_parameters(&self) -> bool {
+        false
+    }
     /// Evaluates an already-validated rule request.
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation;
 }
@@ -720,6 +742,7 @@ mod derived_relationships;
 mod discipline_map;
 mod door_leaves;
 mod envelope_membership;
+mod expression_binding;
 mod facade_area;
 mod federation;
 mod free_space;

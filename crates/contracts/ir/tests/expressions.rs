@@ -189,3 +189,15 @@ fn children_follow_written_order() {
         .collect();
     assert_eq!(names, ["a", "b", "c"]);
 }
+
+#[test]
+fn an_expression_parameter_value_round_trips() {
+    let json = json!({"type": "expression", "value": {"kind": "isDefined",
+        "operand": {"kind": "property", "property": "FireRating"}}});
+    let value: ParameterValue = serde_json::from_value(json.clone()).unwrap();
+    assert!(matches!(value, ParameterValue::Expression { .. }));
+    assert_eq!(serde_json::to_value(&value).unwrap(), json);
+    let kind: axioval_ir::contract::ParameterKind =
+        serde_json::from_value(json!("expression")).unwrap();
+    assert_eq!(kind, axioval_ir::contract::ParameterKind::Expression);
+}

@@ -32,6 +32,7 @@ mod effective_coverage;
 mod empty_host;
 mod escape_route;
 mod exit_separation;
+mod expression_requirement;
 mod external_wall_validation;
 mod free_floor;
 mod free_floor_circle;
@@ -118,6 +119,7 @@ pub use effective_coverage::EffectiveCoverage;
 pub use empty_host::EmptyHost;
 pub use escape_route::EscapeRoute;
 pub use exit_separation::ExitSeparation;
+pub use expression_requirement::ExpressionRequirement;
 pub use external_wall_validation::ExternalWallValidation;
 pub use free_floor_circle::FreeFloorCircle;
 pub use free_floor_rectangle::FreeFloorRectangle;
@@ -181,6 +183,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(PropertyValueConstraint))
         .and_then(|registry| registry.register(BooleanPropertyEquals))
         .and_then(|registry| registry.register(PropertyPredicate))
+        .and_then(|registry| registry.register(ExpressionRequirement))
         .and_then(|registry| registry.register(PropertyComparison))
         .and_then(|registry| registry.register(PropertyRequirements))
         .and_then(|registry| registry.register(ShelfCapacity))

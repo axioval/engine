@@ -326,6 +326,35 @@ Under either, two equal values are neither greater nor less than each other: `gr
 
 Rounding is transitive, so `unique-value` groups values that round alike. A tolerance is not: `1.0` and `1.2` are each within `0.1` of `1.1` but not of each other. `unique-value` therefore judges a tolerance pair by pair: an object is a duplicate of every other object in its scope whose value is within the tolerance of its own, and its finding names exactly those objects. In the example, `1.1` is reported naming the other two, and `1.0` and `1.2` each naming `1.1` only. A quantity is compared only with quantities of the same dimension; an integer and a decimal are compared with each other.
 
+### Expression requirements
+
+`axioval:capability.expression` requires an [expression](./expressions.md) to hold for each selected object. Its one capability parameter, `requirement` (kind `expression`), must be a truth; the compiler checks its structure, the concepts and measured values it reads, and its types and units, and refuses an ill-typed requirement with `EngineError::InvalidExpression` naming the path into it (`requirement.and[2].compare.left`).
+
+- True passes. False is a finding naming the subexpression that failed (its `label`, or its path and kind: the first false operand of an `and`, the consequent of an `implies`) and every value read, with each value's interval and unit, citing the evidence of every read. A requirement that is `null` fails, as a comparison with `null` does.
+- Not evaluated leaves the object not evaluated, with the reason and the subexpression's path: a property that cannot be read (with the resolver's own reason), a measured value straddling a bound (`incomplete_evidence`), or an `if` whose condition is undecided and whose branches disagree.
+
+A definition bound to `expression` may declare parameters of its own beside `requirement` (`RuleCapability::takes_authored_parameters`): scalar values (`string`, `boolean`, `integer`, `number`, `quantity`, `enum`, `date`, `dateTime`), `stringList`s and `table`s with the columns the definition declares. The compiler checks each value against its declared kind and each table row against its columns. The requirement reads them as `parameter` and `lookup` nodes: a lookup matches its keys against the table's key cells as `keyed-limit` matches rows (a text cell is a wildcard pattern over the key read as text, any other cell must equal the key, a blank cell accepts any key, the single most specific row applies) and reads its `column`. No matching row, or a blank result cell, is `null`; tied or undecided rows leave the object not evaluated.
+
+A three-branch cover requirement in one rule:
+
+```json
+{"requirement": {"type": "expression", "value": {
+  "kind": "compare", "operator": "greaterThanOrEquals", "label": "cover",
+  "left": {"kind": "property", "propertySet": "Pset_Concrete", "property": "Cover"},
+  "right": {"kind": "if", "branches": [
+      {"when": {"kind": "compare", "operator": "equals",
+                "left": {"kind": "property", "propertySet": "Pset_Concrete", "property": "ExposureClass"},
+                "right": {"kind": "literal", "value": {"type": "string", "value": "XC4"}}},
+       "then": {"kind": "literal", "value": {"type": "quantity", "value": 40.0, "unit": "mm"}}},
+      {"when": {"kind": "compare", "operator": "equals",
+                "left": {"kind": "property", "propertySet": "Pset_Concrete", "property": "ExposureClass"},
+                "right": {"kind": "literal", "value": {"type": "string", "value": "XC3"}}},
+       "then": {"kind": "literal", "value": {"type": "quantity", "value": 35.0, "unit": "mm"}}}],
+    "else": {"kind": "literal", "value": {"type": "quantity", "value": 25.0, "unit": "mm"}}}}}}
+```
+
+A property's type comes from its declared `valueKind` (a quantity's dimension from its `unitDimension`: `length`, `area`, `volume`, `plane_angle` or a unit); one whose type is not declared is checked when read, and a mismatch then leaves the object not evaluated.
+
 ### Semantic capabilities
 
 These capabilities judge exact properties, classifications and relationships only, so they need no geometry. Relationship parameters (`relationship`, `direction`, `follow_chain`, `skip_absent_relationship_ends`) mean the same as in `property-comparison`. With the IFC adapter, a relationship is an IFC relationship entity name such as `IfcRelAggregates`. An object whose selection or value cannot be decided is not evaluated, never passed.

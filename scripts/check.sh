@@ -9,7 +9,8 @@
 #
 #   deny   dependency policy (cargo-deny)
 #   lint   architecture and packaging self-tests, formatting, clippy
-#   test   workspace tests, and the IDS corpus when IDS_TEST_CASES is set
+#   test   workspace tests, the IDS corpus when IDS_TEST_CASES is set, and
+#          private parity cases when AXIOVAL_PARITY_CASES is set
 #   docs   rustdoc and the mdBook
 set -euo pipefail
 
@@ -47,6 +48,10 @@ check_test() {
   # points IDS_TEST_CASES at a checkout of it.
   if [[ -n "${IDS_TEST_CASES:-}" ]]; then
     cargo test -p axioval-ids -- --ignored corpus
+  fi
+  # Parity of expression rewrites on private models, likewise opt-in.
+  if [[ -n "${AXIOVAL_PARITY_CASES:-}" ]]; then
+    cargo test -p axioval --features ifc --test ifc_parity -- --ignored --nocapture
   fi
 }
 

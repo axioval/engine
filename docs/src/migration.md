@@ -78,3 +78,40 @@ remaining plans and target list were shaped after particular host
 applications. Rule packages are `axioval-ir`; writing them as another
 format is an [export profile](./export.md). The crate name serves only a
 retirement notice (`attic/axioval-spec-notice`).
+
+## Expression parity
+
+Before a capability's decision moves to an [expression](expressions.md)
+rule, the rewrite must judge every object exactly as the capability does.
+The differential parity harness, `axioval_rules::parity`, checks that:
+
+- `outcomes(report, rule)` reads how one rule of a report judged each
+  object. It is a finding (its most severe severity, and whether every
+  finding's evidence is exact) or not evaluated (with its reason). An object
+  the rule reported nothing about passed or was not selected, and parity
+  counts those two as the same.
+- `compare(report, capability, expression)` lines the two rules up object
+  by object. The `ParityEvidence` it returns counts the objects compared and
+  lists every `Difference` in verdict, severity (the graded measure's band)
+  or exactness. `holds()` is true when there are none, and `diff()` prints
+  one line per object for a failing test.
+
+Both rules go in one ruleset and run over the same model, so the outcomes
+compared come from the same evidence. The harness runs in two places:
+
+- **Fixtures, in CI.** `crates/engine/rules/tests/parity.rs` runs the
+  `property-predicate` capability against its expression rewrite over a
+  fixture model, and shows that a wrong rewrite fails with a diff naming
+  the object.
+- **Private models, locally.** Set `AXIOVAL_PARITY_CASES` to a directory of
+  cases and `./scripts/check.sh test` runs the ignored `ifc_parity` test of
+  the `axioval` facade. Each case is a directory holding
+  `definitions.json`, `ruleset.json`, `parity.json`
+  (`{"pairs": [{"capability": "<rule id>", "expression": "<rule id>"}]}`)
+  and one or more `.ifc` models. When the variable is set, a missing,
+  empty or unreadable case fails rather than skips.
+
+Each pair's evidence prints as one JSON line, and that line is what the
+migration ledger records as a proof item, tagged `"kind": "parity"`. The
+ledger check (`scripts/migration.py`) rejects a parity proof that does not
+name both rules, covers no objects, or records any difference.

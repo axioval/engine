@@ -25,6 +25,20 @@ def ledger_path() -> Path:
     return Path(configured) if configured else ROOT / "private" / "capabilities.json"
 
 
+def validate_parity(name: str, item: object) -> None:
+    """A parity proof is the evidence the parity harness prints: it names
+    both rules and records no difference. Any other proof item passes."""
+    if not isinstance(item, dict) or item.get("kind") != "parity":
+        return
+    for field in ("capability", "expression"):
+        if not isinstance(item.get(field), str) or not item[field]:
+            raise SystemExit(f"{name}: parity proof without a {field} rule")
+    if not isinstance(item.get("objects"), int) or item["objects"] < 1:
+        raise SystemExit(f"{name}: parity proof over no objects")
+    if item.get("differences") != []:
+        raise SystemExit(f"{name}: parity proof records differences")
+
+
 def validate(data: dict) -> None:
     entries = data.get("entries")
     if not isinstance(entries, list) or len(entries) != EXPECTED:
@@ -47,6 +61,8 @@ def validate(data: dict) -> None:
         proof = entry.get("proof")
         if not isinstance(proof, list):
             raise SystemExit(f"{name}: proof must be a list")
+        for item in proof:
+            validate_parity(name, item)
         if status == "ported" and len(proof) < len(contract):
             raise SystemExit(f"{name}: ported without all proof obligations")
         if status == "blocked" and not entry.get("blocker"):

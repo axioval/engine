@@ -58,6 +58,7 @@ mod opening_spaces;
 mod opening_zone;
 mod orientation;
 mod pairs;
+pub mod parity;
 mod parking_bay;
 mod passing_spaces;
 mod plan_area;

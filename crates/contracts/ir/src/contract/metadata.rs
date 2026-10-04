@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub struct LocalizedText {
     pub default: String,
@@ -25,6 +26,7 @@ impl LocalizedText {
 ///
 /// `name` and `description` are localized in the normalized MCS contract.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub struct PackageMetadata {
     pub id: String,
@@ -43,6 +45,7 @@ pub struct PackageMetadata {
 /// declares, for example `https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4`.
 /// Binding a concept to source data requires an exact match on it.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub struct ExternalName {
     #[serde(rename = "typeSystem")]
@@ -53,6 +56,7 @@ pub struct ExternalName {
 /// A bibliographic source a package may cite. Provenance only: it never changes
 /// selection, evidence, or outcomes.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Source {
     pub id: String,
@@ -67,6 +71,7 @@ pub struct Source {
 
 /// One pinpoint within a cited source.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub struct Locator {
     pub kind: String,
@@ -75,6 +80,7 @@ pub struct Locator {
 
 /// A reference to one package source.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Citation {
     pub id: String,

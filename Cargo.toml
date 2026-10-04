@@ -54,6 +54,12 @@ thiserror = "2.0.16"
 indexmap = { version = "2.11.0", features = ["serde"] }
 smallvec = { version = "1.15.1", features = ["serde"] }
 uuid = { version = "1.18.1", features = ["serde", "v5"] }
+# JSON Schemas of the package contract, behind `axioval-ir`'s `schema`
+# feature; `std` and `derive` only.
+schemars = { version = "1.2.2", default-features = false, features = ["std", "derive"] }
+# Test-only: validates package fixtures against those schemas. No remote or
+# file resolution: every schema is in memory.
+jsonschema = { version = "0.58.5", default-features = false }
 tracing = "0.1.41"
 clap = { version = "4.5.46", features = ["derive"] }
 axiolid-brep = "0.3.3"

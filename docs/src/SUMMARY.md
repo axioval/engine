@@ -17,6 +17,7 @@
 - [Derived properties](./derived.md)
 - [Expressions](./expressions.md)
 - [Review decisions](./decisions.md)
+- [JSON Schemas](./json-schema.md)
 - [Connectivity and routes](./topology.md)
 - [Metric routing](./metric-routing.md)
 - [Free space and clearance](./free-space.md)

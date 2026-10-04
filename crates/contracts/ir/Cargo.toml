@@ -16,6 +16,15 @@ smallvec.workspace = true
 thiserror.workspace = true
 serde_json.workspace = true
 uuid.workspace = true
+schemars = { workspace = true, optional = true }
+
+[dev-dependencies]
+jsonschema.workspace = true
+
+[features]
+# JSON Schemas of the definition and ruleset package contract
+# (`axioval_ir::schema`), for editors that validate drafts without Rust.
+schema = ["dep:schemars"]
 
 [lints]
 workspace = true

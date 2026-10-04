@@ -6,6 +6,14 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- JSON Schemas of the package contract (#262): `definitions.schema.json`
+  and `ruleset.schema.json` (draft 2020-12), generated from the
+  `axioval-ir` types by `axioval_ir::schema` behind the new opt-in
+  `schema` feature, are published with the documentation under `schema/`
+  and versioned with the crate. They state the serde wire form, selectors,
+  expressions and parameter values included; a test regenerates them byte
+  for byte and validates every package and expression fixture against
+  them.
 - Wholes measured through their parts (#211): with `--geometry`, a
   physical product with no `Body` of its own that is decomposed into parts
   (`IfcRelAggregates`, at any depth: stairs into flights and landings,

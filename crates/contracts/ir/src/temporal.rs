@@ -63,6 +63,7 @@ impl TemporalError {
 /// so a date-time can then be compared with a date, or two date-times by
 /// day.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub enum TemporalPrecision {
     /// Compare calendar days only.
@@ -515,6 +516,48 @@ macro_rules! lexical_serde {
 
 lexical_serde!(Date, "an ISO 8601 date string, optionally with a time zone");
 lexical_serde!(DateTime, "an ISO 8601 date-time string with a UTC offset");
+
+/// A UTC offset as the readers accept it: `Z`, or `±hh:mm` up to 14 hours.
+#[cfg(feature = "schema")]
+const OFFSET_PATTERN: &str = "(Z|[+-](0[0-9]|1[0-3]):[0-5][0-9]|[+-]14:00)";
+/// `YYYY-MM-DD`, months and days in range; whether the day exists in that
+/// month is checked when the package is read.
+#[cfg(feature = "schema")]
+const DATE_PATTERN: &str = "[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])";
+
+/// The wire form is the lexical one the custom `Serialize` writes.
+#[cfg(feature = "schema")]
+impl schemars::JsonSchema for Date {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "Date".into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "description": "An ISO 8601 calendar date, `YYYY-MM-DD`, optionally with a time zone `Z` or `±hh:mm`.",
+            "type": "string",
+            "pattern": format!("^{DATE_PATTERN}{OFFSET_PATTERN}?$"),
+        })
+    }
+}
+
+/// The wire form is the lexical one the custom `Serialize` writes.
+#[cfg(feature = "schema")]
+impl schemars::JsonSchema for DateTime {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "DateTime".into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "description": "An ISO 8601 date-time with an explicit UTC offset, `YYYY-MM-DDThh:mm:ss[.f](Z|±hh:mm)`.",
+            "type": "string",
+            "pattern": format!(
+                "^{DATE_PATTERN}T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{{1,9}})?{OFFSET_PATTERN}$"
+            ),
+        })
+    }
+}
 
 #[cfg(test)]
 mod tests {

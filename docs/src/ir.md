@@ -4,6 +4,8 @@
 
 The compiler currently accepts normalized Axioval Schema `0.1.0` packages only. Both definition packages and rulesets are checked before binding; unknown versions fail with `UnsupportedSchemaVersion` rather than being interpreted as the current contract.
 
+Both package forms are published as generated [JSON Schemas](./json-schema.md), so an editor can check a draft's structure without Rust.
+
 The IR describes what a checker can observe without mirroring any source schema.
 
 ## Identity

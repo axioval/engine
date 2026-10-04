@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 /// One row of a `table` value: cells keyed by column ID.
 pub type TableRow = BTreeMap<String, ParameterValue>;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "type", rename_all = "camelCase", deny_unknown_fields)]
 pub enum ParameterValue {
     String {
@@ -90,6 +91,7 @@ pub enum ParameterValue {
 /// The data file a [`ParameterValue::TableFile`] names, and its rows once
 /// loaded.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TableFileReference {
     pub path: String,
@@ -111,6 +113,7 @@ pub struct TableFileReference {
 ///
 /// A `selector` column cannot be read from a file.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TableFileColumn {
     pub id: String,

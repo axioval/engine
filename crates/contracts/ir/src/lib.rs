@@ -15,6 +15,9 @@ use thiserror::Error;
 pub mod contract;
 pub use contract::{DefinitionPackage, RuleSetPackage};
 
+#[cfg(feature = "schema")]
+pub mod schema;
+
 /// The registry of measured values: descriptors, parameters and parsing.
 pub mod measured;
 
@@ -208,6 +211,21 @@ impl From<Discipline> for String {
 impl fmt::Display for Discipline {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)
+    }
+}
+/// The wire form is the validated name, a plain string.
+#[cfg(feature = "schema")]
+impl schemars::JsonSchema for Discipline {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "Discipline".into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "description": "A discipline name: a lowercase token of at most 64 bytes.",
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+        })
     }
 }
 

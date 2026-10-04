@@ -74,6 +74,13 @@ Keep this crate serializable and deterministic. It must not depend on a source f
   `tests/fixtures/expression` together; never add a loop, recursion, a
   user-defined function or anything that runs package code. The MCS
   expression schema must mirror it.
+- `schema.rs` (feature `schema`) generates the published JSON Schemas of
+  the package contract from the types; never edit
+  `docs/src/schema/*.schema.json` by hand. Every serde type a package
+  reaches derives `JsonSchema` under the feature; a custom wire form
+  (`Date`, `DateTime`, `Discipline`) states it in a manual impl. After a
+  contract change or a version bump, regenerate with `AXIOVAL_BLESS=1
+  cargo test -p axioval-ir --features schema --test json_schema`.
 - `measured.rs` is the registry of `axioval:measured` values: one
   `MeasuredDescriptor` per name, sorted, labelled in English and German.
   Register a new measured value there (and nowhere else), with its

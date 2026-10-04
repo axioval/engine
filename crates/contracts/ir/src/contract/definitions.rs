@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ObjectTypeDefinition {
     pub id: String,
@@ -14,6 +15,7 @@ pub struct ObjectTypeDefinition {
     pub citations: Vec<Citation>,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PropertyDefinition {
     pub id: String,
@@ -26,6 +28,7 @@ pub struct PropertyDefinition {
     pub citations: Vec<Citation>,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PropertySetDefinition {
     pub id: String,
@@ -36,6 +39,7 @@ pub struct PropertySetDefinition {
     pub citations: Vec<Citation>,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ParameterDefinition {
     pub id: String,
@@ -59,6 +63,7 @@ pub struct ParameterDefinition {
 }
 /// One named, typed column of a `table` parameter.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TableColumnDefinition {
     pub id: String,
@@ -80,6 +85,7 @@ pub struct TableColumnDefinition {
 /// pattern is a whole-value wildcard pattern (`*` any run, `?` one character,
 /// `\` escapes the next character).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub enum ColumnKind {
     String,
@@ -114,6 +120,7 @@ impl ColumnKind {
     }
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub struct RuleDefinition {
     pub id: String,
@@ -128,6 +135,7 @@ pub struct RuleDefinition {
     pub citations: Vec<Citation>,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DefinitionPackage {
     pub schema_version: String,
@@ -144,6 +152,7 @@ pub struct DefinitionPackage {
     pub definitions: BTreeMap<String, RuleDefinition>,
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub enum ParameterKind {
     String,
@@ -168,6 +177,7 @@ pub enum ParameterKind {
     Table,
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub enum PropertyValueKind {
     String,

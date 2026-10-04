@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 
 /// One named population participating in a rule.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub struct TargetGroup {
     pub id: String,
@@ -18,6 +19,7 @@ pub struct TargetGroup {
 
 /// Rich applicability: several independently selected, named populations.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub struct GroupApplicability {
     pub groups: BTreeMap<String, TargetGroup>,
@@ -29,6 +31,7 @@ pub struct GroupApplicability {
 /// carries a `kind` discriminator and groups never do, so the untagged form is
 /// unambiguous.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(untagged)]
 pub enum RuleApplicability {
     Selector(Selector),
@@ -47,6 +50,7 @@ impl From<Selector> for RuleApplicability {
 
 /// A human-readable expected state bound to named target groups.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Requirement {
     pub id: String,
@@ -59,6 +63,7 @@ pub struct Requirement {
 
 /// Applies one citation to bound rule parameters.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ParameterCitation {
     pub parameter_ids: Vec<String>,
@@ -67,6 +72,7 @@ pub struct ParameterCitation {
 
 /// A package-contained explanatory image. The engine never reads the file.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ExplanatoryImage {
     pub id: String,
@@ -77,6 +83,7 @@ pub struct ExplanatoryImage {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RuleInstance {
     pub id: String,
@@ -136,6 +143,7 @@ pub struct RuleInstance {
 /// A gate on a folder applies to every rule in it and its subfolders,
 /// together with each rule's own gate.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RuleGate {
     /// The id of the rule whose outcome gates.
@@ -153,6 +161,7 @@ pub struct RuleGate {
 /// objects the other rule passed or failed, as a `ruleOutcome` selector
 /// does.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub enum GateCondition {
     /// Every selected object, if the other rule passed.
@@ -175,6 +184,7 @@ pub enum GateCondition {
 /// level keeps its place. A value that cannot be read leaves the finding
 /// not evaluated rather than filed under the wrong heading.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CategoryLevel {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -193,6 +203,7 @@ pub struct CategoryLevel {
 /// it could change it: the finding is then reported not evaluated, never
 /// given a default.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SeverityOverride {
     pub selector: Selector,
@@ -208,12 +219,14 @@ pub struct SeverityOverride {
 /// bound the value misses. A capability measures it as an interval; one that
 /// straddles bands takes the most severe band it may reach.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SeverityBand {
     pub below: f64,
     pub severity: Severity,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub struct RuleFolder {
     pub id: String,
@@ -235,6 +248,7 @@ pub struct RuleFolder {
     pub annotations: BTreeMap<String, String>,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RuleSetPackage {
     pub schema_version: String,
@@ -271,6 +285,7 @@ pub struct RuleSetPackage {
 /// most once per object in a run and cites the evidence it was computed
 /// from.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ValueDefinition {
     pub name: LocalizedText,
@@ -289,6 +304,7 @@ pub struct ValueDefinition {
 /// cannot be read, and a listed pair naming an object the model does not
 /// hold, leave the pairs they could change undecided.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RelationDefinition {
     pub id: String,
@@ -305,6 +321,7 @@ pub struct RelationDefinition {
 
 /// Which pairs a [`RelationDefinition`] relates.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum RelationKey {
     /// Equal values: a from-object relates to every to-object whose `to`
@@ -344,6 +361,7 @@ pub enum RelationKey {
 
 /// One property a [`RelationKey::Property`] reads.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RelationProperty {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -362,6 +380,7 @@ pub struct RelationProperty {
 /// count. A member without a key is ungrouped; one whose key or membership
 /// cannot be read leaves its groups undecided, never ungrouped.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct GroupingDefinition {
     pub id: String,
@@ -376,6 +395,7 @@ pub struct GroupingDefinition {
 
 /// What a [`GroupingDefinition`] groups its members by.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum GroupingKey {
     /// Equal values of one property, read as a property selector reads it:
@@ -433,6 +453,7 @@ pub enum GroupingKey {
 /// absence). An object whose deciding rows cannot be decided cannot be
 /// read, never unclassified.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ClassificationDefinition {
     pub id: String,
@@ -458,6 +479,7 @@ pub struct ClassificationDefinition {
 /// one level below its parent. Ids and codes are unique within the
 /// classification, every parent is declared, and parents form no cycle.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ClassDefinition {
     pub id: String,
@@ -474,6 +496,7 @@ pub struct ClassDefinition {
 /// One row of a [`ClassificationDefinition`]: objects `selector` selects
 /// take `class`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ClassificationRow {
     pub selector: Selector,
@@ -482,6 +505,7 @@ pub struct ClassificationRow {
 
 /// How a classification's rows assign classes.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub enum ClassificationMode {
     /// The first matching row's class.
@@ -497,6 +521,7 @@ impl ClassificationMode {
     }
 }
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub enum Severity {
     #[default]

@@ -1,0 +1,3168 @@
+{
+  "$comment": "Generated from axioval-ir 0.3.0 by `axioval_ir::schema`; never edit by hand.",
+  "$defs": {
+    "AggregateFunction": {
+      "description": "What an [`Expression::Aggregate`] computes over its members.",
+      "oneOf": [
+        {
+          "const": "count",
+          "description": "How many members there are; takes no `value`.",
+          "type": "string"
+        },
+        {
+          "const": "sum",
+          "description": "The sum of the members' values.",
+          "type": "string"
+        },
+        {
+          "const": "min",
+          "description": "The least member value.",
+          "type": "string"
+        },
+        {
+          "const": "max",
+          "description": "The greatest member value.",
+          "type": "string"
+        },
+        {
+          "const": "average",
+          "description": "The members' mean value.",
+          "type": "string"
+        },
+        {
+          "const": "any",
+          "description": "Whether some member's truth `value` holds.",
+          "type": "string"
+        },
+        {
+          "const": "all",
+          "description": "Whether every member's truth `value` holds, and there is a member.",
+          "type": "string"
+        },
+        {
+          "const": "none",
+          "description": "Whether no member's truth `value` holds.",
+          "type": "string"
+        },
+        {
+          "const": "distinctCount",
+          "description": "How many distinct values the members have.",
+          "type": "string"
+        }
+      ]
+    },
+    "AggregateSource": {
+      "description": "The objects an [`Expression::Aggregate`] ranges over.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "The objects a relationship path reaches from the object in scope,\nits steps written as a `related` selector's.",
+          "properties": {
+            "kind": {
+              "const": "path",
+              "type": "string"
+            },
+            "path": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "path"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The members of the derived group of `grouping` the object in scope\nis, or belongs to.",
+          "properties": {
+            "grouping": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "group",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "grouping"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Every object of the project the selector selects, the object in\nscope included when it is selected: the counterparts of a pair rule.",
+          "properties": {
+            "kind": {
+              "const": "selector",
+              "type": "string"
+            },
+            "selector": {
+              "$ref": "#/$defs/Selector"
+            }
+          },
+          "required": [
+            "kind",
+            "selector"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The members built-in code measures of the object in scope, by a\nlist of [`crate::measured::MEASURED_MEMBERS`] written\n`name[;key=value…]` (a flight's `steps`). The object in scope stays\nthe owner; the `value` reads each member's fields in\n[`crate::MEMBER_SET`]. It takes no `where`: a condition on members\nis part of the value.",
+          "properties": {
+            "kind": {
+              "const": "measured",
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Branch": {
+      "additionalProperties": false,
+      "description": "One `when` → `then` branch of an [`Expression::If`].",
+      "properties": {
+        "then": {
+          "$ref": "#/$defs/Expression"
+        },
+        "when": {
+          "$ref": "#/$defs/Expression"
+        }
+      },
+      "required": [
+        "when",
+        "then"
+      ],
+      "type": "object"
+    },
+    "Citation": {
+      "additionalProperties": false,
+      "description": "A reference to one package source.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "locators": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Locator"
+          },
+          "type": "array"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LocalizedText"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sourceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "sourceId"
+      ],
+      "type": "object"
+    },
+    "ColumnKind": {
+      "description": "The kind of every cell in one table column.\n\nCells reuse the scalar value variants: a `string` or `textPattern` cell is\na `string` value, a `selector` cell a `selector` value, and so on. A text\npattern is a whole-value wildcard pattern (`*` any run, `?` one character,\n`\\` escapes the next character).",
+      "oneOf": [
+        {
+          "enum": [
+            "string",
+            "textPattern",
+            "number",
+            "quantity",
+            "integer",
+            "boolean",
+            "selector",
+            "reference"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "date",
+          "description": "A calendar day, written as a `date` value.",
+          "type": "string"
+        },
+        {
+          "const": "dateTime",
+          "description": "An instant with its UTC offset, written as a `dateTime` value.",
+          "type": "string"
+        }
+      ]
+    },
+    "ComparisonOperator": {
+      "description": "How a property selector compares the resolved value with its `value`.\n\n`matches` is a regular expression and `like` a wildcard pattern (`*` any\nrun, `?` one character, `\\` escapes); both must match the whole value.\n`contains` takes a string, `oneOf` and `noneOf` a string list. The ordered\noperators also take a `date` or `dateTime`, compared chronologically.\n`exists`, `isEmpty` and `isNotEmpty` judge presence and take no value.",
+      "oneOf": [
+        {
+          "enum": [
+            "equals",
+            "notEquals",
+            "lessThan",
+            "lessThanOrEquals",
+            "greaterThan",
+            "greaterThanOrEquals",
+            "matches",
+            "like",
+            "contains",
+            "oneOf",
+            "noneOf",
+            "exists"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "isEmpty",
+          "description": "Present, but null, blank text or a list of nothing else: the `empty`\npresence of `property-requirements`. An absent value is not empty.",
+          "type": "string"
+        },
+        {
+          "const": "isNotEmpty",
+          "description": "Present with a value: the `not-empty` presence of\n`property-requirements`. An absent value is not a value.",
+          "type": "string"
+        }
+      ]
+    },
+    "Date": {
+      "description": "An ISO 8601 calendar date, `YYYY-MM-DD`, optionally with a time zone `Z` or `±hh:mm`.",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])(Z|[+-](0[0-9]|1[0-3]):[0-5][0-9]|[+-]14:00)?$",
+      "type": "string"
+    },
+    "DateTime": {
+      "description": "An ISO 8601 date-time with an explicit UTC offset, `YYYY-MM-DDThh:mm:ss[.f](Z|±hh:mm)`.",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{1,9})?(Z|[+-](0[0-9]|1[0-3]):[0-5][0-9]|[+-]14:00)$",
+      "type": "string"
+    },
+    "Discipline": {
+      "description": "A discipline name: a lowercase token of at most 64 bytes.",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+      "type": "string"
+    },
+    "Expression": {
+      "description": "A node of an expression tree, tagged by `kind` like a [`Selector`].\n\nEvery node may carry an author `label` that findings name in place of\nthe node's rendered form. Operands are evaluated by the engine over\nintervals with three-valued truth; `null` is a value the source states\nas absent, never a value that could not be read.\n\n[`Selector`]: super::Selector",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "A constant of one scalar kind.",
+          "properties": {
+            "kind": {
+              "const": "literal",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "value": {
+              "$ref": "#/$defs/ScalarValue"
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The source states no value.",
+          "properties": {
+            "kind": {
+              "const": "null",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A property of the object in scope, as a property selector names it;\n`axioval:measured` names carry their parameters\n(`bottom_above_level;path=…`).",
+          "properties": {
+            "kind": {
+              "const": "property",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "of": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PropertyScope"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Whose property: the object in scope (the default), or, inside an\naggregate's `value` or `where`, the rule's checked object."
+            },
+            "property": {
+              "type": "string"
+            },
+            "propertySet": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "property"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A parameter of the rule, by name.",
+          "properties": {
+            "kind": {
+              "const": "parameter",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A derived value the ruleset names.",
+          "properties": {
+            "kind": {
+              "const": "derived",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The `column` cell of the most specific row of the `table` parameter\nwhose key columns match `keys`, as `keyed-limit` selects a row.",
+          "properties": {
+            "column": {
+              "type": "string"
+            },
+            "keys": {
+              "additionalProperties": {
+                "$ref": "#/$defs/Expression"
+              },
+              "description": "The value each key column is matched against, by column ID.",
+              "type": "object"
+            },
+            "kind": {
+              "const": "lookup",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "table": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "table",
+            "keys",
+            "column"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "not",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "operand": {
+              "$ref": "#/$defs/Expression"
+            }
+          },
+          "required": [
+            "kind",
+            "operand"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "and",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "operands": {
+              "items": {
+                "$ref": "#/$defs/Expression"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "operands"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "or",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "operands": {
+              "items": {
+                "$ref": "#/$defs/Expression"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "operands"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "`antecedent → consequent`.",
+          "properties": {
+            "antecedent": {
+              "$ref": "#/$defs/Expression"
+            },
+            "consequent": {
+              "$ref": "#/$defs/Expression"
+            },
+            "kind": {
+              "const": "implies",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "antecedent",
+            "consequent"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "xor",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "left": {
+              "$ref": "#/$defs/Expression"
+            },
+            "right": {
+              "$ref": "#/$defs/Expression"
+            }
+          },
+          "required": [
+            "kind",
+            "left",
+            "right"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "`left operator right`.",
+          "properties": {
+            "caseSensitive": {
+              "description": "Whether text comparisons respect case; `false` folds both sides.",
+              "type": "boolean"
+            },
+            "kind": {
+              "const": "compare",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "left": {
+              "$ref": "#/$defs/Expression"
+            },
+            "operator": {
+              "$ref": "#/$defs/ExpressionComparison"
+            },
+            "right": {
+              "$ref": "#/$defs/Expression"
+            }
+          },
+          "required": [
+            "kind",
+            "operator",
+            "left",
+            "right"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "`low ≤ operand ≤ high`, each bound inclusive unless stated\notherwise.",
+          "properties": {
+            "high": {
+              "$ref": "#/$defs/Expression"
+            },
+            "highInclusive": {
+              "type": "boolean"
+            },
+            "kind": {
+              "const": "between",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "low": {
+              "$ref": "#/$defs/Expression"
+            },
+            "lowInclusive": {
+              "type": "boolean"
+            },
+            "operand": {
+              "$ref": "#/$defs/Expression"
+            }
+          },
+          "required": [
+            "kind",
+            "operand",
+            "low",
+            "high"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Whether `operand` equals one of `values`.",
+          "properties": {
+            "caseSensitive": {
+              "type": "boolean"
+            },
+            "kind": {
+              "const": "oneOf",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "operand": {
+              "$ref": "#/$defs/Expression"
+            },
+            "values": {
+              "items": {
+                "$ref": "#/$defs/Expression"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "operand",
+            "values"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Whether `operand` equals none of `values`.",
+          "properties": {
+            "caseSensitive": {
+              "type": "boolean"
+            },
+            "kind": {
+              "const": "noneOf",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "operand": {
+              "$ref": "#/$defs/Expression"
+            },
+            "values": {
+              "items": {
+                "$ref": "#/$defs/Expression"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "operand",
+            "values"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Whether `operand` has a value: not `null`.",
+          "properties": {
+            "kind": {
+              "const": "isDefined",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "operand": {
+              "$ref": "#/$defs/Expression"
+            }
+          },
+          "required": [
+            "kind",
+            "operand"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Whether `operand` is `null`.",
+          "properties": {
+            "kind": {
+              "const": "isUndefined",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "operand": {
+              "$ref": "#/$defs/Expression"
+            }
+          },
+          "required": [
+            "kind",
+            "operand"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The `then` of the first branch whose `when` holds, else `else`. A\nternary is the one-branch case.",
+          "properties": {
+            "branches": {
+              "items": {
+                "$ref": "#/$defs/Branch"
+              },
+              "type": "array"
+            },
+            "else": {
+              "$ref": "#/$defs/Expression"
+            },
+            "kind": {
+              "const": "if",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "branches",
+            "else"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The first operand that is not `null`.",
+          "properties": {
+            "kind": {
+              "const": "coalesce",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "operands": {
+              "items": {
+                "$ref": "#/$defs/Expression"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "operands"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "add",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "left": {
+              "$ref": "#/$defs/Expression"
+            },
+            "right": {
+              "$ref": "#/$defs/Expression"
+            }
+          },
+          "required": [
+            "kind",
+            "left",
+            "right"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "subtract",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "left": {
+              "$ref": "#/$defs/Expression"
+            },
+            "right": {
+              "$ref": "#/$defs/Expression"
+            }
+          },
+          "required": [
+            "kind",
+            "left",
+            "right"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "multiply",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "left": {
+              "$ref": "#/$defs/Expression"
+            },
+            "right": {
+              "$ref": "#/$defs/Expression"
+            }
+          },
+          "required": [
+            "kind",
+            "left",
+            "right"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "divide",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "left": {
+              "$ref": "#/$defs/Expression"
+            },
+            "right": {
+              "$ref": "#/$defs/Expression"
+            }
+          },
+          "required": [
+            "kind",
+            "left",
+            "right"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Unary minus.",
+          "properties": {
+            "kind": {
+              "const": "negate",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "operand": {
+              "$ref": "#/$defs/Expression"
+            }
+          },
+          "required": [
+            "kind",
+            "operand"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "abs",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "operand": {
+              "$ref": "#/$defs/Expression"
+            }
+          },
+          "required": [
+            "kind",
+            "operand"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "min",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "operands": {
+              "items": {
+                "$ref": "#/$defs/Expression"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "operands"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "max",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "operands": {
+              "items": {
+                "$ref": "#/$defs/Expression"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "operands"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "`operand` rounded to the nearest multiple of `step`.",
+          "properties": {
+            "kind": {
+              "const": "round",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "operand": {
+              "$ref": "#/$defs/Expression"
+            },
+            "step": {
+              "$ref": "#/$defs/Expression"
+            }
+          },
+          "required": [
+            "kind",
+            "operand",
+            "step"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "floor",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "operand": {
+              "$ref": "#/$defs/Expression"
+            }
+          },
+          "required": [
+            "kind",
+            "operand"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "ceil",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "operand": {
+              "$ref": "#/$defs/Expression"
+            }
+          },
+          "required": [
+            "kind",
+            "operand"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "sqrt",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "operand": {
+              "$ref": "#/$defs/Expression"
+            }
+          },
+          "required": [
+            "kind",
+            "operand"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The sine of a plane angle.",
+          "properties": {
+            "kind": {
+              "const": "sin",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "operand": {
+              "$ref": "#/$defs/Expression"
+            }
+          },
+          "required": [
+            "kind",
+            "operand"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The cosine of a plane angle.",
+          "properties": {
+            "kind": {
+              "const": "cos",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "operand": {
+              "$ref": "#/$defs/Expression"
+            }
+          },
+          "required": [
+            "kind",
+            "operand"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The tangent of a plane angle.",
+          "properties": {
+            "kind": {
+              "const": "tan",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "operand": {
+              "$ref": "#/$defs/Expression"
+            }
+          },
+          "required": [
+            "kind",
+            "operand"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The plane angle of the vector `(x, y)`.",
+          "properties": {
+            "kind": {
+              "const": "atan2",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "x": {
+              "$ref": "#/$defs/Expression"
+            },
+            "y": {
+              "$ref": "#/$defs/Expression"
+            }
+          },
+          "required": [
+            "kind",
+            "y",
+            "x"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A slope restated in another form: `1:12` as a ratio is `8.33` as a\npercentage and about `4.76°` as an angle.",
+          "properties": {
+            "from": {
+              "$ref": "#/$defs/SlopeForm"
+            },
+            "kind": {
+              "const": "convertSlope",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "operand": {
+              "$ref": "#/$defs/Expression"
+            },
+            "to": {
+              "$ref": "#/$defs/SlopeForm"
+            }
+          },
+          "required": [
+            "kind",
+            "operand",
+            "from",
+            "to"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "An aggregate over the objects `over` reaches from the object in\nscope, those `filter` (`where`) selects: `value` is evaluated with\neach member in scope. A member whose membership cannot be decided\nwidens the result or leaves it not evaluated, never dropped.",
+          "properties": {
+            "function": {
+              "$ref": "#/$defs/AggregateFunction"
+            },
+            "kind": {
+              "const": "aggregate",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "over": {
+              "$ref": "#/$defs/AggregateSource"
+            },
+            "value": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Expression"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "where": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Selector"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "function",
+            "over"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "How the rule `rule` of the same ruleset judged the object in scope:\ntrue when it passed it, false when it reported a finding about it,\n`null` when it did not select it, and not evaluated when it left it\nopen or could not decide whether it selected it.",
+          "properties": {
+            "kind": {
+              "const": "ruleOutcome",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "rule": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "rule"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "How many findings the rule `rule` reported about the object in\nscope: 0 when it passed or did not select it.",
+          "properties": {
+            "kind": {
+              "const": "findingCount",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "rule": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "rule"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The greatest graded deviation (how far a value misses its bound,\nrelative to it) of the rule `rule`'s findings about the object in\nscope, a plain number; `null` when it reported none graded.",
+          "properties": {
+            "kind": {
+              "const": "deviation",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "rule": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "rule"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "concat",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "operands": {
+              "items": {
+                "$ref": "#/$defs/Expression"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "operands"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The number of characters of a text.",
+          "properties": {
+            "kind": {
+              "const": "length",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "operand": {
+              "$ref": "#/$defs/Expression"
+            }
+          },
+          "required": [
+            "kind",
+            "operand"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "lower",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "operand": {
+              "$ref": "#/$defs/Expression"
+            }
+          },
+          "required": [
+            "kind",
+            "operand"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "upper",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "operand": {
+              "$ref": "#/$defs/Expression"
+            }
+          },
+          "required": [
+            "kind",
+            "operand"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "trim",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "operand": {
+              "$ref": "#/$defs/Expression"
+            }
+          },
+          "required": [
+            "kind",
+            "operand"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ExpressionComparison": {
+      "description": "The binary comparisons of an [`Expression::Compare`].\n\nThe ordered operators also take dates and date-times, compared\nchronologically. `like` is a wildcard pattern (`*`, `?`, `\\` escapes)\nand `matches` a regular expression, both over the whole text;\n`contains` asks whether the right text occurs in the left.",
+      "enum": [
+        "equals",
+        "notEquals",
+        "lessThan",
+        "lessThanOrEquals",
+        "greaterThan",
+        "greaterThanOrEquals",
+        "like",
+        "matches",
+        "contains"
+      ],
+      "type": "string"
+    },
+    "ExternalName": {
+      "additionalProperties": false,
+      "description": "One external-schema name for a canonical concept.\n\n`type_system` is the release-bound semantic identity the source adapter\ndeclares, for example `https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4`.\nBinding a concept to source data requires an exact match on it.",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "typeSystem": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "typeSystem",
+        "name"
+      ],
+      "type": "object"
+    },
+    "LocalizedText": {
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "type": "string"
+        },
+        "translations": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "type": "object"
+        }
+      },
+      "required": [
+        "default"
+      ],
+      "type": "object"
+    },
+    "Locator": {
+      "additionalProperties": false,
+      "description": "One pinpoint within a cited source.",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "type": "object"
+    },
+    "ObjectTypeDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "citations": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Citation"
+          },
+          "type": "array"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LocalizedText"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "externalNames": {
+          "items": {
+            "$ref": "#/$defs/ExternalName"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "$ref": "#/$defs/LocalizedText"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "externalNames"
+      ],
+      "type": "object"
+    },
+    "PackageMetadata": {
+      "additionalProperties": false,
+      "description": "Package identity and presentation metadata.\n\n`name` and `description` are localized in the normalized MCS contract.",
+      "properties": {
+        "authors": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LocalizedText"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "license": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "repository": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "version"
+      ],
+      "type": "object"
+    },
+    "ParameterDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "allowedValues": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ParameterValue"
+          },
+          "type": "array"
+        },
+        "citations": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Citation"
+          },
+          "type": "array"
+        },
+        "columns": {
+          "description": "The columns of a `table` parameter, in presentation order; empty for\nevery other kind and then omitted, so existing packages serialize\nunchanged.",
+          "items": {
+            "$ref": "#/$defs/TableColumnDefinition"
+          },
+          "type": "array"
+        },
+        "defaultValue": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ParameterValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LocalizedText"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ParameterKind"
+        },
+        "name": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "referencedValueKind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PropertyValueKind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "required": {
+          "default": true,
+          "type": "boolean"
+        },
+        "unitDimension": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "kind"
+      ],
+      "type": "object"
+    },
+    "ParameterKind": {
+      "oneOf": [
+        {
+          "enum": [
+            "string",
+            "boolean",
+            "integer",
+            "number",
+            "quantity",
+            "enum",
+            "reference",
+            "objectTypeReference",
+            "propertyReference",
+            "selector",
+            "stringList",
+            "referenceList"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "date",
+          "description": "An ISO 8601 calendar date.",
+          "type": "string"
+        },
+        {
+          "const": "dateTime",
+          "description": "An ISO 8601 date-time with a UTC offset.",
+          "type": "string"
+        },
+        {
+          "const": "expression",
+          "description": "An expression; the capability states the type its value must have.",
+          "type": "string"
+        },
+        {
+          "const": "table",
+          "description": "Rows of typed cells; the definition declares the columns.",
+          "type": "string"
+        }
+      ]
+    },
+    "ParameterValue": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "string",
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "boolean",
+              "type": "string"
+            },
+            "value": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "integer",
+              "type": "string"
+            },
+            "value": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "number",
+              "type": "string"
+            },
+            "value": {
+              "format": "double",
+              "type": "number"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "quantity",
+              "type": "string"
+            },
+            "unit": {
+              "type": "string"
+            },
+            "value": {
+              "format": "double",
+              "type": "number"
+            }
+          },
+          "required": [
+            "type",
+            "value",
+            "unit"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "enum",
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "An ISO 8601 calendar date, `YYYY-MM-DD`; any other text is refused\nwhen the package is read.",
+          "properties": {
+            "type": {
+              "const": "date",
+              "type": "string"
+            },
+            "value": {
+              "$ref": "#/$defs/Date"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "An ISO 8601 date-time with an explicit UTC offset,\n`YYYY-MM-DDThh:mm:ss[.f](Z|±hh:mm)`; a date-time without an offset is\nrefused when the package is read.",
+          "properties": {
+            "type": {
+              "const": "dateTime",
+              "type": "string"
+            },
+            "value": {
+              "$ref": "#/$defs/DateTime"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "reference",
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "includeSubtypes": {
+              "default": true,
+              "type": "boolean"
+            },
+            "objectType": {
+              "type": "string"
+            },
+            "type": {
+              "const": "objectTypeReference",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "objectType"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "property": {
+              "type": "string"
+            },
+            "propertySet": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "propertyReference",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "property"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "selector",
+              "type": "string"
+            },
+            "value": {
+              "$ref": "#/$defs/Selector"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "An expression the capability evaluates per object\n([`Expression`]); type checked when the ruleset is compiled.",
+          "properties": {
+            "type": {
+              "const": "expression",
+              "type": "string"
+            },
+            "value": {
+              "$ref": "#/$defs/Expression"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "stringList",
+              "type": "string"
+            },
+            "value": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "referenceList",
+              "type": "string"
+            },
+            "value": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Rows of a `table` parameter, in declared order.",
+          "properties": {
+            "type": {
+              "const": "table",
+              "type": "string"
+            },
+            "value": {
+              "items": {
+                "additionalProperties": {
+                  "$ref": "#/$defs/ParameterValue"
+                },
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Rows of a `table` parameter read from a data file shipped in the\npackage: a CSV file, or one named sheet of an xlsx workbook.\n\n`path` is relative to the package root, `/`-separated, without `.`\nor `..` segments; `sha256` is the lowercase hex SHA-256 of the\nfile's bytes, so the package pins the exact data it was reviewed\nwith. `columns` declares every column of the file: its header, the\ntable column it fills and that column's kind. The file is data,\nnever code: a host loads it before binding\n(`axioval_engine::load_table_files`), the binder checks the declared\ncolumns against the parameter's table and binds the rows exactly as\nit binds the same rows written inline. A reference that was not\nloaded is refused when the package is bound.",
+          "properties": {
+            "columns": {
+              "items": {
+                "$ref": "#/$defs/TableFileColumn"
+              },
+              "type": "array"
+            },
+            "path": {
+              "type": "string"
+            },
+            "sha256": {
+              "type": "string"
+            },
+            "sheet": {
+              "description": "The sheet of an xlsx workbook; a CSV file has none.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "tableFile",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "path",
+            "sha256",
+            "columns"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "PropertyDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "citations": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Citation"
+          },
+          "type": "array"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LocalizedText"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "externalNames": {
+          "items": {
+            "$ref": "#/$defs/ExternalName"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "unitDimension": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "valueKind": {
+          "$ref": "#/$defs/PropertyValueKind"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "valueKind",
+        "externalNames"
+      ],
+      "type": "object"
+    },
+    "PropertyScope": {
+      "description": "Whose property a [`Expression::Property`] reads.",
+      "oneOf": [
+        {
+          "const": "subject",
+          "description": "The rule's checked object, even inside an aggregate's member scope.",
+          "type": "string"
+        }
+      ]
+    },
+    "PropertySetDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "citations": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Citation"
+          },
+          "type": "array"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LocalizedText"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "externalNames": {
+          "items": {
+            "$ref": "#/$defs/ExternalName"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "$ref": "#/$defs/LocalizedText"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "externalNames"
+      ],
+      "type": "object"
+    },
+    "PropertyValueKind": {
+      "oneOf": [
+        {
+          "enum": [
+            "string",
+            "boolean",
+            "integer",
+            "number",
+            "quantity",
+            "enum",
+            "reference",
+            "stringList",
+            "referenceList"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "date",
+          "description": "An ISO 8601 calendar date.",
+          "type": "string"
+        },
+        {
+          "const": "dateTime",
+          "description": "An ISO 8601 date-time with a UTC offset.",
+          "type": "string"
+        }
+      ]
+    },
+    "Quantifier": {
+      "description": "Which elements of a list value a property selector must hold for.\n\n`all` never holds vacuously: an empty list satisfies neither quantifier,\nas an absent value satisfies no comparison.",
+      "oneOf": [
+        {
+          "const": "any",
+          "description": "At least one element satisfies the comparison.",
+          "type": "string"
+        },
+        {
+          "const": "all",
+          "description": "Every element satisfies it, and there is at least one.",
+          "type": "string"
+        }
+      ]
+    },
+    "RelatedQuantifier": {
+      "description": "Which of the objects a `related` selector reaches must match its selector.",
+      "oneOf": [
+        {
+          "const": "any",
+          "description": "At least one reached object matches.",
+          "type": "string"
+        },
+        {
+          "const": "all",
+          "description": "Every reached object matches, and at least one is reached.",
+          "type": "string"
+        },
+        {
+          "const": "none",
+          "description": "No reached object matches; holds when none is reached.",
+          "type": "string"
+        }
+      ]
+    },
+    "RuleDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "capability": {
+          "type": "string"
+        },
+        "citations": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Citation"
+          },
+          "type": "array"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LocalizedText"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "parameters": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ParameterDefinition"
+          },
+          "default": {},
+          "type": "object"
+        },
+        "tags": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "capability"
+      ],
+      "type": "object"
+    },
+    "RuleOutcomeKind": {
+      "description": "Which judgement of another rule a `ruleOutcome` selector selects.",
+      "oneOf": [
+        {
+          "const": "passed",
+          "description": "Selected by the rule, and nothing found or left open about it.",
+          "type": "string"
+        },
+        {
+          "const": "failed",
+          "description": "The subject of at least one of the rule's findings.",
+          "type": "string"
+        }
+      ]
+    },
+    "ScalarValue": {
+      "description": "A literal: one value of a scalar [`ParameterValue`] kind, in the same\nwire form. Lists, tables, references and selectors are not literals.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "boolean",
+              "type": "string"
+            },
+            "value": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "integer",
+              "type": "string"
+            },
+            "value": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "number",
+              "type": "string"
+            },
+            "value": {
+              "format": "double",
+              "type": "number"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "quantity",
+              "type": "string"
+            },
+            "unit": {
+              "type": "string"
+            },
+            "value": {
+              "format": "double",
+              "type": "number"
+            }
+          },
+          "required": [
+            "type",
+            "value",
+            "unit"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "string",
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "enum",
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "date",
+              "type": "string"
+            },
+            "value": {
+              "$ref": "#/$defs/Date"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "dateTime",
+              "type": "string"
+            },
+            "value": {
+              "$ref": "#/$defs/DateTime"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Selector": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "all",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "includeSubtypes": {
+              "default": true,
+              "type": "boolean"
+            },
+            "kind": {
+              "const": "entityType",
+              "type": "string"
+            },
+            "objectType": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "objectType"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "caseSensitive": {
+              "description": "Whether text comparisons respect case; `false` folds both sides.",
+              "type": "boolean"
+            },
+            "kind": {
+              "const": "property",
+              "type": "string"
+            },
+            "operator": {
+              "$ref": "#/$defs/ComparisonOperator"
+            },
+            "precision": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TemporalPrecision"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "How finely dates and date-times compare. `day` reads a date-time\nas the calendar day it states, so it compares with a date; without\nit a date-time compared with a date is not evaluated. Applies to\na `date` or `dateTime` value only."
+            },
+            "property": {
+              "type": "string"
+            },
+            "propertySet": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "quantifier": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Quantifier"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "How a list value is compared: `any` element or `all` of them\nmust satisfy the operator. A scalar value counts as a list of\none. Without it a list value is not evaluated, never compared as\na whole; `exists` takes none."
+            },
+            "trim": {
+              "description": "Whether a text value is trimmed of surrounding whitespace first.",
+              "type": "boolean"
+            },
+            "value": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ParameterValue"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "property",
+            "operator"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Objects by the properties whose set and name match XML Schema\npatterns, as IDS names them (`Pset_.*Common`).\n\nA pattern matches the whole name the source states; it names no\nconcept and is never bound through the package vocabulary. Without\n`propertySetPattern` every property set is searched. The selector\nholds when at least one property matches and the comparison holds\nfor `matched` of them (`any` or `all`); no matching property is no\nmatch. The other fields compare each matched property's value as a\n`property` selector does.",
+          "properties": {
+            "caseSensitive": {
+              "type": "boolean"
+            },
+            "kind": {
+              "const": "propertyPattern",
+              "type": "string"
+            },
+            "matched": {
+              "$ref": "#/$defs/Quantifier",
+              "description": "Which matched properties must satisfy the comparison."
+            },
+            "operator": {
+              "$ref": "#/$defs/ComparisonOperator"
+            },
+            "precision": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TemporalPrecision"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "propertyPattern": {
+              "type": "string"
+            },
+            "propertySetPattern": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "quantifier": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Quantifier"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "How each matched list, bounded or table value is compared."
+            },
+            "trim": {
+              "type": "boolean"
+            },
+            "value": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ParameterValue"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "propertyPattern",
+            "matched",
+            "operator"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Objects carrying a classification in `system`, as their source\nstates it.\n\n`code` names one code exactly and `codePattern` matches codes by an\nXML Schema pattern over the whole code (`Ss_25_.*`), as IDS writes\nclassification patterns; at most one of them is given. With neither,\nany classification in `system` matches. `includeDescendants` also\nmatches the codes an assignment's ancestors carry, and needs a code or\na pattern.",
+          "properties": {
+            "code": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "codePattern": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "includeDescendants": {
+              "default": false,
+              "type": "boolean"
+            },
+            "kind": {
+              "const": "classification",
+              "type": "string"
+            },
+            "system": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "system"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Objects a classification of the ruleset (`classifications`)\nassigns `class`, or, with `includeDescendants`, `class` or any class\nbelow it in the classification's tree.\n\nAn all-match classification selects an object when any class it\nassigns does. An unclassified object is not selected; one whose class\ncannot be derived is not evaluated. `class` is a declared class of a\nhierarchical classification, or a class a flat one's rows assign,\nwhich has no descendants.",
+          "properties": {
+            "class": {
+              "type": "string"
+            },
+            "classification": {
+              "type": "string"
+            },
+            "includeDescendants": {
+              "type": "boolean"
+            },
+            "kind": {
+              "const": "derivedClass",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "classification",
+            "class"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The groups a grouping of the ruleset (`groupings`) derives: derived\nobjects, one per group, never a model object. Only this selector\nreaches them, as only an `entityType` reaches resource objects.",
+          "properties": {
+            "grouping": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "derivedGroup",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "grouping"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "allOf",
+              "type": "string"
+            },
+            "operands": {
+              "items": {
+                "$ref": "#/$defs/Selector"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "operands"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "anyOf",
+              "type": "string"
+            },
+            "operands": {
+              "items": {
+                "$ref": "#/$defs/Selector"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "operands"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "not",
+              "type": "string"
+            },
+            "operand": {
+              "$ref": "#/$defs/Selector"
+            }
+          },
+          "required": [
+            "kind",
+            "operand"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Objects by the objects a relationship `path` reaches from them.\n\nEach step is `Relationship` or `Relationship:direction` (`forward`,\nthe default, `backward` or `either`), walked one after another; a step\nending in `+` is taken one or more times, reaching every object along\nthe relationship's chain. A step may name several relationships\nseparated by `|`, with one direction after the last applying to all\n(`IfcRelFillsElement|IfcRelVoidsElement:backward+`); it takes any of\nthem, mixing them along a chain. The reached objects are tested\nagainst `selector` under `quantifier`.",
+          "properties": {
+            "kind": {
+              "const": "related",
+              "type": "string"
+            },
+            "path": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "quantifier": {
+              "$ref": "#/$defs/RelatedQuantifier",
+              "description": "Which reached objects must match; `any` is omitted when\nserialized."
+            },
+            "selector": {
+              "$ref": "#/$defs/Selector"
+            }
+          },
+          "required": [
+            "kind",
+            "path",
+            "selector"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Objects of the sources the host declared to play `value`, such as\n`structure`.\n\nA discipline is source metadata, not an object fact: every object of\na source matches or none does. An object whose source declares no\ndiscipline is not evaluated, never a non-match, so a discipline-scoped\nrule cannot pass vacuously over a model nobody classified.",
+          "properties": {
+            "kind": {
+              "const": "discipline",
+              "type": "string"
+            },
+            "value": {
+              "$ref": "#/$defs/Discipline"
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Objects of the sources whose metadata `field` satisfies the\ncomparison, such as the application that wrote a model.\n\nSource metadata is not an object fact: every object of a source\nmatches or none does. A field compares as a property selector's value\ndoes: one holding several values (a model written by two\napplications) needs `quantifier`, and one the source states it lacks\nmatches nothing, as an absent property does. A source whose field was\nnever read is not evaluated, never a non-match.",
+          "properties": {
+            "caseSensitive": {
+              "type": "boolean"
+            },
+            "field": {
+              "$ref": "#/$defs/SourceField"
+            },
+            "kind": {
+              "const": "source",
+              "type": "string"
+            },
+            "operator": {
+              "$ref": "#/$defs/ComparisonOperator"
+            },
+            "quantifier": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Quantifier"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "trim": {
+              "type": "boolean"
+            },
+            "value": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ParameterValue"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "field",
+            "operator"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Objects by how another rule of the same ruleset judged them.\n\n`passed` holds for an object the rule `rule` selected and reported\nnothing about; `failed` for an object it reported a finding about.\nAn object the other rule left not evaluated, or could not decide\nwhether it selected, is not evaluated, never a match or a non-match;\nso is every object of a source or project the other rule reported\nabout as a whole. The plan runs `rule` first; a cycle of such\nreferences fails compilation.",
+          "properties": {
+            "kind": {
+              "const": "ruleOutcome",
+              "type": "string"
+            },
+            "outcome": {
+              "$ref": "#/$defs/RuleOutcomeKind"
+            },
+            "rule": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "rule",
+            "outcome"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Objects for which `expression`, a truth, holds.\n\nIt is evaluated per candidate object with three-valued truth: true\nselects, false and `null` do not, and a value that cannot be read\nor decided (a measured interval straddling a bound) leaves the object\nnot evaluated, never skipped. It reads properties, measured and\nderived values, never a rule's parameters; it is type checked when\nthe ruleset is compiled.",
+          "properties": {
+            "expression": {
+              "$ref": "#/$defs/Expression"
+            },
+            "kind": {
+              "const": "expression",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "expression"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "SlopeForm": {
+      "description": "How a slope is stated.",
+      "oneOf": [
+        {
+          "const": "ratio",
+          "description": "Rise over run, a plain number.",
+          "type": "string"
+        },
+        {
+          "const": "percent",
+          "description": "Rise over run times 100, a plain number.",
+          "type": "string"
+        },
+        {
+          "const": "angle",
+          "description": "The inclination, a plane angle.",
+          "type": "string"
+        }
+      ]
+    },
+    "Source": {
+      "additionalProperties": false,
+      "description": "A bibliographic source a package may cite. Provenance only: it never changes\nselection, evidence, or outcomes.",
+      "properties": {
+        "designation": {
+          "type": "string"
+        },
+        "edition": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "publicationDate": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "publisher": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "designation",
+        "title"
+      ],
+      "type": "object"
+    },
+    "SourceField": {
+      "description": "A fact about a whole source that a `source` selector compares.",
+      "oneOf": [
+        {
+          "const": "fileName",
+          "description": "The file name the host read the source from.",
+          "type": "string"
+        },
+        {
+          "const": "application",
+          "description": "The name of every application the source states wrote it.",
+          "type": "string"
+        },
+        {
+          "const": "schema",
+          "description": "The schema the source declares, such as `IFC4`.",
+          "type": "string"
+        },
+        {
+          "const": "project",
+          "description": "The name of the project the source describes.",
+          "type": "string"
+        },
+        {
+          "const": "timestamp",
+          "description": "When the source states it was written, as written: for IFC the\nheader's `FILE_NAME.time_stamp`.",
+          "type": "string"
+        }
+      ]
+    },
+    "TableColumnDefinition": {
+      "additionalProperties": false,
+      "description": "One named, typed column of a `table` parameter.",
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LocalizedText"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ColumnKind"
+        },
+        "name": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "required": {
+          "default": true,
+          "description": "Whether every row must carry a cell in this column.",
+          "type": "boolean"
+        },
+        "unitDimension": {
+          "description": "The dimension of a `quantity` column.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "kind"
+      ],
+      "type": "object"
+    },
+    "TableFileColumn": {
+      "additionalProperties": false,
+      "description": "One column of a [`ParameterValue::TableFile`]: the table column `id` it\nfills, its `kind` (which must be the parameter column's), the file's\nheader naming it (`id` when omitted) and, for a `quantity` column, the\nunit every cell is stated in.\n\nA `selector` column cannot be read from a file.",
+      "properties": {
+        "header": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ColumnKind"
+        },
+        "unit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "kind"
+      ],
+      "type": "object"
+    },
+    "TemporalPrecision": {
+      "description": "How finely a comparison involving a date-time reads it.\n\nWithout a precision a date compares with a date and a date-time with a\ndate-time, as instants. `Day` reads every date-time as the calendar day\nit states in its own offset (`2026-09-27T23:30:00-05:00` is on the 27th),\nso a date-time can then be compared with a date, or two date-times by\nday.",
+      "oneOf": [
+        {
+          "const": "day",
+          "description": "Compare calendar days only.",
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "$id": "https://axioval.github.io/engine/schema/definitions.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Rule definitions, their parameters and the object types, properties and property sets they name.",
+  "properties": {
+    "definitions": {
+      "additionalProperties": {
+        "$ref": "#/$defs/RuleDefinition"
+      },
+      "default": {},
+      "type": "object"
+    },
+    "objectTypes": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ObjectTypeDefinition"
+      },
+      "default": {},
+      "type": "object"
+    },
+    "package": {
+      "$ref": "#/$defs/PackageMetadata"
+    },
+    "properties": {
+      "additionalProperties": {
+        "$ref": "#/$defs/PropertyDefinition"
+      },
+      "default": {},
+      "type": "object"
+    },
+    "propertySets": {
+      "additionalProperties": {
+        "$ref": "#/$defs/PropertySetDefinition"
+      },
+      "default": {},
+      "type": "object"
+    },
+    "schemaVersion": {
+      "type": "string"
+    },
+    "sources": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Source"
+      },
+      "default": {},
+      "type": "object"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "package"
+  ],
+  "title": "Axioval definition package",
+  "type": "object"
+}

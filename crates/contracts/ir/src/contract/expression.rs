@@ -29,6 +29,7 @@ pub const MAX_AGGREGATE_NESTING: usize = 2;
 ///
 /// [`Selector`]: super::Selector
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum Expression {
     /// A constant of one scalar kind.
@@ -368,6 +369,7 @@ pub enum Expression {
 
 /// Whose property a [`Expression::Property`] reads.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub enum PropertyScope {
     /// The rule's checked object, even inside an aggregate's member scope.
@@ -376,6 +378,7 @@ pub enum PropertyScope {
 
 /// What an [`Expression::Aggregate`] computes over its members.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub enum AggregateFunction {
     /// How many members there are; takes no `value`.
@@ -400,6 +403,7 @@ pub enum AggregateFunction {
 
 /// The objects an [`Expression::Aggregate`] ranges over.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum AggregateSource {
     /// The objects a relationship path reaches from the object in scope,
@@ -422,6 +426,7 @@ pub enum AggregateSource {
 
 /// One `when` → `then` branch of an [`Expression::If`].
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Branch {
     pub when: Expression,
@@ -435,6 +440,7 @@ pub struct Branch {
 /// and `matches` a regular expression, both over the whole text;
 /// `contains` asks whether the right text occurs in the left.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub enum ExpressionComparison {
     Equals,
@@ -450,6 +456,7 @@ pub enum ExpressionComparison {
 
 /// How a slope is stated.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub enum SlopeForm {
     /// Rise over run, a plain number.
@@ -463,6 +470,7 @@ pub enum SlopeForm {
 /// A literal: one value of a scalar [`ParameterValue`] kind, in the same
 /// wire form. Lists, tables, references and selectors are not literals.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "type", rename_all = "camelCase", deny_unknown_fields)]
 pub enum ScalarValue {
     Boolean { value: bool },

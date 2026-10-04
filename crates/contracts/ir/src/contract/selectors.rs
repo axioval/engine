@@ -3,6 +3,7 @@ use super::{Expression, ParameterValue};
 use crate::{Discipline, TemporalPrecision};
 use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum Selector {
     All,
@@ -220,6 +221,7 @@ pub enum Selector {
 }
 /// Which judgement of another rule a `ruleOutcome` selector selects.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub enum RuleOutcomeKind {
     /// Selected by the rule, and nothing found or left open about it.
@@ -229,6 +231,7 @@ pub enum RuleOutcomeKind {
 }
 /// A fact about a whole source that a `source` selector compares.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub enum SourceField {
     /// The file name the host read the source from.
@@ -334,6 +337,7 @@ impl Selector {
 /// `all` never holds vacuously: an empty list satisfies neither quantifier,
 /// as an absent value satisfies no comparison.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub enum Quantifier {
     /// At least one element satisfies the comparison.
@@ -343,6 +347,7 @@ pub enum Quantifier {
 }
 /// Which of the objects a `related` selector reaches must match its selector.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub enum RelatedQuantifier {
     /// At least one reached object matches.
@@ -367,6 +372,7 @@ impl RelatedQuantifier {
 /// operators also take a `date` or `dateTime`, compared chronologically.
 /// `exists`, `isEmpty` and `isNotEmpty` judge presence and take no value.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub enum ComparisonOperator {
     Equals,

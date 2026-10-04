@@ -1358,3 +1358,65 @@ fn computed_columns_are_checked_when_bound() {
         "{message}"
     );
 }
+
+#[test]
+fn a_conditional_column_branches_on_a_derived_class() {
+    // Offices count their footprint twice; the column is an expression.
+    let mut set = space_takeoff();
+    let office = json!({"kind": "compare", "operator": "equals",
+        "left": {"kind": "property", "propertySet": "axioval:classification", "property": "space-use"},
+        "right": {"kind": "literal", "value": {"type": "string", "value": "office"}}});
+    let weighted = json!({"type": "expression", "value": {"kind": "if",
+        "branches": [{"when": office, "then": {"kind": "multiply",
+            "left": {"kind": "parameter", "name": "footprint"},
+            "right": {"kind": "literal", "value": {"type": "number", "value": 2.0}}}}],
+        "else": {"kind": "parameter", "name": "footprint"}}});
+    let parameters = &mut set.root.rules[0].parameters;
+    for (key, value) in [
+        (
+            "measure_1_aggregates",
+            json!({"type": "stringList", "value": ["sum"]}),
+        ),
+        ("measure_2_kind", text("computed")),
+        ("measure_2_expression", weighted),
+        ("measure_2_name", text("weighted")),
+        (
+            "measure_2_aggregates",
+            json!({"type": "stringList", "value": ["sum"]}),
+        ),
+    ] {
+        parameters.insert(key.to_owned(), serde_json::from_value(value).unwrap());
+    }
+    // Without `unsure`, whose class may be any.
+    let model = Model::default()
+        .object("o1", "space")
+        .object("o2", "space")
+        .object("lab", "space")
+        .text("o1", "Pset", "Name", "Office 1")
+        .text("o2", "Pset", "Name", "Office 2")
+        .text("lab", "Pset", "Name", "Lab 1");
+    let session = session(model)
+        .with_host_service(
+            PlanAreaServiceHandle::new(Arc::new(footprints())),
+            &[snapshot()],
+        )
+        .unwrap();
+    let report = check(&set, &session);
+    assert!(
+        report.not_evaluated.is_empty(),
+        "{:?}",
+        report.not_evaluated
+    );
+    let offices = rows(&report, "space-takeoff")
+        .into_iter()
+        .find(|(group, _)| group == &["office".to_owned()])
+        .unwrap();
+    // 20 m² and 9.5..10.5 m², summed, then doubled.
+    assert_eq!(offices.1[1], between(29.5, 30.5));
+    assert_eq!(offices.1[2], between(59.0, 61.0));
+    let labs = rows(&report, "space-takeoff")
+        .into_iter()
+        .find(|(group, _)| group == &["lab".to_owned()])
+        .unwrap();
+    assert_eq!(labs.1[1], labs.1[2]);
+}

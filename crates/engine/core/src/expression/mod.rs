@@ -6,6 +6,7 @@
 mod aggregate;
 mod evaluate;
 mod interval;
+mod text;
 mod types;
 mod unit;
 
@@ -15,5 +16,6 @@ pub use evaluate::{
     Value, evaluate,
 };
 pub use interval::{Interval, IntervalFailure, IntervalResult};
+pub use text::{MAX_TEXT_LENGTH, parse_text};
 pub use types::{Type, TypeEnvironment, TypeError, TypeErrorKind, check, check_as, measured_type};
 pub use unit::{Unit, parse_unit};

@@ -6,6 +6,37 @@ and `axioval_engine::expression` checks and evaluates it. The language is
 total and pure: no loops, no recursion, no user-defined functions and no
 package code, so every expression terminates.
 
+## Text form
+
+An expression also has a text form for people to write, as takeoff columns
+and editors take it: `area × 42.5 EUR/m²`,
+`if(class == "office" and not open, area * 2, area)`.
+`axioval_engine::expression::parse_text` parses it into the tree; it never
+runs as code.
+
+```text
+expression := or
+or         := and ("or" and)*
+and        := not ("and" not)*
+not        := "not" not | comparison
+comparison := sum (("==" | "!=" | "<" | "<=" | ">" | ">=" | "≤" | "≥" | "≠") sum)?
+sum        := term (("+" | "-" | "−") term)*
+term       := factor (("*" | "×" | "·" | "/" | "÷") factor)*
+factor     := ("-" | "−") factor
+            | number [unit] | "text" | true | false | null
+            | function "(" expression ("," expression)* ")"
+            | name | "(" expression ")"
+```
+
+A number takes the unit written right after it (`42.5 EUR/m²`, `10 m2`);
+a word that is no unit (`3 or …`) is read as what follows the number. A
+name reads the parameter (in a takeoff, the column) of that name. The
+functions are `min` and `max` (two values or more), `abs`, `sqrt`, `floor`,
+`ceil`, `round(value, step)`, `if(condition, then, else)` and
+`coalesce(…)`. Properties, aggregates and rule outcomes are written in the
+tree. Text is at most `MAX_TEXT_LENGTH` (1000) characters and nests at most
+as deeply as the tree.
+
 ## Values
 
 A value is `null`, a truth, a number, text, an enumeration value, a date or
@@ -135,6 +166,5 @@ A type error names its kind and path:
 | `InvalidUnit`, `InvalidPattern` | a literal `parsec`, a `matches` pattern that does not compile |
 | `Expected` | a requirement that is a quantity |
 
-The unit algebra (`Unit`, `parse_unit`) and `Interval` are shared with
-`quantity-takeoff` computed columns, which use the same symbols and
-exponents.
+`quantity-takeoff` computed columns are expressions: they parse, check and
+evaluate through this module, with the same units and intervals.

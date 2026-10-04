@@ -350,3 +350,29 @@ fn exponent_of(text: &str) -> Option<i8> {
         .collect();
     plain.parse::<i8>().ok().filter(|exponent| *exponent != 0)
 }
+
+#[cfg(test)]
+#[allow(clippy::float_cmp)]
+mod tests {
+    use super::parse_unit;
+    use axioval_ir::QuantityDimension;
+
+    #[test]
+    fn units_parse_with_scales_exponents_and_currencies() {
+        let (scale, unit) = parse_unit("EUR/m²").unwrap();
+        assert_eq!(scale, 1.0);
+        assert_eq!(unit.to_string(), "EUR·m⁻²");
+        assert!(unit.dimension().unwrap().is_none());
+        let (scale, unit) = parse_unit("cm2").unwrap();
+        assert!((scale - 1e-4).abs() < 1e-18);
+        assert_eq!(unit.dimension().unwrap(), Some(QuantityDimension::Area));
+        let (_, unit) = parse_unit("W/m^2·K").unwrap();
+        assert_eq!(unit.to_string(), "kg·s⁻³·K⁻¹");
+        assert_eq!(parse_unit("m⁻¹").unwrap().1.to_string(), "m⁻¹");
+        assert_eq!(parse_unit("1").unwrap().1.to_string(), "1");
+        assert!(parse_unit("parsec").is_err());
+        assert!(parse_unit("m/s/s").is_err());
+        assert!(parse_unit("EUR·USD").is_err());
+        assert!(parse_unit("rad·m").unwrap().1.dimension().is_err());
+    }
+}

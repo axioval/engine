@@ -1742,6 +1742,19 @@ fn computed(
         detail: format!("`{name}` is constant for the rule and takes no {what}"),
     };
     match value {
+        // The capability parses and checks an expression's text, and the
+        // expression itself, against what only it knows (its columns).
+        ParameterValue::Expression { value: expression } if descriptor.expression_text => {
+            expression
+                .validate()
+                .map_err(|error| EngineError::InvalidExpression {
+                    rule: rule.into(),
+                    parameter: name.into(),
+                    path: name.into(),
+                    detail: error.to_string(),
+                })?;
+            Ok(true)
+        }
         ParameterValue::Expression { .. }
             if !matches!(
                 descriptor.parameter_type,

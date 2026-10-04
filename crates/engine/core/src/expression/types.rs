@@ -98,6 +98,8 @@ pub enum TypeErrorKind {
     NotAngle(Type),
     /// Two units that must be one differ; a plain number is unit `1`.
     UnitMismatch {
+        /// What combines them: `adds`, `subtracts`, `compares`, `combines`.
+        operation: &'static str,
         /// The first operand's unit.
         left: Unit,
         /// The other's.
@@ -134,9 +136,12 @@ impl fmt::Display for TypeErrorKind {
             Self::NotNumeric(found) => write!(f, "a number is needed, not {found}"),
             Self::NotText(found) => write!(f, "text is needed, not {found}"),
             Self::NotAngle(found) => write!(f, "a plane angle is needed, not {found}"),
-            Self::UnitMismatch { left, right } => {
-                write!(f, "it combines {left} and {right}, which differ")
-            }
+            // As takeoff columns have always worded it: the added unit first.
+            Self::UnitMismatch {
+                operation,
+                left,
+                right,
+            } => write!(f, "it {operation} {right} and {left}, which differ"),
             Self::Mismatch { left, right } => {
                 write!(f, "it combines {left} and {right}, which differ")
             }
@@ -456,7 +461,12 @@ impl Checker<'_> {
                 if left == Type::Integer && right == Type::Integer {
                     Type::Integer
                 } else {
-                    same_unit(&left, &right).map_err(here)?
+                    let operation = if matches!(expression, Expression::Add { .. }) {
+                        "adds"
+                    } else {
+                        "subtracts"
+                    };
+                    same_unit(operation, &left, &right).map_err(here)?
                 }
             }
             Expression::Multiply { left, right, .. } | Expression::Divide { left, right, .. } => {
@@ -487,7 +497,7 @@ impl Checker<'_> {
                 let mut result = Type::Null;
                 for (index, operand) in operands.iter().enumerate() {
                     let found = self.numeric(operand, &item(index))?;
-                    result = same_unit(&result, &found).map_err(|kind| TypeError {
+                    result = same_unit("compares", &result, &found).map_err(|kind| TypeError {
                         path: item(index),
                         kind,
                     })?;
@@ -497,7 +507,7 @@ impl Checker<'_> {
             Expression::Round { operand, step, .. } => {
                 let value = self.numeric(operand, &child("operand"))?;
                 let step = self.numeric(step, &child("step"))?;
-                same_unit(&value, &step).map_err(here)?
+                same_unit("rounds", &value, &step).map_err(here)?
             }
             Expression::Sqrt { operand, .. } => match self.numeric(operand, &child("operand"))? {
                 Type::Integer => Type::NUMBER,
@@ -516,7 +526,7 @@ impl Checker<'_> {
             Expression::Atan2 { y, x, .. } => {
                 let y = self.numeric(y, &child("y"))?;
                 let x = self.numeric(x, &child("x"))?;
-                same_unit(&y, &x).map_err(here)?;
+                same_unit("combines", &y, &x).map_err(here)?;
                 Type::Number(Unit::RADIAN)
             }
             Expression::ConvertSlope {
@@ -652,7 +662,11 @@ fn joined(left: &Type, right: Type, path: &str) -> Result<Type, TypeError> {
     join(left, &right).ok_or_else(|| TypeError {
         path: path.to_owned(),
         kind: match (left.unit(), right.unit()) {
-            (Some(left), Some(right)) => TypeErrorKind::UnitMismatch { left, right },
+            (Some(left), Some(right)) => TypeErrorKind::UnitMismatch {
+                operation: "combines",
+                left,
+                right,
+            },
             _ => TypeErrorKind::Mismatch {
                 left: left.clone(),
                 right,
@@ -661,11 +675,13 @@ fn joined(left: &Type, right: Type, path: &str) -> Result<Type, TypeError> {
     })
 }
 
-/// The type of `+`, `−`, `min`, `max` or `round` over two numeric types.
-fn same_unit(left: &Type, right: &Type) -> Result<Type, TypeErrorKind> {
+/// The type of `+`, `−`, `min`, `max` or `round` over two numeric types,
+/// `operation` naming it in an error.
+fn same_unit(operation: &'static str, left: &Type, right: &Type) -> Result<Type, TypeErrorKind> {
     match (left.unit(), right.unit()) {
         (Some(left_unit), Some(right_unit)) if left_unit != right_unit => {
             Err(TypeErrorKind::UnitMismatch {
+                operation,
                 left: left_unit,
                 right: right_unit,
             })
@@ -704,9 +720,11 @@ fn comparable(
             Ok(())
         }
         ordered => match (left.unit(), right.unit()) {
-            (Some(left), Some(right)) if left != right => {
-                Err(TypeErrorKind::UnitMismatch { left, right })
-            }
+            (Some(left), Some(right)) if left != right => Err(TypeErrorKind::UnitMismatch {
+                operation: "compares",
+                left,
+                right,
+            }),
             (Some(_), Some(_)) => Ok(()),
             _ => match (left, right) {
                 (T::Boolean, T::Boolean) if matches!(ordered, C::Equals | C::NotEquals) => Ok(()),

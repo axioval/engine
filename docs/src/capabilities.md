@@ -2166,16 +2166,32 @@ be read.
 
 #### Computed columns
 
-A `computed` column's expression names other columns of the takeoff by
-their names (`area`, a profile's `profile_width`; not a `property_set`
-column, nor a `computed` one declared after it) and combines them with `+`,
-`-` (or `−`), `×` (`*`, `·`), `÷` (`/`), `min(…)`, `max(…)`, parentheses and
-literals: a number, or a quantity with its unit written right after it
-(`42.5 EUR/m²`, `2 m`, `0.5 m2`; a unit runs to the next space or operator,
-and every factor after its `/` divides). Units are the SI units and their
-common multiples (`mm`, `cm`, `km`, `l`, `g`, `t`, `min`, `h`, `deg`, `N`,
-`kN`, `Pa`, `kPa`, `MPa`, `J`, `kWh`, `W`, `kW`) and a currency, three
-capital letters (`EUR`).
+A `computed` column is an [expression](./expressions.md), written in its
+[text form](./expressions.md#text-form) as a `string` or given as the
+expression itself (`{"type": "expression", "value": {…}}`). A name reads
+another column of the takeoff (`area`, a profile's `profile_width`; not a
+`property_set` column, nor a `computed` one declared after it), and the
+column combines them with `+`, `-` (or `−`), `×` (`*`, `·`), `÷` (`/`),
+`min(…)`, `max(…)`, parentheses and literals: a number, or a quantity with
+its unit written right after it (`42.5 EUR/m²`, `2 m`, `0.5 m2`; a unit runs
+to the next space or operator, and every factor after its `/` divides).
+Units are the SI units and their common multiples (`mm`, `cm`, `km`, `l`,
+`g`, `t`, `min`, `h`, `deg`, `N`, `kN`, `Pa`, `kPa`, `MPa`, `J`, `kWh`, `W`,
+`kW`) and a currency, three capital letters (`EUR`). Being an expression,
+a column may also branch and read the member itself: `if(…, …, …)`,
+comparisons, `and`/`or`/`not`, and, as the expression tree, the member's
+properties (derived classes included), derived values and aggregates. Doubling
+offices' footprints:
+
+```json
+{"measure_2_expression": {"type": "expression", "value": {"kind": "if",
+  "branches": [{"when": {"kind": "compare", "operator": "equals",
+                         "left": {"kind": "property", "propertySet": "axioval:classification", "property": "space-use"},
+                         "right": {"kind": "literal", "value": {"type": "string", "value": "office"}}},
+                "then": {"kind": "multiply", "left": {"kind": "parameter", "name": "footprint"},
+                         "right": {"kind": "literal", "value": {"type": "number", "value": 2.0}}}}],
+  "else": {"kind": "parameter", "name": "footprint"}}}}
+```
 
 The expression is parsed and checked when the rule is bound, never run as
 code: an unknown name or unit, a column whose unit is not known (declare
@@ -2186,9 +2202,10 @@ column's unit is the expression's: a quantity column in its dimension, a
 number column for a plain number, or a number column carrying its `unit`
 (`EUR`) when it counts a currency.
 
-It is computed for each member over the intervals of its inputs, so the
-result is an interval sure to hold every value they allow (up to binary
-rounding, as every takeoff sum is), and the group's `sum` of the computed
+It is computed for each member by the expression evaluator over the
+intervals of its inputs, so the result is an interval sure to hold every
+value they allow (rounding outward where a floating-point step rounds), and
+the group's `sum` of the computed
 values bounds the true total: `cost = area × 42.5 EUR/m²` fills per member
 and sums per group. A member missing an input has no value, never zero, and
 leaves the group's aggregate unknown; a divisor whose interval holds zero

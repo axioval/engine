@@ -23,9 +23,11 @@ use crate::support::{
     invalid, resolve, undefined,
 };
 
-mod expression;
+mod computed;
 
-use expression::{Expression, Failure, Interval, Unit};
+use axioval_engine::expression::{Interval, Unit, Value, parse_unit};
+use axioval_ir::contract::Expression;
+use computed::{ColumnValue, Written};
 
 /// The name of the table a takeoff reports.
 pub const TAKEOFF_TABLE: &str = "takeoff";
@@ -102,10 +104,13 @@ impl RuleCapability for QuantityTakeoff {
                 ("_expression", ParameterType::String),
                 ("_unit", ParameterType::String),
             ] {
-                parameters.push(ParameterDescriptor::optional(
-                    format!("measure_{n}{suffix}"),
-                    kind,
-                ));
+                let descriptor =
+                    ParameterDescriptor::optional(format!("measure_{n}{suffix}"), kind);
+                parameters.push(if suffix == "_expression" {
+                    descriptor.expression_text()
+                } else {
+                    descriptor
+                });
             }
         }
         parameters.push(ParameterDescriptor::optional(
@@ -224,12 +229,12 @@ enum Source<'a> {
     /// An expression over other columns of the member, as written and,
     /// once every column is declared, bound.
     Computed {
-        text: &'a str,
+        written: Written<'a>,
         bound: Option<Box<Computed>>,
     },
 }
 
-/// A bound computed column: its expression and the column each input of
+/// A bound computed column: its expression and the column each name in
 /// it reads, in the expression's order.
 struct Computed {
     expression: Expression,
@@ -246,13 +251,19 @@ struct Input {
 }
 
 impl Computed {
-    /// The expression's value for a member that read `reads`: no value
-    /// when an input has none, never zero; unreadable when one cannot be
-    /// read, is no number of its unit, or a divisor may be zero.
-    fn cell(&self, reads: &[Read]) -> Cell {
-        let mut values = Vec::with_capacity(self.inputs.len());
+    /// The expression's value for `object`, a member that read `reads`: no
+    /// value when an input it needs has none, never zero; unreadable when
+    /// one cannot be read, is no number of its unit, or a divisor may be
+    /// zero.
+    fn cell(
+        &self,
+        reads: &[Read],
+        context: &RuleContext<'_>,
+        object: &Object,
+        rule: &CompiledRule,
+    ) -> Cell {
+        let mut columns = BTreeMap::new();
         let mut all_exact = true;
-        let mut absent = false;
         for input in &self.inputs {
             let cell = match (&reads[input.measure], &input.part) {
                 (Read::Single(cell), _) => cell.clone(),
@@ -264,7 +275,7 @@ impl Computed {
                     Cell::Unreadable(reason.clone(), format!("cannot be read ({message})"))
                 }
             };
-            match cell {
+            let value: ColumnValue = match cell {
                 Cell::Number {
                     lower,
                     upper,
@@ -275,62 +286,41 @@ impl Computed {
                         Some(dimension) => input.unit.takes(dimension),
                         None => input.unit.takes_plain_numbers(),
                     };
-                    if !fits {
-                        return Cell::Unreadable(
+                    if fits {
+                        all_exact &= exact;
+                        Ok(Value::Number {
+                            value: Interval { lower, upper },
+                            unit: input.unit.clone(),
+                        })
+                    } else {
+                        Err((
                             NotEvaluatedReason::InvalidEvidence,
-                            format!(
-                                "cannot be computed: `{}` is stated as {}, not in {}",
-                                input.name,
-                                kind_text(kind),
-                                input.unit
-                            ),
-                        );
+                            format!("is stated as {}, not in {}", kind_text(kind), input.unit),
+                        ))
                     }
-                    all_exact &= exact;
-                    values.push(Interval { lower, upper });
                 }
-                Cell::Absent => {
-                    absent = true;
-                    values.push(Interval {
-                        lower: 0.0,
-                        upper: 0.0,
-                    });
-                }
-                Cell::Text(texts) => {
-                    return Cell::Unreadable(
-                        NotEvaluatedReason::InvalidEvidence,
-                        format!(
-                            "cannot be computed: `{}` states `{}`, not a number",
-                            input.name,
-                            texts.join(", ")
-                        ),
-                    );
-                }
-                Cell::Unreadable(reason, why) => {
-                    return Cell::Unreadable(
-                        reason,
-                        format!("cannot be computed: `{}` {why}", input.name),
-                    );
-                }
-            }
+                Cell::Absent => Ok(Value::Null),
+                Cell::Text(texts) => Err((
+                    NotEvaluatedReason::InvalidEvidence,
+                    format!("states `{}`, not a number", texts.join(", ")),
+                )),
+                Cell::Unreadable(reason, why) => Err((reason, why)),
+            };
+            columns.insert(input.name.clone(), value);
         }
-        if absent {
-            return Cell::Absent;
-        }
-        match self.expression.evaluate(&values) {
-            Ok(value) => Cell::number(
+        match computed::evaluate_column(&self.expression, columns, context, object, rule) {
+            Ok(Value::Null) => Cell::Absent,
+            Ok(Value::Number { value, unit }) => Cell::number(
                 value.lower,
                 value.upper,
-                self.expression.unit().dimension().ok().flatten(),
-                all_exact,
+                unit.dimension().ok().flatten(),
+                all_exact && value.is_point(),
             ),
-            Err(Failure::ZeroDivisor) => Cell::Unreadable(
-                NotEvaluatedReason::IncompleteEvidence,
-                "cannot be computed: it divides by an interval that holds zero".into(),
+            Ok(other) => Cell::Unreadable(
+                NotEvaluatedReason::InvalidEvidence,
+                format!("cannot be computed: it is {}, not a number", other.kind()),
             ),
-            Err(Failure::Overflow) => {
-                Cell::Unreadable(NotEvaluatedReason::InvalidEvidence, "is not finite".into())
-            }
+            Err((reason, why)) => Cell::Unreadable(reason, why),
         }
     }
 }
@@ -766,7 +756,7 @@ impl<'a> Declaration<'a> {
                 ..
             } = &measure.source
             {
-                reads[index] = Read::Single(computed.cell(&reads));
+                reads[index] = Read::Single(computed.cell(&reads, context, object, rule));
             }
         }
         Some(Member {
@@ -970,7 +960,8 @@ fn measures<'a>(parameters: &Parameters<'a>) -> Result<Vec<Measure<'a>>, Unavail
         let path = parameters.strings(&format!("{key}_path"))?;
         let bounding = parameters.selector(&format!("{key}_bounding"))?;
         let set = parameters.string(&format!("{key}_property_set"))?;
-        let expression = parameters.string(&format!("{key}_expression"))?;
+        let expression =
+            computed::written(parameters.0.parameters.get(&format!("{key}_expression")));
         let unit = parameters.string(&format!("{key}_unit"))?;
         if property.is_none() && kind.is_none() {
             if aggregates.is_some()
@@ -1008,8 +999,8 @@ fn measures<'a>(parameters: &Parameters<'a>) -> Result<Vec<Measure<'a>>, Unavail
         let unit = match unit {
             None => None,
             Some(text) => {
-                let (scale, unit) = expression::parse_unit(text)
-                    .map_err(|why| invalid(format!("`{key}_unit`: {why}")))?;
+                let (scale, unit) =
+                    parse_unit(text).map_err(|why| invalid(format!("`{key}_unit`: {why}")))?;
                 unit.dimension()
                     .map_err(|why| invalid(format!("`{key}_unit`: {why}")))?;
                 Some((scale, unit))
@@ -1027,7 +1018,13 @@ fn measures<'a>(parameters: &Parameters<'a>) -> Result<Vec<Measure<'a>>, Unavail
             Source::BoundaryArea(_) => ("boundary_area".to_owned(), "boundary area".to_owned()),
             Source::PropertySet(set) => (String::new(), (*set).to_owned()),
             Source::Profile => ("profile".to_owned(), "profile".to_owned()),
-            Source::Computed { text, .. } => (String::new(), (*text).to_owned()),
+            Source::Computed { written, .. } => (
+                String::new(),
+                match written {
+                    Written::Text(text) => (*text).to_owned(),
+                    Written::Tree(_) => "a computed expression".to_owned(),
+                },
+            ),
         };
         let name = name.map_or(default_name, str::to_owned);
         if name.is_empty() && !matches!(source, Source::PropertySet(_)) {
@@ -1051,41 +1048,36 @@ fn measures<'a>(parameters: &Parameters<'a>) -> Result<Vec<Measure<'a>>, Unavail
 /// before it), whose units must be known, and its units must agree.
 fn bind_computed(mut measures: Vec<Measure<'_>>) -> Result<Vec<Measure<'_>>, Unavailable> {
     for at in 0..measures.len() {
-        let Source::Computed { text, .. } = &measures[at].source else {
+        let Source::Computed { written, .. } = &measures[at].source else {
             continue;
         };
-        let text = *text;
+        let written = *written;
         let key = format!("measure_{}_expression", at + 1);
-        let mut inputs: Vec<Input> = Vec::new();
-        let bound = {
+        let refuse = |why: String| invalid(format!("`{key}` {}: {why}", written.shown()));
+        let (expression, inputs, unit) = {
             let declared = &measures;
-            let mut resolve = |name: &str| -> Result<(usize, Unit), String> {
-                if let Some(index) = inputs.iter().position(|input| input.name == name) {
-                    return Ok((index, inputs[index].unit.clone()));
-                }
-                let (measure, part, unit) = input_of(declared, at, name)?;
-                inputs.push(Input {
-                    measure,
-                    part,
-                    unit: unit.clone(),
-                    name: name.to_owned(),
-                });
-                Ok((inputs.len() - 1, unit))
-            };
-            expression::bind(text, &mut resolve)
-        }
-        .map_err(|why| invalid(format!("`{key}` `{text}`: {why}")))?;
-        bound
-            .unit()
-            .dimension()
-            .map_err(|why| invalid(format!("`{key}` `{text}`: {why}")))?;
-        measures[at].unit = Some((1.0, bound.unit().clone()));
+            let resolve = |name: &str| input_of(declared, at, name).map(|(_, _, unit)| unit);
+            let (expression, names, unit) = computed::bind(written, &resolve).map_err(refuse)?;
+            let inputs = names
+                .into_iter()
+                .map(|name| {
+                    let (measure, part, unit) = input_of(declared, at, &name)?;
+                    Ok(Input {
+                        measure,
+                        part,
+                        unit,
+                        name,
+                    })
+                })
+                .collect::<Result<Vec<_>, String>>()
+                .map_err(refuse)?;
+            (expression, inputs, unit)
+        };
+        unit.dimension().map_err(refuse)?;
+        measures[at].unit = Some((1.0, unit));
         measures[at].source = Source::Computed {
-            text,
-            bound: Some(Box::new(Computed {
-                expression: bound,
-                inputs,
-            })),
+            written,
+            bound: Some(Box::new(Computed { expression, inputs })),
         };
     }
     Ok(measures)
@@ -1163,7 +1155,7 @@ struct Declared<'a> {
     path: Option<&'a [String]>,
     bounding: Option<&'a Selector>,
     set: Option<&'a str>,
-    expression: Option<&'a str>,
+    expression: Option<Written<'a>>,
     unit: Option<&'a str>,
 }
 
@@ -1238,7 +1230,7 @@ fn source<'a>(key: &str, kind: &str, declared: Declared<'a>) -> Result<Source<'a
             unused("_bounding", bounding.is_some())?;
             unused("_property_set", set.is_some())?;
             Source::Computed {
-                text: expression.ok_or_else(|| required("_expression"))?,
+                written: expression.ok_or_else(|| required("_expression"))?,
                 bound: None,
             }
         }

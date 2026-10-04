@@ -308,6 +308,10 @@ pub struct ParameterDescriptor {
     /// checked object, or, for a table, any scalar cell. Every other
     /// parameter is constant for the whole rule and refuses one.
     pub per_object: bool,
+    /// Whether a `string` parameter holds an expression's text form, which
+    /// a rule may also give as the expression itself; the capability parses
+    /// and checks it.
+    pub expression_text: bool,
 }
 impl ParameterDescriptor {
     /// Required parameter descriptor.
@@ -317,6 +321,7 @@ impl ParameterDescriptor {
             parameter_type,
             required: true,
             per_object: false,
+            expression_text: false,
         }
     }
     /// Optional parameter descriptor.
@@ -326,7 +331,15 @@ impl ParameterDescriptor {
             parameter_type,
             required: false,
             per_object: false,
+            expression_text: false,
         }
+    }
+    /// The `string` parameter holds an expression's text form, and a rule
+    /// may give the expression itself instead.
+    #[must_use]
+    pub fn expression_text(mut self) -> Self {
+        self.expression_text = true;
+        self
     }
     /// The parameter may be computed per checked object: given as an
     /// expression of its kind or, for a table, with expression cells.

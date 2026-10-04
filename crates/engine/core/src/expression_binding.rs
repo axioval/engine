@@ -196,7 +196,15 @@ pub(crate) fn check_rule_expressions(
         };
         match (value, parameter_type) {
             (ParameterValue::Expression { value: expression }, kind) => {
+                let text = descriptors
+                    .iter()
+                    .any(|descriptor| descriptor.name == *name && descriptor.expression_text);
                 let expected = match kind {
+                    // The capability checks it against what only it knows.
+                    _ if text => {
+                        filter_concepts(vocabulary.concepts, rule, expression)?;
+                        continue;
+                    }
                     None | Some(crate::ParameterType::Expression) => Some(Type::Boolean),
                     Some(crate::ParameterType::NumberExpression) => Some(Type::NUMBER),
                     Some(kind) => parameter_type_of(kind),

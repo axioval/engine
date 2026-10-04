@@ -155,6 +155,7 @@ pub(crate) fn reason_of(why: &NotEvaluated) -> NotEvaluatedReason {
             NotEvaluatedReason::InvalidEvidence
         }
         Reason::InvalidPattern(_) => NotEvaluatedReason::InvalidDeclaration,
+        Reason::BudgetExhausted => NotEvaluatedReason::ResourceLimit,
     }
 }
 

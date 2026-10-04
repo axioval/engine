@@ -12,8 +12,8 @@ mod unit;
 
 pub use crate::values::derived_value;
 pub use evaluate::{
-    Evaluation, ExpressionContext, Leaf, Member, NotEvaluated, Read, Reason, RuleRead, Source,
-    Value, evaluate,
+    DEFAULT_EVALUATION_BUDGET, Evaluation, EvaluationBudget, ExpressionContext, Leaf, Member,
+    NotEvaluated, Read, Reason, RuleRead, Source, Value, evaluate,
 };
 pub use interval::{Interval, IntervalFailure, IntervalResult};
 pub use text::{MAX_TEXT_LENGTH, parse_text};

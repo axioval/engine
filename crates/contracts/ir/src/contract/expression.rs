@@ -12,6 +12,14 @@ use std::collections::BTreeMap;
 /// [`Expression::validate`].
 pub const MAX_EXPRESSION_DEPTH: usize = 64;
 
+/// How many nodes an expression may hold, those of its aggregates' member
+/// filters included.
+pub const MAX_EXPRESSION_NODES: usize = 2048;
+
+/// How deeply aggregates may nest within one another's `value` or `where`:
+/// each multiplies the work by its members.
+pub const MAX_AGGREGATE_NESTING: usize = 2;
+
 /// A node of an expression tree, tagged by `kind` like a [`Selector`].
 ///
 /// Every node may carry an author `label` that findings name in place of
@@ -499,6 +507,10 @@ impl TryFrom<ParameterValue> for ScalarValue {
 pub enum ExpressionError {
     #[error("an expression nests deeper than {MAX_EXPRESSION_DEPTH} levels")]
     TooDeep,
+    #[error("an expression holds more than {MAX_EXPRESSION_NODES} nodes")]
+    TooLarge,
+    #[error("aggregates nest deeper than {MAX_AGGREGATE_NESTING} within one another")]
+    AggregatesTooDeep,
     #[error("a `{kind}` expression has no operands")]
     NoOperands { kind: &'static str },
     #[error("an `if` expression has no branch")]
@@ -895,7 +907,40 @@ impl Expression {
     ///
     /// The first structural problem found, depth first.
     pub fn validate(&self) -> Result<(), ExpressionError> {
-        self.validate_at(1)
+        self.validate_at(1)?;
+        let (nodes, nesting) = self.size();
+        if nodes > MAX_EXPRESSION_NODES {
+            return Err(ExpressionError::TooLarge);
+        }
+        if nesting > MAX_AGGREGATE_NESTING {
+            return Err(ExpressionError::AggregatesTooDeep);
+        }
+        Ok(())
+    }
+
+    /// How many nodes the tree holds, its aggregates' member filters
+    /// included, and how deeply its aggregates nest.
+    #[must_use]
+    pub fn size(&self) -> (usize, usize) {
+        let mut nodes = 1;
+        let mut nesting = 0;
+        let mut nested = |inner: &Self| {
+            let (more, depth) = inner.size();
+            nodes += more;
+            nesting = nesting.max(depth);
+        };
+        for child in self.children() {
+            nested(child);
+        }
+        if let Self::Aggregate { filter, .. } = self {
+            if let Some(filter) = filter {
+                for inner in filter.expressions() {
+                    nested(inner);
+                }
+            }
+            nesting += 1;
+        }
+        (nodes, nesting)
     }
 
     fn validate_at(&self, depth: usize) -> Result<(), ExpressionError> {

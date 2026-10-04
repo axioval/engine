@@ -201,3 +201,25 @@ fn an_expression_parameter_value_round_trips() {
         serde_json::from_value(json!("expression")).unwrap();
     assert_eq!(kind, axioval_ir::contract::ParameterKind::Expression);
 }
+
+#[test]
+fn size_and_aggregate_nesting_are_bounded() {
+    use axioval_ir::contract::{MAX_AGGREGATE_NESTING, MAX_EXPRESSION_NODES};
+    let wide = json!({"kind": "and", "operands":
+        vec![json!({"kind": "null"}); MAX_EXPRESSION_NODES]});
+    assert_eq!(invalid(&wide), ExpressionError::TooLarge);
+    let mut nested = json!({"kind": "null"});
+    for _ in 0..=MAX_AGGREGATE_NESTING {
+        nested = json!({"kind": "aggregate", "function": "any",
+            "over": {"kind": "path", "path": ["Hosts"]}, "value": nested});
+    }
+    assert_eq!(invalid(&nested), ExpressionError::AggregatesTooDeep);
+    // An aggregate nested in another's filter counts too.
+    let filtered = json!({"kind": "aggregate", "function": "count",
+        "over": {"kind": "path", "path": ["Hosts"]},
+        "where": {"kind": "expression", "expression": {"kind": "aggregate", "function": "any",
+            "over": {"kind": "path", "path": ["Hosts"]},
+            "value": {"kind": "aggregate", "function": "any",
+                "over": {"kind": "path", "path": ["Hosts"]}, "value": {"kind": "null"}}}}});
+    assert_eq!(invalid(&filtered), ExpressionError::AggregatesTooDeep);
+}

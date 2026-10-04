@@ -1156,3 +1156,35 @@ fn an_explanation_traces_the_deciding_path_deterministically() {
     let golden = include_str!("fixtures/explanation-cover-s2.json");
     assert_eq!(first, golden.trim_end());
 }
+
+#[test]
+fn a_spent_evaluation_budget_leaves_the_rest_open_never_passed() {
+    let registry = registry();
+    let package = vocabulary(&registry, &[]);
+    let plan = plan(&registry, &package, vec![cover_rule()]).unwrap();
+    // The cover rule spends about ten nodes per slab: two slabs' worth.
+    let report = run(registry, plan, &session(slabs()), |runtime| {
+        runtime.with_evaluation_budget(20)
+    })
+    .unwrap();
+    let limited: Vec<_> = report
+        .not_evaluated
+        .iter()
+        .filter(|outcome| outcome.reason == NotEvaluatedReason::ResourceLimit)
+        .collect();
+    assert!(!limited.is_empty());
+    assert!(
+        limited[0].message.contains("budget"),
+        "{}",
+        limited[0].message
+    );
+    // A slab left open for the budget is never also judged.
+    let found = subjects(&report, "cover");
+    for outcome in limited {
+        let slab = &outcome.object_id().unwrap().local_id;
+        assert!(!found.contains(slab), "{slab}");
+    }
+    // With the default budget, every slab is judged.
+    let report = check(&package, vec![cover_rule()], &session(slabs()));
+    assert!(report.not_evaluated.is_empty());
+}

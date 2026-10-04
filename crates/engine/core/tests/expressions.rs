@@ -705,3 +705,114 @@ fn an_explanation_keeps_the_deciding_path_and_bounds_the_rest() {
         ]
     );
 }
+
+/// A random tree over most kinds, its leaves of mixed types, so most trees
+/// are ill-typed somewhere.
+fn any_tree(random: &mut Random, depth: u32) -> serde_json::Value {
+    let leaves = [
+        json!({"kind": "literal", "value": {"type": "number", "value": 2.5}}),
+        json!({"kind": "literal", "value": {"type": "integer", "value": -3}}),
+        json!({"kind": "literal", "value": {"type": "quantity", "value": 4.0, "unit": "m"}}),
+        json!({"kind": "literal", "value": {"type": "string", "value": "XC4"}}),
+        json!({"kind": "literal", "value": {"type": "boolean", "value": true}}),
+        json!({"kind": "null"}),
+        parameter("a"),
+        parameter("unknown"),
+        json!({"kind": "property", "property": "Height"}),
+    ];
+    if depth == 0 || random.below(3) == 0 {
+        return leaves[usize::try_from(random.below(leaves.len() as u64)).unwrap()].clone();
+    }
+    let mut next = || any_tree(random, depth - 1);
+    let (a, b, c) = (next(), next(), next());
+    let comparison = [
+        "equals",
+        "notEquals",
+        "lessThan",
+        "greaterThanOrEquals",
+        "like",
+        "matches",
+        "contains",
+    ];
+    match random.below(22) {
+        0 => json!({"kind": "and", "operands": [a, b]}),
+        1 => json!({"kind": "or", "operands": [a, b, c]}),
+        2 => json!({"kind": "not", "operand": a}),
+        3 => json!({"kind": "implies", "antecedent": a, "consequent": b}),
+        4 => {
+            json!({"kind": "compare", "operator": comparison[usize::try_from(random.below(7)).unwrap()], "left": a, "right": b})
+        }
+        5 => json!({"kind": "between", "operand": a, "low": b, "high": c}),
+        6 => json!({"kind": "oneOf", "operand": a, "values": [b, c]}),
+        7 => json!({"kind": "if", "branches": [{"when": a, "then": b}], "else": c}),
+        8 => json!({"kind": "coalesce", "operands": [a, b]}),
+        9 => json!({"kind": "add", "left": a, "right": b}),
+        10 => json!({"kind": "divide", "left": a, "right": b}),
+        11 => json!({"kind": "multiply", "left": a, "right": b}),
+        12 => json!({"kind": "min", "operands": [a, b]}),
+        13 => json!({"kind": "round", "operand": a, "step": b}),
+        14 => json!({"kind": "sqrt", "operand": a}),
+        15 => json!({"kind": "tan", "operand": a}),
+        16 => json!({"kind": "atan2", "y": a, "x": b}),
+        17 => json!({"kind": "convertSlope", "operand": a, "from": "angle", "to": "percent"}),
+        18 => json!({"kind": "concat", "operands": [a, b]}),
+        19 => json!({"kind": "length", "operand": a}),
+        20 => json!({"kind": "isDefined", "operand": a}),
+        _ => json!({"kind": "xor", "left": a, "right": b}),
+    }
+}
+
+#[test]
+fn fuzzing_trees_never_panics_and_never_yields_an_unsound_interval() {
+    let mut random = Random(0xF022);
+    for _ in 0..3000 {
+        let tree: Expression = serde_json::from_value(any_tree(&mut random, 4)).unwrap();
+        let _ = tree.validate();
+        let _ = check(&tree, "fuzz", &Environment);
+        let mut context = Context::default();
+        context.parameters.insert(
+            "a".into(),
+            Value::Number {
+                value: Interval::new(-1.0, 2.0).unwrap(),
+                unit: Unit::NONE,
+            },
+        );
+        context
+            .properties
+            .insert("Height".into(), measured(0.5, 0.75));
+        let evaluation = evaluate(&tree, "fuzz", &mut context);
+        if let Ok(Value::Number { value, .. }) = evaluation.outcome {
+            assert!(value.lower <= value.upper, "{value:?}");
+            assert!(
+                value.lower.is_finite() && value.upper.is_finite(),
+                "{value:?}"
+            );
+        }
+        // Every explanation keeps its deciding path whole.
+        let explanation = evaluation.explain("fuzz");
+        assert!(explanation.entries.len() <= evaluation.trace.len());
+    }
+}
+
+#[test]
+fn fuzzing_text_never_panics() {
+    use axioval_engine::expression::parse_text;
+    let pieces = [
+        "area", " ", "+", "-", "×", "÷", "(", ")", ",", "2", "3.5", " m", " EUR/m²", "e", "min",
+        "max", "if", "and", "or", "not", "==", "<=", "\"", "office", "≥", "round", "^", "²", "·",
+    ];
+    let mut random = Random(0x7E87);
+    let mut parsed = 0;
+    for _ in 0..5000 {
+        let text: String = (0..random.below(14))
+            .map(|_| pieces[usize::try_from(random.below(pieces.len() as u64)).unwrap()])
+            .collect();
+        if let Ok(tree) = parse_text(&text) {
+            parsed += 1;
+            let _ = tree.validate();
+            let _ = check(&tree, "text", &Environment);
+            let _ = evaluate(&tree, "text", &mut Context::default());
+        }
+    }
+    assert!(parsed > 100, "only {parsed} texts parsed");
+}

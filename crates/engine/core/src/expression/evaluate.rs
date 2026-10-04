@@ -13,9 +13,10 @@
 //!   needed it counts as false, as a comparison with `null` is false.
 //! - A comparison of intervals is decided only when every value they allow
 //!   gives the same answer; a straddling one is not evaluated.
-use std::cmp::Ordering;
+use std::cmp::Ordering as Order;
 use std::collections::BTreeMap;
 use std::fmt;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use axioval_ir::contract::{
     AggregateFunction, AggregateSource, Branch, Expression, ExpressionComparison, PropertyScope,
@@ -239,6 +240,8 @@ pub enum Reason {
     Mismatch(String),
     /// A text pattern does not compile.
     InvalidPattern(String),
+    /// The run's evaluation budget is spent.
+    BudgetExhausted,
     /// An aggregate's result depends on members whose membership cannot
     /// be decided, this many.
     UndecidedMembers(usize),
@@ -259,6 +262,7 @@ impl fmt::Display for Reason {
             Self::Domain => f.write_str("the operand lies outside the function's domain"),
             Self::Mismatch(why) => f.write_str(why),
             Self::InvalidPattern(why) => write!(f, "the pattern is invalid: {why}"),
+            Self::BudgetExhausted => f.write_str("the run's expression evaluation budget is spent"),
             Self::UndecidedMembers(count) => write!(
                 f,
                 "it depends on {count} member(s) whose membership cannot be decided"
@@ -386,8 +390,51 @@ pub struct Member {
     pub evidence: Vec<Evidence>,
 }
 
+/// The default number of expression nodes one run may evaluate.
+pub const DEFAULT_EVALUATION_BUDGET: u64 = 100_000_000;
+
+/// The work a run may spend evaluating expressions, in nodes, shared by
+/// every rule, value and aggregate member of the run.
+#[derive(Debug)]
+pub struct EvaluationBudget {
+    remaining: AtomicU64,
+    limit: u64,
+}
+
+impl EvaluationBudget {
+    /// A budget of `limit` nodes.
+    #[must_use]
+    pub fn new(limit: u64) -> Self {
+        Self {
+            remaining: AtomicU64::new(limit),
+            limit,
+        }
+    }
+
+    /// Spends one node; false once the budget is spent.
+    pub fn spend(&self) -> bool {
+        self.remaining
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |left| {
+                left.checked_sub(1)
+            })
+            .is_ok()
+    }
+
+    /// The budget's size.
+    #[must_use]
+    pub fn limit(&self) -> u64 {
+        self.limit
+    }
+}
+
 /// Answers an expression's leaves for one object in scope.
 pub trait ExpressionContext {
+    /// Spends the work of evaluating one node; false once the run's budget
+    /// is spent, which leaves the expression not evaluated.
+    fn spend(&mut self) -> bool {
+        true
+    }
+
     /// A property of the object, `set` and `name` as the expression names
     /// them.
     fn property(&mut self, set: Option<&str>, name: &str) -> Leaf;
@@ -550,7 +597,11 @@ type Truth = Result<bool, NotEvaluated>;
 
 impl Evaluator<'_> {
     fn eval(&mut self, expression: &Expression, path: &str) -> Outcome {
-        let outcome = self.eval_node(expression, path);
+        let outcome = if self.context.spend() {
+            self.eval_node(expression, path)
+        } else {
+            Err(fail(expression, path, Reason::BudgetExhausted))
+        };
         if let (Some(label), Ok(value)) = (expression.label(), &outcome) {
             self.labelled
                 .entry(label.to_owned())
@@ -1256,15 +1307,15 @@ fn compare(
     }
 }
 
-fn holds(operator: ExpressionComparison, order: Ordering) -> bool {
+fn holds(operator: ExpressionComparison, order: Order) -> bool {
     use ExpressionComparison as C;
     match operator {
-        C::Equals => order == Ordering::Equal,
-        C::NotEquals => order != Ordering::Equal,
-        C::LessThan => order == Ordering::Less,
-        C::LessThanOrEquals => order != Ordering::Greater,
-        C::GreaterThan => order == Ordering::Greater,
-        C::GreaterThanOrEquals => order != Ordering::Less,
+        C::Equals => order == Order::Equal,
+        C::NotEquals => order != Order::Equal,
+        C::LessThan => order == Order::Less,
+        C::LessThanOrEquals => order != Order::Greater,
+        C::GreaterThan => order == Order::Greater,
+        C::GreaterThanOrEquals => order != Order::Less,
         C::Like | C::Matches | C::Contains => unreachable!("not an ordering"),
     }
 }

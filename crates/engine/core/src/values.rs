@@ -116,6 +116,7 @@ pub(crate) type Computed = Result<(Value, Vec<Evidence>), String>;
 pub(crate) struct DerivedValues {
     definitions: Arc<BTreeMap<String, Expression>>,
     bindings: Option<ConceptBindings>,
+    budget: Option<Arc<crate::expression::EvaluationBudget>>,
     cache: Mutex<BTreeMap<(ObjectId, String), Computed>>,
 }
 
@@ -129,10 +130,12 @@ impl DerivedValues {
     pub(crate) fn new(
         definitions: Arc<BTreeMap<String, Expression>>,
         bindings: Option<ConceptBindings>,
+        budget: Option<Arc<crate::expression::EvaluationBudget>>,
     ) -> Self {
         Self {
             definitions,
             bindings,
+            budget,
             cache: Mutex::new(BTreeMap::new()),
         }
     }
@@ -264,6 +267,13 @@ struct ObjectReads<'a> {
 }
 
 impl ExpressionContext for ObjectReads<'_> {
+    fn spend(&mut self) -> bool {
+        self.values
+            .budget
+            .as_ref()
+            .is_none_or(|budget| budget.spend())
+    }
+
     fn property(&mut self, set: Option<&str>, name: &str) -> Leaf {
         if set == Some(VALUE_SET) {
             return self.derived(name);

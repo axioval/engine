@@ -5,7 +5,8 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 
 use axioval_engine::expression::{
-    ExpressionContext, Interval, Leaf, Member, RuleRead, Unit, Value, derived_value, evaluate,
+    EvaluationBudget, ExpressionContext, Interval, Leaf, Member, RuleRead, Unit, Value,
+    derived_value, evaluate,
 };
 use axioval_engine::{ObjectVerdict, RuleContext, RuleOutcomes};
 use axioval_ir::contract::{
@@ -142,6 +143,20 @@ impl<'a> ObjectLeaves<'a> {
 }
 
 impl ExpressionContext for ObjectLeaves<'_> {
+    fn spend(&mut self) -> bool {
+        let spent = self
+            .context
+            .services
+            .get::<std::sync::Arc<EvaluationBudget>>()
+            .is_none_or(|budget| budget.spend());
+        if !spent {
+            self.reasons
+                .borrow_mut()
+                .push(NotEvaluatedReason::ResourceLimit);
+        }
+        spent
+    }
+
     fn property(&mut self, set: Option<&str>, name: &str) -> Leaf {
         if set == Some(axioval_ir::VALUE_SET) {
             return self.derived(name);

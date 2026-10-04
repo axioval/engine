@@ -1124,6 +1124,7 @@ pub struct Runtime {
     services: ServiceRegistry,
     locations: Option<LocationPolicy>,
     summaries: bool,
+    evaluation_budget: u64,
 }
 impl Runtime {
     /// Creates a runtime from a host-controlled registry.
@@ -1133,7 +1134,29 @@ impl Runtime {
             services: ServiceRegistry::new(),
             locations: None,
             summaries: false,
+            evaluation_budget: expression::DEFAULT_EVALUATION_BUDGET,
         }
+    }
+    /// Installs what a run's expressions need: the plan's derived values
+    /// and a fresh evaluation budget.
+    fn install_expressions(
+        &self,
+        services: &mut ServiceRegistry,
+        derived: &Arc<BTreeMap<String, schema::Expression>>,
+    ) {
+        services.replace(values::ValueExpressions(derived.clone()));
+        services.replace(Arc::new(expression::EvaluationBudget::new(
+            self.evaluation_budget,
+        )));
+    }
+    /// How many expression nodes a run may evaluate, all rules, values and
+    /// aggregate members together ([`expression::DEFAULT_EVALUATION_BUDGET`]
+    /// unless set). Once spent, every further expression leaves its object
+    /// not evaluated (`resource_limit`), never passed.
+    #[must_use]
+    pub fn with_evaluation_budget(mut self, nodes: u64) -> Self {
+        self.evaluation_budget = nodes;
+        self
     }
     /// Reports per-rule counts and status ([`Report::rules`]): how many
     /// objects each rule surely selected, how many it found or left not
@@ -1313,7 +1336,7 @@ impl Runtime {
                 location: None,
             })
             .collect();
-        services.replace(values::ValueExpressions(plan.values.clone()));
+        self.install_expressions(&mut services, &plan.values);
         // Measured values are answered through the host's resolver in
         // every run; classifications are derived first when the plan has
         // any.

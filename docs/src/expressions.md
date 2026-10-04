@@ -142,6 +142,33 @@ with its value: an expression rule's findings and not-evaluated outcomes
 carry the trace as their `explanation`, its deciding path marked (see
 [Explanations](./ir.md#explanations)).
 
+## Limits
+
+Expressions come from packages and editors, so their size and their cost
+are bounded:
+
+| Limit | Value | Where |
+| --- | --- | --- |
+| nesting depth | `MAX_EXPRESSION_DEPTH` (64) | `Expression::validate`, the text parser |
+| nodes, aggregate filters included | `MAX_EXPRESSION_NODES` (2048) | `Expression::validate` |
+| aggregates within one another's `value` or `where` | `MAX_AGGREGATE_NESTING` (2) | `Expression::validate` |
+| text | `MAX_TEXT_LENGTH` (1000 characters) | the text parser |
+| nodes evaluated per run, every rule, value and aggregate member together | `DEFAULT_EVALUATION_BUDGET` (100 000 000) | `Runtime::with_evaluation_budget` |
+
+The first four refuse the expression when the ruleset is compiled (a rule's
+`InvalidExpression`, a value's `InvalidValue`), naming the limit. Once a
+run has spent its evaluation budget, every further expression leaves its
+object not evaluated (`resource_limit`, "the run's expression evaluation
+budget is spent"), never passed: an expensive ruleset degrades to open
+outcomes, not to wrong ones.
+
+The evaluator, the type checker and the text parser are fuzzed in the test
+suite with seeded random inputs (`fuzzing_*` in
+`crates/engine/core/tests/expressions.rs`, a few thousand trees and texts
+per run, so CI runs them in a bounded time): no input panics, and no
+interval comes out reversed or infinite; the interval soundness test checks
+that random points always land inside the computed interval.
+
 ## Types and units
 
 `expression::check` infers every node's type before evaluation: a truth,

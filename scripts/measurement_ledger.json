@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "1.0.0",
+  "description": "Rules modules that call a measuring service method (`measure_*`) without a measured-value provider of their own. `answeredBy` names the registered measured values or member lists that expose what the module measures (answered by the engine or a shared provider); `searchOnly` gives why the module only searches. A module absent here must register a `measured.rs` provider; an entry for a module that no longer measures, or now has its own provider, is stale and fails the gate.",
+  "answeredBy": {
+    "corridor_end_openings": ["end_walls"],
+    "effective_coverage": ["effect_covered_area", "effect_covered_share"],
+    "exit_separation": ["exit_pairs", "plan_diameter"],
+    "light_well": ["well_gap", "well_height", "well_section_area", "well_section_width"],
+    "measured_plan": ["centre_line_distance", "end_walls", "exit_pairs", "plan_diameter", "recesses", "well_gap"],
+    "orientation": ["axes_within", "rectangle_side", "skew"],
+    "quantity_takeoff": ["boundary_area"],
+    "recess_width": ["recesses"],
+    "space_boundary_coverage": ["boundary_covered_share", "boundary_off_surface_count", "boundary_overlap_area", "boundary_uncovered_area"],
+    "space_distance": ["distance", "plan_diameter"],
+    "space_validation": ["boundary_gap", "cap_coverage", "clear_height", "duplicate_count", "intersection_count", "largest_unallocated_region", "support_count", "unallocated_share"],
+    "wall_sides": ["centre_line_distance"]
+  },
+  "searchOnly": {
+    "accessible_route": "searches a route through connectors and walkable runs; the runs' own measurements are the stair and ramp values",
+    "clash": "proximity only narrows the candidate pairs the clash service decides",
+    "clash_cases": "measures a found clash's overlap to describe it, never to decide it",
+    "comparison": "distances only pair an object with its counterpart in the other revision",
+    "component_clearance": "searches the free zone in front of a component for obstructions",
+    "component_visibility": "searches sight lines from a component's centre",
+    "containment": "face distances decide which container an object lies in",
+    "external_wall_validation": "envelope membership classifies walls by the envelope search",
+    "local_circulation": "searches routes between spaces"
+  }
+}

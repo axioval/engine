@@ -3,7 +3,7 @@
 //! what leaves it not evaluated.
 //!
 //! The registry is the one place a measured name is parsed and validated.
-//! The engine resolves only what [`parse`] accepts, the compiler refuses a
+//! The engine resolves only what [`parse`](crate::measured::parse) accepts, the compiler refuses a
 //! rule reading anything else with the registry's message, and catalogues
 //! for editors are emitted from the same descriptors.
 //!

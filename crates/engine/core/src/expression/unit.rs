@@ -13,7 +13,8 @@ const BASES: [&str; 8] = ["m", "kg", "s", "A", "K", "mol", "cd", "rad"];
 /// The radian's place in [`BASES`].
 const RADIAN: usize = 7;
 
-/// A unit: exponents of [`BASES`] and of at most one currency.
+/// A unit: exponents of the SI base units and the radian, and of at most
+/// one currency.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Unit {
     exponents: [i8; 8],

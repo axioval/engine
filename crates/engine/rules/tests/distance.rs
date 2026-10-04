@@ -943,3 +943,263 @@ fn a_computed_minimum_judges_as_the_literal_it_computes() {
             .contains("between 0.6000 and 1.0000 m")
     );
 }
+
+/// A verdict three ways: holds, fails, or cannot be decided.
+#[derive(Debug, PartialEq)]
+enum Tri {
+    Holds,
+    Fails,
+    Open,
+}
+
+/// The capability's verdict about the pipe.
+fn capability_verdict(outcome: &CapabilityEvaluation) -> Tri {
+    if outcome
+        .findings()
+        .iter()
+        .any(|finding| common::subject(finding) == "pipe")
+    {
+        Tri::Fails
+    } else if reasons(outcome).iter().any(|(object, _)| object == "pipe") {
+        Tri::Open
+    } else {
+        Tri::Holds
+    }
+}
+
+/// The pipe's measured value `name`, judged at least `bound`, or at most
+/// with a negative `bound` (Kleene: an interval straddling it is open);
+/// `absent` is the verdict when there is no value.
+fn measured_verdict(model: &Model, stub: Stub, name: &str, bound: f64, absent: &Tri) -> Tri {
+    use axioval_engine::{CapabilityRegistry, PropertyResolution, ServiceRegistry, measured_value};
+    use axioval_ir::PropertyValue;
+    let project = model.project();
+    let mut services = ServiceRegistry::new();
+    services
+        .register(ProximityServiceHandle::new(Arc::new(stub)))
+        .unwrap();
+    axioval_rules::register_builtins(CapabilityRegistry::new())
+        .unwrap()
+        .install_measured(&mut services, &project);
+    let (lower, upper) = match measured_value(&services, &project, &id("pipe"), name) {
+        Ok(PropertyResolution::Present(resolved)) => match resolved.property().value() {
+            PropertyValue::Integer(value) => {
+                #[allow(clippy::cast_precision_loss)]
+                let value = *value as f64;
+                (value, value)
+            }
+            PropertyValue::Quantity { value, .. } | PropertyValue::Decimal(value) => {
+                (*value, *value)
+            }
+            PropertyValue::Measured { lower, upper, .. } => (*lower, *upper),
+            other => panic!("{name}: {other:?}"),
+        },
+        Ok(PropertyResolution::Absent(_)) => {
+            return match absent {
+                Tri::Holds => Tri::Holds,
+                Tri::Fails => Tri::Fails,
+                Tri::Open => Tri::Open,
+            };
+        }
+        Err(_) => return Tri::Open,
+    };
+    let (lower, upper, bound) = if bound < 0.0 {
+        (-upper, -lower, bound)
+    } else {
+        (lower, upper, bound)
+    };
+    if lower >= bound {
+        Tri::Holds
+    } else if upper < bound {
+        Tri::Fails
+    } else {
+        Tri::Open
+    }
+}
+
+/// `nearest` with a maximum: the nearest counterpart's distance at most
+/// the maximum, none within it failing.
+#[test]
+fn the_nearest_distance_reaches_the_nearest_modes_verdicts() {
+    for (maximum, expected) in [(1.0, Tri::Holds), (0.4, Tri::Fails)] {
+        let verdict = capability_verdict(&run(
+            model(),
+            walls(),
+            vec![("maximum_metres", number(maximum))],
+        ));
+        assert_eq!(verdict, expected);
+        let name = format!("distance;to=wall;within={maximum}");
+        assert_eq!(
+            measured_verdict(&model(), walls(), &name, -maximum, &Tri::Fails),
+            expected,
+            "at most {maximum}"
+        );
+    }
+}
+
+/// Every mode's fixtures, rewritten as a measured value and a comparison,
+/// reach the capability's verdict: `at_least` as `count_within` at least
+/// the count, `none_closer_than` as the nearest `distance` at least the
+/// minimum (none within it holds).
+#[test]
+#[allow(clippy::too_many_lines, clippy::items_after_statements)]
+fn measured_distances_reach_the_capabilitys_verdicts_in_every_mode() {
+    let undecided = || {
+        Stub::default()
+            .at("pipe", 0.0, 0.0)
+            .at("near", 1.5, 0.0)
+            .curved("mid", 1.8, 0.0)
+            .at("far", 4.0, 0.0)
+            .distance("pipe", "near", "Minimum3d", (0.5, 0.5))
+            .distance("pipe", "mid", "Minimum3d", (0.95, 1.05))
+            .distance("pipe", "far", "Minimum3d", (3.0, 3.0))
+    };
+    let unmeasured = || {
+        Stub::default()
+            .at("pipe", 0.0, 0.0)
+            .at("near", 1.5, 0.0)
+            .without_geometry("mid")
+            .at("far", 4.0, 0.0)
+            .distance("pipe", "near", "Minimum3d", (0.5, 0.5))
+    };
+    let straddling = |near: (f64, f64)| {
+        Stub::default()
+            .at("pipe", 0.0, 0.0)
+            .at("near", 1.5, 0.0)
+            .curved("mid", 1.5, 0.0)
+            .at("far", 4.0, 0.0)
+            .distance("pipe", "near", "Minimum3d", near)
+            .distance("pipe", "mid", "Minimum3d", (0.58, 0.62))
+    };
+    let planar = || {
+        Stub::default()
+            .at("pipe", 0.0, 0.0)
+            .at("near", 1.5, 10.0)
+            .at("mid", 9.0, 10.0)
+            .at("far", 20.0, 0.0)
+            .distance("pipe", "near", "Horizontal", (0.5, 0.5))
+    };
+    let none_closer = |minimum: f64| {
+        vec![
+            ("mode", string("none_closer_than")),
+            ("minimum_metres", number(minimum)),
+        ]
+    };
+    let ranged = {
+        let mut parameters = at_least(2, 1.0);
+        parameters.push(("minimum_metres", number(0.6)));
+        parameters
+    };
+    let horizontal = {
+        let mut parameters = at_least(1, 1.0);
+        parameters.push(("projection", string("horizontal")));
+        parameters
+    };
+    type Case = (
+        &'static str,
+        Box<dyn Fn() -> Stub>,
+        Vec<(&'static str, ParameterValue)>,
+        String,
+        f64,
+    );
+    let count = |radius: f64| format!("count_within;to=wall;radius={radius}");
+    let nearest = |within: f64| format!("distance;to=wall;within={within}");
+    let cases: Vec<Case> = vec![
+        (
+            "2 within 1 m",
+            Box::new(walls),
+            at_least(2, 1.0),
+            count(1.0),
+            2.0,
+        ),
+        (
+            "3 within 1 m",
+            Box::new(walls),
+            at_least(3, 1.0),
+            count(1.0),
+            3.0,
+        ),
+        (
+            "2 within 0.6 to 1 m",
+            Box::new(walls),
+            ranged,
+            format!("{};from=0.6", count(1.0)),
+            2.0,
+        ),
+        (
+            "1 of undecided",
+            Box::new(undecided),
+            at_least(1, 1.0),
+            count(1.0),
+            1.0,
+        ),
+        (
+            "2 of undecided",
+            Box::new(undecided),
+            at_least(2, 1.0),
+            count(1.0),
+            2.0,
+        ),
+        (
+            "3 of undecided",
+            Box::new(undecided),
+            at_least(3, 1.0),
+            count(1.0),
+            3.0,
+        ),
+        (
+            "2 of unmeasured",
+            Box::new(unmeasured),
+            at_least(2, 1.0),
+            count(1.0),
+            2.0,
+        ),
+        (
+            "3 of unmeasured",
+            Box::new(unmeasured),
+            at_least(3, 1.0),
+            count(1.0),
+            3.0,
+        ),
+        (
+            "1 in plan",
+            Box::new(planar),
+            horizontal,
+            format!("{};projection=horizontal", count(1.0)),
+            1.0,
+        ),
+        (
+            "none within 1 m",
+            Box::new(walls),
+            none_closer(1.0),
+            nearest(1.0),
+            1.0,
+        ),
+        (
+            "none within 0.4 m",
+            Box::new(walls),
+            none_closer(0.4),
+            nearest(0.4),
+            0.4,
+        ),
+        (
+            "none within a straddle",
+            Box::new(move || straddling((0.7, 0.7))),
+            none_closer(0.6),
+            nearest(0.6),
+            0.6,
+        ),
+        (
+            "certainly one within",
+            Box::new(move || straddling((0.5, 0.5))),
+            none_closer(0.6),
+            nearest(0.6),
+            0.6,
+        ),
+    ];
+    for (case, stub, parameters, name, bound) in cases {
+        let expected = capability_verdict(&run(model(), stub(), parameters));
+        let measured = measured_verdict(&model(), stub(), &name, bound, &Tri::Holds);
+        assert_eq!(measured, expected, "{case}: `{name}` at least {bound}");
+    }
+}

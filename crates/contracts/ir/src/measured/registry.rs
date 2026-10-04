@@ -1,10 +1,10 @@
 //! Every measured value's descriptor, sorted by name.
 
 use super::{
-    ANGLE_TO, BEARING, CLEAR_HEIGHT, CLEAR_WIDTH, CLEARANCE_BELOW, CROSS_FALL, EXTENT,
-    GRADIENT_DIRECTION, HEADROOM, INCLINATION, LENGTH, LocalizedText, MeasuredDescriptor,
-    MeasuredExactness, MeasuredParameter, MeasuredParameterKind, PERIMETER, SKEW, SLOPE,
-    SLOPE_ALONG, THICKNESS,
+    ANGLE_TO, BEARING, CLEAR_HEIGHT, CLEAR_WIDTH, CLEARANCE_BELOW, COUNT_WITHIN, CROSS_FALL,
+    DISTANCE, EXTENT, GRADIENT_DIRECTION, HEADROOM, INCLINATION, LENGTH, LocalizedText,
+    MeasuredDescriptor, MeasuredExactness, MeasuredParameter, MeasuredParameterKind, PERIMETER,
+    SKEW, SLOPE, SLOPE_ALONG, THICKNESS,
 };
 use crate::{
     MEASURED_AREA, MEASURED_BOTTOM, MEASURED_BOTTOM_ABOVE_LEVEL, MEASURED_BOUNDARY_AREA,
@@ -77,6 +77,48 @@ const fn kinds(key: &'static str, help: &'static [LocalizedText]) -> MeasuredPar
     }
 }
 
+const PROXIMITY: &[&str] = &["proximity", "type-hierarchy"];
+
+const COUNTERPARTS: MeasuredParameter = MeasuredParameter {
+    key: "to",
+    kind: MeasuredParameterKind::SourceKind,
+    required: true,
+    default: None,
+    help: &en_de(
+        "The source kinds of the counterparts, `,`-separated, subtypes included.",
+        "Die Quellarten der Gegenstücke, durch `,` getrennt, Untertypen eingeschlossen.",
+    ),
+};
+
+const PROJECTION: MeasuredParameter = MeasuredParameter {
+    key: "projection",
+    kind: MeasuredParameterKind::Choice {
+        options: &["minimum_3d", "horizontal", "vertical", "plan_overlap"],
+    },
+    required: false,
+    default: Some("minimum_3d"),
+    help: &en_de(
+        "Surface to surface in space, in plan, vertically, or as overlap in plan.",
+        "Oberfläche zu Oberfläche im Raum, im Grundriss, vertikal oder als \
+         Überlappung im Grundriss.",
+    ),
+};
+
+const VERTICAL_DIRECTION: MeasuredParameter = MeasuredParameter {
+    key: "direction",
+    kind: MeasuredParameterKind::Choice {
+        options: &["either", "above", "below"],
+    },
+    required: false,
+    default: None,
+    help: &en_de(
+        "With `vertical`: counterparts above, below, or either.",
+        "Mit `vertical`: Gegenstücke darüber, darunter oder beides.",
+    ),
+};
+
+const NO_DISTANCE: &str = "a counterpart's distance could not be read or straddles";
+
 const OWN_AXIS: MeasuredParameterKind = MeasuredParameterKind::Choice {
     options: &["own_x", "own_y", "own_z", "x", "y", "z"],
 };
@@ -92,7 +134,7 @@ macro_rules! plain {
         MeasuredDescriptor {
             name: $name,
             parameters: &[],
-            dimension: $dimension,
+            dimension: Some($dimension),
             services: $services,
             exactness: $exactness,
             not_evaluated: $not,
@@ -123,7 +165,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             },
             REFERENCE_PATH,
         ],
-        dimension: QuantityDimension::PlaneAngle,
+        dimension: Some(QuantityDimension::PlaneAngle),
         services: &["plan-span", "relationship-selection", "vertical-extent"],
         exactness: MeasuredExactness::Measured,
         not_evaluated: &[NO_GEOMETRY, NO_LONG_AXIS, STANDS_VERTICAL],
@@ -177,7 +219,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
                 ),
             },
         ],
-        dimension: QuantityDimension::PlaneAngle,
+        dimension: Some(QuantityDimension::PlaneAngle),
         services: &["object-frame", "plan-span", "coordinate-system"],
         exactness: MeasuredExactness::Measured,
         not_evaluated: &[
@@ -216,7 +258,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
                 "Die Beziehungsschritte vom Objekt zu seinem Geschoss.",
             ),
         }],
-        dimension: QuantityDimension::Length,
+        dimension: Some(QuantityDimension::Length),
         services: &["relationship-selection", "object-frame", "vertical-extent"],
         exactness: MeasuredExactness::Measured,
         not_evaluated: &[
@@ -257,7 +299,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
                 ),
             },
         ],
-        dimension: QuantityDimension::Area,
+        dimension: Some(QuantityDimension::Area),
         services: &["boundary-coverage", "type-hierarchy"],
         exactness: MeasuredExactness::Measured,
         not_evaluated: &[
@@ -331,7 +373,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
                 ),
             },
         ],
-        dimension: QuantityDimension::Length,
+        dimension: Some(QuantityDimension::Length),
         services: WALKING,
         exactness: MeasuredExactness::Measured,
         not_evaluated: &[NO_WALKING_SURFACE, UNDECIDED_KIND],
@@ -352,7 +394,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
                 "Die Quellarten der Räume, deren Böden darunter liegen, durch `,` getrennt.",
             ),
         )],
-        dimension: QuantityDimension::Length,
+        dimension: Some(QuantityDimension::Length),
         services: WALKING,
         exactness: MeasuredExactness::Measured,
         not_evaluated: &[
@@ -366,6 +408,45 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              of the spaces below; none when it stands above none.",
             "Die kleinste Höhe zwischen der Unterseite eines Laufs oder einer Rampe und \
              den Böden der Räume darunter; keine, wenn sie über keinem steht.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: COUNT_WITHIN,
+        parameters: &[
+            COUNTERPARTS,
+            MeasuredParameter {
+                key: "radius",
+                kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The greatest distance counted, in metres.",
+                    "Der größte gezählte Abstand, in Metern.",
+                ),
+            },
+            MeasuredParameter {
+                key: "from",
+                kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                required: false,
+                default: Some("0"),
+                help: &en_de(
+                    "The least distance counted, in metres.",
+                    "Der kleinste gezählte Abstand, in Metern.",
+                ),
+            },
+            PROJECTION,
+            VERTICAL_DIRECTION,
+        ],
+        dimension: None,
+        services: PROXIMITY,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_GEOMETRY, UNDECIDED_KIND],
+        label: &en_de("Count within", "Anzahl im Umkreis"),
+        help: &en_de(
+            "How many counterparts lie within a radius: an interval from those surely \
+             within to those possibly within, a point when every one is decided.",
+            "Wie viele Gegenstücke im Umkreis liegen: ein Intervall von den sicher bis zu \
+             den möglicherweise darin liegenden, ein Punkt, wenn alle entschieden sind.",
         ),
     },
     MeasuredDescriptor {
@@ -385,7 +466,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             },
             FACE,
         ],
-        dimension: QuantityDimension::PlaneAngle,
+        dimension: Some(QuantityDimension::PlaneAngle),
         services: FACES_AND_FRAMES,
         exactness: MeasuredExactness::Measured,
         not_evaluated: &[NO_GEOMETRY, NO_FACE, STANDS_VERTICAL],
@@ -395,6 +476,78 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              over its pieces.",
             "Das Gefälle der Fläche quer zu einer Grundrissachse, ohne Vorzeichen, als \
              Winkel; die Hülle über ihre Teile.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: DISTANCE,
+        parameters: &[
+            COUNTERPARTS,
+            MeasuredParameter {
+                key: "mode",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["nearest", "farthest"],
+                },
+                required: false,
+                default: Some("nearest"),
+                help: &en_de(
+                    "The nearest or the farthest counterpart.",
+                    "Das nächste oder das fernste Gegenstück.",
+                ),
+            },
+            PROJECTION,
+            VERTICAL_DIRECTION,
+            MeasuredParameter {
+                key: "subject_surface",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["top", "bottom"],
+                },
+                required: false,
+                default: None,
+                help: &en_de(
+                    "With `vertical`: from the object's top or bottom; with \
+                     `counterpart_surface`.",
+                    "Mit `vertical`: von Ober- oder Unterseite des Objekts; mit \
+                     `counterpart_surface`.",
+                ),
+            },
+            MeasuredParameter {
+                key: "counterpart_surface",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["top", "bottom", "nearest"],
+                },
+                required: false,
+                default: None,
+                help: &en_de(
+                    "With `vertical`: to the counterpart's top, bottom, or the surface \
+                     directly over or under the object.",
+                    "Mit `vertical`: zur Ober- oder Unterseite des Gegenstücks oder der \
+                     Fläche direkt darüber oder darunter.",
+                ),
+            },
+            MeasuredParameter {
+                key: "within",
+                kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                required: false,
+                default: Some("1000"),
+                help: &en_de(
+                    "How far counterparts are searched for, in metres; none within is no \
+                     distance.",
+                    "Wie weit nach Gegenstücken gesucht wird, in Metern; keines darin ist \
+                     kein Abstand.",
+                ),
+            },
+        ],
+        dimension: Some(QuantityDimension::Length),
+        services: PROXIMITY,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_GEOMETRY, UNDECIDED_KIND, NO_DISTANCE],
+        label: &en_de("Distance", "Abstand"),
+        help: &en_de(
+            "The nearest or farthest counterpart's distance, as `distance` measures \
+             it; an undecided counterpart widens it towards the bound it could move.",
+            "Der Abstand zum nächsten oder fernsten Gegenstück, wie `distance` ihn misst; \
+             ein unentschiedenes Gegenstück weitet ihn zur Grenze, die es verschieben \
+             könnte.",
         ),
     },
     MeasuredDescriptor {
@@ -423,7 +576,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
                 ),
             },
         ],
-        dimension: QuantityDimension::Length,
+        dimension: Some(QuantityDimension::Length),
         services: &["vertical-extent", "object-frame"],
         exactness: MeasuredExactness::Measured,
         not_evaluated: &[NO_GEOMETRY, "the placement is not stated exactly"],
@@ -474,7 +627,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
     MeasuredDescriptor {
         name: GRADIENT_DIRECTION,
         parameters: &[FACE],
-        dimension: QuantityDimension::PlaneAngle,
+        dimension: Some(QuantityDimension::PlaneAngle),
         services: FACES,
         exactness: MeasuredExactness::Measured,
         not_evaluated: &[
@@ -502,7 +655,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
                  Untertypen eingeschlossen.",
             ),
         )],
-        dimension: QuantityDimension::Length,
+        dimension: Some(QuantityDimension::Length),
         services: WALKING,
         exactness: MeasuredExactness::Measured,
         not_evaluated: &[
@@ -534,7 +687,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
                  gemessen, `own_x` und `own_y` von der Waagerechten.",
             ),
         }],
-        dimension: QuantityDimension::PlaneAngle,
+        dimension: Some(QuantityDimension::PlaneAngle),
         services: &["object-frame"],
         exactness: MeasuredExactness::Stated,
         not_evaluated: &["the placement is not stated exactly"],
@@ -560,7 +713,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
                  Träger, `own_z` für eine Stütze.",
             ),
         }],
-        dimension: QuantityDimension::Length,
+        dimension: Some(QuantityDimension::Length),
         services: &["vertical-extent", "object-frame"],
         exactness: MeasuredExactness::Measured,
         not_evaluated: &[NO_GEOMETRY, "the placement is not stated exactly"],
@@ -600,7 +753,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
     MeasuredDescriptor {
         name: SKEW,
         parameters: &[REFERENCE_PATH],
-        dimension: QuantityDimension::PlaneAngle,
+        dimension: Some(QuantityDimension::PlaneAngle),
         services: RECTANGLES,
         exactness: MeasuredExactness::Measured,
         not_evaluated: &[NO_GEOMETRY, NO_LONG_AXIS],
@@ -615,7 +768,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
     MeasuredDescriptor {
         name: SLOPE,
         parameters: &[FACE],
-        dimension: QuantityDimension::PlaneAngle,
+        dimension: Some(QuantityDimension::PlaneAngle),
         services: FACES,
         exactness: MeasuredExactness::Measured,
         not_evaluated: &[NO_GEOMETRY, NO_FACE, STANDS_VERTICAL],
@@ -646,7 +799,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             },
             FACE,
         ],
-        dimension: QuantityDimension::PlaneAngle,
+        dimension: Some(QuantityDimension::PlaneAngle),
         services: FACES_AND_FRAMES,
         exactness: MeasuredExactness::Measured,
         not_evaluated: &[NO_GEOMETRY, NO_FACE, STANDS_VERTICAL],
@@ -684,7 +837,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
                 ),
             },
         ],
-        dimension: QuantityDimension::Length,
+        dimension: Some(QuantityDimension::Length),
         services: &["vertical-extent", "object-frame"],
         exactness: MeasuredExactness::Measured,
         not_evaluated: &[

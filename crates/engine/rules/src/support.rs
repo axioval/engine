@@ -541,7 +541,13 @@ pub(crate) fn display(value: Option<&PropertyValue>) -> String {
             lower,
             upper,
             dimension,
-        }) => format!("{lower} to {upper} {} (measured)", dimension.unit_symbol()),
+        }) => format!(
+            "{lower} to {upper}{} (measured)",
+            dimension.map_or(String::new(), |dimension| format!(
+                " {}",
+                dimension.unit_symbol()
+            ))
+        ),
         Some(PropertyValue::String(value)) => format!("`{value}`"),
         Some(PropertyValue::Date(value)) => value.to_string(),
         Some(PropertyValue::DateTime(value)) => value.to_string(),
@@ -1673,7 +1679,7 @@ pub(crate) fn quantity_bounds(value: &PropertyValue) -> Option<(f64, f64, Quanti
         PropertyValue::Measured {
             lower,
             upper,
-            dimension,
+            dimension: Some(dimension),
         } => Some((*lower, *upper, *dimension)),
         _ => None,
     }

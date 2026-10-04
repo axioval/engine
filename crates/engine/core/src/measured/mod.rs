@@ -198,6 +198,8 @@ pub fn measured_value(
 /// A measured answer before it becomes a property.
 enum Answer {
     Value(f64, f64, QuantityDimension, String),
+    /// A plain number, such as a count, known to lie in the interval.
+    Number(f64, f64, String),
     Absent(String),
 }
 
@@ -278,7 +280,10 @@ impl Measures {
             )
         };
         let (lower, upper, dimension, locator) = match self.measure(&name, object)? {
-            Answer::Value(lower, upper, dimension, locator) => (lower, upper, dimension, locator),
+            Answer::Value(lower, upper, dimension, locator) => {
+                (lower, upper, Some(dimension), locator)
+            }
+            Answer::Number(lower, upper, locator) => (lower, upper, None, locator),
             Answer::Absent(locator) => {
                 return Ok(PropertyResolution::Absent(
                     CompletePropertyAbsenceEvidence::try_new(
@@ -292,17 +297,22 @@ impl Measures {
             return Err(PropertyResolutionError::InvalidValue);
         }
         let exact = lower.to_bits() == upper.to_bits();
-        let value = if exact {
-            PropertyValue::Quantity {
+        let value = match (exact, dimension) {
+            (true, Some(dimension)) => PropertyValue::Quantity {
                 value: lower,
                 dimension,
+            },
+            // A whole count is an integer; any other plain number a decimal.
+            #[allow(clippy::cast_possible_truncation)]
+            (true, None) if lower.fract() == 0.0 && lower.abs() < 9.0e15 => {
+                PropertyValue::Integer(lower as i64)
             }
-        } else {
-            PropertyValue::Measured {
+            (true, None) => PropertyValue::Decimal(lower),
+            (false, dimension) => PropertyValue::Measured {
                 lower,
                 upper,
                 dimension,
-            }
+            },
         };
         let mut evidence = Evidence::exact(object.source.clone(), locate(locator));
         evidence.exact = exact;
@@ -591,7 +601,10 @@ impl Measures {
                 upper,
                 dimension,
                 locator,
-            } => Answer::Value(lower, upper, dimension, locator),
+            } => match dimension {
+                Some(dimension) => Answer::Value(lower, upper, dimension, locator),
+                None => Answer::Number(lower, upper, locator),
+            },
             provider::Measurement::Absent { locator } => Answer::Absent(locator),
         })
     }

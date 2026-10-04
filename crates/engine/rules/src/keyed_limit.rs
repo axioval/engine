@@ -369,7 +369,7 @@ fn stated_width(
     if let Some(PropertyValue::Measured {
         lower,
         upper,
-        dimension: QuantityDimension::Length,
+        dimension: Some(QuantityDimension::Length),
     }) = resolved.value()
         && lower.is_finite()
         && upper.is_finite()

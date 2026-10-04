@@ -243,18 +243,13 @@ fn property_value(value: &Value) -> Result<Option<PropertyValue>, String> {
                 value: value.lower,
                 dimension,
             },
-            Some(dimension) => PropertyValue::Measured {
+            None if value.is_point() => PropertyValue::Decimal(value.lower),
+            // A plain number known only to an interval.
+            dimension => PropertyValue::Measured {
                 lower: value.lower,
                 upper: value.upper,
                 dimension,
             },
-            None if value.is_point() => PropertyValue::Decimal(value.lower),
-            None => {
-                return Err(format!(
-                    "{}..{} is an interval of plain numbers, which only expressions read",
-                    value.lower, value.upper
-                ));
-            }
         },
     }))
 }

@@ -102,7 +102,7 @@ impl Spread {
                 lower,
                 upper,
                 dimension,
-            } => (Some(*dimension), *lower, *upper),
+            } => (*dimension, *lower, *upper),
             _ => return None,
         };
         if let Self::Quantity(_, wanted) = self {

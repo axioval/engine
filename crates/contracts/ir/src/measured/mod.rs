@@ -15,6 +15,10 @@ use serde::Serialize;
 
 mod registry;
 
+/// The nearest or farthest counterpart's distance.
+pub const DISTANCE: &str = "distance";
+/// How many counterparts lie within a radius.
+pub const COUNT_WITHIN: &str = "count_within";
 /// The least vertical clearance above a walking surface.
 pub const HEADROOM: &str = "headroom";
 /// The least clearance below a flight or ramp over the floors beneath.
@@ -59,8 +63,10 @@ pub struct MeasuredDescriptor {
     /// The parameters it takes, in documentation order.
     pub parameters: &'static [MeasuredParameter],
     /// The dimension of the value; it is answered in the coherent SI unit
-    /// ([`MeasuredDescriptor::unit`]).
-    pub dimension: QuantityDimension,
+    /// ([`MeasuredDescriptor::unit`]). `None` for a plain number, such as
+    /// a count.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dimension: Option<QuantityDimension>,
     /// The services a run needs to answer it, by their service names.
     pub services: &'static [&'static str],
     /// How exact an answer can be.
@@ -78,11 +84,11 @@ impl MeasuredDescriptor {
     #[must_use]
     pub fn unit(&self) -> &'static str {
         match self.dimension {
-            QuantityDimension::Length => "m",
-            QuantityDimension::Area => "m2",
-            QuantityDimension::Volume => "m3",
-            QuantityDimension::PlaneAngle => "rad",
-            QuantityDimension::Other { .. } => "1",
+            Some(QuantityDimension::Length) => "m",
+            Some(QuantityDimension::Area) => "m2",
+            Some(QuantityDimension::Volume) => "m3",
+            Some(QuantityDimension::PlaneAngle) => "rad",
+            Some(QuantityDimension::Other { .. }) | None => "1",
         }
     }
 

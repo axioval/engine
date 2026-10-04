@@ -1291,17 +1291,28 @@ impl Test {
     fn holds_measured(
         &self,
         (lower, upper): (f64, f64),
-        held: QuantityDimension,
+        held: Option<QuantityDimension>,
     ) -> Result<bool, String> {
+        let unit = |dimension: Option<QuantityDimension>| {
+            dimension.map_or_else(
+                || "a plain number".to_owned(),
+                QuantityDimension::unit_symbol,
+            )
+        };
         match self {
             Self::Exists | Self::NotEmpty => Ok(true),
             Self::Empty => Ok(false),
-            Self::Compare(order, Expected::Quantity(expected, dimension), _) => {
-                if held != *dimension {
+            Self::Compare(order, wanted @ (Expected::Quantity(..) | Expected::Number(_)), _) => {
+                let (expected, dimension) = match wanted {
+                    Expected::Quantity(expected, dimension) => (expected, Some(*dimension)),
+                    Expected::Number(expected) => (expected, None),
+                    _ => unreachable!("matched above"),
+                };
+                if held != dimension {
                     return Err(format!(
-                        "a quantity in {} cannot be compared with one in {}",
-                        held.unit_symbol(),
-                        dimension.unit_symbol()
+                        "a measured value in {} cannot be compared with one in {}",
+                        unit(held),
+                        unit(dimension)
                     ));
                 }
                 let tolerance = Tolerance::unit_conversion();
@@ -1314,15 +1325,15 @@ impl Test {
                 crate::support::interval_verdict(least, greatest, |ordering| order.holds(ordering))
                     .ok_or_else(|| {
                         format!(
-                            "the measured value lies between {lower} and {upper} {}, which \
+                            "the measured value lies between {lower} and {upper} ({}), which \
                              straddles the bound",
-                            held.unit_symbol()
+                            unit(held)
                         )
                     })
             }
             _ => Err(format!(
-                "the value is a measured quantity in {} but the selector compares another kind",
-                held.unit_symbol()
+                "the value is measured in {} but the selector compares another kind",
+                unit(held)
             )),
         }
     }
@@ -1464,9 +1475,10 @@ fn kind(value: &PropertyValue) -> String {
         PropertyValue::Bounded { .. } => "a bounded value".into(),
         PropertyValue::Table(_) => "a table".into(),
         PropertyValue::Complex => "a complex property".into(),
-        PropertyValue::Measured { dimension, .. } => {
-            format!("a measured quantity in {}", dimension.unit_symbol())
-        }
+        PropertyValue::Measured { dimension, .. } => match dimension {
+            Some(dimension) => format!("a measured quantity in {}", dimension.unit_symbol()),
+            None => "a measured number".into(),
+        },
     }
 }
 

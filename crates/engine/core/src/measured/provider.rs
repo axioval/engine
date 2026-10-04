@@ -25,8 +25,9 @@ pub enum Measurement {
         lower: f64,
         /// The greatest value it may have.
         upper: f64,
-        /// The value's dimension.
-        dimension: QuantityDimension,
+        /// The value's dimension; `None` for a plain number, such as a
+        /// count.
+        dimension: Option<QuantityDimension>,
         /// Where the measurement came from, for its evidence.
         locator: String,
     },

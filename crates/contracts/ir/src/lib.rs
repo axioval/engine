@@ -348,11 +348,14 @@ pub enum PropertyValue {
     /// A quantity measured only to lie within `[lower, upper]`, in the SI
     /// unit of its dimension, the bounds finite and ordered: a value from a
     /// tessellated body. It is one value whose exact place is unknown, so a
-    /// comparison it may pass or fail cannot be decided.
+    /// comparison it may pass or fail cannot be decided. Without a
+    /// dimension it is a plain number known only to an interval, such as a
+    /// count of objects some of which are undecided.
     Measured {
         lower: f64,
         upper: f64,
-        dimension: QuantityDimension,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        dimension: Option<QuantityDimension>,
     },
     /// A property that groups named member properties and is no value of
     /// its own (an IFC complex property or physical complex quantity). It

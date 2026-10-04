@@ -2070,7 +2070,7 @@ fn a_clear_width_known_as_an_interval_decides_only_where_it_agrees() {
     let between = |lower: f64, upper: f64| PropertyValue::Measured {
         lower,
         upper,
-        dimension: QuantityDimension::Length,
+        dimension: Some(QuantityDimension::Length),
     };
     let model = doors(&[
         ("d1", "SINGLE_SWING_LEFT", None, Some(between(0.7, 0.8))),

@@ -66,6 +66,10 @@ use crate::pairs::{
 use crate::selection::select_objects;
 use crate::support::{Parameters, Traversal, Unavailable, finding, invalid, traversal_parameters};
 
+mod measured;
+
+pub(crate) use measured::DistanceMeasures;
+
 /// Requires counterparts to keep a declared distance from each subject.
 pub struct Distance;
 

@@ -1098,7 +1098,7 @@ fn width_between(lower: f64, upper: f64) -> PropertyValue {
     PropertyValue::Measured {
         lower,
         upper,
-        dimension: QuantityDimension::Length,
+        dimension: Some(QuantityDimension::Length),
     }
 }
 

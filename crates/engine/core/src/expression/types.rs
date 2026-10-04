@@ -205,7 +205,7 @@ pub trait TypeEnvironment {
 /// The registry's message for an unknown name or a wrong parameter.
 pub fn measured_type(name: &str) -> Result<Type, String> {
     let call = axioval_ir::measured::parse(name).map_err(|error| error.to_string())?;
-    Ok(Type::Number(Unit::of(Some(call.descriptor.dimension))))
+    Ok(Type::Number(Unit::of(call.descriptor.dimension)))
 }
 
 /// Infers the type of `expression`, whose path is `root`.

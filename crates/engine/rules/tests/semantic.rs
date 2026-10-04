@@ -434,7 +434,7 @@ mod consistent {
         let measured = |lower, upper| PropertyValue::Measured {
             lower,
             upper,
-            dimension: axioval_ir::QuantityDimension::Length,
+            dimension: Some(axioval_ir::QuantityDimension::Length),
         };
         // 0.2395 to 0.2415 m may lie within 1 mm of 0.24 m, or not.
         let straddling = walls(&[metres(0.24), measured(0.2395, 0.2415)]);

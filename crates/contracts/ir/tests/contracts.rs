@@ -862,7 +862,7 @@ fn a_measured_value_reads_and_writes_its_interval() {
         PropertyValue::Measured {
             lower: 0.045,
             upper: 0.055,
-            dimension: QuantityDimension::Length
+            dimension: Some(QuantityDimension::Length)
         }
     );
     assert!(value.is_scalar());

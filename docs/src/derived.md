@@ -380,6 +380,8 @@ ignoring ASCII case):
 | `clearance_below;spaces=<kinds>` | the least clearance below a flight or ramp over the floors beneath | `WalkingSurfaceService::measure_clearance_below` |
 | `clear_width;obstacles=<kinds>;band_to=<m>[;band_from=<m>][;along=flight\|runs]` | the narrowest clear width along a flight or a ramp's runs | `WalkingSurfaceService::measure_clear_width` |
 | `clear_height` | a space's clear height | `SpaceService::measure_clear_height` |
+| `distance;to=<kinds>[;mode=nearest\|farthest][;projection=…][;direction=…][;subject_surface=…;counterpart_surface=…][;within=<m>]` | the nearest or farthest counterpart's distance, as `distance` measures it | built in, over `ProximityService` |
+| `count_within;to=<kinds>;radius=<m>[;from=<m>][;projection=…][;direction=…]` | how many counterparts lie within a radius, a plain number | built in, over `ProximityService` |
 | `angle_to;path=<steps>[;between=axis\|face_normal]` | the angle to the objects a path reaches, an angle | `PlanSpanService::measure_rectangle` or `VerticalExtentService::measure_face_normals`, `RelationshipSelectionService` |
 | `skew;path=<steps>` | how far the long axis is from square to the reached objects', an angle | `PlanSpanService::measure_rectangle`, `RelationshipSelectionService` |
 | `bearing;axis=own_x\|own_y\|long[;reference=project_north\|true_north]` | an axis's plan bearing clockwise from north, an angle | `ObjectFrameService` or `PlanSpanService`, `CoordinateSystemService` for true north |
@@ -514,6 +516,37 @@ floor.
 `clear_width` is measured between two heights above the pitch line
 (`band_from`, default 0, and `band_to`, in metres) along a stair flight,
 or with `along=runs` along each of a ramp's runs, the least over them.
+
+### Distances
+
+`distance` and `count_within` are measured by the built-in code of the
+`distance` capability: its broad phase, projections, surfaces and
+counting of undecided counterparts. A comparison of the value therefore
+reaches the capability's verdicts:
+
+- `at_least` is `count_within` at least the count;
+- `none_closer_than` is the nearest `distance` at least the minimum, none
+  within it holding;
+- `nearest` with a maximum is the nearest `distance` at most it, none
+  within it failing.
+
+The counterparts are the objects of the source kinds `to` names. The
+search runs within `within` (default 1000 m) or the `radius`, so a
+counterpart beyond it is proven out of reach, and none within it is an
+exact absence. An undecided counterpart widens the value towards the
+bound it could move: one whose distance could not be read, or whose
+interval straddles. The nearest distance's lower bound is the least any
+counterpart may come, and its upper bound the least of those surely
+counted. `count_within` runs from those surely within to those possibly
+within, and a decided count is an integer.
+
+A measured value without a dimension, such as a count, is a plain
+number. Known only to an interval, it is a `measured` value without a
+`dimension`:
+
+```json
+{"type": "measured", "value": {"lower": 2, "upper": 3}}
+```
 
 ### Measured by built-in code
 

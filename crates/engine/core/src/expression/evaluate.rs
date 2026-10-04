@@ -139,10 +139,10 @@ impl Value {
                 lower,
                 upper,
                 dimension,
-            } => Self::quantity(
-                Interval::new(*lower, *upper).ok_or("a measured interval is not ordered")?,
-                *dimension,
-            ),
+            } => Self::Number {
+                value: Interval::new(*lower, *upper).ok_or("a measured interval is not ordered")?,
+                unit: Unit::of(*dimension),
+            },
             PropertyValue::String(value) => Self::Text(value.clone()),
             PropertyValue::Date(value) => Self::Date(*value),
             PropertyValue::DateTime(value) => Self::DateTime(*value),

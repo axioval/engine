@@ -1285,7 +1285,7 @@ fn value_cell(value: Option<&PropertyValue>) -> Cell {
             lower,
             upper,
             dimension,
-        }) => Cell::number(*lower, *upper, Some(*dimension), false),
+        }) => Cell::number(*lower, *upper, *dimension, false),
         Some(PropertyValue::String(text)) => Cell::Text(vec![text.trim().to_owned()]),
         value => Cell::Text(vec![display(value)]),
     }

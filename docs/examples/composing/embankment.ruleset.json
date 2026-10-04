@@ -1,0 +1,128 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:example.composing.embankment",
+    "name": {
+      "default": "Embankment slopes",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "Every embankment side slope is no steeper than its soil class allows.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "definitionPackages": [
+    "axioval:example.composing.embankment-definitions"
+  ],
+  "root": {
+    "id": "root",
+    "name": {
+      "default": "Earthworks",
+      "translations": {}
+    },
+    "rules": [
+      {
+        "id": "embankment-slope",
+        "definitionId": "axioval:example.composing.slope-by-soil-class",
+        "name": {
+          "default": "Side slopes within the soil class's limit",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:example.composing.embankment",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "slope_limits": {
+            "type": "table",
+            "value": [
+              {
+                "soil": {"type": "string", "value": "rock"},
+                "maximum_ratio": {"type": "number", "value": 1.0}
+              },
+              {
+                "soil": {"type": "string", "value": "gravel"},
+                "maximum_ratio": {"type": "number", "value": 0.5}
+              },
+              {
+                "soil": {"type": "string", "value": "sand"},
+                "maximum_ratio": {"type": "number", "value": 0.4}
+              },
+              {
+                "soil": {"type": "string", "value": "clay"},
+                "maximum_ratio": {"type": "number", "value": 0.25}
+              }
+            ]
+          },
+          "requirement": {
+            "type": "expression",
+            "value": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "isDefined",
+                  "label": "soil class stated",
+                  "operand": {
+                    "kind": "property",
+                    "propertySet": "axioval:example.composing.ground",
+                    "property": "axioval:example.composing.soil-class"
+                  }
+                },
+                {
+                  "kind": "isDefined",
+                  "label": "limit for the soil class",
+                  "operand": {
+                    "kind": "lookup",
+                    "table": "slope_limits",
+                    "column": "maximum_ratio",
+                    "keys": {
+                      "soil": {
+                        "kind": "property",
+                        "propertySet": "axioval:example.composing.ground",
+                        "property": "axioval:example.composing.soil-class"
+                      }
+                    }
+                  }
+                },
+                {
+                  "kind": "compare",
+                  "operator": "lessThanOrEquals",
+                  "label": "slope within the limit",
+                  "left": {
+                    "kind": "convertSlope",
+                    "label": "rise per run",
+                    "from": "angle",
+                    "to": "ratio",
+                    "operand": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "slope"
+                    }
+                  },
+                  "right": {
+                    "kind": "lookup",
+                    "label": "limit",
+                    "table": "slope_limits",
+                    "column": "maximum_ratio",
+                    "keys": {
+                      "soil": {
+                        "kind": "property",
+                        "propertySet": "axioval:example.composing.ground",
+                        "property": "axioval:example.composing.soil-class"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "folders": []
+  }
+}

@@ -19,6 +19,7 @@
 - [Authoring catalogue](./catalogue.md)
 - [Rule drafts](./drafts.md)
 - [Block editors](./block-editors.md)
+- [Composing rules](./composing-rules.md)
 - [Review decisions](./decisions.md)
 - [JSON Schemas](./json-schema.md)
 - [Connectivity and routes](./topology.md)

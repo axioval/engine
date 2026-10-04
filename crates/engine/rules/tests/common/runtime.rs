@@ -24,9 +24,14 @@ use super::{Model, source};
 pub const TYPE_SYSTEM: &str = "axioval:test";
 
 pub fn snapshot() -> SourceSnapshot {
+    snapshot_in(TYPE_SYSTEM)
+}
+
+/// The in-memory source's snapshot, declaring `type_system`.
+pub fn snapshot_in(type_system: &str) -> SourceSnapshot {
     SourceSnapshot::try_new(source(), "r1", "sha256:test")
         .unwrap()
-        .with_type_system(TYPE_SYSTEM)
+        .with_type_system(type_system)
         .unwrap()
 }
 
@@ -65,10 +70,16 @@ impl RelationshipSelectionService for Bound {
 
 /// A session over `model` with its property and relationship services.
 pub fn session(model: Model) -> EvidenceSession {
+    session_in(model, TYPE_SYSTEM)
+}
+
+/// A session over `model` as [`session`], its source declaring
+/// `type_system`.
+pub fn session_in(model: Model, type_system: &str) -> EvidenceSession {
     let project = Project::new(model.objects.clone()).unwrap();
     let model = Arc::new(model);
-    let bound = || Arc::new(Bound(model.clone(), vec![snapshot()]));
-    EvidenceSession::try_new(project, [snapshot()])
+    let bound = || Arc::new(Bound(model.clone(), vec![snapshot_in(type_system)]));
+    EvidenceSession::try_new(project, [snapshot_in(type_system)])
         .unwrap()
         .with_service(PropertyResolutionServiceHandle::new(bound()))
         .unwrap()

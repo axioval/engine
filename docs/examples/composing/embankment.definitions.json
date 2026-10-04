@@ -1,0 +1,134 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:example.composing.embankment-definitions",
+    "name": {
+      "default": "Embankment slope terms",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "Illustrative terms for a slope limit by soil class; the limits are not taken from any standard.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "objectTypes": {
+    "axioval:example.composing.embankment": {
+      "id": "axioval:example.composing.embankment",
+      "name": {
+        "default": "Embankment side slope",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcEarthworksFill"
+        }
+      ]
+    }
+  },
+  "properties": {
+    "axioval:example.composing.soil-class": {
+      "id": "axioval:example.composing.soil-class",
+      "name": {
+        "default": "Soil class",
+        "translations": {}
+      },
+      "valueKind": "string",
+      "externalNames": [
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "SoilClass"
+        }
+      ]
+    }
+  },
+  "propertySets": {
+    "axioval:example.composing.ground": {
+      "id": "axioval:example.composing.ground",
+      "name": {
+        "default": "Ground",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "Ground"
+        }
+      ]
+    }
+  },
+  "definitions": {
+    "axioval:example.composing.slope-by-soil-class": {
+      "id": "axioval:example.composing.slope-by-soil-class",
+      "name": {
+        "default": "Slope limit by soil class",
+        "translations": {}
+      },
+      "description": {
+        "default": "A measured slope compared with the limit a table gives for the stated soil class.",
+        "translations": {}
+      },
+      "capability": "axioval:capability.expression",
+      "parameters": {
+        "requirement": {
+          "id": "requirement",
+          "name": {
+            "default": "Requirement",
+            "translations": {}
+          },
+          "kind": "expression",
+          "required": true
+        },
+        "deviation": {
+          "id": "deviation",
+          "name": {
+            "default": "Deviation",
+            "translations": {}
+          },
+          "kind": "expression",
+          "required": false
+        },
+        "message": {
+          "id": "message",
+          "name": {
+            "default": "Message",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
+        "slope_limits": {
+          "id": "slope_limits",
+          "name": {
+            "default": "Steepest slope per soil class",
+            "translations": {}
+          },
+          "kind": "table",
+          "required": true,
+          "columns": [
+            {
+              "id": "soil",
+              "name": {
+                "default": "Soil class",
+                "translations": {}
+              },
+              "kind": "textPattern",
+              "required": true
+            },
+            {
+              "id": "maximum_ratio",
+              "name": {
+                "default": "Steepest rise per run",
+                "translations": {}
+              },
+              "kind": "number",
+              "required": false
+            }
+          ]
+        }
+      }
+    }
+  }
+}

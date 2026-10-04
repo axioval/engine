@@ -1,0 +1,182 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:example.composing.cover-definitions",
+    "name": {
+      "default": "Concrete cover terms",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "Illustrative terms for a minimum cover by exposure class; the classes and covers are not taken from any standard.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "objectTypes": {
+    "axioval:example.composing.slab": {
+      "id": "axioval:example.composing.slab",
+      "name": {
+        "default": "Concrete slab",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcSlab"
+        }
+      ]
+    }
+  },
+  "properties": {
+    "axioval:example.composing.exposure-class": {
+      "id": "axioval:example.composing.exposure-class",
+      "name": {
+        "default": "Exposure class",
+        "translations": {}
+      },
+      "valueKind": "string",
+      "externalNames": [
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "ExposureClass"
+        }
+      ]
+    },
+    "axioval:example.composing.nominal-cover": {
+      "id": "axioval:example.composing.nominal-cover",
+      "name": {
+        "default": "Nominal cover",
+        "translations": {}
+      },
+      "valueKind": "quantity",
+      "unitDimension": "length",
+      "externalNames": [
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "NominalCover"
+        }
+      ]
+    },
+    "axioval:example.composing.prestressed": {
+      "id": "axioval:example.composing.prestressed",
+      "name": {
+        "default": "Prestressed",
+        "translations": {}
+      },
+      "valueKind": "boolean",
+      "externalNames": [
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "Prestressed"
+        }
+      ]
+    }
+  },
+  "propertySets": {
+    "axioval:example.composing.durability": {
+      "id": "axioval:example.composing.durability",
+      "name": {
+        "default": "Durability",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "Durability"
+        }
+      ]
+    }
+  },
+  "definitions": {
+    "axioval:example.composing.cover-by-exposure": {
+      "id": "axioval:example.composing.cover-by-exposure",
+      "name": {
+        "default": "Cover by exposure class",
+        "translations": {}
+      },
+      "description": {
+        "default": "Where an exposure class is stated, the stated cover meets the class's minimum and leaves a core in the measured thickness.",
+        "translations": {}
+      },
+      "capability": "axioval:capability.expression",
+      "parameters": {
+        "requirement": {
+          "id": "requirement",
+          "name": {
+            "default": "Requirement",
+            "translations": {}
+          },
+          "kind": "expression",
+          "required": true
+        },
+        "deviation": {
+          "id": "deviation",
+          "name": {
+            "default": "Deviation",
+            "translations": {}
+          },
+          "kind": "expression",
+          "required": false
+        },
+        "message": {
+          "id": "message",
+          "name": {
+            "default": "Message",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
+        "minimum_cover": {
+          "id": "minimum_cover",
+          "name": {
+            "default": "Minimum cover per exposure class",
+            "translations": {}
+          },
+          "kind": "table",
+          "required": true,
+          "columns": [
+            {
+              "id": "exposure",
+              "name": {
+                "default": "Exposure class",
+                "translations": {}
+              },
+              "kind": "textPattern",
+              "required": true
+            },
+            {
+              "id": "cover",
+              "name": {
+                "default": "Minimum cover",
+                "translations": {}
+              },
+              "kind": "quantity",
+              "unitDimension": "length",
+              "required": false
+            }
+          ]
+        },
+        "prestress_allowance": {
+          "id": "prestress_allowance",
+          "name": {
+            "default": "Extra cover when prestressed",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": true
+        },
+        "least_core": {
+          "id": "least_core",
+          "name": {
+            "default": "Least core between both covers",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": true
+        }
+      }
+    }
+  }
+}

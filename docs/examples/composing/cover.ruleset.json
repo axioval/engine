@@ -1,0 +1,153 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:example.composing.cover",
+    "name": {
+      "default": "Concrete cover",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "Slabs with a stated exposure class carry at least the class's cover, more when prestressed, and keep a core between their two covers.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "definitionPackages": [
+    "axioval:example.composing.cover-definitions"
+  ],
+  "root": {
+    "id": "root",
+    "name": {
+      "default": "Durability",
+      "translations": {}
+    },
+    "rules": [
+      {
+        "id": "cover-by-exposure",
+        "definitionId": "axioval:example.composing.cover-by-exposure",
+        "name": {
+          "default": "Cover meets the exposure class",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:example.composing.slab",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "minimum_cover": {
+            "type": "table",
+            "value": [
+              {
+                "exposure": {"type": "string", "value": "interior-dry"},
+                "cover": {"type": "quantity", "value": 20.0, "unit": "mm"}
+              },
+              {
+                "exposure": {"type": "string", "value": "exterior-sheltered"},
+                "cover": {"type": "quantity", "value": 30.0, "unit": "mm"}
+              },
+              {
+                "exposure": {"type": "string", "value": "exterior-exposed"},
+                "cover": {"type": "quantity", "value": 40.0, "unit": "mm"}
+              },
+              {
+                "exposure": {"type": "string", "value": "aggressive"},
+                "cover": {"type": "quantity", "value": 50.0, "unit": "mm"}
+              }
+            ]
+          },
+          "prestress_allowance": {"type": "quantity", "value": 10.0, "unit": "mm"},
+          "least_core": {"type": "quantity", "value": 100.0, "unit": "mm"},
+          "requirement": {
+            "type": "expression",
+            "value": {
+              "kind": "implies",
+              "antecedent": {
+                "kind": "isDefined",
+                "label": "exposure class stated",
+                "operand": {
+                  "kind": "property",
+                  "propertySet": "axioval:example.composing.durability",
+                  "property": "axioval:example.composing.exposure-class"
+                }
+              },
+              "consequent": {
+                "kind": "and",
+                "operands": [
+                  {
+                    "kind": "compare",
+                    "operator": "greaterThanOrEquals",
+                    "label": "cover meets the class",
+                    "left": {
+                      "kind": "property",
+                      "label": "cover",
+                      "propertySet": "axioval:example.composing.durability",
+                      "property": "axioval:example.composing.nominal-cover"
+                    },
+                    "right": {
+                      "kind": "add",
+                      "label": "required cover",
+                      "left": {
+                        "kind": "lookup",
+                        "table": "minimum_cover",
+                        "column": "cover",
+                        "keys": {
+                          "exposure": {
+                            "kind": "property",
+                            "propertySet": "axioval:example.composing.durability",
+                            "property": "axioval:example.composing.exposure-class"
+                          }
+                        }
+                      },
+                      "right": {
+                        "kind": "if",
+                        "branches": [
+                          {
+                            "when": {
+                              "kind": "property",
+                              "propertySet": "axioval:example.composing.durability",
+                              "property": "axioval:example.composing.prestressed"
+                            },
+                            "then": {"kind": "parameter", "name": "prestress_allowance"}
+                          }
+                        ],
+                        "else": {"kind": "literal", "value": {"type": "quantity", "value": 0.0, "unit": "mm"}}
+                      }
+                    }
+                  },
+                  {
+                    "kind": "compare",
+                    "operator": "greaterThanOrEquals",
+                    "label": "core left",
+                    "left": {
+                      "kind": "subtract",
+                      "label": "core",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "extent_z"
+                      },
+                      "right": {
+                        "kind": "multiply",
+                        "left": {"kind": "literal", "value": {"type": "number", "value": 2.0}},
+                        "right": {
+                          "kind": "property",
+                          "propertySet": "axioval:example.composing.durability",
+                          "property": "axioval:example.composing.nominal-cover"
+                        }
+                      }
+                    },
+                    "right": {"kind": "parameter", "name": "least_core"}
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    ],
+    "folders": []
+  }
+}

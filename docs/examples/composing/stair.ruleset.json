@@ -1,0 +1,96 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:example.composing.stair",
+    "name": {
+      "default": "Stair steps",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "Every step of a flight keeps two risers and a going within a comfortable band.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "definitionPackages": [
+    "axioval:example.composing.stair-definitions"
+  ],
+  "root": {
+    "id": "root",
+    "name": {
+      "default": "Stairs",
+      "translations": {}
+    },
+    "rules": [
+      {
+        "id": "step-formula",
+        "definitionId": "axioval:example.composing.step-formula",
+        "name": {
+          "default": "Two risers and a going between 0.60 m and 0.65 m",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:example.composing.flight",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "step_length_least": {"type": "quantity", "value": 0.6, "unit": "m"},
+          "step_length_greatest": {"type": "quantity", "value": 0.65, "unit": "m"},
+          "riser_greatest": {"type": "quantity", "value": 0.19, "unit": "m"},
+          "requirement": {
+            "type": "expression",
+            "value": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "aggregate",
+                  "label": "every step within the step formula",
+                  "function": "all",
+                  "over": {"kind": "measured", "name": "steps"},
+                  "value": {
+                    "kind": "implies",
+                    "antecedent": {
+                      "kind": "isDefined",
+                      "operand": {"kind": "property", "propertySet": "axioval:member", "property": "going"}
+                    },
+                    "consequent": {
+                      "kind": "between",
+                      "operand": {
+                        "kind": "add",
+                        "label": "two risers and a going",
+                        "left": {
+                          "kind": "multiply",
+                          "left": {"kind": "literal", "value": {"type": "number", "value": 2.0}},
+                          "right": {"kind": "property", "propertySet": "axioval:member", "property": "riser"}
+                        },
+                        "right": {"kind": "property", "propertySet": "axioval:member", "property": "going"}
+                      },
+                      "low": {"kind": "parameter", "name": "step_length_least"},
+                      "high": {"kind": "parameter", "name": "step_length_greatest"}
+                    }
+                  }
+                },
+                {
+                  "kind": "aggregate",
+                  "label": "no riser too high",
+                  "function": "none",
+                  "over": {"kind": "measured", "name": "steps"},
+                  "value": {
+                    "kind": "compare",
+                    "operator": "greaterThan",
+                    "left": {"kind": "property", "propertySet": "axioval:member", "property": "riser"},
+                    "right": {"kind": "parameter", "name": "riser_greatest"}
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "folders": []
+  }
+}

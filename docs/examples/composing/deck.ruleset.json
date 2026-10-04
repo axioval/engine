@@ -1,0 +1,79 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:example.composing.deck",
+    "name": {
+      "default": "Deck drainage",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "External deck slabs fall across their length within a band, steep enough to drain and flat enough to walk.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "definitionPackages": [
+    "axioval:example.composing.deck-definitions"
+  ],
+  "root": {
+    "id": "root",
+    "name": {
+      "default": "Decks",
+      "translations": {}
+    },
+    "rules": [
+      {
+        "id": "deck-cross-fall",
+        "definitionId": "axioval:example.composing.cross-fall-band",
+        "name": {
+          "default": "External decks fall across between 1 % and 3 %",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "allOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:example.composing.deck",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "property",
+              "propertySet": "axioval:example.composing.slab-common",
+              "property": "axioval:example.composing.is-external",
+              "operator": "equals",
+              "value": {"type": "boolean", "value": true}
+            }
+          ]
+        },
+        "parameters": {
+          "least_percent": {"type": "number", "value": 1.0},
+          "greatest_percent": {"type": "number", "value": 3.0},
+          "requirement": {
+            "type": "expression",
+            "value": {
+              "kind": "between",
+              "label": "cross-fall within the band",
+              "operand": {
+                "kind": "convertSlope",
+                "label": "cross-fall",
+                "from": "angle",
+                "to": "percent",
+                "operand": {
+                  "kind": "property",
+                  "propertySet": "axioval:measured",
+                  "property": "cross_fall;axis=own_x"
+                }
+              },
+              "low": {"kind": "parameter", "name": "least_percent"},
+              "high": {"kind": "parameter", "name": "greatest_percent"}
+            }
+          }
+        }
+      }
+    ],
+    "folders": []
+  }
+}

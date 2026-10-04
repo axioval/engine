@@ -1,0 +1,123 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:example.composing.deck-definitions",
+    "name": {
+      "default": "Deck drainage terms",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "Illustrative terms for a cross-fall band on external decks.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "objectTypes": {
+    "axioval:example.composing.deck": {
+      "id": "axioval:example.composing.deck",
+      "name": {
+        "default": "Deck slab",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcSlab"
+        }
+      ]
+    }
+  },
+  "properties": {
+    "axioval:example.composing.is-external": {
+      "id": "axioval:example.composing.is-external",
+      "name": {
+        "default": "External",
+        "translations": {}
+      },
+      "valueKind": "boolean",
+      "externalNames": [
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IsExternal"
+        }
+      ]
+    }
+  },
+  "propertySets": {
+    "axioval:example.composing.slab-common": {
+      "id": "axioval:example.composing.slab-common",
+      "name": {
+        "default": "Slab common properties",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "Pset_SlabCommon"
+        }
+      ]
+    }
+  },
+  "definitions": {
+    "axioval:example.composing.cross-fall-band": {
+      "id": "axioval:example.composing.cross-fall-band",
+      "name": {
+        "default": "Cross-fall within a band",
+        "translations": {}
+      },
+      "description": {
+        "default": "The fall across a surface's own axis lies between a least and a greatest percentage.",
+        "translations": {}
+      },
+      "capability": "axioval:capability.expression",
+      "parameters": {
+        "requirement": {
+          "id": "requirement",
+          "name": {
+            "default": "Requirement",
+            "translations": {}
+          },
+          "kind": "expression",
+          "required": true
+        },
+        "deviation": {
+          "id": "deviation",
+          "name": {
+            "default": "Deviation",
+            "translations": {}
+          },
+          "kind": "expression",
+          "required": false
+        },
+        "message": {
+          "id": "message",
+          "name": {
+            "default": "Message",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
+        "least_percent": {
+          "id": "least_percent",
+          "name": {
+            "default": "Least cross-fall (%)",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": true
+        },
+        "greatest_percent": {
+          "id": "greatest_percent",
+          "name": {
+            "default": "Greatest cross-fall (%)",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": true
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,101 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:example.composing.stair-definitions",
+    "name": {
+      "default": "Stair step terms",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "Illustrative terms for a step formula relating each step's riser and going.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "objectTypes": {
+    "axioval:example.composing.flight": {
+      "id": "axioval:example.composing.flight",
+      "name": {
+        "default": "Stair flight",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcStairFlight"
+        }
+      ]
+    }
+  },
+  "definitions": {
+    "axioval:example.composing.step-formula": {
+      "id": "axioval:example.composing.step-formula",
+      "name": {
+        "default": "Step formula",
+        "translations": {}
+      },
+      "description": {
+        "default": "Two risers and one going of every step lie within a band, and no riser is higher than a limit.",
+        "translations": {}
+      },
+      "capability": "axioval:capability.expression",
+      "parameters": {
+        "requirement": {
+          "id": "requirement",
+          "name": {
+            "default": "Requirement",
+            "translations": {}
+          },
+          "kind": "expression",
+          "required": true
+        },
+        "deviation": {
+          "id": "deviation",
+          "name": {
+            "default": "Deviation",
+            "translations": {}
+          },
+          "kind": "expression",
+          "required": false
+        },
+        "message": {
+          "id": "message",
+          "name": {
+            "default": "Message",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
+        "step_length_least": {
+          "id": "step_length_least",
+          "name": {
+            "default": "Least step length (2 risers + going)",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": true
+        },
+        "step_length_greatest": {
+          "id": "step_length_greatest",
+          "name": {
+            "default": "Greatest step length (2 risers + going)",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": true
+        },
+        "riser_greatest": {
+          "id": "riser_greatest",
+          "name": {
+            "default": "Highest riser",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": true
+        }
+      }
+    }
+  }
+}

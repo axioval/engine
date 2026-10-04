@@ -170,3 +170,126 @@ fn a_tolerance_small_openings_and_overlaps_are_honoured() {
         [("w".into(), NotEvaluatedReason::IncompleteEvidence)]
     );
 }
+
+/// `empty-host` as an expression: a host with an opening on its middle
+/// plane (`opening_count`) whose summed openings (`opening_area`) do not
+/// fall short of its middle-plane face (`middle_face_area`) by more than
+/// the tolerance is empty. It judges every fixture as the capability does.
+#[test]
+#[allow(
+    clippy::format_push_string,
+    clippy::items_after_statements,
+    clippy::too_many_lines
+)]
+fn an_empty_host_as_an_expression_reaches_the_verdicts() {
+    use serde_json::{Value, json};
+    let measured = |name: &str| json!({"kind": "property", "propertySet": "axioval:measured", "property": name});
+    let rounded = |operand: Value| {
+        json!({"kind": "round", "operand": operand,
+            "step": {"kind": "literal", "value": {"type": "quantity", "value": 1e-6, "unit": "m2"}}})
+    };
+    let requirement = |tolerance: f64, minimum: Option<f64>| {
+        let mut openings =
+            "path=voids:forward;length_axis=profile-x;height_axis=extrusion".to_owned();
+        if let Some(minimum) = minimum {
+            openings.push_str(&format!(";minimum={minimum}"));
+        }
+        json!({"kind": "implies",
+            "antecedent": {"kind": "compare", "operator": "greaterThan",
+                "left": measured(&format!("opening_count;{openings}")),
+                "right": {"kind": "literal", "value": {"type": "integer", "value": 0}}},
+            "consequent": {"kind": "compare", "operator": "lessThan",
+                "left": rounded(measured(&format!("opening_area;{openings}"))),
+                "right": {"kind": "subtract",
+                    "left": rounded(measured(
+                        "middle_face_area;length_axis=profile-x;height_axis=extrusion")),
+                    "right": {"kind": "literal",
+                        "value": {"type": "quantity", "value": tolerance, "unit": "m2"}}}}})
+    };
+    type Fixture = (fn() -> Model, Option<f64>, Option<f64>);
+    let fixtures: [Fixture; 9] = [
+        (
+            || opening(wall(), "whole", (2.5, 1.5), (5.0, 3.0)),
+            None,
+            None,
+        ),
+        (
+            || {
+                opening(
+                    opening(wall(), "left", (1.0, 1.5), (2.0, 3.0)),
+                    "right",
+                    (3.5, 1.5),
+                    (3.0, 3.0),
+                )
+            },
+            None,
+            None,
+        ),
+        (
+            || opening(wall(), "window", (2.5, 1.5), (1.0, 1.2)),
+            None,
+            None,
+        ),
+        (
+            || opening(wall(), "most", (2.45, 1.5), (4.9, 3.0)),
+            None,
+            None,
+        ),
+        (
+            || opening(wall(), "most", (2.45, 1.5), (4.9, 3.0)),
+            Some(0.5),
+            None,
+        ),
+        (
+            || opening(wall(), "whole", (2.5, 1.5), (5.0, 3.0)),
+            None,
+            Some(20.0),
+        ),
+        (
+            || {
+                opening(
+                    opening(wall(), "a", (2.0, 1.5), (2.0, 3.0)),
+                    "b",
+                    (2.5, 1.5),
+                    (2.0, 3.0),
+                )
+            },
+            None,
+            None,
+        ),
+        (wall, None, None),
+        (|| wall().object("bare", "wall"), None, None),
+    ];
+    let (mut found, mut open) = (0, 0);
+    for (index, (model, tolerance, minimum)) in fixtures.into_iter().enumerate() {
+        let mut extra = Vec::new();
+        if let Some(tolerance) = tolerance {
+            extra.push(("area_tolerance", square_metres(tolerance)));
+        }
+        if let Some(minimum) = minimum {
+            extra.push(("minimum_opening_area", square_metres(minimum)));
+        }
+        let evaluated = check(model(), extra);
+        let rewritten = model().evaluate_measured(
+            &axioval_rules::ExpressionRequirement,
+            &rule(
+                "axioval:capability.expression",
+                kind("wall"),
+                vec![(
+                    "requirement",
+                    common::expression(requirement(tolerance.unwrap_or(0.0), minimum)),
+                )],
+            ),
+            |_| {},
+        );
+        let parity = axioval_rules::parity::compare_evaluations(
+            (ID, &evaluated),
+            ("expression", &rewritten),
+        );
+        assert!(parity.holds(), "fixture {index}:\n{}", parity.diff());
+        found += parity.found;
+        open += parity.open;
+    }
+    // A wall with no recorded voids and one without a body stay open.
+    assert_eq!((found, open), (3, 4));
+}

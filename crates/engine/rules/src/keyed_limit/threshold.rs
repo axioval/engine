@@ -232,6 +232,91 @@ impl<'a> ThresholdStep<'a> {
         )))
     }
 
+    /// The step on every side of `subject` as one interval, as
+    /// [`Self::judge`] reads its floors: the greatest over the sides, or
+    /// with `least` the least. On a side with floors it surely steps onto,
+    /// the step is bounded below by the greatest (or above by the least)
+    /// of theirs and widened by every possible floor; on a side with only
+    /// possible floors, it is any of theirs. A declared threshold the door
+    /// does not state, or a floor that cannot be measured, leaves it
+    /// unknown. The flag says whether every floor's and the door's evidence
+    /// is exact and no floor is only possible, so the interval holds only
+    /// rounding.
+    pub(crate) fn measure(
+        &self,
+        context: &RuleContext<'_>,
+        subject: &Object,
+        least: bool,
+    ) -> Result<Option<(f64, f64, bool)>, Unavailable> {
+        let service = extents(context)?;
+        let door = extent(service, &subject.id)?;
+        let threshold = match self.threshold {
+            None => 0.0,
+            Some(property) => {
+                thickness(context, subject, property, &mut Vec::new())?.ok_or_else(|| {
+                    (
+                        NotEvaluatedReason::IncompleteEvidence,
+                        format!("the door states no threshold {property}"),
+                    )
+                })?
+            }
+        };
+        let everything: Vec<&Object> = context.project.objects().collect();
+        let (spaces, _) = self.floor.related(context, &subject.id, &everything)?;
+        if spaces.is_empty() {
+            return Ok(None);
+        }
+        let ramps = self.ramps(context, service, &subject.id, &spaces);
+        let proximity = context.services.get::<ProximityServiceHandle>();
+        let bottom = (door.bottom().lower_metres(), door.bottom().upper_metres());
+        let mut exact = door.evidence().exact;
+        let mut hull: Option<(f64, f64)> = None;
+        for space in &spaces {
+            let (sure, possible) = sides(proximity, service, space, &ramps);
+            exact &= possible.is_empty();
+            let mut steps = |floors: &[Floor]| {
+                floors
+                    .iter()
+                    .map(|floor| {
+                        let elevation = floor
+                            .elevation
+                            .clone()
+                            .map_err(|why| (NotEvaluatedReason::IncompleteEvidence, why))?;
+                        exact &= floor.evidence.iter().all(|evidence| evidence.exact);
+                        Ok(step_interval(bottom, threshold, elevation))
+                    })
+                    .collect::<Result<Vec<_>, Unavailable>>()
+            };
+            let (sure, possible) = (steps(&sure)?, steps(&possible)?);
+            let lowers = || sure.iter().chain(&possible).map(|step| step.0);
+            let uppers = || sure.iter().chain(&possible).map(|step| step.1);
+            let side = if sure.is_empty() {
+                (
+                    lowers().fold(f64::INFINITY, f64::min),
+                    uppers().fold(f64::NEG_INFINITY, f64::max),
+                )
+            } else if least {
+                (
+                    lowers().fold(f64::INFINITY, f64::min),
+                    sure.iter().map(|step| step.1).fold(f64::INFINITY, f64::min),
+                )
+            } else {
+                (
+                    sure.iter()
+                        .map(|step| step.0)
+                        .fold(f64::NEG_INFINITY, f64::max),
+                    uppers().fold(f64::NEG_INFINITY, f64::max),
+                )
+            };
+            hull = Some(match hull {
+                None => side,
+                Some((low, high)) if least => (low.min(side.0), high.min(side.1)),
+                Some((low, high)) => (low.max(side.0), high.max(side.1)),
+            });
+        }
+        Ok(hull.map(|(lower, upper)| (lower, upper, exact)))
+    }
+
     /// The selected ramps near the door and their tops; none without
     /// `ramp_selector`.
     fn ramps(
@@ -427,6 +512,31 @@ enum Judged {
     Undecided(String),
 }
 
+/// The unsigned step of a signed interval: its distance from zero.
+fn unsigned(lower: f64, upper: f64) -> (f64, f64) {
+    if lower >= 0.0 {
+        (lower, upper)
+    } else if upper <= 0.0 {
+        (-upper, -lower)
+    } else {
+        (0.0, (-lower).max(upper))
+    }
+}
+
+/// The unsigned step from a floor at `(floor_low, floor_high)` to a door
+/// whose bottom lies at `(low, high)` with a `threshold` on it, widened to
+/// hold the exact value.
+fn step_interval(
+    (low, high): (f64, f64),
+    threshold: f64,
+    (floor_low, floor_high): (f64, f64),
+) -> (f64, f64) {
+    unsigned(
+        difference(difference(low, floor_high).0, -threshold).0,
+        difference(difference(high, floor_low).1, -threshold).1,
+    )
+}
+
 /// The step from `floor` to the door's `bottom` and threshold against the
 /// bounds.
 fn step(
@@ -440,32 +550,23 @@ fn step(
         Ok(elevation) => *elevation,
         Err(why) => return Judged::Undecided(why.clone()),
     };
-    let lower = difference(low, floor_high).0;
-    let upper = difference(high, floor_low).1;
-    let (lower, upper, note) = match threshold {
-        Threshold::None => (lower, upper, String::new()),
+    let ((step_low, step_high), note) = match threshold {
+        Threshold::None => (
+            step_interval((low, high), 0.0, (floor_low, floor_high)),
+            String::new(),
+        ),
         Threshold::Stated(value) => (
-            difference(lower, -value).0,
-            difference(upper, -value).1,
+            step_interval((low, high), *value, (floor_low, floor_high)),
             format!(" with its {} m threshold", shown(*value, *value)),
         ),
         Threshold::Default(value, words) => (
-            difference(lower, -value).0,
-            difference(upper, -value).1,
+            step_interval((low, high), *value, (floor_low, floor_high)),
             format!(" with {words}"),
         ),
         Threshold::Unknown(property) => (
-            lower,
-            f64::INFINITY,
+            unsigned(difference(low, floor_high).0, f64::INFINITY),
             format!(" and a threshold {property} does not state"),
         ),
-    };
-    let (step_low, step_high) = if lower >= 0.0 {
-        (lower, upper)
-    } else if upper <= 0.0 {
-        (-upper, -lower)
-    } else {
-        (0.0, (-lower).max(upper))
     };
     let measured = if step_high.is_finite() {
         format!("{} m", shown(step_low, step_high))

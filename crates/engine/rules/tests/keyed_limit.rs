@@ -2287,3 +2287,567 @@ fn the_built_in_quantities_read_from_the_registry_judge_alike() {
     );
     assert_eq!(outcome(&measured), outcome(&built_in), "threshold step");
 }
+
+/// Door and window limits rewritten as expressions over the registered
+/// door values: the limit table becomes a `lookup` of the row the door's
+/// own keys select (or, for keys reached along a path, one guarded
+/// conjunct per row), and each bound a comparison of the measured value
+/// rounded to a micrometre. Every rewrite runs through the parity harness
+/// on the capability's own fixtures.
+#[allow(
+    clippy::format_push_string,
+    clippy::needless_pass_by_value,
+    clippy::too_many_lines,
+    clippy::type_complexity
+)]
+mod as_expressions {
+    use axioval_engine::ServiceRegistry;
+    use axioval_rules::ExpressionRequirement;
+    use axioval_rules::parity::{Outcome, ParityEvidence, compare_evaluations};
+    use serde_json::{Value, json};
+
+    use super::*;
+
+    fn measured(name: &str) -> Value {
+        json!({"kind": "property", "propertySet": "axioval:measured", "property": name})
+    }
+
+    fn m(value: f64) -> Value {
+        json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": "m"}})
+    }
+
+    fn rounded(operand: Value) -> Value {
+        json!({"kind": "round", "operand": operand, "step": m(1e-6)})
+    }
+
+    fn compare(operator: &str, left: Value, right: Value) -> Value {
+        json!({"kind": "compare", "operator": operator, "left": left, "right": right})
+    }
+
+    fn defined(operand: &Value) -> Value {
+        json!({"kind": "isDefined", "operand": operand})
+    }
+
+    /// `limits` as the expression reads it: each bound a length, and each
+    /// row numbered in a `row` column, so a lookup tells a row without
+    /// bounds from no row.
+    fn lookup_table(limits: &[TableRow]) -> ParameterValue {
+        let rows = limits
+            .iter()
+            .enumerate()
+            .map(|(index, row)| {
+                let mut row: TableRow = row
+                    .iter()
+                    .map(|(column, cell)| match cell {
+                        ParameterValue::Number { value } => (
+                            column.clone(),
+                            ParameterValue::Quantity {
+                                value: *value,
+                                unit: "m".into(),
+                            },
+                        ),
+                        cell => (column.clone(), cell.clone()),
+                    })
+                    .collect();
+                row.insert("row".into(), common::integer(i64::try_from(index).unwrap()));
+                row
+            })
+            .collect();
+        ParameterValue::Table { value: rows }
+    }
+
+    /// `value` within the bounds of the row of `limits` the door's
+    /// operation type selects, and some row selected: `keyed-limit` with
+    /// `key_1` the door's `Attributes.OperationType`.
+    fn limited(value: &Value) -> Value {
+        let lookup = |column: &str| {
+            json!({"kind": "lookup", "table": "limits", "column": column,
+                "keys": {"key_1": {"kind": "property", "propertySet": "Attributes",
+                    "property": "OperationType"}}})
+        };
+        let (minimum, maximum) = (lookup("minimum"), lookup("maximum"));
+        json!({"kind": "and", "operands": [
+            defined(&lookup("row")),
+            {"kind": "implies", "antecedent": defined(&minimum),
+                "consequent": compare("greaterThanOrEquals", rounded(value.clone()), minimum)},
+            {"kind": "implies", "antecedent": defined(&maximum),
+                "consequent": compare("lessThanOrEquals", rounded(value.clone()), maximum)}]})
+    }
+
+    /// The rewrite of a rule over `of` with `limits`, run on `model` with
+    /// `services`, against the capability's `evaluated` outcome.
+    fn parity(
+        evaluated: &CapabilityEvaluation,
+        model: Model,
+        of: &str,
+        (requirement, limits): (Value, &[TableRow]),
+        services: impl Fn(&mut ServiceRegistry),
+    ) -> ParityEvidence {
+        let rewritten = model.evaluate_measured(
+            &ExpressionRequirement,
+            &rule(
+                "axioval:capability.expression",
+                kind(of),
+                vec![
+                    ("requirement", common::expression(requirement)),
+                    ("limits", lookup_table(limits)),
+                ],
+            ),
+            services,
+        );
+        compare_evaluations((ID, evaluated), ("expression", &rewritten))
+    }
+
+    fn holds(parity: &ParityEvidence, what: &str) -> (usize, usize) {
+        assert!(parity.holds(), "{what}:\n{}", parity.diff());
+        (parity.found, parity.open)
+    }
+
+    const WIDTH: &str = "door_clear_width;stated=Pset/ClearWidth;overall=Attributes/OverallWidth";
+
+    /// Clear widths stated, or the overall width less the rule's
+    /// deduction, every fixture of the clear-width tests.
+    #[test]
+    fn clear_widths_stated_or_less_a_deduction_reach_the_verdicts() {
+        let deducted = || {
+            doors(&[
+                ("d1", "SINGLE_SWING_LEFT", Some(1.0), None),
+                ("d2", "SINGLE_SWING_RIGHT", Some(0.9), None),
+                ("d3", "SINGLE_SWING_LEFT", Some(0.9), Some(length(0.95))),
+                ("d4", "DOUBLE_DOOR_SINGLE_SWING", Some(1.25), None),
+                ("d5", "SINGLE_SWING_LEFT", Some(2.0), Some(length(0.8))),
+                ("d6", "OTHER", Some(2.0), None),
+            ])
+        };
+        let unreadable = || {
+            doors(&[
+                (
+                    "d1",
+                    "SINGLE_SWING_LEFT",
+                    Some(1.0),
+                    Some(PropertyValue::Null),
+                ),
+                (
+                    "d2",
+                    "SINGLE_SWING_LEFT",
+                    Some(1.0),
+                    Some(PropertyValue::String("wide".into())),
+                ),
+                ("d3", "SINGLE_SWING_LEFT", None, None),
+                ("d4", "SINGLE_SWING_LEFT", Some(0.05), None),
+                (
+                    "d5",
+                    "SINGLE_SWING_LEFT",
+                    Some(1.0),
+                    Some(PropertyValue::Decimal(0.8)),
+                ),
+            ])
+        };
+        let stated_only = || {
+            doors(&[
+                ("d1", "SINGLE_SWING_LEFT", Some(0.8), None),
+                ("d2", "SINGLE_SWING_LEFT", Some(0.8), Some(length(0.85))),
+            ])
+        };
+        let deduction = format!("{WIDTH};deduction=0.1");
+        let cases: [(fn() -> Model, Option<f64>, &str); 3] = [
+            (deducted, Some(0.1), &deduction),
+            (unreadable, Some(0.1), &deduction),
+            (stated_only, None, "door_clear_width;stated=Pset/ClearWidth"),
+        ];
+        let mut totals = (0, 0);
+        for (index, (model, width_deduction, value)) in cases.into_iter().enumerate() {
+            let evaluated = clear(model(), door_keys(width_deduction));
+            let (found, open) = holds(
+                &parity(
+                    &evaluated,
+                    model(),
+                    "door",
+                    (limited(&measured(value)), &door_limits()),
+                    |_| {},
+                ),
+                &format!("case {index}"),
+            );
+            totals = (totals.0 + found, totals.1 + open);
+        }
+        assert_eq!(totals, (5, 6));
+    }
+
+    /// Clear widths from the lining and leaves, the passage and the widest
+    /// leaf, every door of the leaf fixtures.
+    #[test]
+    fn clear_widths_from_the_leaves_reach_the_verdicts() {
+        use common::doors::{Doors, hinged, sliding};
+        let leaf = |width: f64| hinged([0.0; 3], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], width, false);
+        let model = || {
+            doors(&[
+                ("d1", "SINGLE_SWING_LEFT", Some(1.0), None),
+                ("d2", "SINGLE_SWING_LEFT", Some(1.1), None),
+                ("d3", "DOUBLE_DOOR_SINGLE_SWING", Some(1.3), None),
+                ("d4", "SINGLE_SWING_LEFT", Some(1.0), None),
+                ("d5", "SINGLE_SWING_LEFT", Some(1.2), None),
+                ("d6", "SINGLE_SWING_LEFT", Some(1.2), None),
+            ])
+        };
+        let frames = || {
+            Doors::default()
+                .door("d1", vec![leaf(0.9)], 1.0, Some(0.05))
+                .door("d2", vec![leaf(1.0)], 1.1, Some(0.05))
+                .door("d3", vec![leaf(0.6), leaf(0.6)], 1.3, Some(0.05))
+                .door(
+                    "d4",
+                    vec![sliding([0.0; 3], [1.0, 0.0, 0.0], 1.0)],
+                    1.0,
+                    Some(0.05),
+                )
+                .door("d5", vec![leaf(1.1)], 1.2, None)
+                .unknown(
+                    "d6",
+                    axioval_engine::DoorLeavesError::Refused("folding".into()),
+                )
+                .handle()
+        };
+        let mut parameters = door_keys(Some(0.2));
+        parameters.push(("clear_width_from_leaves", string("passage")));
+        let evaluated = model().evaluate_with(
+            &KeyedLimit,
+            &rule(ID, kind("door"), parameters),
+            |services| {
+                services.register(frames()).unwrap();
+            },
+        );
+        let passage = parity(
+            &evaluated,
+            model(),
+            "door",
+            (
+                limited(&measured(&format!(
+                    "{WIDTH};deduction=0.2;from_leaves=passage"
+                ))),
+                &door_limits(),
+            ),
+            |services| {
+                services.register(frames()).unwrap();
+            },
+        );
+        assert_eq!(holds(&passage, "passage"), (3, 1));
+        // A double door's widest leaf against 1 m, and its passage.
+        let model = || doors(&[("d1", "DOUBLE_DOOR_SINGLE_SWING", Some(1.4), None)]);
+        let frames = || {
+            Doors::default()
+                .door(
+                    "d1",
+                    vec![
+                        hinged([0.0; 3], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], 0.9, false),
+                        hinged(
+                            [1.4, 0.0, 0.0],
+                            [-1.0, 0.0, 0.0],
+                            [0.0, 1.0, 0.0],
+                            0.5,
+                            false,
+                        ),
+                    ],
+                    1.4,
+                    Some(0.05),
+                )
+                .handle()
+        };
+        let limits = vec![row([Some("DOUBLE_DOOR_*"), None, None], Some(1.0), None)];
+        for (mode, flagged) in [("widest-leaf", 1), ("passage", 0)] {
+            let parameters = vec![
+                ("limits", table(limits.clone())),
+                ("quantity", string("clear-width")),
+                ("key_1", property(Some("Attributes"), "OperationType")),
+                ("clear_width_from_leaves", string(mode)),
+            ];
+            let evaluated = model().evaluate_with(
+                &KeyedLimit,
+                &rule(ID, kind("door"), parameters),
+                |services| {
+                    services.register(frames()).unwrap();
+                },
+            );
+            let rewritten = parity(
+                &evaluated,
+                model(),
+                "door",
+                (
+                    limited(&measured(&format!("door_clear_width;from_leaves={mode}"))),
+                    &limits,
+                ),
+                |services| {
+                    services.register(frames()).unwrap();
+                },
+            );
+            assert_eq!(holds(&rewritten, mode), (flagged, 0));
+        }
+    }
+
+    /// Clear heights: stated, or the overall height less the lining and
+    /// threshold, an unstated threshold bounding it only from above.
+    #[test]
+    fn clear_heights_reach_the_verdicts() {
+        let model = || {
+            tall_doors(&[
+                ("d1", 2.1, Some(0.05), Some(0.02), None),
+                ("d2", 2.2, Some(0.05), Some(0.02), None),
+                ("d3", 2.2, Some(0.05), None, None),
+                ("d4", 2.05, Some(0.05), None, None),
+                ("d5", 2.1, Some(0.05), Some(0.02), Some(2.06)),
+            ])
+        };
+        let limits = vec![row([Some("*"), None, None], Some(2.05), None)];
+        let evaluated = model().evaluate(&KeyedLimit, &rule(ID, kind("door"), height_keys(true)));
+        let height = measured(
+            "door_clear_height;stated=Lining/ClearHeight;overall=Attributes/OverallHeight;\
+             lining=Lining/LiningThickness;threshold=Lining/ThresholdThickness",
+        );
+        let parity = parity(
+            &evaluated,
+            model(),
+            "door",
+            (limited(&height), &limits),
+            |_| {},
+        );
+        assert_eq!(holds(&parity, "clear height"), (2, 1));
+    }
+
+    /// The sill-height limits keyed on the use of every space a window
+    /// adjoins: one conjunct per row, applying where every adjoining space
+    /// has the row's use, and some row applying.
+    fn by_use(limits: &[TableRow], height: &str) -> Value {
+        let mut operands = Vec::new();
+        let mut applies = Vec::new();
+        for row in limits {
+            let Some(ParameterValue::String { value: pattern }) = row.get("key_1") else {
+                unreachable!("every sill row names a use");
+            };
+            let applying = json!({"kind": "aggregate", "function": "all",
+                "over": {"kind": "path", "path": ["adjacent"]},
+                "value": {"kind": "compare", "operator": "like",
+                    "left": {"kind": "property", "propertySet": "Pset", "property": "Use"},
+                    "right": {"kind": "literal", "value": {"type": "string", "value": pattern}}}});
+            let bound = |column: &str, operator: &str| match row.get(column) {
+                Some(ParameterValue::Number { value }) => Some(json!({"kind": "implies",
+                    "antecedent": applying.clone(),
+                    "consequent": compare(operator, rounded(measured(height)), m(*value))})),
+                _ => None,
+            };
+            operands.extend(bound("minimum", "greaterThanOrEquals"));
+            operands.extend(bound("maximum", "lessThanOrEquals"));
+            applies.push(applying);
+        }
+        operands.push(json!({"kind": "or", "operands": applies}));
+        json!({"kind": "and", "operands": operands})
+    }
+
+    /// Sill heights above every floor a window adjoins. Where the
+    /// adjoining spaces' uses disagree, or a window adjoins none, the
+    /// capability cannot read its key and leaves it open; the expression,
+    /// which reads no text along a path as one value, finds that no row
+    /// applies. Where one floor cannot be measured, the capability still
+    /// finds a sill too high above another; the measured height over every
+    /// floor is unknown, so the expression leaves it open.
+    #[test]
+    fn sill_heights_reach_the_verdicts_but_where_keys_disagree_or_a_floor_is_unknown() {
+        let sill_height =
+            |model: fn() -> Model, bottoms: fn() -> Bottoms, limits: Vec<TableRow>, least: bool| {
+                let evaluated = sill(model(), bottoms(), sill_keys(limits.clone()));
+                let value = if least {
+                    "sill_height;floor_path=adjacent;measure=least"
+                } else {
+                    "sill_height;floor_path=adjacent"
+                };
+                parity(
+                    &evaluated,
+                    model(),
+                    "window",
+                    (by_use(&limits, value), &limits),
+                    move |services| {
+                        services
+                            .register(VerticalExtentServiceHandle::new(Arc::new(bottoms())))
+                            .unwrap();
+                    },
+                )
+            };
+        let between = || rooms(&[("w1", &["o1", "o2"]), ("w2", &["o1"]), ("w3", &["k"])]);
+        let (found, open) = holds(
+            &sill_height(
+                between,
+                || {
+                    floors()
+                        .with("w1", 1.2, 0.0)
+                        .with("w2", 0.9, 0.0)
+                        .with("w3", 2.0, 0.0)
+                },
+                sill_limits(),
+                false,
+            ),
+            "too high",
+        );
+        assert_eq!((found, open), (1, 0));
+        let straddling = || rooms(&[("w1", &["o1"]), ("w2", &["o1"])]);
+        let (found, open) = holds(
+            &sill_height(
+                straddling,
+                || floors().with("w1", 1.0, 0.01).with("w2", 1.1, 0.01),
+                sill_limits(),
+                false,
+            ),
+            "straddling",
+        );
+        assert_eq!((found, open), (1, 1));
+        let low = || rooms(&[("w1", &["o2"])]);
+        let minimum = vec![row([Some("Office"), None, None], Some(0.8), None)];
+        let (found, open) = holds(
+            &sill_height(low, || floors().with("w1", 1.0, 0.0), minimum, true),
+            "too low",
+        );
+        assert_eq!((found, open), (1, 0));
+        // An unmeasured floor beside a failing one.
+        let unknown = sill_height(
+            || rooms(&[("w1", &["o1", "o3"]), ("w2", &["o1", "o3"])]),
+            || floors().with("w1", 0.5, 0.0).with("w2", 1.5, 0.0),
+            sill_limits(),
+            false,
+        );
+        assert_eq!(differing(&unknown), [("w2", "finding", "open")]);
+        // Disagreeing uses, no space, and a window without geometry.
+        let keys = sill_height(
+            || rooms(&[("w1", &["o1", "k"]), ("w2", &[]), ("w3", &["o1"])]),
+            || floors().with("w1", 3.0, 0.0).with("w2", 3.0, 0.0),
+            sill_limits(),
+            false,
+        );
+        assert_eq!(
+            differing(&keys),
+            [("w1", "open", "finding"), ("w2", "open", "finding")]
+        );
+    }
+
+    /// Each differing object, how the capability and the expression judged
+    /// it.
+    fn differing(parity: &ParityEvidence) -> Vec<(&str, &'static str, &'static str)> {
+        let shown = |outcome: &Option<Outcome>| match outcome {
+            None => "passed",
+            Some(Outcome::Finding { .. }) => "finding",
+            Some(Outcome::NotEvaluated { .. }) => "open",
+        };
+        parity
+            .differences
+            .iter()
+            .map(|difference| {
+                (
+                    difference.object.local_id.as_str(),
+                    shown(&difference.capability),
+                    shown(&difference.expression),
+                )
+            })
+            .collect()
+    }
+
+    /// Threshold steps from geometry, with stated and unstated thresholds,
+    /// and with a ramp standing in for the floor beside a door.
+    #[test]
+    fn threshold_steps_reach_the_verdicts() {
+        let limits = vec![row([Some("*"), None, None], None, Some(0.02))];
+        let step_of = |value: &str,
+                       model: &dyn Fn() -> Model,
+                       bottoms: &dyn Fn() -> Bottoms,
+                       ramps: &dyn Fn() -> Ramps,
+                       parameters: Vec<(&'static str, ParameterValue)>| {
+            let evaluated = step(model(), bottoms(), ramps(), parameters);
+            parity(
+                &evaluated,
+                model(),
+                "door",
+                (limited(&measured(value)), &limits),
+                |services| {
+                    services
+                        .register(VerticalExtentServiceHandle::new(Arc::new(bottoms())))
+                        .unwrap();
+                    services
+                        .register(ProximityServiceHandle::new(Arc::new(ramps())))
+                        .unwrap();
+                },
+            )
+        };
+        // A sill 4 cm above both floors, and one on them.
+        let geometry = step_of(
+            "threshold_step;floor_path=adjacent",
+            &|| stepped(&[("d1", &["k", "o"]), ("d2", &["k", "o"])], &[]),
+            &|| {
+                Bottoms::default()
+                    .with("k", 0.0, 0.0)
+                    .with("o", 0.0, 0.0)
+                    .with("d1", 0.04, 0.0)
+                    .with("d2", 0.0, 0.0)
+            },
+            &Ramps::default,
+            step_keys(false),
+        );
+        assert_eq!(holds(&geometry, "geometry"), (1, 0));
+        // Stated thresholds of 3 cm and 1 cm, and one not stated.
+        let mut parameters = step_keys(false);
+        parameters.push((
+            "threshold_thickness",
+            property(Some("Lining"), "ThresholdThickness"),
+        ));
+        let thresholds = step_of(
+            "threshold_step;floor_path=adjacent;threshold=Lining/ThresholdThickness",
+            &|| {
+                stepped(&[("d1", &["k"]), ("d2", &["k"]), ("d3", &["k"])], &[])
+                    .value("d1", "Lining", "ThresholdThickness", length(0.03))
+                    .value("d2", "Lining", "ThresholdThickness", length(0.01))
+            },
+            &|| {
+                Bottoms::default()
+                    .with("k", 0.0, 0.0)
+                    .with("d1", 0.0, 0.0)
+                    .with("d2", 0.0, 0.0)
+                    .with("d3", 0.0, 0.0)
+            },
+            &Ramps::default,
+            parameters,
+        );
+        assert_eq!(holds(&thresholds, "thresholds"), (1, 1));
+        // d1 steps onto the top of ramp r1 beside it; d2 and d3 onto the
+        // floor half a metre below, their ramps too far.
+        let ramps = || {
+            let mut ramps = Ramps::default();
+            for (door, ramp, distance) in [
+                ("d1", "r1", 0.1),
+                ("d1", "r3", 5.0),
+                ("d2", "r1", 5.0),
+                ("d2", "r3", 5.0),
+                ("d3", "r1", 5.0),
+                ("d3", "r3", 1.0),
+            ] {
+                ramps.distances.insert((door.into(), ramp.into()), distance);
+            }
+            ramps.over = vec![("r1".into(), "low".into()), ("r3".into(), "low".into())];
+            ramps
+        };
+        let ramped = step_of(
+            "threshold_step;floor_path=adjacent;ramps=ramp;ramp_reach=0.4",
+            &|| {
+                stepped(
+                    &[("d1", &["low"]), ("d2", &["low"]), ("d3", &["low"])],
+                    &["r1", "r3"],
+                )
+            },
+            &|| {
+                Bottoms::default()
+                    .with("low", 0.0, 0.0)
+                    .with("d1", 0.5, 0.0)
+                    .with("d2", 0.5, 0.0)
+                    .with("d3", 0.5, 0.0)
+                    .with("r1", -0.5, 0.0)
+                    .with("r3", -0.5, 0.0)
+            },
+            &ramps,
+            step_keys(true),
+        );
+        assert_eq!(holds(&ramped, "ramps"), (2, 0));
+    }
+}

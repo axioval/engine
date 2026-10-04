@@ -7,7 +7,9 @@
 
 use serde::Serialize;
 
-use super::registry::{ANGLE_TOLERANCE, MEMBER_PATH, PAIRED, SPACED_MEMBERS, en_de};
+use super::registry::{
+    ANGLE_TOLERANCE, FACE_AXES, MEMBER_PATH, OPENINGS_MINIMUM, PAIRED, SPACED_MEMBERS, en_de,
+};
 use super::{
     LocalizedText, MeasuredCall, MeasuredDescriptor, MeasuredError, MeasuredExactness,
     MeasuredParameter, MeasuredParameterKind,
@@ -831,6 +833,130 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
     },
     MemberDescriptor {
         list: MeasuredDescriptor {
+            name: "opening_placements",
+            parameters: &[
+                MeasuredParameter {
+                    key: "host_path",
+                    kind: MeasuredParameterKind::Path,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The relationship steps from the opening to its hosts.",
+                        "Die Beziehungsschritte von der Öffnung zu ihren Wirten.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "hosts",
+                    kind: MeasuredParameterKind::SourceKind,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The source kinds of the hosts, `,`-separated, subtypes included; any \
+                         object the path reaches without it.",
+                        "Die Quellarten der Wirte, durch `,` getrennt, Untertypen \
+                         eingeschlossen; ohne Angabe jedes erreichte Objekt.",
+                    ),
+                },
+                FACE_AXES[0],
+                FACE_AXES[1],
+                MeasuredParameter {
+                    key: "zone",
+                    kind: MeasuredParameterKind::Choice {
+                        options: &["section", "web"],
+                    },
+                    required: false,
+                    default: Some("section"),
+                    help: &en_de(
+                        "Whether edge distances are measured to the host's edges or to its \
+                         flanges (`web`, across `profile-y`).",
+                        "Ob Randabstände zu den Rändern des Wirts oder zu seinen Flanschen \
+                         (`web`, quer zu `profile-y`) gemessen werden.",
+                    ),
+                },
+                OPENINGS_MINIMUM,
+            ],
+            dimension: None,
+            services: &["relationship-selection", "body-facts"],
+            exactness: MeasuredExactness::Measured,
+            not_evaluated: &[
+                "whether a reached object is a host is undecided",
+                "the opening or its host is no straight extrusion the body set bounds",
+            ],
+            label: &en_de("Opening placements", "Lagen einer Öffnung"),
+            help: &en_de(
+                "The opening's placement in each host its path reaches, as `opening-zone` \
+                 places it: whether it lies within the host's face, and its clear distances \
+                 from the host's ends and edges. A distance measured to a free outline from \
+                 the box the opening may lie in is a lower bound, widened up to the host's \
+                 extent; a placement that cannot be read, or may be below the minimum area, \
+                 states every field undecided.",
+                "Die Lage der Öffnung in jedem Wirt, den ihr Pfad erreicht, wie \
+                 `opening-zone` sie bestimmt: ob sie in der Ansicht des Wirts liegt, und ihre \
+                 lichten Abstände zu seinen Enden und Rändern. Ein Abstand zu einem freien \
+                 Umriss aus dem Quader, in dem die Öffnung liegen kann, ist eine Untergrenze, \
+                 bis zur Ausdehnung des Wirts erweitert; eine nicht lesbare oder womöglich zu \
+                 kleine Lage gibt jedes Feld unentschieden an.",
+            ),
+        },
+        fields: &[
+            field(
+                "inside",
+                TRUTH,
+                &en_de("Inside", "Innerhalb"),
+                &en_de(
+                    "Whether the opening lies within the host's face (and free outline).",
+                    "Ob die Öffnung innerhalb der Ansicht (und des freien Umrisses) des \
+                     Wirts liegt.",
+                ),
+            ),
+            field(
+                "end_distance",
+                LENGTH,
+                &en_de("End distance", "Endabstand"),
+                &en_de(
+                    "The clear distance from the nearer end of the host along its length; \
+                     `null` where the outline bounds no end across the opening.",
+                    "Der lichte Abstand zum näheren Ende des Wirts entlang seiner Länge; \
+                     `null`, wo der Umriss kein Ende quer zur Öffnung begrenzt.",
+                ),
+            ),
+            field(
+                "edge_distance",
+                LENGTH,
+                &en_de("Edge distance", "Randabstand"),
+                &en_de(
+                    "The clear distance from the nearer edge (or flange, with `zone` `web`), \
+                     negative where the opening reaches into a flange.",
+                    "Der lichte Abstand zum näheren Rand (oder Flansch, mit `zone` `web`), \
+                     negativ, wo die Öffnung in einen Flansch reicht.",
+                ),
+            ),
+            field(
+                "bottom_distance",
+                LENGTH,
+                &en_de("Bottom distance", "Abstand unten"),
+                &en_de(
+                    "The distance from the host's low edge (or lower flange) along its \
+                     height.",
+                    "Der Abstand zum unteren Rand (oder unteren Flansch) des Wirts entlang \
+                     seiner Höhe.",
+                ),
+            ),
+            field(
+                "top_distance",
+                LENGTH,
+                &en_de("Top distance", "Abstand oben"),
+                &en_de(
+                    "The distance from the host's high edge (or upper flange) along its \
+                     height.",
+                    "Der Abstand zum oberen Rand (oder oberen Flansch) des Wirts entlang \
+                     seiner Höhe.",
+                ),
+            ),
+        ],
+    },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
             name: "parallel_pairs",
             parameters: &[
                 SPACED_MEMBERS,
@@ -1116,6 +1242,76 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
                     "Ob die Steigung die Stufe offen lässt.",
                 ),
             },
+        ],
+    },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
+            name: "swing_spaces",
+            parameters: &[
+                MeasuredParameter {
+                    key: "path",
+                    kind: MeasuredParameterKind::Path,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The relationship steps from the door to the spaces it opens onto.",
+                        "Die Beziehungsschritte von der Tür zu den Räumen, zu denen sie sich \
+                         öffnet.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "kinds",
+                    kind: MeasuredParameterKind::SourceKind,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The source kinds of the spaces listed, `,`-separated, subtypes \
+                         included; every space reached without it.",
+                        "Die Quellarten der aufgeführten Räume, durch `,` getrennt, Untertypen \
+                         eingeschlossen; ohne Angabe jeder erreichte Raum.",
+                    ),
+                },
+            ],
+            dimension: None,
+            services: &["object-frame", "free-space", "relationship-selection"],
+            exactness: MeasuredExactness::Measured,
+            not_evaluated: &[
+                "the door's leaves are unknown",
+                "the door has no hinged leaf",
+                "a probe the free-space service cannot answer",
+            ],
+            label: &en_de("Spaces a door opens onto", "Räume an einer Tür"),
+            help: &en_de(
+                "The spaces the path reaches from a door, each with whether the door swings \
+                 into it and whether it swings away from it, probed as `door-swing` probes \
+                 them.",
+                "Die Räume, die der Pfad von einer Tür erreicht, je damit, ob die Tür in ihn \
+                 hinein oder von ihm weg aufschlägt, geprüft wie `door-swing` prüft.",
+            ),
+        },
+        fields: &[
+            field(
+                "into",
+                TRUTH,
+                &en_de("Swings into", "Schlägt hinein"),
+                &en_de(
+                    "Whether a leaf swings into the space (a double-acting leaf into both \
+                     sides); false where neither probe lies in it.",
+                    "Ob ein Flügel in den Raum aufschlägt (ein Pendelflügel zu beiden \
+                     Seiten); falsch, wo keine Probe in ihm liegt.",
+                ),
+            ),
+            field(
+                "away",
+                TRUTH,
+                &en_de("Swings away", "Schlägt weg"),
+                &en_de(
+                    "Whether the space surely lies behind the door and not on its swing side; \
+                     undecided where neither probe lies in it.",
+                    "Ob der Raum sicher hinter der Tür und nicht auf ihrer Aufschlagseite \
+                     liegt; unentschieden, wo keine Probe in ihm liegt.",
+                ),
+            ),
         ],
     },
 ];

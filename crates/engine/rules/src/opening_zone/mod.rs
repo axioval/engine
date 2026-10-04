@@ -18,12 +18,15 @@ use crate::support::{Parameters, Traversal, Unavailable, finding, invalid};
 
 mod dimensions;
 pub(crate) mod face;
+mod measured;
 mod outline;
 mod supports;
 mod zones;
 
 use face::{Axis, FaceAxes, Host, ROUNDING, Solid, Span, gap, read_host};
 use supports::{Opening, SupportConfig, Supports};
+
+pub(crate) use measured::PlacementMeasures;
 
 /// Requires each selected opening to lie within its host's face and inside
 /// the zone the rule allows: clear of the host's ends by `end_distance`,
@@ -294,6 +297,18 @@ impl Placed {
 /// A finding's message and, where it misses a bound, by how far.
 type Found = (String, Option<Deviation>);
 
+/// An opening's clear distance from its host's edges or flanges.
+struct Clearance {
+    /// The distance, negative where the opening reaches into a flange.
+    clear: f64,
+    /// Whether it is exact rather than a lower bound.
+    exact: bool,
+    /// Whether it is measured to a free outline.
+    outline: bool,
+    /// How a finding names what it is measured to.
+    what: &'static str,
+}
+
 /// Where an opening is: in each checked host it reaches (none when it
 /// reaches none), each placement known or not; unknown altogether when its
 /// hosts are.
@@ -483,11 +498,7 @@ impl Judge<'_, '_> {
         let mut findings = Vec::new();
         let (_, length_bounds) = host.axis(self.config.axes.length);
         let (_, height_bounds) = host.axis(self.config.axes.height);
-        let beyond = |extent: Span, bounds: Span| {
-            extent.0 < bounds.0 - ROUNDING || extent.1 > bounds.1 + ROUNDING
-        };
-        let outside_length = beyond(placed.length, length_bounds);
-        let outside_height = beyond(placed.height, height_bounds);
+        let (outside_length, outside_height) = self.beyond(&host, placed);
         let outside: Vec<String> = [
             ("length", outside_length, placed.length, length_bounds),
             ("height", outside_height, placed.height, height_bounds),
@@ -569,6 +580,31 @@ impl Judge<'_, '_> {
         self.spacing(opening, placed, openings, findings, evaluation);
     }
 
+    /// Whether the opening reaches past its host's box along its length and
+    /// along its height.
+    fn beyond(&self, host: &Host, placed: &Placed) -> (bool, bool) {
+        let (_, length_bounds) = host.axis(self.config.axes.length);
+        let (_, height_bounds) = host.axis(self.config.axes.height);
+        let beyond = |extent: Span, bounds: Span| {
+            extent.0 < bounds.0 - ROUNDING || extent.1 > bounds.1 + ROUNDING
+        };
+        (
+            beyond(placed.length, length_bounds),
+            beyond(placed.height, height_bounds),
+        )
+    }
+
+    /// Within the box that holds a free outline, whether the opening
+    /// crosses the outline itself: `None` when it may, its place in the
+    /// host's section known only within bounds.
+    fn crossing(host: &Host, placed: &Placed, rect: [Span; 2]) -> Option<bool> {
+        match &host.outline {
+            None => Some(false),
+            Some(outline) if outline.clearance(rect, 0).is_some() => Some(false),
+            Some(_) => placed.section_exact.then_some(true),
+        }
+    }
+
     /// Within the box that holds a free outline, whether the opening
     /// crosses the outline itself; an error when it may.
     fn crosses_outline(
@@ -577,13 +613,7 @@ impl Judge<'_, '_> {
         rect: [Span; 2],
         findings: &mut Vec<Found>,
     ) -> Result<bool, Unavailable> {
-        let Some(outline) = &host.outline else {
-            return Ok(false);
-        };
-        if outline.clearance(rect, 0).is_some() {
-            return Ok(false);
-        }
-        if !placed.section_exact {
+        let Some(crosses) = Self::crossing(host, placed, rect) else {
             return Err((
                 NotEvaluatedReason::IncompleteEvidence,
                 format!(
@@ -593,6 +623,9 @@ impl Judge<'_, '_> {
                     placed.host.local_id
                 ),
             ));
+        };
+        if !crosses {
+            return Ok(false);
         }
         findings.push((
             format!(
@@ -613,18 +646,16 @@ impl Judge<'_, '_> {
         rect: [Span; 2],
         findings: &mut Vec<Found>,
     ) -> Result<(), Unavailable> {
-        let length = self.config.axes.length;
         let Some(required) = self.config.end_distance else {
             return Ok(());
         };
-        let Some((low, high)) = host.clearance(length, placed.length, rect) else {
+        let Some((clear, exact)) = self.end_clearance(host, placed, rect) else {
             return Ok(());
         };
-        let clear = low.min(high);
         if clear >= required - ROUNDING {
             return Ok(());
         }
-        if !placed.section_exact && host.outlined(length) {
+        if !exact {
             return Err((
                 NotEvaluatedReason::IncompleteEvidence,
                 format!(
@@ -647,6 +678,89 @@ impl Judge<'_, '_> {
         Ok(())
     }
 
+    /// The opening's clear distance from the nearer end of its host, and
+    /// whether it is exact rather than a lower bound; none where the host
+    /// has no ends along its length.
+    fn end_clearance(&self, host: &Host, placed: &Placed, rect: [Span; 2]) -> Option<(f64, bool)> {
+        let length = self.config.axes.length;
+        let (low, high) = host.clearance(length, placed.length, rect)?;
+        Some((
+            low.min(high),
+            placed.section_exact || !host.outlined(length),
+        ))
+    }
+
+    /// The opening's clear distance from its host's nearer edge (or, with
+    /// `zone` `web`, flange), negative where it reaches into a flange;
+    /// whether it is exact rather than a lower bound; and whether it is
+    /// measured to a free outline. None where the outline bounds no edge
+    /// across it.
+    fn edge_clearance(
+        &self,
+        host: &Host,
+        placed: &Placed,
+        rect: [Span; 2],
+    ) -> Result<Option<Clearance>, Unavailable> {
+        let height = self.config.axes.height;
+        if !self.config.web && host.outlined(height) {
+            // Across a free outline, the edges are where the outline is.
+            return Ok(host
+                .clearance(height, placed.height, rect)
+                .map(|(low, high)| Clearance {
+                    clear: low.min(high),
+                    exact: placed.section_exact,
+                    outline: true,
+                    what: "an edge",
+                }));
+        }
+        let (zone, what) = if self.config.web {
+            (Self::web(host, placed)?, "the flanges")
+        } else {
+            (host.axis(height).1, "an edge")
+        };
+        Ok(Some(Clearance {
+            clear: (placed.height.0 - zone.0).min(zone.1 - placed.height.1),
+            exact: true,
+            outline: false,
+            what,
+        }))
+    }
+
+    /// The web zone of the host, refused for a profile without one.
+    fn web(host: &Host, placed: &Placed) -> Result<Span, Unavailable> {
+        host.web.ok_or_else(|| {
+            (
+                NotEvaluatedReason::IncompleteEvidence,
+                format!(
+                    "its host {}'s `{}` profile has no web between flanges",
+                    placed.host.local_id, host.family
+                ),
+            )
+        })
+    }
+
+    /// The opening's distances from its host's low and high edges (or, with
+    /// `zone` `web`, flanges), and whether they are exact rather than lower
+    /// bounds; none where the outline bounds no edge across it.
+    fn far_clearance(
+        &self,
+        host: &Host,
+        placed: &Placed,
+        rect: [Span; 2],
+    ) -> Result<Option<(Span, bool)>, Unavailable> {
+        if self.config.web {
+            let web = Self::web(host, placed)?;
+            return Ok(Some((
+                (placed.height.0 - web.0, web.1 - placed.height.1),
+                true,
+            )));
+        }
+        let height = self.config.axes.height;
+        Ok(host
+            .clearance(height, placed.height, rect)
+            .map(|clear| (clear, placed.section_exact || !host.outlined(height))))
+    }
+
     /// Judges the clearance from the host's edges, or from its flanges.
     fn edges(
         &self,
@@ -659,17 +773,20 @@ impl Judge<'_, '_> {
             return Ok(());
         }
         let required = self.config.edge_distance.unwrap_or(0.0);
-        let height = self.config.axes.height;
-        if !self.config.web && host.outlined(height) {
-            // Across a free outline, the edges are where the outline is.
-            let Some((low, high)) = host.clearance(height, placed.height, rect) else {
-                return Ok(());
-            };
-            let clear = low.min(high);
-            if clear >= required - ROUNDING {
-                return Ok(());
-            }
-            if !placed.section_exact {
+        let Some(Clearance {
+            clear,
+            exact,
+            outline,
+            what,
+        }) = self.edge_clearance(host, placed, rect)?
+        else {
+            return Ok(());
+        };
+        if clear >= required - ROUNDING {
+            return Ok(());
+        }
+        if outline {
+            if !exact {
                 return Err((
                     NotEvaluatedReason::IncompleteEvidence,
                     format!(
@@ -691,36 +808,19 @@ impl Judge<'_, '_> {
             ));
             return Ok(());
         }
-        let (zone, what) = if self.config.web {
-            let web = host.web.ok_or_else(|| {
-                (
-                    NotEvaluatedReason::IncompleteEvidence,
-                    format!(
-                        "its host {}'s `{}` profile has no web between flanges",
-                        placed.host.local_id, host.family
-                    ),
-                )
-            })?;
-            (web, "the flanges")
+        let distance = if clear < 0.0 {
+            format!("reaches {} into", metres(-clear))
         } else {
-            (host.axis(self.config.axes.height).1, "an edge")
+            format!("is {} from", metres(clear))
         };
-        let clear = (placed.height.0 - zone.0).min(zone.1 - placed.height.1);
-        if clear < required - ROUNDING {
-            let distance = if clear < 0.0 {
-                format!("reaches {} into", metres(-clear))
-            } else {
-                format!("is {} from", metres(clear))
-            };
-            findings.push((
-                format!(
-                    "opening {distance} {what} of its host {}; {} clear required",
-                    placed.host.local_id,
-                    metres(required)
-                ),
-                Some(Deviation::below(required, clear, clear)),
-            ));
-        }
+        findings.push((
+            format!(
+                "opening {distance} {what} of its host {}; {} clear required",
+                placed.host.local_id,
+                metres(required)
+            ),
+            Some(Deviation::below(required, clear, clear)),
+        ));
         Ok(())
     }
 
@@ -738,31 +838,13 @@ impl Judge<'_, '_> {
         let Some((maximum, low, high)) = self.config.edge_maximum else {
             return Ok(());
         };
-        let height = self.config.axes.height;
-        let (clear, exact, what) = if self.config.web {
-            let web = host.web.ok_or_else(|| {
-                (
-                    NotEvaluatedReason::IncompleteEvidence,
-                    format!(
-                        "its host {}'s `{}` profile has no web between flanges",
-                        placed.host.local_id, host.family
-                    ),
-                )
-            })?;
-            (
-                (placed.height.0 - web.0, web.1 - placed.height.1),
-                true,
-                ["the lower flange", "the upper flange"],
-            )
+        let Some((clear, exact)) = self.far_clearance(host, placed, rect)? else {
+            return Ok(());
+        };
+        let what = if self.config.web {
+            ["the lower flange", "the upper flange"]
         } else {
-            let Some(clear) = host.clearance(height, placed.height, rect) else {
-                return Ok(());
-            };
-            (
-                clear,
-                placed.section_exact || !host.outlined(height),
-                ["the bottom edge", "the top edge"],
-            )
+            ["the bottom edge", "the top edge"]
         };
         let mut open = Vec::new();
         for (checked, distance, edge) in [(low, clear.0, what[0]), (high, clear.1, what[1])] {

@@ -169,3 +169,60 @@ fn the_measured_leaves_and_swing_match_the_judged_doors() {
     );
     assert!(read("unknown", "leaf_count").is_err());
 }
+
+/// Each direction as an expression over the spaces a door opens onto
+/// (`swing_spaces`): `swing_not_into` as no picked space swung into,
+/// `swing_into` as not every picked space swung away from. Both judge every
+/// door as `door-swing` does.
+#[test]
+fn the_directions_as_expressions_over_the_swung_spaces_reach_the_verdicts() {
+    use axioval_rules::ExpressionRequirement;
+    use serde_json::{Value, json};
+    let spaces = |kinds: &str, function: &str, field: &str| {
+        json!({"kind": "aggregate", "function": function,
+            "over": {"kind": "measured",
+                "name": format!("swing_spaces;path=opens:forward;kinds={kinds}")},
+            "value": {"kind": "property", "propertySet": "axioval:member", "property": field}})
+    };
+    let services = |services: &mut axioval_engine::ServiceRegistry| {
+        services.register(doors().handle()).unwrap();
+        services
+            .register(
+                Rooms::default()
+                    .room("office", [-5.0, 0.0], [5.0, 4.0])
+                    .room("corridor", [-5.0, -2.0], [5.0, 0.0])
+                    .handle(),
+            )
+            .unwrap();
+    };
+    let not_every_away =
+        |kinds: &str| json!({"kind": "not", "operand": spaces(kinds, "all", "away")});
+    let checks: [(&str, &str, Value); 4] = [
+        (
+            "swing_not_into",
+            "corridor",
+            spaces("corridor", "none", "into"),
+        ),
+        ("swing_not_into", "office", spaces("office", "none", "into")),
+        ("swing_into", "office", not_every_away("office")),
+        ("swing_into", "corridor", not_every_away("corridor")),
+    ];
+    for (direction, picked, requirement) in checks {
+        let evaluated = run(vec![(direction, selector(kind(picked)))]);
+        let rewritten = model().evaluate_measured(
+            &ExpressionRequirement,
+            &rule(
+                "axioval:capability.expression",
+                kind("door"),
+                vec![("requirement", common::expression(requirement))],
+            ),
+            services,
+        );
+        let parity = axioval_rules::parity::compare_evaluations(
+            (ID, &evaluated),
+            ("expression", &rewritten),
+        );
+        assert!(parity.holds(), "{direction} {picked}:\n{}", parity.diff());
+        assert!(parity.found > 0 && parity.open > 0, "{direction} {picked}");
+    }
+}

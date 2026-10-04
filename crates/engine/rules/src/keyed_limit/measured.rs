@@ -9,15 +9,17 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_engine::{
-    CompiledRule, FreeSpaceServiceHandle, MeasuredProvider, Measurement, ObjectFrameServiceHandle,
-    PropertyResolutionError, RuleContext,
+    CompiledRule, FreeSpaceServiceHandle, MeasuredProvider, Measurement, NotEvaluatedReason,
+    ObjectFrameServiceHandle, PropertyResolutionError, RuleContext,
 };
 use axioval_ir::contract::{ParameterValue, Selector, Severity};
 use axioval_ir::measured::{MeasuredArgument, MeasuredCall};
 use axioval_ir::{Object, ObjectId, QuantityDimension, RuleId};
 
-use super::{ClearHeight, ClearWidth, LeafMode, difference, extent, extents, sill_interval};
+use super::threshold;
+use super::{ClearHeight, ClearWidth, LeafMode, extent, extents, sill_interval};
 use crate::door_swing::{self, Footprint};
+use crate::measured_kinds::objects_of_kinds;
 use crate::support::{Parameters, Traversal, Unavailable};
 
 /// The names measured here.
@@ -85,6 +87,29 @@ fn value(
 
 const LENGTH: Option<QuantityDimension> = Some(QuantityDimension::Length);
 
+/// A length `keyed-limit` measured citing `evidence`: exact as that
+/// evidence is, whatever rounding the interval holds, so an expression
+/// over it cites what the capability cites.
+fn cited(measured: super::Measured) -> Measurement {
+    let (lower, upper, locator) = (measured.lower, measured.upper, measured.what);
+    if measured.evidence.iter().all(|evidence| evidence.exact) {
+        Measurement::Rounded {
+            lower,
+            upper,
+            dimension: LENGTH,
+            locator,
+        }
+    } else {
+        Measurement::Cited {
+            lower,
+            upper,
+            dimension: LENGTH,
+            locator,
+            exact: false,
+        }
+    }
+}
+
 impl DoorMeasures {
     fn measure_object(
         call: &MeasuredCall,
@@ -117,7 +142,7 @@ impl DoorMeasures {
                     None,
                 )?
                 .measure(context, object)?;
-                Ok(value(measured.lower, measured.upper, LENGTH, measured.what))
+                Ok(cited(measured))
             }
             "door_clear_height" => {
                 let rule = rule(
@@ -138,7 +163,7 @@ impl DoorMeasures {
                     defaults: None,
                 }
                 .measure(context, object)?;
-                Ok(value(measured.lower, measured.upper, LENGTH, measured.what))
+                Ok(cited(measured))
             }
             "sill_height" | "threshold_step" => Self::above_floors(call, object, context),
             _ => Self::leaves(call, object, context),
@@ -184,76 +209,97 @@ impl DoorMeasures {
     }
 
     /// The sill height or threshold step over every floor the path
-    /// reaches: the greatest, or with `measure=least` the least.
+    /// reaches: the greatest, or with `measure=least` the least. An interval
+    /// resting on exact extents only holds rounding, so it is cited exact.
     fn above_floors(
         call: &MeasuredCall,
         object: &Object,
         context: &RuleContext<'_>,
     ) -> Result<Measurement, Unavailable> {
+        let least = call.choice("measure") == Some("least");
+        let measured = if call.name() == "threshold_step" {
+            Self::threshold_step(call, object, context, least)?
+        } else {
+            Self::sill_height(call, object, context, least)?
+        };
+        let Some((lower, upper, exact)) = measured else {
+            return Ok(Measurement::Absent {
+                locator: "the path reaches no floor".into(),
+            });
+        };
+        let locator = "over the floors reached".to_owned();
+        Ok(if exact {
+            Measurement::Rounded {
+                lower,
+                upper,
+                dimension: LENGTH,
+                locator,
+            }
+        } else {
+            value(lower, upper, LENGTH, locator)
+        })
+    }
+
+    fn sill_height(
+        call: &MeasuredCall,
+        object: &Object,
+        context: &RuleContext<'_>,
+        least: bool,
+    ) -> Result<Option<(f64, f64, bool)>, Unavailable> {
         let service = extents(context)?;
         let own = extent(service, &object.id)?;
         let everything: Vec<&Object> = context.project.objects().collect();
         let (floors, _) = path(call)?.related(context, &object.id, &everything)?;
-        if floors.is_empty() {
-            return Ok(Measurement::Absent {
-                locator: "the path reaches no floor".into(),
-            });
-        }
-        let threshold = if call.name() == "threshold_step" {
-            let rule = rule(call, &[("threshold", "threshold")]);
-            match Parameters(&rule).property("threshold")? {
-                None => Some(0.0),
-                Some(property) => super::thickness(context, object, property, &mut Vec::new())?,
-            }
-        } else {
-            None
-        };
-        let least = call.choice("measure") == Some("least");
+        let mut exact = own.evidence().exact;
         let mut hull: Option<(f64, f64)> = None;
         for floor in floors {
-            let floor = extent(service, &floor)?;
-            let (lower, upper) = if call.name() == "sill_height" {
-                sill_interval(&own, &floor)
-            } else {
-                let Some(threshold) = threshold else {
-                    return Err((
-                        axioval_engine::NotEvaluatedReason::IncompleteEvidence,
-                        "the door states no threshold".into(),
-                    ));
-                };
-                // The step from the floor to the door's bottom and its
-                // threshold, unsigned.
-                let lower = difference(
-                    difference(own.bottom().lower_metres(), floor.bottom().upper_metres()).0,
-                    -threshold,
+            // As the capability reads it: a floor it cannot measure leaves
+            // the sill undecided, whatever the reason.
+            let floor = extent(service, &floor).map_err(|(_, why)| {
+                (
+                    NotEvaluatedReason::IncompleteEvidence,
+                    format!("the floor of {floor} cannot be measured: {why}"),
                 )
-                .0;
-                let upper = difference(
-                    difference(own.bottom().upper_metres(), floor.bottom().lower_metres()).1,
-                    -threshold,
-                )
-                .1;
-                if lower >= 0.0 {
-                    (lower, upper)
-                } else if upper <= 0.0 {
-                    (-upper, -lower)
-                } else {
-                    (0.0, (-lower).max(upper))
-                }
-            };
+            })?;
+            exact &= floor.evidence().exact;
+            let (lower, upper) = sill_interval(&own, &floor);
             hull = Some(match hull {
                 None => (lower, upper),
                 Some((low, high)) if least => (low.min(lower), high.min(upper)),
                 Some((low, high)) => (low.max(lower), high.max(upper)),
             });
         }
-        let (lower, upper) = hull.unwrap_or((0.0, 0.0));
-        Ok(value(
-            lower,
-            upper,
-            LENGTH,
-            "over the floors reached".into(),
-        ))
+        Ok(hull.map(|(lower, upper)| (lower, upper, exact)))
+    }
+
+    /// The threshold step as `keyed-limit`'s `threshold-step` reads its
+    /// floors, a ramp of the `ramps` kinds within `ramp_reach` of the door
+    /// standing in for the floor of a space it lies over.
+    fn threshold_step(
+        call: &MeasuredCall,
+        object: &Object,
+        context: &RuleContext<'_>,
+        least: bool,
+    ) -> Result<Option<(f64, f64, bool)>, Unavailable> {
+        let mut rule = rule(
+            call,
+            &[
+                ("threshold", "threshold_thickness"),
+                ("ramp_reach", "ramp_reach"),
+            ],
+        );
+        if call.argument("ramps").is_some() {
+            let ramps = objects_of_kinds(context, call, "ramps", &object.id)
+                .map_err(|error| (NotEvaluatedReason::BackendUnavailable, error.to_string()))?;
+            rule.parameters.insert(
+                "ramp_selector".to_owned(),
+                ParameterValue::Selector {
+                    value: Box::new(Selector::Objects { objects: ramps }),
+                },
+            );
+        }
+        threshold::ThresholdStep::parse(&Parameters(&rule), path(call)?, None)?
+            .measure(context, object, least)
     }
 
     /// The door's leaves: how many, how wide, the area they sweep, and how

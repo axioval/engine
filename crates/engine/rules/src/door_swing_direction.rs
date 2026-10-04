@@ -13,6 +13,10 @@ use crate::door_swing::{self, Relation};
 use crate::selection::{Selection, select_objects, selector_matches};
 use crate::support::{Parameters, Traversal, Unavailable, finding, invalid};
 
+mod measured;
+
+pub(crate) use measured::SwingMeasures;
+
 /// Requires each selected door to swing into, or not into, the spaces it
 /// opens onto.
 ///
@@ -135,6 +139,25 @@ impl RuleCapability for DoorSwing {
     }
 }
 
+/// The leaves of `door`, refused when none is hinged: such a door swings
+/// into no space.
+pub(crate) fn hinged_leaves(
+    frames: &ObjectFrameServiceHandle,
+    door: &Object,
+) -> Result<axioval_engine::DoorLeaves, Unavailable> {
+    let leaves = door_swing::leaves(frames, &door.id)?;
+    if leaves.hinged().next().is_none() {
+        return Err((
+            NotEvaluatedReason::IncompleteEvidence,
+            format!(
+                "the door has no hinged leaf ({}), so it swings into no space",
+                leaves.operation()
+            ),
+        ));
+    }
+    Ok(leaves)
+}
+
 /// What checking one door found.
 #[derive(Default)]
 struct Judged {
@@ -151,16 +174,7 @@ fn check(
     everything: &[&Object],
     door: &Object,
 ) -> Result<Judged, Unavailable> {
-    let leaves = door_swing::leaves(frames, &door.id)?;
-    if leaves.hinged().next().is_none() {
-        return Err((
-            NotEvaluatedReason::IncompleteEvidence,
-            format!(
-                "the door has no hinged leaf ({}), so it swings into no space",
-                leaves.operation()
-            ),
-        ));
-    }
+    let leaves = hinged_leaves(frames, door)?;
     let (reached, cited) = config.spaces.related(context, &door.id, everything)?;
     let mut judged = Judged {
         evidence: cited,

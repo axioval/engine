@@ -393,8 +393,9 @@ ignoring ASCII case):
 | `counterpart_uncovered_share;by=<kinds>[;measure=plan\|height\|elevation][;horizontal=<m>][;vertical=<m>][;axis_tolerance=<degrees>][;frame=<kinds>][;infill_above=<share>]` | the share of the footprint, height or elevation outside every counterpart, as `counterpart-coverage` measures it | built in, over `PlanAreaService`, `ProximityService`, `VerticalExtentService`, `PlanSpanService` |
 | `opening_area;path=<steps>[;length_axis=…;height_axis=…][;minimum=<m²>]` | the summed section areas of a host's openings on its middle plane | built in, over the body facts |
 | `opening_section_area;host_path=<steps>[;length_axis=…;height_axis=…]` | one opening's section area on its host's middle plane | built in, over the body facts |
+| `opening_count;path=<steps>[;length_axis=…;height_axis=…][;minimum=<m²>]`, `middle_face_area[;length_axis=…;height_axis=…]` | how many openings take area from a host's middle plane, and that face's area, as `empty-host` compares them | built in, over the body facts |
 | `door_clear_width[;stated=<set/name>][;from_leaves=passage\|widest-leaf][;overall=<set/name>;deduction=<m>]`, `door_clear_height[;stated=…][;overall=…][;lining=…][;threshold=…]` | a door's clear width or height, as `keyed-limit` reads it | built in, over the door's properties and leaves |
-| `sill_height;floor_path=<steps>[;measure=greatest\|least]`, `threshold_step;floor_path=<steps>[;threshold=<set/name>][;measure=…]` | above the floors a path reaches | built in, over `VerticalExtentService` |
+| `sill_height;floor_path=<steps>[;measure=greatest\|least]`, `threshold_step;floor_path=<steps>[;threshold=<set/name>][;ramps=<kinds>;ramp_reach=<m>][;measure=…]` | above the floors a path reaches | built in, over `VerticalExtentService` (and `ProximityService` for ramps) |
 | `leaf_count`, `leaf_width[;measure=widest\|narrowest\|total]`, `swing_area`, `swings_into;path=<steps>` | a door's or window's leaves and swing | built in, over `ObjectFrameService::leaves` and `FreeSpaceService` |
 | `profile_dimension;name=<column>`, `profile_slope;name=<column>` | a dimension or slope of the member's swept profile, by `allowed-profile`'s column names | built in, over the body set |
 | `section_area`, `section_modulus[;axis=strong\|weak]` | the profile's section area and elastic section modulus, where its family defines them | built in, over the body set |
@@ -549,17 +550,40 @@ The door values take `keyed-limit`'s steps:
   leaves only an upper bound.
 - `sill_height` and `threshold_step` are measured above each floor the
   path reaches: the greatest by default, the least with `measure=least`.
-  The threshold step adds a stated threshold.
+  The threshold step adds a stated threshold. With `ramps` and
+  `ramp_reach`, a ramp of those kinds surely within reach of the door and
+  surely over a space is that side's floor, measured at its top; one that
+  only may be leaves both floors possible, so the side's step is any of
+  theirs. A floor that cannot be measured leaves the value unknown.
+
+Each is cited as the capability cites it: exact where its evidence is (a
+stated width, exact extents), inexact where it rests on the rule's
+deduction or a derivation from the door's statements, even when the
+interval is a point (`Measurement::Cited` with `exact: false`).
 
 `keyed-limit`'s `quantity: measured` reads any of them, and judges each
-fixture as the built-in quantity does. The door-type defaults table is a
+fixture as the built-in quantity does. So does an `expression` rule: the
+limit table becomes a `lookup` of the row the door's own keys select (a
+`row` column telling a row without bounds from no row) and each bound a
+comparison of the value rounded to a micrometre; a key reached along a path
+becomes one conjunct per row, applying where every reached object has the
+row's key. The parity harness holds on the clear-width, clear-height,
+sill-height and threshold-step fixtures, ramps included, but where a path
+key cannot be read as one value (the reached objects disagree, or there are
+none), which the capability leaves open and the expression finds without a
+row, and where one floor cannot be measured beside a failing one, which the
+capability finds and the expression leaves open. The door-type defaults table is a
 rule's and stays with the built-in quantities; a measured value reads what
 the door states. A glazing ratio is a stated property and is read as one.
 
 `leaf_count` and `leaf_width` read the door's leaves. `swing_area` is the
 plan area they sweep, bracketed by inscribed and circumscribed polygons.
 `swings_into` counts the spaces the path reaches that a leaf swings into,
-probed as `door-swing` probes them.
+probed as `door-swing` probes them. The `swing_spaces` members state per
+space whether the door swings into it and whether it surely swings away
+from it, so `door-swing` is an expression: `swing_not_into` is `none` of
+the picked spaces swung `into`, `swing_into` the negation of `all` of them
+swung `away` (a space neither probe lies in decides nothing).
 
 ### Profiles
 
@@ -589,6 +613,7 @@ the same request, so its verdict is an expression ratio:
 | light area | `area-ratio`'s light-area numerator is an expression over the stated sizes: a `lookup` of the light area table, or `W × H − 2(W + H) × frame` |
 | `plan-coverage` | `plan_overlap;with=<kinds>` over `area` |
 | `opening-area` | `opening_area;path=…` against the stated gross less net area, or an `aggregate` `sum` of each opening's `opening_section_area` over the path |
+| `empty-host` | `opening_count;path=…` above zero and `opening_area;path=…` not short of `middle_face_area` by more than the tolerance |
 | `slab-contact` | `contact_share;with=<kinds>;side=…` against the minimum ratio |
 | `counterpart-coverage` | `counterpart_uncovered_share;by=<kinds>;measure=…` at most each band's threshold, one rule per band at its severity (in plan alone, also `uncovered_area;by=<kinds>;growth=<tolerance>` over `area`) |
 | `effective-coverage` | `effect_covered_share;sources=<kinds>;reach=…;range=…` against the minimum |
@@ -622,6 +647,13 @@ below 98 %), so its rewrite is one expression rule per severity, each the
 conjunction of the aspects graded at it. Its values read a refusal of the
 space service as the capability does: unavailable or unmeasured is
 incomplete evidence.
+
+`opening_area` and `empty-host`'s values reach those capabilities'
+verdicts on every fixture through the parity harness, but one: a wall
+stating only one of its side areas, which `opening-area` leaves open,
+reads the missing side as `null` in an expression, so the comparison is
+false, a finding. The summed `opening_section_area` checks no two openings
+against each other and knows no minimum area.
 
 ### Space aspects
 
@@ -819,6 +851,8 @@ and declare their parameters and typed fields:
 | `guard_edges` (`barrier_gap`, `platform_gap`, `landing_gap`, `landing_width`, `climb_distance`, `climb_side`, `measure_from`, `barriers`, `landings`, `climbables`) | the exposed edges of a walking surface, as the guard service samples them | `guarded_height`, `tallest_barrier`, `barrier_share`, `landing_fall`, `climbable_height` |
 | `axes_within` (`of`, `reach`) | the objects of the kinds named within reach of the footprint in plan | `angle` |
 | `parallel_pairs` (`members`, `member_path`, `angle_tolerance`, `reach`) | the parallel pairs of members the object reaches, as `wall-spacing` pairs them | `distance` |
+| `swing_spaces` (`path`, `kinds`) | the spaces a door opens onto, probed as `door-swing` probes them | `into`, `away` |
+| `opening_placements` (`host_path`, `hosts`, `length_axis`, `height_axis`, `zone`, `minimum`) | an opening's placement in each host its path reaches, as `opening-zone` places it | `inside`, `end_distance`, `edge_distance`, `bottom_distance`, `top_distance` |
 
 Step `j` climbs riser `j` onto tread `j`; its `going`, `nosing` and
 `winder_angle` are measured from the tread below, so the first step and a
@@ -831,6 +865,19 @@ Built-in code registered beside the capabilities measures each list
 whether the measurement it comes from is exact: its fields' evidence is
 then exact, an interval holding only the rounding of exact arithmetic, as
 the capability measuring it cites it.
+
+`opening-zone`'s margins are one `none` over `opening_placements`: no
+placement outside its host, or inside it nearer an end or edge than
+`end_distance` and `edge_distance` (zero with `zone=web`, below which an
+opening reaches into a flange) or farther from an edge than
+`edge_distance_maximum`. A distance measured to a free outline from the
+box an opening may lie in is a lower bound and is stated as the interval
+up to the host's extent, so it passes but never finds; a placement that
+may be below `minimum`, or a host among several whose body cannot be read,
+states every field undecided, and an opening none of whose placements can
+be read is not measured. These reach the capability's verdicts on every
+margin fixture; spacing, zones, dimensions and supports relate an opening
+to others and are not fields of one placement.
 
 "Every riser at most 0.19 m, and risers within 5 mm of one another":
 

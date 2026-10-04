@@ -166,12 +166,10 @@ fn check_with(model: Model, extra: Vec<(&'static str, ParameterValue)>) -> Capab
     model.evaluate(&OpeningArea, &rule(ID, kind("wall"), parameters))
 }
 
-#[test]
-fn a_wall_whose_openings_make_up_gross_less_net_passes() {
-    // Two windows of 1.2 m² and a recess stopping short of the middle
-    // plane, which takes no side area.
+/// Two windows of 1.2 m² and a recess stopping short of the middle plane.
+fn recessed() -> Model {
     let model = window(window(wall(Some(12.6)), "o1", 1.0), "o2", 3.0);
-    let model = opening(
+    opening(
         model,
         "recess",
         4.2,
@@ -179,7 +177,14 @@ fn a_wall_whose_openings_make_up_gross_less_net_passes() {
         0.05,
         "rectangle",
         &[("XDim", 0.4), ("YDim", 0.4)],
-    );
+    )
+}
+
+#[test]
+fn a_wall_whose_openings_make_up_gross_less_net_passes() {
+    // Two windows of 1.2 m² and a recess stopping short of the middle
+    // plane, which takes no side area.
+    let model = recessed();
     let evaluation = check(model);
     assert!(
         findings(&evaluation).is_empty(),
@@ -321,21 +326,23 @@ const L_SHAPE: [[f64; 2]; 6] = [
     [0.0, 1.5],
 ];
 
+/// A window and the L, its corner at x 1, z 0.5: it spans x 1 to 2, z 0.5
+/// to 2.
+fn with_l(net: f64) -> Model {
+    let model = opening(
+        window(wall(Some(net)), "o1", 3.5),
+        "l",
+        1.0,
+        0.5,
+        0.2,
+        "arbitrary-closed",
+        &[],
+    );
+    outlined(model, "l", &L_SHAPE)
+}
+
 #[test]
 fn an_l_shaped_opening_counts_with_the_area_of_its_outline() {
-    // The L's corner at x 1, z 0.5: it spans x 1 to 2, z 0.5 to 2.
-    let with_l = |net: f64| {
-        let model = opening(
-            window(wall(Some(net)), "o1", 3.5),
-            "l",
-            1.0,
-            0.5,
-            0.2,
-            "arbitrary-closed",
-            &[],
-        );
-        outlined(model, "l", &L_SHAPE)
-    };
     let evaluation = check(with_l(12.8));
     assert!(
         findings(&evaluation).is_empty(),
@@ -358,11 +365,10 @@ fn an_l_shaped_opening_counts_with_the_area_of_its_outline() {
     );
 }
 
-#[test]
-fn an_opening_through_a_mitred_wall_end_cannot_be_counted() {
-    // Wall `w`, 0.2 m thick (y 0 to 0.2) and 3 m high, 5 m long on its face
-    // y = 0 and 5.2 m on y = 0.2.
-    let wall = || {
+/// Wall `w`, 0.2 m thick (y 0 to 0.2) and 3 m high, 5 m long on its face
+/// y = 0 and 5.2 m on y = 0.2, with a 1 m x 1.2 m window centred at `x`.
+fn mitred_window(x: f64) -> Model {
+    let model = {
         outlined(
             extrusion(
                 Model::default(),
@@ -390,24 +396,26 @@ fn an_opening_through_a_mitred_wall_end_cannot_be_counted() {
             quantity(14.1, QuantityDimension::Area),
         )
     };
-    let window_at = |model: Model, x: f64| {
-        extrusion(
-            model,
-            "o",
-            "opening",
-            [x, 0.2, 1.5],
-            [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, -1.0, 0.0]],
-            0.2,
-            "rectangle",
-            &[("XDim", 1.0), ("YDim", 1.2)],
-        )
-        .edge("voids", "w", "o")
-    };
-    let evaluation = check(window_at(wall(), 4.0));
+    extrusion(
+        model,
+        "o",
+        "opening",
+        [x, 0.2, 1.5],
+        [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, -1.0, 0.0]],
+        0.2,
+        "rectangle",
+        &[("XDim", 1.0), ("YDim", 1.2)],
+    )
+    .edge("voids", "w", "o")
+}
+
+#[test]
+fn an_opening_through_a_mitred_wall_end_cannot_be_counted() {
+    let evaluation = check(mitred_window(4.0));
     assert!(findings(&evaluation).is_empty());
     assert!(unevaluated(&evaluation).is_empty());
     // Through the mitre, the part of it the wall loses is not known.
-    let evaluation = check(window_at(wall(), 4.6));
+    let evaluation = check(mitred_window(4.6));
     assert!(findings(&evaluation).is_empty());
     assert_eq!(
         unevaluated(&evaluation),
@@ -422,21 +430,23 @@ fn an_opening_through_a_mitred_wall_end_cannot_be_counted() {
     );
 }
 
+/// A 0.2 m x 0.2 m hole through the wall.
+fn small(model: Model) -> Model {
+    opening(
+        model,
+        "small",
+        3.0,
+        0.5,
+        0.2,
+        "rectangle",
+        &[("XDim", 0.2), ("YDim", 0.2)],
+    )
+}
+
 /// Openings below `minimum_opening_area` are left out of the sum, as
 /// quantity rules leave small openings out of the net area.
 #[test]
 fn openings_below_the_minimum_area_are_left_out() {
-    let small = |model| {
-        opening(
-            model,
-            "small",
-            3.0,
-            0.5,
-            0.2,
-            "rectangle",
-            &[("XDim", 0.2), ("YDim", 0.2)],
-        )
-    };
     // Net area 13.8 m² leaves out the 0.04 m² hole.
     let evaluation = check(small(window(wall(Some(13.8)), "o1", 1.0)));
     assert_eq!(findings(&evaluation).len(), 1);
@@ -476,55 +486,233 @@ fn the_measured_opening_area_reaches_the_verdicts() {
     }
 }
 
-/// The wall-opening share as an expression: the sum, over the openings
-/// the wall's path reaches, of each one's section area, against its gross
-/// less net side area. It reproduces `opening-area`'s verdicts.
-#[test]
-fn the_opening_sum_as_an_aggregate_expression_reaches_the_verdicts() {
+#[allow(
+    clippy::format_push_string,
+    clippy::needless_pass_by_value,
+    clippy::too_many_lines,
+    clippy::type_complexity
+)]
+mod as_expressions {
+    use axioval_engine::CapabilityEvaluation;
     use axioval_rules::ExpressionRequirement;
-    use serde_json::json;
-    let side = |name: &str| json!({"kind": "property", "propertySet": QTO, "property": name});
-    let summed = json!({"kind": "aggregate", "function": "sum",
-        "over": {"kind": "path", "path": ["voids:forward"]},
-        "value": {"kind": "property", "propertySet": "axioval:measured",
-            "property": "opening_section_area;host_path=voids:backward;length_axis=profile-x;height_axis=extrusion"}});
-    let requirement = json!({"kind": "compare", "operator": "lessThanOrEquals",
-        "left": {"kind": "abs", "operand": {"kind": "subtract", "left": summed,
-            "right": {"kind": "subtract", "left": side("GrossSideArea"), "right": side("NetSideArea")}}},
-        "right": {"kind": "literal", "value": {"type": "quantity", "value": 0.01, "unit": "m2"}}});
-    let rule = rule(
-        "axioval:capability.expression",
-        kind("wall"),
-        vec![(
-            "requirement",
-            ParameterValue::Expression {
-                value: serde_json::from_value(requirement).unwrap(),
-            },
-        )],
-    );
-    let fixtures: [fn() -> Model; 3] = [
-        || window(window(wall(Some(12.6)), "o1", 1.0), "o2", 3.0),
-        || window(window(wall(Some(13.0)), "o1", 1.0), "o2", 3.0),
-        || {
-            opening(
-                wall(Some(15.0 - std::f64::consts::FRAC_PI_4)),
-                "round",
-                2.5,
-                1.5,
-                0.2,
-                "circle",
-                &[("Radius", 0.5)],
-            )
-        },
-    ];
-    for (index, model) in fixtures.into_iter().enumerate() {
-        let found = !findings(&check(model())).is_empty();
-        let evaluation = model().evaluate_measured(&ExpressionRequirement, &rule, |_| {});
-        assert!(
-            unevaluated(&evaluation).is_empty(),
-            "{index}: {:?}",
-            evaluation.not_evaluated_outcomes()
+    use axioval_rules::parity::{ParityEvidence, compare_evaluations};
+    use serde_json::{Value, json};
+
+    use super::*;
+
+    const ARGUMENTS: &str = "path=voids:forward;length_axis=profile-x;height_axis=extrusion";
+
+    fn side(name: &str) -> Value {
+        json!({"kind": "property", "propertySet": QTO, "property": name})
+    }
+
+    fn square_metres(value: f64) -> Value {
+        json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": "m2"}})
+    }
+
+    /// Where the wall states either side area, `voided` agrees with its
+    /// gross less net side area within 0.01 m².
+    fn agrees(voided: Value) -> Value {
+        json!({"kind": "implies",
+            "antecedent": {"kind": "or", "operands": [
+                {"kind": "isDefined", "operand": side("GrossSideArea")},
+                {"kind": "isDefined", "operand": side("NetSideArea")}]},
+            "consequent": {"kind": "compare", "operator": "lessThanOrEquals",
+                "left": {"kind": "abs", "operand": {"kind": "subtract",
+                    "left": {"kind": "round", "operand": voided, "step": square_metres(1e-6)},
+                    "right": {"kind": "subtract",
+                        "left": side("GrossSideArea"), "right": side("NetSideArea")}}},
+                "right": square_metres(0.01)}})
+    }
+
+    /// The measured `opening_area` with `minimum` in square metres.
+    fn opening_area(minimum: Option<f64>) -> Value {
+        let minimum = minimum.map_or_else(String::new, |minimum| format!(";minimum={minimum}"));
+        json!({"kind": "property", "propertySet": "axioval:measured",
+            "property": format!("opening_area;{ARGUMENTS}{minimum}")})
+    }
+
+    /// The sum of each reached opening's `opening_section_area`; an area
+    /// of zero without openings, where the sum would be a plain zero.
+    fn section_sum() -> Value {
+        let over = json!({"kind": "path", "path": ["voids:forward"]});
+        json!({"kind": "if", "branches": [{
+            "when": {"kind": "compare", "operator": "equals",
+                "left": {"kind": "aggregate", "function": "count", "over": over},
+                "right": {"kind": "literal", "value": {"type": "integer", "value": 0}}},
+            "then": square_metres(0.0)}],
+            "else": {"kind": "aggregate", "function": "sum", "over": over,
+                "value": {"kind": "property", "propertySet": "axioval:measured",
+                    "property": "opening_section_area;host_path=voids:backward;\
+                        length_axis=profile-x;height_axis=extrusion"}}})
+    }
+
+    fn parity(
+        model: fn() -> Model,
+        minimum: Option<f64>,
+        requirement: &Value,
+    ) -> (CapabilityEvaluation, ParityEvidence) {
+        let extra = minimum
+            .map(|value| {
+                (
+                    "minimum_opening_area",
+                    ParameterValue::Quantity {
+                        value,
+                        unit: "m2".into(),
+                    },
+                )
+            })
+            .into_iter()
+            .collect();
+        let evaluated = check_with(model(), extra);
+        let rewritten = model().evaluate_measured(
+            &ExpressionRequirement,
+            &rule(
+                "axioval:capability.expression",
+                kind("wall"),
+                vec![("requirement", common::expression(requirement.clone()))],
+            ),
+            |_| {},
         );
-        assert_eq!(!findings(&evaluation).is_empty(), found, "fixture {index}");
+        let parity = compare_evaluations((ID, &evaluated), ("expression", &rewritten));
+        (rewritten, parity)
+    }
+
+    /// A wall stating neither side area.
+    fn unstated() -> Model {
+        extrusion(
+            Model::default(),
+            "w",
+            "wall",
+            [0.0; 3],
+            [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+            3.0,
+            "rectangle",
+            &[("XDim", 5.0), ("YDim", 0.2), ("PositionX", 2.5)],
+        )
+    }
+
+    type Fixture = (fn() -> Model, Option<f64>);
+
+    /// Every fixture of this file: passing, found and open walls.
+    fn fixtures() -> Vec<Fixture> {
+        vec![
+            (recessed, None),
+            (
+                || window(window(wall(Some(13.0)), "o1", 1.0), "o2", 3.0),
+                None,
+            ),
+            (
+                || {
+                    opening(
+                        wall(Some(15.0 - std::f64::consts::FRAC_PI_4)),
+                        "round",
+                        2.5,
+                        1.5,
+                        0.2,
+                        "circle",
+                        &[("Radius", 0.5)],
+                    )
+                },
+                None,
+            ),
+            (
+                || {
+                    wall(Some(14.0))
+                        .object("slab", "slab")
+                        .object("elsewhere", "opening")
+                        .edge("voids", "slab", "elsewhere")
+                },
+                None,
+            ),
+            (
+                || {
+                    window(wall(Some(12.6)), "o1", 1.0)
+                        .object("free", "opening")
+                        .value("free", BODY_SET, "Count", PropertyValue::Integer(1))
+                        .text("free", BODY_SET, "Kind", "extrusion")
+                        .text("free", BODY_SET, "Profile.Type", "arbitrary-closed")
+                        .edge("voids", "w", "free")
+                },
+                None,
+            ),
+            (|| window(wall(Some(13.8)), "o", 4.8), None),
+            (
+                || window(window(wall(Some(12.6)), "o1", 1.0), "o2", 1.5),
+                None,
+            ),
+            (unstated, None),
+            (|| with_l(12.8), None),
+            (|| with_l(13.0), None),
+            (|| mitred_window(4.0), None),
+            (|| mitred_window(4.6), None),
+            (|| small(window(wall(Some(13.8)), "o1", 1.0)), None),
+            (|| small(window(wall(Some(13.8)), "o1", 1.0)), Some(0.05)),
+        ]
+    }
+
+    /// The measured opening area against the stated gross less net side
+    /// area judges every wall as `opening-area` does, but one: a wall
+    /// stating only one side area, which the capability leaves open. The
+    /// expression reads the missing side as `null`, so their difference is
+    /// `null` and the comparison false, a finding; an expression cannot
+    /// leave an object open on a stated absence.
+    #[test]
+    fn the_measured_opening_area_judges_every_wall_alike() {
+        let requirement = |minimum| agrees(opening_area(minimum));
+        let (mut found, mut open) = (0, 0);
+        for (index, (model, minimum)) in fixtures().into_iter().enumerate() {
+            let (_, parity) = parity(model, minimum, &requirement(minimum));
+            assert!(parity.holds(), "fixture {index}:\n{}", parity.diff());
+            found += parity.found;
+            open += parity.open;
+        }
+        assert_eq!((found, open), (4, 4));
+        // The one difference: only the gross side area stated.
+        let (rewritten, parity) = parity(|| wall(None), None, &requirement(None));
+        assert_eq!(parity.differences.len(), 1, "{}", parity.diff());
+        let difference = &parity.differences[0];
+        assert_eq!(difference.object.local_id, "w");
+        assert!(matches!(
+            difference.capability,
+            Some(axioval_rules::parity::Outcome::NotEvaluated {
+                reason: NotEvaluatedReason::IncompleteEvidence
+            })
+        ));
+        assert!(matches!(
+            difference.expression,
+            Some(axioval_rules::parity::Outcome::Finding { .. })
+        ));
+        assert_eq!(rewritten.findings().len(), 1);
+    }
+
+    /// The same share summed over the openings the wall's path reaches,
+    /// each one's `opening_section_area`, judges alike every wall whose
+    /// openings are placed apart. Summed one by one, the openings are never
+    /// checked against each other, so two overlapping openings are summed
+    /// where the capability leaves the wall open; and the section area
+    /// knows no minimum.
+    #[test]
+    fn the_summed_section_areas_judge_walls_of_separate_openings_alike() {
+        let requirement = agrees(section_sum());
+        for (index, (model, minimum)) in fixtures().into_iter().enumerate() {
+            let (_, parity) = parity(model, minimum, &requirement);
+            match index {
+                // Overlapping openings: summed, and 2.4 m² holds 15 − 12.6.
+                6 => {
+                    assert_eq!(parity.differences.len(), 1, "{}", parity.diff());
+                    assert!(parity.differences[0].expression.is_none());
+                }
+                // The small hole is counted: 1.24 m² against 1.2 m².
+                13 => {
+                    assert_eq!(parity.differences.len(), 1, "{}", parity.diff());
+                    assert!(matches!(
+                        parity.differences[0].expression,
+                        Some(axioval_rules::parity::Outcome::Finding { .. })
+                    ));
+                }
+                _ => assert!(parity.holds(), "fixture {index}:\n{}", parity.diff()),
+            }
+        }
     }
 }

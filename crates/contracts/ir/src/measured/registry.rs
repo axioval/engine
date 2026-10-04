@@ -561,6 +561,61 @@ macro_rules! plain {
     };
 }
 
+/// The host axes a face is measured in, as `opening-area` reads them.
+pub(super) const FACE_AXES: [MeasuredParameter; 2] = [
+    MeasuredParameter {
+        key: "length_axis",
+        kind: MeasuredParameterKind::Choice {
+            options: &["extrusion", "profile-x", "profile-y"],
+        },
+        required: false,
+        default: Some("extrusion"),
+        help: &en_de(
+            "The host's axis along its length.",
+            "Die Achse des Wirts entlang seiner Länge.",
+        ),
+    },
+    MeasuredParameter {
+        key: "height_axis",
+        kind: MeasuredParameterKind::Choice {
+            options: &["extrusion", "profile-x", "profile-y"],
+        },
+        required: false,
+        default: Some("profile-y"),
+        help: &en_de(
+            "The host's axis along its height.",
+            "Die Achse des Wirts entlang seiner Höhe.",
+        ),
+    },
+];
+
+const OPENINGS_PATH: MeasuredParameter = MeasuredParameter {
+    key: "path",
+    kind: MeasuredParameterKind::Path,
+    required: true,
+    default: None,
+    help: &en_de(
+        "The relationship steps from the host to its openings.",
+        "Die Beziehungsschritte vom Wirt zu seinen Öffnungen.",
+    ),
+};
+
+pub(super) const OPENINGS_MINIMUM: MeasuredParameter = MeasuredParameter {
+    key: "minimum",
+    kind: MeasuredParameterKind::Length { minimum: 0.0 },
+    required: false,
+    default: None,
+    help: &en_de(
+        "Openings smaller than this many square metres are not counted.",
+        "Öffnungen kleiner als so viele Quadratmeter werden nicht gezählt.",
+    ),
+};
+
+/// A host's openings and the face they void, as `opening-area` and
+/// `empty-host` read them.
+const HOST_OPENINGS: &[MeasuredParameter] =
+    &[OPENINGS_PATH, FACE_AXES[0], FACE_AXES[1], OPENINGS_MINIMUM];
+
 /// Every measured value, sorted by name.
 pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
     MeasuredDescriptor {
@@ -2069,6 +2124,26 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ),
     },
     MeasuredDescriptor {
+        name: "middle_face_area",
+        parameters: &FACE_AXES,
+        dimension: Some(QuantityDimension::Area),
+        services: &["body-facts"],
+        exactness: MeasuredExactness::Stated,
+        not_evaluated: &[
+            "the host is no straight extrusion the body set bounds",
+            "its outline's edge runs along its middle plane",
+        ],
+        label: &en_de("Middle-plane face area", "Fläche der Mittelebene"),
+        help: &en_de(
+            "The area of a host's face on its middle plane, as `empty-host` compares its \
+             openings with it: the box's length times its height, the outline's area, or \
+             the outline's chord along the face times the height.",
+            "Die Fläche der Ansicht eines Wirts auf seiner Mittelebene, wie `empty-host` \
+             seine Öffnungen mit ihr vergleicht: Länge mal Höhe des Quaders, die Fläche \
+             des Umrisses oder seine Sehne entlang der Ansicht mal der Höhe.",
+        ),
+    },
+    MeasuredDescriptor {
         name: "missing_tactile_strips",
         parameters: &[
             kinds(
@@ -2222,52 +2297,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
     },
     MeasuredDescriptor {
         name: "opening_area",
-        parameters: &[
-            MeasuredParameter {
-                key: "path",
-                kind: MeasuredParameterKind::Path,
-                required: true,
-                default: None,
-                help: &en_de(
-                    "The relationship steps from the host to its openings.",
-                    "Die Beziehungsschritte vom Wirt zu seinen Öffnungen.",
-                ),
-            },
-            MeasuredParameter {
-                key: "length_axis",
-                kind: MeasuredParameterKind::Choice {
-                    options: &["extrusion", "profile-x", "profile-y"],
-                },
-                required: false,
-                default: Some("extrusion"),
-                help: &en_de(
-                    "The host's axis along its length.",
-                    "Die Achse des Wirts entlang seiner Länge.",
-                ),
-            },
-            MeasuredParameter {
-                key: "height_axis",
-                kind: MeasuredParameterKind::Choice {
-                    options: &["extrusion", "profile-x", "profile-y"],
-                },
-                required: false,
-                default: Some("profile-y"),
-                help: &en_de(
-                    "The host's axis along its height.",
-                    "Die Achse des Wirts entlang seiner Höhe.",
-                ),
-            },
-            MeasuredParameter {
-                key: "minimum",
-                kind: MeasuredParameterKind::Length { minimum: 0.0 },
-                required: false,
-                default: None,
-                help: &en_de(
-                    "Openings smaller than this many square metres are not counted.",
-                    "Öffnungen kleiner als so viele Quadratmeter werden nicht gezählt.",
-                ),
-            },
-        ],
+        parameters: HOST_OPENINGS,
         dimension: Some(QuantityDimension::Area),
         services: &["relationship-selection", "body-facts"],
         exactness: MeasuredExactness::Stated,
@@ -2281,6 +2311,26 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              `opening-area` measures them against `gross_area − net_area`.",
             "Die summierten Schnittflächen der Öffnungen eines Wirts auf seiner \
              Mittelebene, wie `opening-area` sie mit `gross_area − net_area` vergleicht.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "opening_count",
+        parameters: HOST_OPENINGS,
+        dimension: None,
+        services: &["relationship-selection", "body-facts"],
+        exactness: MeasuredExactness::Stated,
+        not_evaluated: &[
+            "an opening cannot be placed on the host's middle plane",
+            "openings may overlap",
+        ],
+        label: &en_de("Voiding openings", "Durchbrechende Öffnungen"),
+        help: &en_de(
+            "How many of a host's openings take area from its middle plane, as \
+             `opening_area` sums them: recesses short of it and openings below the \
+             minimum are not counted.",
+            "Wie viele Öffnungen eines Wirts seiner Mittelebene Fläche nehmen, wie \
+             `opening_area` sie summiert: Nischen davor und Öffnungen unter dem Minimum \
+             zählen nicht.",
         ),
     },
     MeasuredDescriptor {
@@ -2795,9 +2845,32 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
                 ),
             ),
             OVER_FLOORS,
+            objects(
+                "ramps",
+                false,
+                &en_de(
+                    "The source kinds of ramps, `,`-separated, subtypes included: a ramp \
+                     within `ramp_reach` of the door and over a space is that side's floor, \
+                     measured at its top.",
+                    "Die Quellarten der Rampen, durch `,` getrennt, Untertypen \
+                     eingeschlossen: eine Rampe innerhalb von `ramp_reach` der Tür über einem \
+                     Raum ist der Boden dieser Seite, an ihrer Oberkante gemessen.",
+                ),
+            ),
+            MeasuredParameter {
+                key: "ramp_reach",
+                kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                required: false,
+                default: None,
+                help: &en_de(
+                    "With `ramps`, how far from the door in plan a ramp may lie, in metres.",
+                    "Mit `ramps`, wie weit eine Rampe im Grundriss von der Tür liegen darf, \
+                     in Metern.",
+                ),
+            },
         ],
         dimension: Some(QuantityDimension::Length),
-        services: &["vertical-extent", "relationship-selection"],
+        services: &["vertical-extent", "relationship-selection", "proximity"],
         exactness: MeasuredExactness::Measured,
         not_evaluated: &[
             NO_GEOMETRY,
@@ -2807,9 +2880,12 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         label: &en_de("Threshold step", "Schwellenstufe"),
         help: &en_de(
             "The step from each floor the path reaches to the door's bottom and \
-             threshold, as `keyed-limit`'s `threshold-step` measures it without ramps.",
+             threshold, as `keyed-limit`'s `threshold-step` measures it: a ramp surely \
+             near and over a space is its floor, one that only may be leaves both \
+             possible.",
             "Die Stufe von jedem erreichten Boden zur Türunterkante mit Schwelle, wie \
-             `keyed-limit` `threshold-step` ohne Rampen misst.",
+             `keyed-limit` `threshold-step` misst: eine Rampe sicher nahe über einem Raum \
+             ist sein Boden, eine nur mögliche lässt beide offen.",
         ),
     },
     plain!(

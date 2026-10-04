@@ -1821,3 +1821,548 @@ fn openings_below_the_minimum_area_are_ignored() {
         [("down".into(), NotEvaluatedReason::IncompleteEvidence)]
     );
 }
+
+/// The margins rewritten as one expression over the opening's placements
+/// (`opening_placements`): no placement outside its host, or inside it
+/// nearer an end or edge than allowed, or farther from an edge than
+/// allowed. Every margin fixture of this file runs through the parity
+/// harness. Spacing, zones, dimensions and supports are not margins of one
+/// placement and are not rewritten here.
+#[allow(
+    clippy::format_push_string,
+    clippy::needless_pass_by_value,
+    clippy::too_many_lines,
+    clippy::type_complexity
+)]
+mod as_expressions {
+    use axioval_rules::ExpressionRequirement;
+    use axioval_rules::parity::compare_evaluations;
+    use serde_json::{Value, json};
+
+    use super::*;
+
+    /// The checks of one rule.
+    #[derive(Clone, Copy, Default)]
+    struct Margins {
+        end: Option<f64>,
+        edge: Option<f64>,
+        web: bool,
+        /// The largest distance from the low and the high edge.
+        maximum: Option<(f64, bool, bool)>,
+        minimum_area: Option<f64>,
+    }
+
+    /// Where the openings' hosts are: the path, the host kind if the rule
+    /// selects one, and the face axes.
+    #[derive(Clone, Copy)]
+    struct Hosts {
+        path: &'static str,
+        kind: Option<&'static str>,
+        axes: (&'static str, &'static str),
+    }
+
+    const BEAMS: Hosts = Hosts {
+        path: "voids:backward",
+        kind: Some("beam"),
+        axes: ("extrusion", "profile-y"),
+    };
+
+    const WALLS: Hosts = Hosts {
+        path: "voids:backward",
+        kind: Some("wall"),
+        axes: ("profile-x", "extrusion"),
+    };
+
+    fn field(name: &str) -> Value {
+        json!({"kind": "property", "propertySet": "axioval:member", "property": name})
+    }
+
+    fn rounded(name: &str) -> Value {
+        json!({"kind": "round", "operand": field(name),
+            "step": {"kind": "literal", "value": {"type": "quantity", "value": 1e-6, "unit": "m"}}})
+    }
+
+    /// Inside its host, `name` compared by `operator` with `bound`.
+    fn inside_and(name: &str, operator: &str, bound: f64) -> Value {
+        json!({"kind": "and", "operands": [field("inside"),
+            {"kind": "compare", "operator": operator, "left": rounded(name),
+                "right": {"kind": "literal",
+                    "value": {"type": "quantity", "value": bound, "unit": "m"}}}]})
+    }
+
+    fn requirement(hosts: Hosts, margins: Margins) -> Value {
+        let mut list = format!(
+            "opening_placements;host_path={};length_axis={};height_axis={}",
+            hosts.path, hosts.axes.0, hosts.axes.1
+        );
+        if let Some(kind) = hosts.kind {
+            list.push_str(&format!(";hosts={kind}"));
+        }
+        if margins.web {
+            list.push_str(";zone=web");
+        }
+        if let Some(minimum) = margins.minimum_area {
+            list.push_str(&format!(";minimum={minimum}"));
+        }
+        let mut violations = vec![json!({"kind": "not", "operand": field("inside")})];
+        if let Some(end) = margins.end {
+            violations.push(inside_and("end_distance", "lessThan", end));
+        }
+        if margins.edge.is_some() || margins.web {
+            violations.push(inside_and(
+                "edge_distance",
+                "lessThan",
+                margins.edge.unwrap_or(0.0),
+            ));
+        }
+        if let Some((maximum, low, high)) = margins.maximum {
+            if low {
+                violations.push(inside_and("bottom_distance", "greaterThan", maximum));
+            }
+            if high {
+                violations.push(inside_and("top_distance", "greaterThan", maximum));
+            }
+        }
+        json!({"kind": "aggregate", "function": "none",
+            "over": {"kind": "measured", "name": list},
+            "value": {"kind": "or", "operands": violations}})
+    }
+
+    fn capability(hosts: Hosts, margins: Margins) -> Vec<(&'static str, ParameterValue)> {
+        let mut parameters = vec![
+            ("host_path", strings(&[hosts.path])),
+            ("length_axis", string(hosts.axes.0)),
+            ("height_axis", string(hosts.axes.1)),
+        ];
+        if let Some(host) = hosts.kind {
+            parameters.push(("host_selector", selector(kind(host))));
+        }
+        if let Some(end) = margins.end {
+            parameters.push(("end_distance", metres(end)));
+        }
+        if let Some(edge) = margins.edge {
+            parameters.push(("edge_distance", metres(edge)));
+        }
+        if margins.web {
+            parameters.push(("zone", string("web")));
+        }
+        if let Some((maximum, low, high)) = margins.maximum {
+            parameters.push(("edge_distance_maximum", metres(maximum)));
+            let edges = match (low, high) {
+                (true, false) => "bottom",
+                (false, true) => "top",
+                _ => "both",
+            };
+            parameters.push(("maximum_edges", string(edges)));
+        }
+        if let Some(minimum) = margins.minimum_area {
+            parameters.push(("minimum_opening_area", square_metres(minimum)));
+        }
+        parameters
+    }
+
+    /// Runs the capability and its rewrite over `of` on `model`, asserts
+    /// parity and returns how many objects were found and left open.
+    fn parity(
+        model: impl Fn() -> Model,
+        of: &str,
+        hosts: Hosts,
+        margins: Margins,
+    ) -> (usize, usize) {
+        let evaluated = model().evaluate(
+            &OpeningZone,
+            &rule(ID, kind(of), capability(hosts, margins)),
+        );
+        let rewritten = model().evaluate_measured(
+            &ExpressionRequirement,
+            &rule(
+                "axioval:capability.expression",
+                kind(of),
+                vec![(
+                    "requirement",
+                    common::expression(requirement(hosts, margins)),
+                )],
+            ),
+            |_| {},
+        );
+        let parity = compare_evaluations((ID, &evaluated), ("expression", &rewritten));
+        assert!(parity.holds(), "{}", parity.diff());
+        (parity.found, parity.open)
+    }
+
+    fn web_holes() -> Model {
+        let circle = |model, local, x, z| hole(model, local, x, z, "circle", &[("Radius", 0.05)]);
+        let model = circle(beam(), "inside", 3.0, 0.0);
+        let model = circle(model, "near-end", 0.2, 0.0);
+        let model = circle(model, "in-flange", 4.5, 0.1);
+        circle(model, "outside", 6.0, 0.0)
+    }
+
+    #[test]
+    fn ends_webs_and_flanges_of_beams_reach_the_verdicts() {
+        let margins = Margins {
+            end: Some(0.3),
+            edge: Some(0.01),
+            web: true,
+            ..Margins::default()
+        };
+        assert_eq!(parity(web_holes, "opening", BEAMS, margins), (3, 0));
+        // Without a web zone, the flanges' hole is too near the edge.
+        let section = Margins {
+            web: false,
+            ..margins
+        };
+        assert_eq!(parity(web_holes, "opening", BEAMS, section), (3, 0));
+        // A host whose outline is not stated bounds nothing; an opening of
+        // another host is not checked.
+        let unbounded = || {
+            let model = extrusion(
+                Model::default(),
+                "b",
+                "beam",
+                [0.0; 3],
+                [[0.0, 1.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]],
+                6.0,
+                "arbitrary-closed",
+                &[],
+            );
+            hole(model, "o", 3.0, 0.0, "circle", &[("Radius", 0.05)])
+        };
+        assert_eq!(
+            parity(unbounded, "opening", BEAMS, Margins::default()),
+            (0, 1)
+        );
+        let elsewhere = || {
+            beam()
+                .object("free", "opening")
+                .object("slab", "slab")
+                .edge("voids", "slab", "free")
+        };
+        assert_eq!(parity(elsewhere, "opening", BEAMS, margins), (0, 0));
+    }
+
+    #[test]
+    fn webs_of_l_beams_reach_the_verdicts() {
+        let circle = |model, local, z| hole(model, local, 3.0, z, "circle", &[("Radius", 0.05)]);
+        let web = Margins {
+            edge: Some(0.02),
+            web: true,
+            ..Margins::default()
+        };
+        let section = Margins { web: false, ..web };
+        for l in [uniform_l as Beam, non_uniform_l] {
+            let holes = || circle(circle(l(), "web", 0.05), "ledge", -0.1);
+            assert_eq!(parity(holes, "opening", BEAMS, web), (1, 0));
+            assert_eq!(parity(holes, "opening", BEAMS, section), (0, 0));
+        }
+        let rounded = || {
+            let rounded = l_beam(
+                "l-shape",
+                &[
+                    ("Depth", 0.4),
+                    ("Width", 0.3),
+                    ("Thickness", 0.1),
+                    ("FilletRadius", 0.01),
+                ],
+                &[],
+            );
+            circle(rounded, "web", 0.05)
+        };
+        let only_web = Margins {
+            web: true,
+            ..Margins::default()
+        };
+        assert_eq!(parity(rounded, "opening", BEAMS, only_web), (0, 1));
+    }
+
+    #[test]
+    fn a_duct_judged_in_each_beam_reaches_the_verdicts() {
+        let ducts = Hosts {
+            path: INTERSECTS,
+            ..BEAMS
+        };
+        let margins = Margins {
+            end: Some(0.3),
+            web: true,
+            ..Margins::default()
+        };
+        let second = |model: Model, family_dimensions: &[(&str, f64)]| {
+            extrusion(
+                model,
+                "b2",
+                "beam",
+                [0.0, 0.8, 0.0],
+                [[0.0, 1.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]],
+                6.0,
+                "i-shape",
+                family_dimensions,
+            )
+        };
+        let through = || {
+            let model = second(
+                beam(),
+                &[
+                    ("OverallWidth", 0.3),
+                    ("OverallDepth", 0.3),
+                    ("WebThickness", 0.01),
+                    ("FlangeThickness", 0.02),
+                ],
+            );
+            let model = duct(model, "inside", 3.0, 0.0, &["b", "b2"]);
+            let model = duct(model, "near-end", 0.2, 0.0, &["b", "b2"]);
+            let model = duct(model, "in-flange", 4.5, 0.1, &["b"]);
+            duct(model, "beside", 5.0, 1.0, &[])
+        };
+        assert_eq!(parity(through, "duct", ducts, margins), (2, 0));
+        // An unreadable second beam leaves only its placement open: the
+        // other placement's finding stands.
+        let unreadable = || {
+            let model = second(beam(), &[("OverallWidth", 0.3)]);
+            duct(model, "near-end", 0.2, 0.0, &["b", "b2"])
+        };
+        assert_eq!(parity(unreadable, "duct", ducts, margins), (1, 0));
+    }
+
+    #[test]
+    fn walls_and_their_outlines_reach_the_verdicts() {
+        // A window reaching past the wall's end and too near its top.
+        let past_end = || {
+            let model = extrusion(
+                Model::default(),
+                "w",
+                "wall",
+                [0.0; 3],
+                [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+                3.0,
+                "rectangle",
+                &[("XDim", 5.0), ("YDim", 0.2), ("PositionX", 2.5)],
+            );
+            extrusion(
+                model,
+                "o",
+                "opening",
+                [4.8, 0.1, 2.2],
+                [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, -1.0, 0.0]],
+                0.2,
+                "rectangle",
+                &[("XDim", 1.0), ("YDim", 1.2)],
+            )
+            .edge("voids", "w", "o")
+        };
+        let any_host = Hosts {
+            kind: None,
+            ..WALLS
+        };
+        let edge = Margins {
+            edge: Some(0.5),
+            ..Margins::default()
+        };
+        assert_eq!(parity(past_end, "opening", any_host, edge), (1, 0));
+        // Openings near, across and past a mitred end, and one extruded
+        // along the wall, known only by its box.
+        let mitred = || {
+            let model = wall_window(mitred_wall(), "middle", 2.5);
+            let model = wall_window(model, "near-mitre", 4.0);
+            let model = wall_window(model, "across-mitre", 4.6);
+            let model = wall_window(model, "past-end", 5.5);
+            extrusion(
+                model,
+                "along",
+                "opening",
+                [4.3, 0.1, 1.5],
+                [[0.0, 1.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]],
+                0.5,
+                "rectangle",
+                &[("XDim", 0.1), ("YDim", 1.0)],
+            )
+            .edge("voids", "w", "along")
+        };
+        let ends_and_edges = Margins {
+            end: Some(0.6),
+            edge: Some(0.2),
+            ..Margins::default()
+        };
+        assert_eq!(parity(mitred, "opening", WALLS, ends_and_edges), (3, 1));
+        assert_eq!(
+            parity(
+                || wall_window(mitred_wall(), "w1", 2.5),
+                "opening",
+                WALLS,
+                Margins::default()
+            ),
+            (0, 0)
+        );
+        // A recess reaching the mitre only part way through.
+        let recess = || {
+            extrusion(
+                mitred_wall(),
+                "recess",
+                "opening",
+                [4.5, 0.2, 1.5],
+                [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, -1.0, 0.0]],
+                0.1,
+                "rectangle",
+                &[("XDim", 0.2), ("YDim", 0.5)],
+            )
+            .edge("voids", "w", "recess")
+        };
+        for (end, found) in [(0.5, 0), (0.55, 1)] {
+            let margins = Margins {
+                end: Some(end),
+                ..Margins::default()
+            };
+            assert_eq!(parity(recess, "opening", WALLS, margins), (found, 0));
+        }
+        // An L-shaped opening, as far as its outline reaches.
+        let l = || {
+            let model = through_wall(mitred_wall(), "l", [3.8, 0.3, 0.5], "arbitrary-closed", &[]);
+            outlined(
+                model,
+                "l",
+                &[
+                    [0.0, 0.0],
+                    [1.0, 0.0],
+                    [1.0, 0.5],
+                    [0.5, 0.5],
+                    [0.5, 1.5],
+                    [0.0, 1.5],
+                ],
+            )
+        };
+        let margins = Margins {
+            end: Some(0.3),
+            edge: Some(0.6),
+            ..Margins::default()
+        };
+        assert_eq!(parity(l, "opening", WALLS, margins), (1, 0));
+        // Outlines that are no region, or are curved, bound nothing.
+        let crossing = || {
+            let model = outlined(
+                extrusion(
+                    Model::default(),
+                    "w",
+                    "wall",
+                    [0.0; 3],
+                    UPRIGHT,
+                    3.0,
+                    "arbitrary-closed",
+                    &[],
+                ),
+                "w",
+                &[[0.0, 0.0], [5.0, 0.0], [5.0, 0.2], [3.0, -0.1], [0.0, 0.2]],
+            );
+            wall_window(model, "o", 2.5)
+        };
+        let curved = || {
+            let model = extrusion(
+                Model::default(),
+                "w",
+                "wall",
+                [0.0; 3],
+                UPRIGHT,
+                3.0,
+                "arbitrary-closed",
+                &[],
+            );
+            wall_window(model, "o", 2.5)
+        };
+        for model in [crossing as fn() -> Model, curved] {
+            assert_eq!(parity(model, "opening", WALLS, Margins::default()), (0, 1));
+        }
+    }
+
+    #[test]
+    fn a_notched_slab_and_window_heads_reach_the_verdicts() {
+        let slab = || {
+            let model = outlined(
+                extrusion(
+                    Model::default(),
+                    "s",
+                    "slab",
+                    [0.0; 3],
+                    UPRIGHT,
+                    0.2,
+                    "arbitrary-closed",
+                    &[],
+                ),
+                "s",
+                &[
+                    [0.0, 0.0],
+                    [4.0, 0.0],
+                    [4.0, 2.0],
+                    [2.0, 2.0],
+                    [2.0, 3.0],
+                    [0.0, 3.0],
+                ],
+            );
+            let shaft = |model: Model, local: &str, x: f64, y: f64| {
+                extrusion(
+                    model,
+                    local,
+                    "opening",
+                    [x, y, -0.1],
+                    UPRIGHT,
+                    0.4,
+                    "rectangle",
+                    &[("XDim", 0.5), ("YDim", 0.5)],
+                )
+                .edge("voids", "s", local)
+            };
+            let model = shaft(model, "below-notch", 3.0, 1.6);
+            let model = shaft(model, "in-notch", 2.2, 2.2);
+            shaft(model, "clear", 1.0, 1.0)
+        };
+        let slabs = Hosts {
+            path: "voids:backward",
+            kind: Some("slab"),
+            axes: ("profile-x", "profile-y"),
+        };
+        let edge = Margins {
+            edge: Some(0.3),
+            ..Margins::default()
+        };
+        assert_eq!(parity(slab, "opening", slabs, edge), (2, 0));
+        let any_host = Hosts {
+            kind: None,
+            ..WALLS
+        };
+        for (edges, found) in [((false, true), 1), ((true, true), 2)] {
+            let margins = Margins {
+                maximum: Some((0.5, edges.0, edges.1)),
+                ..Margins::default()
+            };
+            assert_eq!(
+                parity(windows_below_the_top, "opening", any_host, margins),
+                (found, 0)
+            );
+        }
+    }
+
+    #[test]
+    fn openings_below_the_minimum_area_reach_the_verdicts() {
+        let end = Margins {
+            end: Some(0.3),
+            ..Margins::default()
+        };
+        assert_eq!(parity(small_holes, "opening", BEAMS, end), (1, 0));
+        let ignored = Margins {
+            minimum_area: Some(0.001),
+            ..end
+        };
+        assert_eq!(parity(small_holes, "opening", BEAMS, ignored), (0, 0));
+        let down = || {
+            extrusion(
+                beam(),
+                "down",
+                "opening",
+                [4.0, 0.0, -0.2],
+                [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+                0.4,
+                "circle",
+                &[("Radius", 0.005)],
+            )
+            .edge("voids", "b", "down")
+        };
+        assert_eq!(parity(down, "opening", BEAMS, ignored), (0, 1));
+    }
+}

@@ -101,7 +101,7 @@ impl RuleCapability for EmptyHost {
 }
 
 /// The area of the host's face on its middle plane.
-fn face_area(host: &Host, axes: FaceAxes) -> Result<f64, Unavailable> {
+pub(crate) fn face_area(host: &Host, axes: FaceAxes) -> Result<f64, Unavailable> {
     let (_, length) = host.axis(axes.length);
     let (_, height) = host.axis(axes.height);
     let through = axes.through();

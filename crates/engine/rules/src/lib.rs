@@ -256,6 +256,8 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(distance::DistanceMeasures))
         .and_then(|registry| registry.register_measured(measured_openings::OpeningMeasures))
         .and_then(|registry| registry.register_measured(keyed_limit::DoorMeasures))
+        .and_then(|registry| registry.register_measured(door_swing_direction::SwingMeasures))
+        .and_then(|registry| registry.register_measured(opening_zone::PlacementMeasures))
         .and_then(|registry| registry.register_measured(allowed_profile::ProfileMeasures))
         .and_then(|registry| registry.register_measured(stair_geometry::StairMeasures))
         .and_then(|registry| registry.register_measured(horizontal_guard::GuardMeasures))

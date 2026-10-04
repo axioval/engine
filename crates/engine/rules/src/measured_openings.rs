@@ -1,7 +1,8 @@
 //! The voided area of a host as a measured value: the summed section areas
 //! of the openings its path reaches, on the host's middle plane, measured
 //! as `opening-area` measures them, so `gross_area − net_area` against it
-//! is that capability's comparison.
+//! is that capability's comparison; and, as `empty-host` compares them, how
+//! many openings it counts and the area of the face they void.
 
 use std::collections::BTreeMap;
 
@@ -13,7 +14,9 @@ use axioval_ir::measured::{MeasuredArgument, MeasuredCall};
 use axioval_ir::{ObjectId, QuantityDimension, RuleId};
 
 use crate::counts::Population;
+use crate::empty_host::face_area;
 use crate::opening_area::{Openings, voided};
+use crate::opening_zone::face::{FaceAxes, read_host};
 use crate::support::Parameters;
 
 /// The name measured.
@@ -21,12 +24,42 @@ pub(crate) const OPENING_AREA: &str = "opening_area";
 /// One opening's section area on its host's middle plane.
 pub(crate) const OPENING_SECTION_AREA: &str = "opening_section_area";
 
-/// Measures `opening_area`.
+/// How many openings take area from the host's middle plane.
+const OPENING_COUNT: &str = "opening_count";
+/// The host's face on its middle plane, as `empty-host` measures it.
+const MIDDLE_FACE_AREA: &str = "middle_face_area";
+
+/// Measures `opening_area` and what `empty-host` compares.
 pub(crate) struct OpeningMeasures;
+
+/// The face `call`'s axes name on the middle plane of `host`.
+fn middle_face(
+    call: &MeasuredCall,
+    context: &RuleContext<'_>,
+    host: &ObjectId,
+) -> Result<Measurement, crate::support::Unavailable> {
+    let axes = FaceAxes::parse(
+        call.choice("length_axis").unwrap_or("extrusion"),
+        call.choice("height_axis").unwrap_or("profile-y"),
+    )?;
+    let face = read_host(context, host)?;
+    let area = face_area(&face, axes)?;
+    Ok(Measurement::Value {
+        lower: area,
+        upper: area,
+        dimension: Some(QuantityDimension::Area),
+        locator: format!("{MIDDLE_FACE_AREA}:{host}"),
+    })
+}
 
 impl MeasuredProvider for OpeningMeasures {
     fn names(&self) -> &'static [&'static str] {
-        &[OPENING_AREA, OPENING_SECTION_AREA]
+        &[
+            MIDDLE_FACE_AREA,
+            OPENING_AREA,
+            OPENING_COUNT,
+            OPENING_SECTION_AREA,
+        ]
     }
 
     fn measure(
@@ -38,6 +71,14 @@ impl MeasuredProvider for OpeningMeasures {
         let unavailable = |why: String| {
             PropertyResolutionError::Unavailable(format!("`{OPENING_AREA}` of {object}: {why}"))
         };
+        if call.name() == MIDDLE_FACE_AREA {
+            return middle_face(call, context, object).map_err(|(reason, why)| {
+                crate::measured_kinds::resolution_error((
+                    reason,
+                    format!("`{MIDDLE_FACE_AREA}` of {object}: {why}"),
+                ))
+            });
+        }
         let text = |value: &str| ParameterValue::String {
             value: value.to_owned(),
         };
@@ -100,6 +141,16 @@ impl MeasuredProvider for OpeningMeasures {
         let mut evidence = Vec::new();
         let voided =
             voided(context, &openings, &population, host, &mut evidence).map_err(refused)?;
+        if call.name() == OPENING_COUNT {
+            #[allow(clippy::cast_precision_loss)]
+            let counted = voided.counted.len() as f64;
+            return Ok(Measurement::Value {
+                lower: counted,
+                upper: counted,
+                dimension: None,
+                locator: format!("{OPENING_COUNT}:{object}"),
+            });
+        }
         Ok(Measurement::Value {
             lower: voided.sum,
             upper: voided.sum,

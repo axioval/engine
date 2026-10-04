@@ -137,31 +137,36 @@ pub(crate) fn slope(normals: &[FaceNormal]) -> Result<Interval, String> {
     })
 }
 
+/// One piece's gradient along `direction`, as a signed angle.
+fn along(normal: &[Interval; 3], direction: PlanDirection) -> Result<Interval, String> {
+    if level(normal) {
+        return Ok(Interval::point(0.0));
+    }
+    // On the plane `n·p = c`, moving `u` in plan rises `-(n·u)/n_z`.
+    let [x, y, z] = *normal;
+    let rise = x
+        .times(direction.x)
+        .and_then(|east| y.times(direction.y).and_then(|north| east.plus(north)))
+        .and_then(|dot| dot.negate().divided_by(z))
+        .map_err(failure)?;
+    Ok(clamp(rise.atan(), -PI / 2.0, PI / 2.0))
+}
+
 /// The gradient of each piece along `direction`, as a signed angle: rising
 /// along it is positive, falling negative.
 pub(crate) fn slope_along(
     normals: &[FaceNormal],
     direction: PlanDirection,
 ) -> Result<Interval, String> {
-    over(normals, |normal| {
-        if level(normal) {
-            return Ok(Interval::point(0.0));
-        }
-        // On the plane `n·p = c`, moving `u` in plan rises `-(n·u)/n_z`.
-        let [x, y, z] = *normal;
-        let along = x
-            .times(direction.x)
-            .and_then(|east| y.times(direction.y).and_then(|north| east.plus(north)))
-            .and_then(|dot| dot.negate().divided_by(z))
-            .map_err(failure)?;
-        Ok(clamp(along.atan(), -PI / 2.0, PI / 2.0))
-    })
+    over(normals, |normal| along(normal, direction))
 }
 
-/// The fall across `axis`: the magnitude of the gradient a quarter turn
-/// from it, as an angle.
+/// The fall across `axis`: the magnitude of each piece's gradient a
+/// quarter turn from it, as an angle. Taken per piece, so a crowned face
+/// falling equally to both sides measures that one fall.
 pub(crate) fn cross_fall(normals: &[FaceNormal], axis: PlanDirection) -> Result<Interval, String> {
-    slope_along(normals, axis.across()).map(Interval::abs)
+    let across = axis.across();
+    over(normals, |normal| along(normal, across).map(Interval::abs))
 }
 
 /// The compass bearing of steepest descent, clockwise from the y axis (plan
@@ -300,6 +305,23 @@ mod tests {
         assert!(holds(cross_fall(&plane, east).unwrap(), 0.0));
         // It descends towards the west: a bearing of three quarters of a turn.
         assert!(holds(gradient_direction(&plane).unwrap(), 1.5 * PI));
+    }
+
+    #[test]
+    fn a_crowned_face_falls_equally_to_both_sides() {
+        // Two pieces falling 2.5 % to the east and to the west.
+        let crowned = [exact([0.025, 0.0, 1.0]), exact([-0.025, 0.0, 1.0])];
+        let north = PlanDirection::of([0.0, 1.0, 0.0]).unwrap();
+        let fall = cross_fall(&crowned, north).unwrap();
+        let angle = 0.025_f64.atan();
+        assert!(
+            holds(fall, angle) && fall.upper - fall.lower < 1e-12,
+            "{fall:?}"
+        );
+        // Along the crown the signed gradients still span both ways.
+        let east = PlanDirection::of([1.0, 0.0, 0.0]).unwrap();
+        let along = slope_along(&crowned, east).unwrap();
+        assert!(holds(along, -angle) && holds(along, angle));
     }
 
     #[test]

@@ -486,7 +486,8 @@ zero slope, and `convertSlope` turns an angle into a ratio or percent.
   positive: world `x` or `y`, or the object's own `own_x` or `own_y`
   projected to plan.
 - `cross_fall;axis=…` is the magnitude of the gradient a quarter turn from
-  the axis.
+  the axis, taken per piece, so a crowned face falling equally to both
+  sides measures that one fall.
 - `gradient_direction` is the compass bearing of steepest descent,
   clockwise from plan north (the y axis); its interval's midpoint lies in
   `[0, 2π)`, so a face descending about north may read `[-0.1, 0.1]`.

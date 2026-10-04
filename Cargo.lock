@@ -127,9 +127,9 @@ dependencies = [
 
 [[package]]
 name = "axiolid-construct"
-version = "0.3.14"
+version = "0.3.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f455488f03784bf6b20824f0f3fcc476e4a71ebedef4285981adf5b7db3bafd"
+checksum = "ebf93ce233be804d3c3fd90f7b698a40fce3fe8502e249c37c91e1d434f88dff"
 dependencies = [
  "axiolid-brep",
  "axiolid-brep-audit",
@@ -150,7 +150,6 @@ dependencies = [
  "axiolid-surface",
  "axiolid-tessellation-contract",
  "axiolid-topology",
- "earcut",
 ]
 
 [[package]]
@@ -196,9 +195,9 @@ dependencies = [
 
 [[package]]
 name = "axiolid-evaluate"
-version = "0.3.5"
+version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "082563e8c71360861f9c1a7283947c4ddbdf9f4575b83b0eff095090f36d55a2"
+checksum = "0b0283e724bd8557f33ab2cbac0bb32dd1177f30facf417c1f929b73d0a3fb61"
 dependencies = [
  "axiolid-contracts",
  "axiolid-core",
@@ -329,9 +328,9 @@ dependencies = [
 
 [[package]]
 name = "axiolid-mesh-compile"
-version = "0.3.13"
+version = "0.3.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9b604d0cf6d01ed36e5b22f3af04b2edc7f3fe29d5f72e33d836ff754940eb0"
+checksum = "ca50e3307bab711159ab2366d59e690eb4a5fea2dbdf1c3799afbc5ec2e6dfc8"
 dependencies = [
  "axiolid-brep",
  "axiolid-brep-boolean",
@@ -351,7 +350,6 @@ dependencies = [
  "axiolid-reference",
  "axiolid-surface",
  "axiolid-topology",
- "earcut",
 ]
 
 [[package]]
@@ -481,9 +479,9 @@ dependencies = [
 
 [[package]]
 name = "axiolid-reference"
-version = "0.3.6"
+version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b0d7ed2725269aaecafc6eb5145b1e7f3f0b7b1960a34f31edf98eded6f6a10"
+checksum = "13b3614cc9359e53e24ac8dc4655650d55a8163a850ae5108ab8e52d66d17bd1"
 dependencies = [
  "axiolid-contracts",
  "axiolid-core",
@@ -1079,15 +1077,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4b8a88685455ed29a21542a33abd9cb6510b6b129abadabdcef0f4c55bc8f61"
 dependencies = [
  "litrs",
-]
-
-[[package]]
-name = "earcut"
-version = "0.4.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f03dd5350900133e14471c90d513eb5ba264004cd833adecab7dfa5fb5a2974"
-dependencies = [
- "num-traits",
 ]
 
 [[package]]

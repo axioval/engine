@@ -465,7 +465,20 @@ touching a wall's top) is built since axiolid-mesh-compile 0.3.13
 is exact (axis matrices, dyadic sizes), perturbed by the reported
 `PlaneTouchesCylinder` reading under a general placement, and its mesh
 certified either way. I sections of decimal (IPE, HEA) sizes are built at
-no tolerance since axiolid-construct 0.3.14 (axiolid/kernel#250).
+no tolerance since axiolid-construct 0.3.14 (axiolid/kernel#250). A disk
+swept along an elevated directrix (an `IfcGradientCurve`) is certified
+against the exact tube since axiolid-mesh-compile 0.3.14
+(axiolid/kernel#252); its exact boundary is built only where
+`exact_directrix` reads the directrix as one segment or arc (a straight
+plan under a constant grade). A faceted face
+warped off its plane is declared within the width of the slab its corners
+span about its fit plane, which the same release reports for authored
+polygon and faceted B-rep faces alike (axiolid/kernel#257, #261), and
+such a face under a boolean leaves its body unmeasured. Faces are
+triangulated by the kernel's certified ear clipper (#260); a face whose
+ring touches another inside a neighbouring face's edge leaves a
+T-junction there, which the mesh audit reads as an open edge, so the body
+is treated as an open surface, never as a closed solid.
 `axioval check
 --geometry` does all this by default (see [CLI](./cli.md)).
 

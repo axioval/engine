@@ -58,8 +58,9 @@ tracing = "0.1.41"
 clap = { version = "4.5.46", features = ["derive"] }
 axiolid-brep = "0.3.3"
 # 0.3.13 mitres a swept disk's sharp corners again (axiolid/kernel#245);
-# 0.3.14 lowers I sections of decimal (IPE, HEA) sizes at no tolerance (#250).
-axiolid-construct = "0.3.14"
+# 0.3.14 lowers I sections of decimal (IPE, HEA) sizes at no tolerance (#250);
+# 0.3.15 refuses pinched rings unless asked to accept them (#253, #262).
+axiolid-construct = "0.3.15"
 axiolid-core = "0.3.0"
 axiolid-inspect = "0.3.5"
 axiolid-mesh = "0.3.0"
@@ -77,7 +78,7 @@ axiolid-contracts = "0.3.3"
 # 0.3.3 and model 0.3.4 carry the exact alignment relations (CUBIC
 # transitions, vertical arcs and clothoids, cant) `ifc-geometry` 0.8 lowers to.
 axiolid-curve = "0.3.3"
-axiolid-evaluate = "0.3.5"
+axiolid-evaluate = "0.3.6"
 # 0.3.9 subtracts placed extrusions exactly (axiolid/kernel#228, through
 # axiolid-brep-boolean 0.1.2) and reports a certified deviation per mesh
 # (#232, with axiolid-reference 0.3.4); 0.3.10 clips by half-spaces (#234),
@@ -89,8 +90,11 @@ axiolid-evaluate = "0.3.5"
 # fillets (#243, #249, through axiolid-brep-boolean 0.1.5, which also keeps
 # a report at no tolerance empty, #251), triangulates warped authored
 # polygon faces with their warp (#254) and resolves composite and trimmed
-# boundaries of curve-bounded planes (#255).
-axiolid-mesh-compile = "0.3.13"
+# boundaries of curve-bounded planes (#255); 0.3.14 reports a warped face's
+# slab width as certified (#257, #261), triangulates planar and B-rep faces
+# with the certified clipper (#260) and sweeps along elevated directrices
+# (#252).
+axiolid-mesh-compile = "0.3.14"
 axiolid-exact-compile-contract = "0.3.1"
 axiolid-mesh-compile-contract = "0.3.1"
 # 0.3.4 declares its scratch as a true upper bound on a thread pool (#226).

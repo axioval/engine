@@ -169,6 +169,34 @@ All notable changes are documented here. This project follows Semantic Versionin
   composite or trimmed curve are meshed and measured (#255, closes #214).
   The engine sets no memory budget, so boolmesh's per-worker scratch bound
   (#226) changes nothing here.
+- Moved to `axiolid-mesh-compile` 0.3.14, `axiolid-construct` 0.3.15,
+  `axiolid-evaluate` 0.3.6 and `axiolid-reference` 0.3.7 (all additive).
+  A warped authored face, a polygon face set's or a faceted B-rep's (a face
+  given only by its loops), is now reported by the mesh compiler as the
+  width of the slab its corners span about its fit plane (#257, #261),
+  which covers every reading of the face: a quad with one corner lifted
+  5 cm is declared within about 2.5 cm, the gap between its two
+  triangulations, and a saddle with corners at `±h` within `2 h`. The CLI
+  declares that reported bound instead of computing twice the largest
+  corner distance itself; a warped face under a boolean still leaves the
+  body unmeasured, since the compiler bounds no boolean of a polygon mesh
+  or B-rep. Planar faces and B-rep faces are triangulated by the kernel's
+  certified ear clipper instead of earcut (#260): triangle sets differ,
+  areas, closure and deviations do not, and rings that bound no region
+  (folding back, crossing by rounding, overlapping trims), which earcut
+  covered partly without a word, are refused by name, so such a body is
+  unmeasured with the reason. A ring touching another at a vertex is
+  accepted in a face (#262); where the touching vertex lies inside a
+  neighbouring face's edge the mesh keeps a T-junction there, and the mesh
+  audit every service reads then counts the body an open surface, never a
+  closed solid. A disk swept along an `IfcGradientCurve` (an elevated
+  directrix) is built and certified against the exact tube (#252), so such
+  a pipe is measured. Plan regions are unchanged: the engine never hands
+  overlay output to the kernel's ring triangulator, whose plain
+  `triangulate` now refuses pinched rings (#253), and free floor and
+  unallocated floor whose pieces touch at a point are measured (tests pin
+  two rooms meeting at a corner, an L round a column and a corridor
+  narrowed to a point).
 
 - The IFC crates move to `openbim-ifc` 0.13, `ifc-geometry` 0.8,
   `ifc-alignment` 0.6, `ifc-spatial` 0.5, `ifc-properties` 0.8,
@@ -179,9 +207,8 @@ All notable changes are documented here. This project follows Semantic Versionin
   read as before, and a release whose table were not linked would be
   refused with its reason. `CUBIC` transitions and vertical circular arcs
   and clothoids of IFC4X3 alignments now lower exactly instead of being
-  refused by name; a solid swept along such a gradient curve stays
-  unmeasured, now with the mesh compiler's reason, since the reference
-  compiler does not yet sweep along an elevated directrix.
+  refused by name; a solid swept along such a gradient curve is measured
+  since `axiolid-mesh-compile` 0.3.14 (above).
 - `axioval-ids` and the CLI read and write IDS with `openbim-ids` 0.2.0.
   Its reader and writer are unchanged, so translation, export and the
   conformance corpus are too. Its new `audit` feature is left off: it
@@ -1007,14 +1034,12 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 - A faceted B-rep or polygon face set whose authored faces leave their
   plane by more than the 1 mm tolerance is no longer declared exact (#213).
-  The mesh compiler reports a faceted B-rep face planar however warped,
-  and since `axiolid-mesh-compile` 0.3.13 triangulates a warped polygon
-  mesh face instead of refusing it (axiolid/kernel#254). With `--geometry`
-  such a body is tessellated and declared within twice the largest warp of
-  its faces (a corner's distance from the face's fit plane, scaled by its
-  placement), since two readings of a warped face, such as a quad's two
-  diagonals, lie up to twice its warp apart; a body in which such a face is
-  an operand of a boolean is unmeasured, with the reason.
+  With `--geometry` such a body is tessellated and declared within the
+  width of the slab the warped face's corners span about its fit plane,
+  which `axiolid-mesh-compile` 0.3.14 reports for polygon mesh and faceted
+  B-rep faces alike (axiolid/kernel#254, #257, #261) and which holds every
+  reading of the face, such as a quad's two triangulations; a body in which
+  such a face is an operand of a boolean is unmeasured, with the reason.
 - Clash and containment pairs between two meshed bodies are no longer left
   unmeasured when the plan overlay refuses a sliver of their footprints
   (#210), the most frequent not-evaluated case of the inventory. The

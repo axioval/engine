@@ -520,6 +520,37 @@ fn an_open_surface_has_no_intersection_volume() {
     );
 }
 
+/// A box whose top face is split at a point inside an edge the right face
+/// keeps whole: a T-junction, as a B-rep face with a ring touching another
+/// ring's edge can leave since axiolid-mesh-compile 0.3.14 (#262). The
+/// shell looks closed but its mesh is not, so it is measured as a
+/// surface: it encloses no volume to share.
+#[test]
+fn a_box_with_a_t_junction_is_no_closed_solid() {
+    let mut box_ = cuboid([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
+    box_.positions.push(Point3::new(1.0, 0.5, 1.0));
+    // The top's first triangle (4, 5, 6) becomes (4, 5, 8) and (4, 8, 6).
+    let top = 6;
+    box_.indices.splice(top..top + 3, [4, 5, 8, 4, 8, 6]);
+    let slab = || cuboid([0.5, 0.0, 0.5], [2.0, 1.0, 2.0]);
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("slab"), slab())
+        .with_mesh(id("box"), box_);
+    assert!(
+        measure(geometry, "box", "slab")
+            .intersection_volume()
+            .is_none()
+    );
+    // The same box closed shares a quarter of its volume.
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("slab"), slab())
+        .with_mesh(id("box"), cuboid([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]));
+    let volume = measure(geometry, "box", "slab")
+        .intersection_volume()
+        .unwrap();
+    assert_volume(volume.shared(), 0.25);
+}
+
 /// A tessellated column's volumes widen by the band within its chord
 /// deviation, so the true cylinder's volumes lie inside.
 #[test]

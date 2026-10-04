@@ -865,3 +865,31 @@ fn an_unmeasured_requested_element_makes_boundary_and_overlaps_unavailable() {
         Err(blocked(SpaceAspect::Overlaps, &["wall"]))
     );
 }
+
+/// Two rooms meeting at one corner leave floor whose two pieces touch at
+/// that corner (axiolid/kernel#253, #262): it is measured, never refused.
+#[test]
+fn unallocated_floor_pinched_at_a_corner_is_measured() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("floor"), body(0.0, 10.0, 0.0, 10.0, 0.0, 0.2))
+        .with_mesh(id("a"), body(0.0, 5.0, 0.0, 5.0, 0.2, 3.0))
+        .with_mesh(id("b"), body(5.0, 10.0, 5.0, 10.0, 0.2, 3.0));
+    let service = AxiolidSpaceService::new(geometry, source())
+        .with_slab(id("floor"))
+        .with_storey(id("floor"), id("level-0"))
+        .with_space(id("a"))
+        .with_storey(id("a"), id("level-0"))
+        .with_space(id("b"))
+        .with_storey(id("b"), id("level-0"));
+    let regions = service.measure_unallocated_regions().expect("measurable");
+    let areas: Vec<f64> = regions
+        .iter()
+        .map(axioval_engine::UnallocatedRegion::area_square_metres)
+        .collect();
+    // The two pieces are two regions: a point joins nothing.
+    assert_eq!(areas.len(), 2, "{areas:?}");
+    assert!(
+        areas.iter().all(|area| (area - 25.0).abs() < 1e-6),
+        "{areas:?}"
+    );
+}

@@ -114,8 +114,9 @@ had hidden.
 
 Cases 3 and 5 are resolved upstream (`axiolid-mesh-compile` 0.3.13). A
 warped authored face is now meshed, and the body is tessellated within
-twice the face's warp (#213, axiolid/kernel#254), or unmeasured when the
-face is an operand of a boolean. A curve-bounded plane bounded by a
+the width of the slab the face's corners span about its fit plane, which
+`axiolid-mesh-compile` 0.3.14 reports (#213, axiolid/kernel#254, #257,
+#261), or unmeasured when the face is an operand of a boolean. A curve-bounded plane bounded by a
 composite or trimmed curve is meshed too (#214, axiolid/kernel#255).
 
 Cases not observed on this corpus are listed with their capability (see

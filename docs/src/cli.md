@@ -913,7 +913,7 @@ states:
 | State | Meaning | Effect on geometric rules |
 |---|---|---|
 | exact | every face is planar (polygonal extrusions, including steel sections without fillets or rounded edges, faceted B-reps and polygon meshes whose faces keep within 1 mm of their planes, booleans of these and clips by half-spaces, bounded by a polygon or not), so the mesh is the shape; a whole measured through its parts when every part is exact | measured as exact |
-| tessellated | some face is curved, or an authored polygon face is warped more than 1 mm off its plane; the mesh is within the deviation the mesh compiler certifies for it (the 1 mm chord budget, or the bound it computed), and within twice a warped face's warp; a whole measured through its parts when some part is tessellated, within the largest deviation of its parts | measured as approximate, never exact |
+| tessellated | some face is curved, or an authored polygon face is warped more than 1 mm off its plane; the mesh is within the deviation the mesh compiler certifies for it (the 1 mm chord budget, or the bound it computed), and within the reported slab width of a warped face; a whole measured through its parts when some part is tessellated, within the largest deviation of its parts | measured as approximate, never exact |
 | no body | the object occupies no material: spatial structure, openings, annotations, grids, ports, structural analysis items, non-products | ignored as an obstacle |
 | unmeasured | a physical product that could not be meshed: one without a Body representation and without parts (`no body representation`), a whole one of whose parts is unmeasured, or a curved one whose mesh the compiler certifies no deviation for | measurements it could affect are not evaluated; with a bound (below), space measurements it cannot reach are evaluated |
 
@@ -1007,20 +1007,33 @@ is meshed since the same release (axiolid/kernel#255) and measured.
 `IfcPolygonalFaceSet` whose corners leave its plane by more than the
 1 mm tolerance has no single true surface: the two triangulations of a
 warped quad, a bilinear patch and the face flattened onto its plane are
-all readings of it. The mesh compiler triangulates such a face
-(axiolid/kernel#254) and reports a polygon mesh face's warp `w`, the
-largest distance of a corner from the face's fit plane, but reports a
-faceted B-rep face planar whatever its corners. The bridge therefore
-computes `w` itself for both kinds, as the compiler does (the outer
-ring's centroid and Newell normal), scaled by each placement's stretch,
-and declares the body tessellated within `2 w`: every reading through
-the face's corners lies within their spread across the fit plane, which
-reaches `2 w` (a quad with one corner lifted 5 cm has `w` of 1.25 cm,
-and its two diagonals' triangulations lie 2.5 cm apart at its centre).
-A warped face never makes a body exact, and a body in which one is an
-operand of a boolean (a faceted wall with openings) is unmeasured, since
-nothing bounds how far the boolean's result lies from its mesh. Faces
-within 1 mm of their plane count as planar, as the compiler counts them.
+all readings of it. The mesh compiler triangulates such a face in its fit
+plane (the outer ring's centroid and Newell normal) and reports, for
+polygon mesh faces and faceted B-rep faces alike, the width of the slab
+its corners (holes included) span about that plane (axiolid/kernel#254,
+#257, #261), scaled by each placement's stretch. Every reading lies in
+that slab, so the body is declared tessellated within the reported
+width: a quad with one corner lifted 5 cm within about 2.5 cm, the gap
+between its two triangulations at its centre, a saddle with corners at
+`±h` within `2 h`. A warped face never makes a body exact, and a body in
+which one is an operand of a boolean (a faceted wall with openings) is
+unmeasured, since the compiler bounds no boolean of a polygon mesh or
+B-rep and nothing else bounds how far the boolean's result lies from its
+mesh. Faces within 1 mm of their plane count as planar, as the compiler
+counts them.
+
+**Face triangulation.** Planar faces, faceted B-rep faces and curved
+faces' parameter domains are triangulated by the kernel's certified ear
+clipper (axiolid/kernel#260), which proves its triangles tile the face
+exactly once. Rings that bound no region (a spike folding back, rings
+crossing after rounding, overlapping trims), which the earlier
+triangulator covered partly without a word, are refused by name, and the
+body is unmeasured with the reason. Rings touching at a single point
+bound a valid face and are accepted (#262). Where such a point lies
+inside an edge another face shares, that face keeps the edge whole and
+the mesh has a T-junction; the mesh audit then finds the edge open, so
+the body is measured as an open surface (no volume, no containment
+inside it), never as a closed solid.
 A disk swept round a
 polyline corner without a fillet radius is mitred at half angle, as
 `IfcSweptDiskSolid` defines it, and certified within the budget
@@ -1064,9 +1077,10 @@ IFC4X3 geometry families are lowered by `ifc-geometry` (0.8) or refused by
 name: alignment curves, gradient curves, open cross profiles and
 `IfcTriangulatedIrregularNetwork` terrains are measured. `CUBIC` transitions
 and vertical circular arcs and clothoids lower exactly (openbimrs/ifc#90,
-#258); a solid swept along a gradient curve is still unmeasured, with the
-mesh compiler's reason, since the reference compiler does not yet sweep
-along an elevated directrix. An
+#258), and a disk swept along a gradient curve is measured within the
+deviation the mesh compiler certifies against the exact tube
+(axiolid/kernel#252); a gradient whose grade breaks inside the sweep is
+unbounded by name and leaves its object unmeasured. An
 `IfcSectionedSolidHorizontal`, an `IfcSectionedSurface`, an
 `IfcSegmentedReferenceCurve` and the distance-along-curve families leave
 their object unmeasured with the lowering's stated reason. The bridge reads

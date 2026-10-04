@@ -599,29 +599,40 @@ registry source, not the kernel checkout, before relying on an API.
   disk radius (a horn torus), a mitre reaching past its leg. The exact
   compiler (and so `exact_boundary`) still refuses directrices with
   corners.
-- Sweeps along an `IfcGradientCurve` (axiolid/kernel#252) are not yet
-  built by the kernel.
-- Warped authored faces (axiolid/kernel#254, engine#213): the mesh compiler
-  triangulates a polygon mesh face off its plane and reports `w`, its
-  largest corner distance from the fit plane; two readings of such a face
-  can lie `2 w` apart, so hosts declare `2 w` until the kernel reports the
-  spread itself (asked upstream). A B-rep face given only by its loops is
-  still reported planar (`Proven(0)`) however warped, so the host computes
-  the warp of those faces too (`axioval-cli`'s `warp`).
-- Rings touching at a single vertex will be refused by the overlay
-  (axiolid/kernel#253, after axiolid-overlay 0.3.10). Sites built from
-  single triangles, convex pieces or fixed n-gons cannot build them; sites
-  that hand overlay output back as input can (two footprints meeting at a
-  corner, a hole touching the outer ring, eroded pieces): `space.rs`
-  (`measure_cap_coverage`, `measure_unallocated_regions`),
-  `free_space.rs` (`measure_free_area`), `plan_span.rs`
-  (`measure_section`), `envelope_membership.rs` (`covered_region`),
-  `linear_quantity.rs`, `elevation.rs` (`within`), `walkable.rs`'s `Plan`
-  operations and their callers (walkability, metric routing, weighted
-  travel, adjacent-across), and every `Region::new` over overlay output
-  (`placement.rs` `union`/`footprint`, `boundary_coverage.rs`,
-  `coverage.rs`, `circulation.rs` `piece` and `reached`,
-  `walkability.rs` `split_region`). Check each against the release.
+- Sweeps along an `IfcGradientCurve` (axiolid/kernel#252) are built and
+  certified by mesh-compile 0.3.14; a grade break inside the sweep is
+  unbounded by name. `exact_boundary` builds one only where
+  `exact_directrix` reads a segment or an arc.
+- Warped authored faces (axiolid/kernel#254, #257, #261, engine#213):
+  since mesh-compile 0.3.14 the compiler reports polygon mesh faces and
+  B-rep faces without a surface by the slab width of their corners about
+  the fit plane, which hosts declare as returned. A boolean with such an
+  operand is still unbounded (the exact compiler refuses polygon meshes
+  and B-reps), so the host refuses a body with a warped face under a
+  boolean.
+- Faces are triangulated by the certified clipper (#260) under
+  `PinchPolicy::Accept` (#262). A face ring touching another ring inside
+  an edge a neighbouring face shares leaves a T-junction in that face; the
+  mesh audit reads the edge as open, so such a body is a surface here,
+  never a closed solid (`tests/proximity.rs`). Asked upstream: insert the
+  touching vertex into the neighbour's edge too, so the shell closes.
+- Pinched rings (axiolid/kernel#253, #262): axiolid-construct 0.3.15's
+  plain `triangulate` and the extrusions refuse rings touching at a single
+  point; `profile::triangulate_with(rings, PinchPolicy::Accept)` takes
+  them for regions and surfaces. Nothing here hands overlay output to the
+  construct triangulator: `space.rs`, `free_space.rs`, `plan_span.rs`,
+  `envelope_membership.rs`, `linear_quantity.rs`, `elevation.rs`,
+  `walkable.rs`, `circulation.rs` and every `Region::new` work through
+  axiolid-overlay 0.3.10 (which accepts touching rings), axiolid-measure
+  and axiolid-route with axiolid-triangulate, none of which depends on
+  axiolid-construct (`cargo tree -i axiolid-construct`), and
+  `exact_boundary.rs` extrudes only lowered profiles, which are solids and
+  rightly refuse. Any future site that triangulates a region
+  through `axiolid-construct` must use `PinchPolicy::Accept`.
+  `tests/space.rs` (two rooms meeting at a corner, two regions of 25 m²)
+  and `tests/free_space.rs` (an L round a column, a corridor narrowed to a
+  point) pin it. Should a later overlay refuse touching rings too, check
+  each site above against that release.
 - Bodies of several items (axiolid/kernel#229): items under openings are
   cut part by part in world coordinates by the host's lowering, so a turned
   wall of several parts touches on planes no axis is normal to and keeps

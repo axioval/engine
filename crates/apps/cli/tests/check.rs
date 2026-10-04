@@ -1738,8 +1738,8 @@ fn a_real_without_a_decimal_point_is_read_and_reported_as_an_integrity_warning()
 /// written as an `IfcTriangulatedIrregularNetwork` is measured, an
 /// `IfcSectionedSolidHorizontal`, which has no neutral sweep over stations
 /// along an alignment, is unmeasured with that reason, and a pipe swept along
-/// a gradient curve with a vertical arc lowers but is unmeasured with the
-/// compiler's reason; none is dropped.
+/// a gradient curve with a vertical arc is measured within a certified
+/// deviation; none is dropped.
 #[test]
 fn with_geometry_ifc4x3_families_are_measured_or_unmeasured_by_name() {
     let case = Case::new("geometry-ifc4x3");
@@ -1760,8 +1760,8 @@ fn with_geometry_ifc4x3_families_are_measured_or_unmeasured_by_name() {
              #62=IFCVECTOR(#61,1.);\n\
              #63=IFCLINE(#60,#62);\n\
              #64=IFCAXIS2PLACEMENT2D(#60,#61);\n\
-             #65=IFCCURVESEGMENT(.CONTINUOUS.,#64,IFCLENGTHMEASURE(0.),IFCLENGTHMEASURE(150.),#63);\n\
-             #66=IFCCARTESIANPOINT((150.,0.));\n\
+             #65=IFCCURVESEGMENT(.CONTINUOUS.,#64,IFCLENGTHMEASURE(0.),IFCLENGTHMEASURE(15.),#63);\n\
+             #66=IFCCARTESIANPOINT((15.,0.));\n\
              #67=IFCAXIS2PLACEMENT2D(#66,#61);\n\
              #68=IFCCURVESEGMENT(.CONTINUOUS.,#67,IFCLENGTHMEASURE(0.),IFCLENGTHMEASURE(0.),#63);\n\
              #69=IFCCOMPOSITECURVE((#65,#68),.F.);\n\
@@ -1769,9 +1769,9 @@ fn with_geometry_ifc4x3_families_are_measured_or_unmeasured_by_name() {
              #71=IFCCARTESIANPOINT((0.,10.));\n\
              #72=IFCDIRECTION((0.9998000599800071,-0.01999600119960014));\n\
              #73=IFCAXIS2PLACEMENT2D(#71,#72);\n\
-             #74=IFCCURVESEGMENT(.CONTINUOUS.,#73,IFCLENGTHMEASURE(0.),IFCLENGTHMEASURE(150.3703467020344),#70);\n\
-             #75=IFCCARTESIANPOINT((150.,18.286590431607237));\n\
-             #76=IFCDIRECTION((1.,0.13111672487879786));\n\
+             #74=IFCCURVESEGMENT(.CONTINUOUS.,#73,IFCLENGTHMEASURE(0.),IFCLENGTHMEASURE(15.001311989928656),#70);\n\
+             #75=IFCCARTESIANPOINT((15.,9.812540071876587));\n\
+             #76=IFCDIRECTION((1.,-0.00499606355093224));\n\
              #77=IFCAXIS2PLACEMENT2D(#75,#76);\n\
              #78=IFCCURVESEGMENT(.CONTINUOUS.,#77,IFCLENGTHMEASURE(0.),IFCLENGTHMEASURE(0.),#63);\n\
              #79=IFCGRADIENTCURVE((#74,#78),.F.,#69,$);\n\
@@ -1816,17 +1816,19 @@ fn with_geometry_ifc4x3_families_are_measured_or_unmeasured_by_name() {
         "{sectioned}"
     );
     // The pipe's directrix is an `IfcGradientCurve` whose profile is a
-    // vertical circular arc. Since ifc-geometry 0.8 that arc lowers exactly
-    // instead of being refused by name; the reference compiler does not yet
-    // sweep along an elevated directrix, so the pipe stays unmeasured with
-    // the compiler's reason, never dropped.
-    let pipe = reason("#83");
+    // vertical circular arc. Since ifc-geometry 0.8 that arc lowers exactly,
+    // and since axiolid-mesh-compile 0.3.14 (axiolid/kernel#252) the disk
+    // swept along it is certified against the exact tube, so the pipe is
+    // measured as tessellated. The run is 15 m: the certificate's search
+    // grows with the tube's length, and 150 m took minutes in a debug
+    // build.
+    assert_eq!(geometry["tessellated"], 1, "{geometry:#}");
     assert!(
-        pipe.starts_with("mesh compilation refused") && pipe.contains("CurveEvaluation"),
-        "{pipe}"
+        !geometry["unmeasured"].to_string().contains("\"#83\""),
+        "{geometry:#}"
     );
     assert_eq!(reason("#30"), "no body representation");
-    assert_eq!(unmeasured.len(), 3, "{geometry:#}");
+    assert_eq!(unmeasured.len(), 2, "{geometry:#}");
 }
 
 /// The crossing walls with `extra` entities added to the model.
@@ -16122,10 +16124,11 @@ fn a_swept_disk_round_an_unfilleted_corner_is_certified() {
 }
 
 /// A wall #69 as an `IfcFacetedBrep`, the unit box at x 10 with its
-/// corner (11, 1, 1) lifted 5 cm, so the three faces meeting there are
-/// warped quads (axiolid/kernel#254). The mesh compiler reports a faceted
-/// face planar whatever its corners, so the bridge measures the warp
-/// itself and declares the mesh within twice it: the wall is measured as
+/// corner (11, 1, 1) lifted 5 cm, so its top face is a
+/// warped quad (the side faces keep their corners in their planes;
+/// axiolid/kernel#254). The mesh compiler reports a faceted
+/// face without a surface by the slab width of its corners (#257, #261),
+/// and the bridge declares the mesh within it: the wall is measured as
 /// tessellated, never exact, and never unmeasured.
 #[test]
 fn a_faceted_body_with_a_warped_face_is_tessellated() {

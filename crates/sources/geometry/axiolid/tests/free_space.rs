@@ -603,3 +603,64 @@ fn an_open_or_inward_obstacle_near_the_volume_refuses() {
         ));
     }
 }
+
+/// A prism over the triangle `corners` from `z0` to `z1`, its top and
+/// bottom only, as `body` builds a box.
+fn wedge(corners: [(f64, f64); 3], z0: f64, z1: f64) -> TriMesh {
+    let mut positions: Vec<Point3> = corners
+        .iter()
+        .map(|&(x, y)| Point3::new(x, y, z0))
+        .collect();
+    positions.extend(corners.iter().map(|&(x, y)| Point3::new(x, y, z1)));
+    TriMesh::new(positions, vec![0, 1, 2, 3, 4, 5])
+}
+
+/// The free area of `room` less `obstacles`.
+fn free_area(room: TriMesh, obstacles: Vec<(&str, TriMesh)>) -> f64 {
+    let names = obstacles.iter().map(|(name, _)| id(name)).collect();
+    let mut geometry = AxiolidGeometry::new().with_mesh(id("room"), room);
+    for (name, mesh) in obstacles {
+        geometry = geometry.with_mesh(id(name), mesh);
+    }
+    let service = AxiolidFreeSpaceService::new(geometry, source());
+    let request = FreeAreaRequest::new(id("room"), profile(), names);
+    service
+        .measure_free_area(&request)
+        .expect("measurable")
+        .available_area()
+        .upper_square_metres()
+}
+
+/// Free floor whose pieces touch at single points is measured, never
+/// refused (axiolid/kernel#253, #262: rings touching at a vertex bound a
+/// valid region; only a solid's cap refuses them): an L-shaped room
+/// wrapped round a column's corner, and a corridor narrowed to a point.
+#[test]
+fn free_floor_pinched_at_a_point_is_measured() {
+    // A 3 m square room less a column at its corner and the column's
+    // diagonal neighbour: the free floor touches itself at (2, 2).
+    let area = free_area(
+        body(0.0, 3.0, 0.0, 3.0, 0.0, 0.1),
+        vec![
+            ("column", body(2.0, 3.0, 2.0, 3.0, 0.0, 3.0)),
+            ("pier", body(1.0, 2.0, 1.0, 2.0, 0.0, 3.0)),
+        ],
+    );
+    assert!((area - 7.0).abs() < 1e-6, "got {area}");
+    // A 6 x 2 corridor narrowed to nothing at (3, 1) by two wedges: two
+    // lobes of 5 m2 joined at one point.
+    let area = free_area(
+        body(0.0, 6.0, 0.0, 2.0, 0.0, 0.1),
+        vec![
+            (
+                "south",
+                wedge([(2.0, 0.0), (4.0, 0.0), (3.0, 1.0)], 0.0, 1.0),
+            ),
+            (
+                "north",
+                wedge([(4.0, 2.0), (2.0, 2.0), (3.0, 1.0)], 0.0, 1.0),
+            ),
+        ],
+    );
+    assert!((area - 10.0).abs() < 1e-6, "got {area}");
+}

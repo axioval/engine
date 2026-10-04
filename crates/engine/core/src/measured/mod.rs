@@ -21,6 +21,12 @@ use axioval_ir::{
     PropertyValue, QuantityDimension,
 };
 
+mod surface;
+
+use axioval_ir::measured::{
+    CROSS_FALL, GRADIENT_DIRECTION, INCLINATION, MeasuredCall, SLOPE, SLOPE_ALONG,
+};
+
 use crate::ServiceRegistry;
 use crate::boundary_coverage::{
     BoundaryCoverageRequest, BoundaryCoverageServiceHandle, BoundaryPlacement,
@@ -38,7 +44,7 @@ use crate::proximity::ProximityServiceHandle;
 use crate::relationships::{
     AbsentEndPolicy, RelationshipSelectionError, RelationshipSelectionServiceHandle,
 };
-use crate::vertical_extent::VerticalExtentServiceHandle;
+use crate::vertical_extent::{SurfaceFace, VerticalExtentServiceHandle};
 
 /// A measured name, parsed.
 #[derive(Clone, Debug, PartialEq)]
@@ -49,6 +55,8 @@ pub(crate) enum MeasuredName {
     BottomAboveLevel(Vec<PathSegment>),
     /// The summed area of the space boundaries against elements of `kind`.
     BoundaryArea { kind: String, plane: f64 },
+    /// A slope, fall or tilt, measured from a face's normals or an axis.
+    Surface(MeasuredCall),
 }
 
 /// Parses a name in the measured set through the registry
@@ -79,6 +87,9 @@ pub(crate) fn parse(name: &str) -> Result<MeasuredName, String> {
                 kind: kind.clone(),
                 plane: *plane,
             }
+        }
+        SLOPE | SLOPE_ALONG | CROSS_FALL | INCLINATION | GRADIENT_DIRECTION => {
+            MeasuredName::Surface(call)
         }
         name if call.descriptor.parameters.is_empty() => MeasuredName::Plain(name),
         name => return Err(format!("`{name}` is registered but not measured")),
@@ -215,6 +226,7 @@ impl Measures {
             MeasuredName::Plain(name) => self.plain(name, object),
             MeasuredName::BottomAboveLevel(steps) => self.bottom_above_level(steps, object),
             MeasuredName::BoundaryArea { kind, plane } => self.boundary_area(kind, *plane, object),
+            MeasuredName::Surface(call) => self.surface(call, object),
         }
     }
 
@@ -308,12 +320,12 @@ impl Measures {
         }
     }
 
-    /// The world coordinates of `object`'s placement origin, stated exactly.
-    fn origin(
+    /// `object`'s placement frame, stated exactly, and its locator.
+    fn frame(
         &self,
         name: &str,
         object: &ObjectId,
-    ) -> Result<([f64; 3], String), PropertyResolutionError> {
+    ) -> Result<(crate::free_space::MetricFrame, String), PropertyResolutionError> {
         let frame = self
             .frames
             .as_ref()
@@ -327,10 +339,81 @@ impl Measures {
                 "its placement is not stated exactly",
             ));
         }
-        Ok((
-            frame.frame().origin().coordinates_metres(),
-            frame.evidence().locator.clone(),
-        ))
+        Ok((frame.frame().clone(), frame.evidence().locator.clone()))
+    }
+
+    /// The world coordinates of `object`'s placement origin, stated exactly.
+    fn origin(
+        &self,
+        name: &str,
+        object: &ObjectId,
+    ) -> Result<([f64; 3], String), PropertyResolutionError> {
+        let (frame, locator) = self.frame(name, object)?;
+        Ok((frame.origin().coordinates_metres(), locator))
+    }
+
+    /// A slope, fall or tilt of `object`, as an angle.
+    fn surface(
+        &self,
+        call: &MeasuredCall,
+        object: &ObjectId,
+    ) -> Result<Answer, PropertyResolutionError> {
+        let name = call.name();
+        let unavailable = |error: String| Self::unavailable(name, object, &error);
+        let angle = |value: crate::expression::Interval, locator: String| {
+            Answer::Value(
+                value.lower,
+                value.upper,
+                QuantityDimension::PlaneAngle,
+                locator,
+            )
+        };
+        if name == INCLINATION {
+            let (frame, locator) = self.frame(name, object)?;
+            let (axis, from_vertical) = match call.choice("axis") {
+                Some("own_x") => (frame.right(), false),
+                Some("own_y") => (frame.forward(), false),
+                _ => (frame.up(), true),
+            };
+            let tilt = surface::inclination(axis, from_vertical).map_err(unavailable)?;
+            return Ok(angle(tilt, locator));
+        }
+        let face = match call.choice("face") {
+            Some("bottom") => SurfaceFace::Bottom,
+            _ => SurfaceFace::Top,
+        };
+        let normals = self
+            .vertical
+            .as_ref()
+            .ok_or_else(|| Self::missing(name, "vertical-extent"))?
+            .measure_face_normals(object, face)
+            .map_err(|error| unavailable(error.to_string()))?;
+        let pieces = normals.normals();
+        let value = match name {
+            SLOPE => surface::slope(pieces),
+            GRADIENT_DIRECTION => surface::gradient_direction(pieces),
+            _ => {
+                let key = if name == SLOPE_ALONG {
+                    "direction"
+                } else {
+                    "axis"
+                };
+                let direction = match call.choice(key) {
+                    Some("x") => [1.0, 0.0, 0.0],
+                    Some("y") => [0.0, 1.0, 0.0],
+                    Some("own_y") => self.frame(name, object)?.0.forward().components(),
+                    _ => self.frame(name, object)?.0.right().components(),
+                };
+                let direction = surface::PlanDirection::of(direction).map_err(unavailable)?;
+                if name == SLOPE_ALONG {
+                    surface::slope_along(pieces, direction)
+                } else {
+                    surface::cross_fall(pieces, direction)
+                }
+            }
+        }
+        .map_err(unavailable)?;
+        Ok(angle(value, normals.evidence().locator.clone()))
     }
 
     /// The object's bottom above the elevation of the one level `steps`

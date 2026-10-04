@@ -14,8 +14,8 @@
 use axiolid_core::Tolerance;
 use axiolid_mesh::audit_mesh;
 use axioval_engine::{
-    DirectionalExtent, ElevationInterval, MetricDirection, VerticalExtent, VerticalExtentError,
-    VerticalExtentService,
+    DirectionalExtent, ElevationInterval, FaceNormals, MetricDirection, SurfaceFace,
+    VerticalExtent, VerticalExtentError, VerticalExtentService,
 };
 use axioval_ir::{Evidence, ObjectId};
 
@@ -44,6 +44,8 @@ impl AxiolidVerticalExtentService {
 struct Body {
     soup: Vec<Triangle>,
     tessellation: Option<f64>,
+    /// Whether the mesh closes a volume, so its faces have an outside.
+    closed: bool,
 }
 
 impl AxiolidVerticalExtentService {
@@ -73,7 +75,8 @@ impl AxiolidVerticalExtentService {
         // Only positions a triangle uses belong to the body; a mesh with bad
         // indices or non-finite positions has no trustworthy extent.
         let soup = triangles(mesh);
-        if soup.is_empty() || !audit_mesh(mesh, tolerance).is_surface_usable() {
+        let health = audit_mesh(mesh, tolerance);
+        if soup.is_empty() || !health.is_surface_usable() {
             return Err(VerticalExtentError::Unavailable(format!(
                 "the mesh of {object} cannot be measured"
             )));
@@ -84,7 +87,11 @@ impl AxiolidVerticalExtentService {
             .map_err(|_| VerticalExtentError::InvalidMeasurement)?;
         // A tessellation is never exact, even with a zero declared deviation.
         let tessellation = (!fidelity.is_exact()).then(|| fidelity.deviation_metres());
-        Ok(Body { soup, tessellation })
+        Ok(Body {
+            soup,
+            tessellation,
+            closed: health.is_closed_two_manifold(),
+        })
     }
 }
 
@@ -106,7 +113,9 @@ impl VerticalExtentService for AxiolidVerticalExtentService {
         &self,
         object: &ObjectId,
     ) -> Result<VerticalExtent, VerticalExtentError> {
-        let Body { soup, tessellation } = self.body(object)?;
+        let Body {
+            soup, tessellation, ..
+        } = self.body(object)?;
         let (bottom, top) =
             soup.iter()
                 .flatten()
@@ -143,7 +152,9 @@ impl VerticalExtentService for AxiolidVerticalExtentService {
         object: &ObjectId,
         direction: MetricDirection,
     ) -> Result<DirectionalExtent, VerticalExtentError> {
-        let Body { soup, tessellation } = self.body(object)?;
+        let Body {
+            soup, tessellation, ..
+        } = self.body(object)?;
         let axis = direction.components();
         // A unit direction with one non-zero component is exactly a
         // coordinate axis: its products and sums are exact.
@@ -195,5 +206,19 @@ impl VerticalExtentService for AxiolidVerticalExtentService {
             widen(highest)?,
             evidence,
         )
+    }
+
+    /// The normals of the face's triangles; see [`crate::face_normals`].
+    fn measure_face_normals(
+        &self,
+        object: &ObjectId,
+        face: SurfaceFace,
+    ) -> Result<FaceNormals, VerticalExtentError> {
+        let Body {
+            soup,
+            tessellation,
+            closed,
+        } = self.body(object)?;
+        crate::face_normals::measure(object, face, &soup, tessellation, closed)
     }
 }

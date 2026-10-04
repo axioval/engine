@@ -367,10 +367,15 @@ ignoring ASCII case):
 | `bottom_above_level;path=<steps>` | its bottom above the one level the path reaches | `RelationshipSelectionService`, `ObjectFrameService`, `VerticalExtentService` |
 | `boundary_area;kind=<kind>[;plane=<m>]` | a space's summed boundary area against elements of one kind | `BoundaryCoverageService`, `TypeHierarchyService` |
 | `level_height` | a storey's height to the next storey, a length | the source's property resolver |
+| `slope[;face=top\|bottom]` | a face's steepest gradient, an angle | `VerticalExtentService::measure_face_normals` |
+| `slope_along;direction=x\|y\|own_x\|own_y[;face=…]` | a face's signed gradient in a plan direction, an angle | `VerticalExtentService::measure_face_normals`, `ObjectFrameService` for own axes |
+| `cross_fall;axis=x\|y\|own_x\|own_y[;face=…]` | a face's unsigned gradient across a plan axis, an angle | as `slope_along` |
+| `gradient_direction[;face=…]` | the plan bearing of a face's steepest descent, an angle | `VerticalExtentService::measure_face_normals` |
+| `inclination;axis=own_x\|own_y\|own_z` | the tilt of one of the placement's axes, an angle | `ObjectFrameService` |
 
 ### Names with parameters
 
-Two names take `;`-separated `key=value` parameters, part of the property
+Several names take `;`-separated `key=value` parameters, part of the property
 name so that every selector, property reference and table key can carry
 them unchanged. Keys are matched ignoring ASCII case.
 
@@ -415,6 +420,49 @@ rule `r` reads measured value `boundary_area;kind=wall;depth=1`:
   policy names storeys. A boundary naming no element may be of the kind,
   so it leaves the space not evaluated, and so does a subtype question
   without a type-hierarchy service.
+
+### Slopes, falls and tilts
+
+The slope family measures a face of the body from the normals the
+vertical-extent service certifies for each planar piece of it
+(`FaceNormals`: a box per piece sure to hold its normal). `face=top`, the
+default, is the pieces looking up and `face=bottom` those looking down, on
+a closed body by its outward normal (a mesh wound inside out is read by the
+sign of its volume); an open surface, such as a terrain sheet, is both.
+Vertical sides belong to neither face.
+
+Every value is an angle, in radians, computed with the expression
+language's sound interval arithmetic, and is the hull over the face's
+pieces. A curved or warped face therefore gives the range of its slopes,
+never one triangle's. A level piece of exactly stated vertices has an exact
+zero slope, and `convertSlope` turns an angle into a ratio or percent.
+
+- `slope` is each piece's steepest gradient, in `[0, π/2)`.
+- `slope_along;direction=…` is the gradient along a plan direction, rising
+  positive: world `x` or `y`, or the object's own `own_x` or `own_y`
+  projected to plan.
+- `cross_fall;axis=…` is the magnitude of the gradient a quarter turn from
+  the axis.
+- `gradient_direction` is the compass bearing of steepest descent,
+  clockwise from plan north (the y axis); its interval's midpoint lies in
+  `[0, 2π)`, so a face descending about north may read `[-0.1, 0.1]`.
+- `inclination;axis=own_z` is the own z axis's tilt from the vertical;
+  `own_x` and `own_y` are measured from the horizontal, unsigned.
+
+A face that may stand vertical somewhere has no gradient there, and
+`gradient_direction` has no answer when a piece is level or the pieces
+descend more than a half turn apart: each leaves the object not
+evaluated, as does a body without the face asked for.
+
+On a mesh the pieces are its triangles. The Axiolid adapter boxes each
+cross product by a bound on its rounding, so exactly stated vertices give
+exact normals. A tessellated mesh lies within its chord deviation `d` of
+the true surface, so its normal over a triangle may lean by about `2d / h`
+for the triangle's least height `h`. Each box widens by that much, and a
+triangle too small for its deviation leaves the face unmeasured. On a
+ramp, the steepest piece of the top face is the run that
+`WalkingSurfaceService::measure_sloped_runs` measures, and the landings
+are level.
 
 ### Stated rather than measured
 

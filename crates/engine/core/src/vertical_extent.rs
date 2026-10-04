@@ -334,6 +334,144 @@ fn difference(minuend: f64, subtrahend: f64) -> (f64, f64) {
     }
 }
 
+/// Which face of a body a surface measurement reads.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SurfaceFace {
+    /// The faces looking up: on a closed body, those whose outward normal
+    /// points up; on an open surface, every face not vertical.
+    Top,
+    /// The faces looking down: on a closed body, those whose outward
+    /// normal points down; on an open surface, every face not vertical.
+    Bottom,
+}
+
+/// A box sure to hold a normal of one planar piece of a face, as an
+/// unnormalised vector `[x, y, z]`: each component lies in
+/// `[lower[i], upper[i]]`, all scaled alike.
+///
+/// A planar body's piece is its triangle, and the box only bounds the
+/// rounding of its cross product. A tessellated piece's box also holds every
+/// normal the true surface may have over it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FaceNormal {
+    lower: [f64; 3],
+    upper: [f64; 3],
+}
+
+impl FaceNormal {
+    /// The box `[lower, upper]`; every bound finite and ordered, and the box
+    /// clear of the zero vector.
+    ///
+    /// # Errors
+    ///
+    /// [`VerticalExtentError::InvalidMeasurement`] for a bound that is not
+    /// finite or not ordered, or a box holding the zero vector.
+    pub fn try_new(lower: [f64; 3], upper: [f64; 3]) -> Result<Self, VerticalExtentError> {
+        let valid = (0..3).all(|axis| {
+            lower[axis].is_finite() && upper[axis].is_finite() && lower[axis] <= upper[axis]
+        });
+        let holds_zero = (0..3).all(|axis| lower[axis] <= 0.0 && 0.0 <= upper[axis]);
+        if !valid || holds_zero {
+            return Err(VerticalExtentError::InvalidMeasurement);
+        }
+        Ok(Self { lower, upper })
+    }
+
+    /// The exactly known normal `vector`.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::try_new`].
+    pub fn exact(vector: [f64; 3]) -> Result<Self, VerticalExtentError> {
+        Self::try_new(vector, vector)
+    }
+
+    /// The least value of each component.
+    #[must_use]
+    pub fn lower(&self) -> [f64; 3] {
+        self.lower
+    }
+
+    /// The greatest value of each component.
+    #[must_use]
+    pub fn upper(&self) -> [f64; 3] {
+        self.upper
+    }
+
+    /// Whether the normal is known exactly.
+    #[must_use]
+    #[allow(clippy::float_cmp)]
+    pub fn is_exact(&self) -> bool {
+        self.lower == self.upper
+    }
+}
+
+/// The normals of every planar piece of one face of a body, with evidence.
+/// The face is the union of the pieces, so a measurement over the face is
+/// the hull of its measurement over each.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FaceNormals {
+    object: ObjectId,
+    face: SurfaceFace,
+    normals: Vec<FaceNormal>,
+    evidence: Evidence,
+}
+
+impl FaceNormals {
+    /// The normals of `object`'s `face`. A face has at least one piece, and
+    /// the evidence is exact exactly when every normal is.
+    ///
+    /// # Errors
+    ///
+    /// [`VerticalExtentError::InvalidMeasurement`] for a face without
+    /// pieces, [`VerticalExtentError::InexactEvidence`] for evidence that
+    /// does not match the normals.
+    pub fn try_new(
+        object: ObjectId,
+        face: SurfaceFace,
+        normals: Vec<FaceNormal>,
+        evidence: Evidence,
+    ) -> Result<Self, VerticalExtentError> {
+        if normals.is_empty() {
+            return Err(VerticalExtentError::InvalidMeasurement);
+        }
+        let exact = normals.iter().all(FaceNormal::is_exact);
+        if evidence.exact != exact || evidence.locator.trim().is_empty() {
+            return Err(VerticalExtentError::InexactEvidence);
+        }
+        Ok(Self {
+            object,
+            face,
+            normals,
+            evidence,
+        })
+    }
+
+    /// The measured object.
+    #[must_use]
+    pub fn object(&self) -> &ObjectId {
+        &self.object
+    }
+
+    /// The face measured.
+    #[must_use]
+    pub fn face(&self) -> SurfaceFace {
+        self.face
+    }
+
+    /// The normal of each piece of the face.
+    #[must_use]
+    pub fn normals(&self) -> &[FaceNormal] {
+        &self.normals
+    }
+
+    /// The source and exactness of the measurement.
+    #[must_use]
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
 /// Measures the vertical extents of model objects.
 pub trait VerticalExtentService: Send + Sync + 'static {
     /// The elevations of `object`'s lowest and highest points.
@@ -355,6 +493,20 @@ pub trait VerticalExtentService: Send + Sync + 'static {
         let _ = (object, direction);
         Err(VerticalExtentError::Unavailable(
             "this service measures vertical extents only".into(),
+        ))
+    }
+
+    /// The normals of the pieces of `object`'s `face`.
+    ///
+    /// A service that does not measure faces refuses.
+    fn measure_face_normals(
+        &self,
+        object: &ObjectId,
+        face: SurfaceFace,
+    ) -> Result<FaceNormals, VerticalExtentError> {
+        let _ = (object, face);
+        Err(VerticalExtentError::Unavailable(
+            "this service does not measure faces".into(),
         ))
     }
 }
@@ -396,6 +548,20 @@ impl VerticalExtentServiceHandle {
             return Err(VerticalExtentError::InvalidMeasurement);
         }
         Ok(extent)
+    }
+
+    /// The normals of `object`'s `face`. Normals naming another object or
+    /// face answer a different question and are refused.
+    pub fn measure_face_normals(
+        &self,
+        object: &ObjectId,
+        face: SurfaceFace,
+    ) -> Result<FaceNormals, VerticalExtentError> {
+        let normals = self.0.measure_face_normals(object, face)?;
+        if normals.object() != object || normals.face() != face {
+            return Err(VerticalExtentError::InvalidMeasurement);
+        }
+        Ok(normals)
     }
 }
 

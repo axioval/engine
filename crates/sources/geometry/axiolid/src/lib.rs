@@ -20,6 +20,7 @@ pub mod envelope_membership;
 pub mod exact_boundary;
 pub mod facade_area;
 mod face_distance;
+mod face_normals;
 pub(crate) mod flight;
 pub mod free_space;
 pub mod geometry;

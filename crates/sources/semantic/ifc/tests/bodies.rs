@@ -571,3 +571,44 @@ fn a_site_has_a_body_only_where_its_representations_state_one() {
         Err(PropertyResolutionError::Unavailable(_))
     ));
 }
+
+/// An IFC4X3 deck lofted between stations along its directrix
+/// (`IfcSectionedSolidHorizontal`) is a sectioned spine since
+/// `ifc-geometry` 0.9 (openbimrs/ifc#307).
+#[test]
+fn an_ifc4x3_sectioned_solid_is_a_sectioned_spine() {
+    let data = "\
+#90=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);
+#91=IFCUNITASSIGNMENT((#90));
+#92=IFCPROJECT('000000000000000000000P',$,'P',$,$,$,$,(#5),#91);
+#1=IFCCARTESIANPOINT((0.,0.,0.));
+#2=IFCAXIS2PLACEMENT3D(#1,$,$);
+#3=IFCLOCALPLACEMENT($,#2);
+#5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);
+#10=IFCPOLYLINE((#11,#12));
+#11=IFCCARTESIANPOINT((0.,0.,0.));
+#12=IFCCARTESIANPOINT((10.,0.,0.));
+#13=IFCRECTANGLEPROFILEDEF(.AREA.,'narrow',#15,2.,1.);
+#14=IFCRECTANGLEPROFILEDEF(.AREA.,'wide',#15,4.,1.);
+#15=IFCAXIS2PLACEMENT2D(#16,$);
+#16=IFCCARTESIANPOINT((0.,0.));
+#17=IFCAXIS2PLACEMENTLINEAR(#18,$,$);
+#18=IFCPOINTBYDISTANCEEXPRESSION(IFCLENGTHMEASURE(0.),$,$,$,#10);
+#19=IFCAXIS2PLACEMENTLINEAR(#20,$,$);
+#20=IFCPOINTBYDISTANCEEXPRESSION(IFCLENGTHMEASURE(10.),$,$,$,#10);
+#21=IFCSECTIONEDSOLIDHORIZONTAL(#10,(#13,#14),(#17,#19));
+#22=IFCSHAPEREPRESENTATION(#5,'Body','AdvancedSweptSolid',(#21));
+#23=IFCPRODUCTDEFINITIONSHAPE($,$,(#22));
+#30=IFCBUILDINGELEMENTPROXY('0000000000000000000030',$,'Deck',$,$,#3,#23,$,$);
+";
+    assert_eq!(
+        value_in("IFC4X3_ADD2", data, "#30", "Count"),
+        Some(PropertyValue::Integer(1))
+    );
+    assert_eq!(
+        value_in("IFC4X3_ADD2", data, "#30", "Kind"),
+        Some(PropertyValue::String("sectioned-spine".into()))
+    );
+    // Its sections are no swept-area profile.
+    assert_eq!(value_in("IFC4X3_ADD2", data, "#30", "Profile.Type"), None);
+}

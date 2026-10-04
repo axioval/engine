@@ -463,7 +463,9 @@ state their outline and voids as vertices through `ifc-geometry`'s
 `profile_outline` (0.4.1, openbimrs/ifc#166), from `IfcPolyline` and
 line-only `IfcIndexedPolyCurve` boundaries in the exact length unit. An
 `IfcArcIndex` segment or any other curve family refuses the outline facts
-alone (`Unavailable`), never chorded; the rest of the profile stands.
+alone (`Unavailable`), never chorded; the rest of the profile stands. An
+IFC4X3 `IfcSectionedSolidHorizontal` is a `sectioned-spine` item
+(`ifc-geometry` 0.9, openbimrs/ifc#307), with no profile facts of its own.
 
 Lengths go through the project's exact length unit and angles through its
 plane-angle unit (`ifc_properties::exact_unit`), never through

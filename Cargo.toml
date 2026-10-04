@@ -99,7 +99,8 @@ axiolid-exact-compile-contract = "0.3.1"
 axiolid-mesh-compile-contract = "0.3.1"
 # 0.3.4 declares its scratch as a true upper bound on a thread pool (#226).
 axiolid-mesh-boolean-boolmesh = "0.3.4"
-# 0.3.5 adds oriented stations (#246), additively.
+# 0.3.5 adds oriented stations (#246), additively; `ifc-geometry` 0.9
+# requires it for the IFC4X3 stations it lowers.
 axiolid-model = "0.3.5"
 axiolid-primitive = "0.3.0"
 axiolid-profile = "0.3.0"
@@ -111,9 +112,16 @@ openbim-ids = { version = "0.2.1", features = ["audit-schema"] }
 # Door and window operation geometry (openbimrs/ifc#148, #170) is published
 # only in the IFC facade, which joins `ifc-geometry` and `ifc-properties`; `geometry-select`
 # compiles no geometry kernel.
-openbim_ifc = { package = "openbim-ifc", version = "0.14.0", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
+# 0.15 re-exports `ifc-geometry` 0.9; its `authoring` feature stays off.
+openbim_ifc = { package = "openbim-ifc", version = "0.15.0", default-features = false, features = ["geometry-select", "properties", "ifc2x3", "ifc4", "ifc4x3"] }
 ifc-classification = "0.4.0"
-ifc-geometry = { version = "0.8.2", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
+# Test-only: reads a linear placement's `IfcPointByDistanceExpression` to
+# pin that `ifc-geometry` refuses an alignment parameter (openbimrs/ifc#347).
+ifc-alignment = "0.6.0"
+# 0.9 lowers IFC4X3 stations, offset curves by distances and sectioned
+# solids and surfaces (openbimrs/ifc#307) and, since 0.8.2, refuses an
+# `IfcParameterValue` along an alignment by name (openbimrs/ifc#347).
+ifc-geometry ={ version = "0.9.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }
 # Map conversions only: without the default `transform` feature it links no
 # geometry crate (never Axiolid).
 ifc-georef = { version = "0.6.0", default-features = false, features = ["ifc2x3", "ifc4", "ifc4x3"] }

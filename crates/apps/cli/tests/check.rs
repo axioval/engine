@@ -1734,52 +1734,81 @@ fn a_real_without_a_decimal_point_is_read_and_reported_as_an_integrity_warning()
     );
 }
 
+/// An `IfcGradientCurve` (#79) over a 15 m straight plan (#69), its profile
+/// a vertical circular arc of radius 1000 m (#74).
+const GRADIENT_CURVE: &str = "\
+     #60=IFCCARTESIANPOINT((0.,0.));\n\
+     #61=IFCDIRECTION((1.,0.));\n\
+     #62=IFCVECTOR(#61,1.);\n\
+     #63=IFCLINE(#60,#62);\n\
+     #64=IFCAXIS2PLACEMENT2D(#60,#61);\n\
+     #65=IFCCURVESEGMENT(.CONTINUOUS.,#64,IFCLENGTHMEASURE(0.),IFCLENGTHMEASURE(15.),#63);\n\
+     #66=IFCCARTESIANPOINT((15.,0.));\n\
+     #67=IFCAXIS2PLACEMENT2D(#66,#61);\n\
+     #68=IFCCURVESEGMENT(.CONTINUOUS.,#67,IFCLENGTHMEASURE(0.),IFCLENGTHMEASURE(0.),#63);\n\
+     #69=IFCCOMPOSITECURVE((#65,#68),.F.);\n\
+     #70=IFCCIRCLE(#64,1000.);\n\
+     #71=IFCCARTESIANPOINT((0.,10.));\n\
+     #72=IFCDIRECTION((0.9998000599800071,-0.01999600119960014));\n\
+     #73=IFCAXIS2PLACEMENT2D(#71,#72);\n\
+     #74=IFCCURVESEGMENT(.CONTINUOUS.,#73,IFCLENGTHMEASURE(0.),IFCLENGTHMEASURE(15.001311989928656),#70);\n\
+     #75=IFCCARTESIANPOINT((15.,9.812540071876587));\n\
+     #76=IFCDIRECTION((1.,-0.00499606355093224));\n\
+     #77=IFCAXIS2PLACEMENT2D(#75,#76);\n\
+     #78=IFCCURVESEGMENT(.CONTINUOUS.,#77,IFCLENGTHMEASURE(0.),IFCLENGTHMEASURE(0.),#63);\n\
+     #79=IFCGRADIENTCURVE((#74,#78),.F.,#69,$);\n";
+
+/// A deck's directrix (#90, 10 m along +X from x = 20 m) with two
+/// rectangles (#93 2 m by 1 m, #94 4 m by 1 m) and its stations at 0 m (#97)
+/// and 10 m (#99), all distances `IfcLengthMeasure`.
+const SECTIONED_DECK: &str = "\
+     #90=IFCPOLYLINE((#91,#92));\n\
+     #91=IFCCARTESIANPOINT((20.,0.,0.));\n\
+     #92=IFCCARTESIANPOINT((30.,0.,0.));\n\
+     #93=IFCRECTANGLEPROFILEDEF(.AREA.,'narrow',#95,2.,1.);\n\
+     #94=IFCRECTANGLEPROFILEDEF(.AREA.,'wide',#95,4.,1.);\n\
+     #95=IFCAXIS2PLACEMENT2D(#96,$);\n\
+     #96=IFCCARTESIANPOINT((0.,0.));\n\
+     #97=IFCAXIS2PLACEMENTLINEAR(#98,$,$);\n\
+     #98=IFCPOINTBYDISTANCEEXPRESSION(IFCLENGTHMEASURE(0.),$,$,$,#90);\n\
+     #99=IFCAXIS2PLACEMENTLINEAR(#100,$,$);\n\
+     #100=IFCPOINTBYDISTANCEEXPRESSION(IFCLENGTHMEASURE(10.),$,$,$,#90);\n";
+
 /// IFC4X3 geometry families are lowered or refused by name: a terrain
 /// written as an `IfcTriangulatedIrregularNetwork` is measured, an
-/// `IfcSectionedSolidHorizontal`, which has no neutral sweep over stations
-/// along an alignment, is unmeasured with that reason, and a pipe swept along
-/// a gradient curve with a vertical arc is measured within a certified
-/// deviation; none is dropped.
+/// `IfcSectionedSolidHorizontal` lofted between stations along its
+/// directrix lowers (ifc-geometry 0.9, openbimrs/ifc#307) but is unmeasured
+/// because its mesh has no certified deviation, one whose station gives its
+/// distance as `IfcParameterValue` is refused by name, and a pipe swept along a gradient curve with a vertical arc
+/// is measured within a certified deviation; none is dropped.
 #[test]
 fn with_geometry_ifc4x3_families_are_measured_or_unmeasured_by_name() {
     let case = Case::new("geometry-ifc4x3");
     let model = case.write(
         "model.ifc",
-        &crossing_walls_with(
+        &crossing_walls_with(&format!(
             "#40=IFCCARTESIANPOINTLIST3D(((10.,10.,0.),(12.,10.,0.),(10.,12.,0.5)),$);\n\
              #41=IFCTRIANGULATEDIRREGULARNETWORK(#40,$,.F.,((1,2,3)),$,(0));\n\
              #42=IFCSHAPEREPRESENTATION(#5,'Body','Tessellation',(#41));\n\
              #43=IFCPRODUCTDEFINITIONSHAPE($,$,(#42));\n\
              #44=IFCGEOGRAPHICELEMENT('0000000000000000000044',$,$,$,$,#3,#43,$,.TERRAIN.);\n\
-             #50=IFCSECTIONEDSOLIDHORIZONTAL($,$,$);\n\
+             {SECTIONED_DECK}\
+             #50=IFCSECTIONEDSOLIDHORIZONTAL(#90,(#93,#94),(#97,#99));\n\
              #51=IFCSHAPEREPRESENTATION(#5,'Body','AdvancedSweptSolid',(#50));\n\
              #52=IFCPRODUCTDEFINITIONSHAPE($,$,(#51));\n\
              #53=IFCBUILDINGELEMENTPROXY('0000000000000000000053',$,$,$,$,#3,#52,$,$);\n\
-             #60=IFCCARTESIANPOINT((0.,0.));\n\
-             #61=IFCDIRECTION((1.,0.));\n\
-             #62=IFCVECTOR(#61,1.);\n\
-             #63=IFCLINE(#60,#62);\n\
-             #64=IFCAXIS2PLACEMENT2D(#60,#61);\n\
-             #65=IFCCURVESEGMENT(.CONTINUOUS.,#64,IFCLENGTHMEASURE(0.),IFCLENGTHMEASURE(15.),#63);\n\
-             #66=IFCCARTESIANPOINT((15.,0.));\n\
-             #67=IFCAXIS2PLACEMENT2D(#66,#61);\n\
-             #68=IFCCURVESEGMENT(.CONTINUOUS.,#67,IFCLENGTHMEASURE(0.),IFCLENGTHMEASURE(0.),#63);\n\
-             #69=IFCCOMPOSITECURVE((#65,#68),.F.);\n\
-             #70=IFCCIRCLE(#64,1000.);\n\
-             #71=IFCCARTESIANPOINT((0.,10.));\n\
-             #72=IFCDIRECTION((0.9998000599800071,-0.01999600119960014));\n\
-             #73=IFCAXIS2PLACEMENT2D(#71,#72);\n\
-             #74=IFCCURVESEGMENT(.CONTINUOUS.,#73,IFCLENGTHMEASURE(0.),IFCLENGTHMEASURE(15.001311989928656),#70);\n\
-             #75=IFCCARTESIANPOINT((15.,9.812540071876587));\n\
-             #76=IFCDIRECTION((1.,-0.00499606355093224));\n\
-             #77=IFCAXIS2PLACEMENT2D(#75,#76);\n\
-             #78=IFCCURVESEGMENT(.CONTINUOUS.,#77,IFCLENGTHMEASURE(0.),IFCLENGTHMEASURE(0.),#63);\n\
-             #79=IFCGRADIENTCURVE((#74,#78),.F.,#69,$);\n\
+             #54=IFCAXIS2PLACEMENTLINEAR(#55,$,$);\n\
+             #55=IFCPOINTBYDISTANCEEXPRESSION(IFCPARAMETERVALUE(1.),$,$,$,#90);\n\
+             #56=IFCSECTIONEDSOLIDHORIZONTAL(#90,(#93,#94),(#97,#54));\n\
+             #57=IFCSHAPEREPRESENTATION(#5,'Body','AdvancedSweptSolid',(#56));\n\
+             #58=IFCPRODUCTDEFINITIONSHAPE($,$,(#57));\n\
+             #59=IFCBUILDINGELEMENTPROXY('0000000000000000000059',$,$,$,$,#3,#58,$,$);\n\
+             {GRADIENT_CURVE}\
              #80=IFCSWEPTDISKSOLID(#79,0.1,$,$,$);\n\
              #81=IFCSHAPEREPRESENTATION(#5,'Body','AdvancedSweptSolid',(#80));\n\
              #82=IFCPRODUCTDEFINITIONSHAPE($,$,(#81));\n\
              #83=IFCPIPESEGMENT('0000000000000000000083',$,$,$,$,#3,#82,$,$);\n",
-        )
+        ))
         .replace("FILE_SCHEMA(('IFC4'))", "FILE_SCHEMA(('IFC4X3_ADD2'))"),
     );
     let saved = case.path("result.json");
@@ -1809,11 +1838,23 @@ fn with_geometry_ifc4x3_families_are_measured_or_unmeasured_by_name() {
             .and_then(|entry| entry["reason"].as_str())
             .unwrap_or_else(|| panic!("{local} must be unmeasured: {geometry:#}"))
     };
+    // The deck lofts a 2 m wide rectangle into a 4 m wide one over 10 m.
+    // Since ifc-geometry 0.9 it lowers onto stations and meshes, but the
+    // mesh compiler samples the surface between stations and certifies no
+    // bound on it, so the deck is unmeasured with that reason rather than
+    // declared within the chord tolerance.
     let sectioned = reason("#53");
     assert!(
-        sectioned.contains("IFCSECTIONEDSOLIDHORIZONTAL")
-            && sectioned.contains("IfcAxis2PlacementLinear stations"),
+        sectioned.contains("certifies no bound") && sectioned.contains("stationed sections"),
         "{sectioned}"
+    );
+    // The same deck with its last station as an `IfcParameterValue` is
+    // refused by name before meshing, never lofted to a guessed position.
+    let parameter = reason("#59");
+    assert!(
+        parameter.contains("IFCSECTIONEDSOLIDHORIZONTAL")
+            && parameter.contains("IfcParameterValue"),
+        "{parameter}"
     );
     // The pipe's directrix is an `IfcGradientCurve` whose profile is a
     // vertical circular arc. Since ifc-geometry 0.8 that arc lowers exactly,
@@ -1828,7 +1869,147 @@ fn with_geometry_ifc4x3_families_are_measured_or_unmeasured_by_name() {
         "{geometry:#}"
     );
     assert_eq!(reason("#30"), "no body representation");
-    assert_eq!(unmeasured.len(), 2, "{geometry:#}");
+    assert_eq!(unmeasured.len(), 3, "{geometry:#}");
+}
+
+/// Three 1 m cubes placed along the gradient curve (#79) by
+/// `IfcLinearPlacement`, 5 along it: #133 by `IfcParameterValue`, #143 by
+/// `IfcLengthMeasure`, and #153 by `IfcLengthMeasure` with the
+/// `CartesianPosition` authoring tools cache.
+fn linearly_placed_cubes() -> String {
+    crossing_walls_with(&format!(
+        "{GRADIENT_CURVE}\
+         #120=IFCRECTANGLEPROFILEDEF(.AREA.,$,#121,1.,1.);\n\
+         #121=IFCAXIS2PLACEMENT2D(#60,$);\n\
+         #122=IFCEXTRUDEDAREASOLID(#120,#2,#4,1.);\n\
+         #123=IFCSHAPEREPRESENTATION(#5,'Body','SweptSolid',(#122));\n\
+         #124=IFCPRODUCTDEFINITIONSHAPE($,$,(#123));\n\
+         #130=IFCPOINTBYDISTANCEEXPRESSION(IFCPARAMETERVALUE(5.),$,$,$,#79);\n\
+         #131=IFCAXIS2PLACEMENTLINEAR(#130,$,$);\n\
+         #132=IFCLINEARPLACEMENT($,#131,$);\n\
+         #133=IFCBUILDINGELEMENTPROXY('0000000000000000000133',$,$,$,$,#132,#124,$,$);\n\
+         #140=IFCPOINTBYDISTANCEEXPRESSION(IFCLENGTHMEASURE(5.),$,$,$,#79);\n\
+         #141=IFCAXIS2PLACEMENTLINEAR(#140,$,$);\n\
+         #142=IFCLINEARPLACEMENT($,#141,$);\n\
+         #143=IFCBUILDINGELEMENTPROXY('0000000000000000000143',$,$,$,$,#142,#124,$,$);\n\
+         #150=IFCPOINTBYDISTANCEEXPRESSION(IFCLENGTHMEASURE(5.),$,$,$,#79);\n\
+         #151=IFCAXIS2PLACEMENTLINEAR(#150,$,$);\n\
+         #152=IFCLINEARPLACEMENT($,#151,#155);\n\
+         #153=IFCBUILDINGELEMENTPROXY('0000000000000000000153',$,$,$,$,#152,#124,$,$);\n\
+         #154=IFCCARTESIANPOINT((5.,0.,9.9));\n\
+         #155=IFCAXIS2PLACEMENT3D(#154,$,$);\n"
+    ))
+    .replace("FILE_SCHEMA(('IFC4'))", "FILE_SCHEMA(('IFC4X3_ADD2'))")
+}
+
+/// openbimrs/ifc#347, fixed in ifc-geometry 0.8.2: a distance along an
+/// alignment centreline given as `IfcParameterValue` is undefined in IFC4.3
+/// ADD2, and from axiolid-evaluate 0.3.6 the reference evaluator would read
+/// it as plan distance. Deriving the frame refuses it by name, naming the
+/// gradient curve, before any evaluator sees it; the same distance as
+/// `IfcLengthMeasure` is placed on the centreline.
+#[test]
+fn an_alignment_parameter_is_refused_by_name_and_a_length_is_placed() {
+    use axiolid_evaluate::ReferenceCurveEvaluator;
+    use ifc_alignment::{AlignmentUnits, resolve_linear_placement};
+    use ifc_geometry::GeometryError;
+    use ifc_geometry::constraint::placement::derive::derive_placement_transform;
+    use ifc_model::EntityId;
+
+    let model = axioval::ifc::read_ifc_step(linearly_placed_cubes().as_bytes()).unwrap();
+    let units = ifc_geometry::units::resolve(&model);
+    let alignment_units = AlignmentUnits {
+        length_to_metres: units.length_to_metres,
+        angle_to_radians: units.angle_to_radians,
+    };
+    let evaluator = ReferenceCurveEvaluator::new();
+    let derive = |placement: u64| {
+        let linear = resolve_linear_placement(&model, EntityId(placement), alignment_units)
+            .expect("a well-formed linear placement");
+        derive_placement_transform(
+            &model,
+            &units,
+            EntityId(placement),
+            &linear.relative_placement,
+            &evaluator,
+        )
+    };
+
+    match derive(132) {
+        Err(GeometryError::Unsupported {
+            entity,
+            type_name,
+            detail,
+        }) => {
+            assert_eq!(entity, EntityId(79), "names the basis curve");
+            assert_eq!(type_name, "IFCGRADIENTCURVE");
+            assert!(detail.contains("IfcParameterValue"), "{detail}");
+        }
+        other => panic!("an alignment parameter must be refused by name: {other:?}"),
+    }
+
+    // 5 m along the straight plan; the height is on the sag arc of radius
+    // 1000 m entering at 10 m with a grade of -0.02 (its centre lies 1000 m
+    // along the left normal of the entry tangent).
+    let placed = derive(142).expect("a length along the centreline is placed");
+    let (cx, cy): (f64, f64) = (
+        1000.0 * 0.019_996_001_199_600_14,
+        10.0 + 1000.0 * 0.999_800_059_980_007_1,
+    );
+    let height = cy - (1000.0_f64.powi(2) - (5.0 - cx).powi(2)).sqrt();
+    for (axis, expected) in [5.0, 0.0, height].into_iter().enumerate() {
+        assert!(
+            (placed.origin[axis] - expected).abs() < 1e-6,
+            "origin {:?} != (5, 0, {height})",
+            placed.origin
+        );
+    }
+}
+
+/// End to end, a product whose `IfcLinearPlacement` states only the
+/// distance along the alignment is never placed, whether the distance is a
+/// parameter or a length: the bridge derives no frame, so both are
+/// unmeasured by name. The cached `CartesianPosition` places the third.
+#[test]
+fn with_geometry_a_linear_placement_without_a_cached_position_is_never_placed() {
+    let case = Case::new("geometry-linear-placement");
+    let model = case.write("model.ifc", &linearly_placed_cubes());
+    let saved = case.path("result.json");
+    let (definitions, ruleset) = case.clash_packages();
+    let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+        .arg("check")
+        .arg("--model")
+        .arg(model)
+        .arg("--definitions")
+        .arg(definitions)
+        .arg("--ruleset")
+        .arg(ruleset)
+        .args(["--geometry", "--report", saved.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+
+    let result: Value = serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
+    let geometry = &result["geometry"];
+    // Both walls and the cube at its cached position.
+    assert_eq!(geometry["exact"], 3, "{geometry:#}");
+    let unmeasured = geometry["unmeasured"].as_array().unwrap();
+    let reason = |local: &str| {
+        unmeasured
+            .iter()
+            .find(|entry| entry["object"]["local_id"] == local)
+            .and_then(|entry| entry["reason"].as_str())
+            .unwrap_or_else(|| panic!("{local} must be unmeasured: {geometry:#}"))
+    };
+    for cube in ["#133", "#143"] {
+        let why = reason(cube);
+        assert!(
+            why.contains("IFCLINEARPLACEMENT") && why.contains("no CartesianPosition"),
+            "{cube}: {why}"
+        );
+    }
+    assert_eq!(reason("#30"), "no body representation");
+    assert_eq!(unmeasured.len(), 3, "{geometry:#}");
 }
 
 /// The crossing walls with `extra` entities added to the model.

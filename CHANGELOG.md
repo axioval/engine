@@ -107,6 +107,22 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- The IFC crates move to `ifc-geometry` 0.9 and `openbim-ifc` 0.15 (its
+  new `authoring` feature stays off). IFC4X3 stations
+  (`IfcPointByDistanceExpression`, `IfcAxis2PlacementLinear` with `Axis`
+  and `RefDirection`), `IfcOffsetCurveByDistances`,
+  `IfcSectionedSolidHorizontal` and `IfcSectionedSurface` now lower exactly
+  onto stations (openbimrs/ifc#307), and a sectioned solid's body is a
+  `sectioned-spine` item. A sectioned solid stays unmeasured
+  with geometry, now with the reason that the mesh compiler certifies no
+  bound between stations instead of the lowering's refusal. A station given
+  as `IfcParameterValue`, on a tangent discontinuity of its basis or on a
+  plain `IfcCompositeCurve` basis is refused by name (openbimrs/ifc#346). A
+  test pins the 0.8.2 fix (openbimrs/ifc#347): deriving a linear
+  placement's frame refuses an `IfcParameterValue` along an alignment by
+  name and places an `IfcLengthMeasure`; with geometry, a product on an
+  `IfcLinearPlacement` without a cached `CartesianPosition` stays
+  unmeasured by name, never placed.
 - **Breaking:** IDS documents are audited against the IFC schemas of their
   listed releases on import and export (`openbim-ids` 0.2.1 with its
   `audit-schema` feature; no template data, `cargo deny` unchanged).

@@ -1073,17 +1073,29 @@ compiler refuses is unmeasured, and its space is not evaluated. Surfaces, face
 surfaces (`IfcFaceSurface`, `IfcAdvancedFace`) and face-based surface models
 are lowered through `ifc-geometry` (openbimrs/ifc#155).
 
-IFC4X3 geometry families are lowered by `ifc-geometry` (0.8) or refused by
+IFC4X3 geometry families are lowered by `ifc-geometry` (0.9) or refused by
 name: alignment curves, gradient curves, open cross profiles and
 `IfcTriangulatedIrregularNetwork` terrains are measured. `CUBIC` transitions
 and vertical circular arcs and clothoids lower exactly (openbimrs/ifc#90,
 #258), and a disk swept along a gradient curve is measured within the
 deviation the mesh compiler certifies against the exact tube
 (axiolid/kernel#252); a gradient whose grade breaks inside the sweep is
-unbounded by name and leaves its object unmeasured. An
-`IfcSectionedSolidHorizontal`, an `IfcSectionedSurface`, an
-`IfcSegmentedReferenceCurve` and the distance-along-curve families leave
-their object unmeasured with the lowering's stated reason. The bridge reads
+unbounded by name and leaves its object unmeasured. Stations
+(`IfcPointByDistanceExpression`, `IfcAxis2PlacementLinear` with its `Axis`
+and `RefDirection`), `IfcOffsetCurveByDistances`,
+`IfcSectionedSolidHorizontal` and `IfcSectionedSurface` lower exactly onto
+stations (openbimrs/ifc#307). A sectioned solid still leaves its
+object unmeasured: the mesh compiler samples the surface between stations
+and certifies no bound on it, so it is never declared within the chord
+tolerance. A station given as `IfcParameterValue`, one on a tangent
+discontinuity of its basis or a run of sections across one, and one on a
+plain `IfcCompositeCurve` basis are refused by name (openbimrs/ifc#346), as
+is an `IfcSegmentedReferenceCurve`. A product placed by an
+`IfcLinearPlacement` is placed only at the `CartesianPosition` the file
+caches: the bridge derives no frame from the basis curve, so without it the
+product is unmeasured by name, whatever the distance (an `IfcParameterValue`
+along an alignment would be refused by name there too, openbimrs/ifc#347).
+The bridge reads
 the bytes with the session's own STEP reader (`read_ifc_step`), so a REAL
 written without its decimal point is measured too and reported once, as an
 integrity warning.

@@ -584,6 +584,20 @@ enum Uncamered {
     Unbounded(ObjectId),
 }
 
+/// The deciding path of an expression rule's explanation, one line per
+/// step, after a heading.
+fn explain(description: &mut Vec<String>, explanation: Option<&axioval_ir::Explanation>) {
+    let Some(explanation) = explanation else {
+        return;
+    };
+    description.push("Why:".to_owned());
+    description.extend(
+        explanation
+            .deciding()
+            .map(|step| format!("- {}", step.describe())),
+    );
+}
+
 impl Entry {
     fn finding(finding: &Finding, known: (&Report, &Project)) -> Result<Self, ExportError> {
         let subject = finding.object_id();
@@ -602,6 +616,7 @@ impl Entry {
         if !finding.related.is_empty() {
             description.push(format!("Related: {}", join(&finding.related)));
         }
+        explain(&mut description, finding.explanation.as_ref());
         for evidence in &finding.evidence {
             let exactness = if evidence.exact { "exact" } else { "inexact" };
             description.push(format!("Evidence ({exactness}): {}", evidence.locator));
@@ -640,6 +655,7 @@ impl Entry {
                 description.push("Object: none; the whole rule was not evaluated".to_owned());
             }
         }
+        explain(&mut description, outcome.explanation.as_ref());
         Ok(Self {
             title: title(&outcome.message, &outcome.rule_id.to_string()),
             topic_type: NOT_EVALUATED_TOPIC_TYPE.to_owned(),

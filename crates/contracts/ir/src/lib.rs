@@ -18,6 +18,10 @@ pub use contract::{DefinitionPackage, RuleSetPackage};
 /// The registry of measured values: descriptors, parameters and parsing.
 pub mod measured;
 
+/// Explanations of expression verdicts in findings and outcomes.
+pub mod explanation;
+pub use explanation::{Explanation, ExplanationEntry, MAX_EXPLANATION_ENTRIES};
+
 /// Calendar dates and date-times with a UTC offset.
 pub mod temporal;
 pub use temporal::{Date, DateTime, TemporalError, TemporalPrecision};
@@ -1194,6 +1198,9 @@ pub struct Finding {
     /// ([`Report::apply_decisions`]). `None` (and absent on the wire) when
     /// undecided or when no decisions were applied.
     pub decision: Option<FindingDecision>,
+    /// How an expression rule reached the finding. `None` (and absent on
+    /// the wire) for every other rule.
+    pub explanation: Option<Explanation>,
 }
 
 impl Finding {
@@ -1206,6 +1213,7 @@ impl Finding {
         message: impl Into<String>,
     ) -> Self {
         Self {
+            explanation: None,
             id: None,
             rule_id,
             scope: scope.into(),
@@ -1272,6 +1280,8 @@ struct FindingWire {
     categories: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     decision: Option<FindingDecision>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    explanation: Option<Explanation>,
 }
 
 impl From<Finding> for FindingWire {
@@ -1289,6 +1299,7 @@ impl From<Finding> for FindingWire {
             location: finding.location,
             categories: finding.categories,
             decision: finding.decision,
+            explanation: finding.explanation,
         }
     }
 }
@@ -1307,6 +1318,7 @@ impl TryFrom<FindingWire> for Finding {
             location: wire.location,
             categories: wire.categories,
             decision: wire.decision,
+            explanation: wire.explanation,
         })
     }
 }
@@ -1348,6 +1360,9 @@ pub struct NotEvaluated {
     /// The storeys and spaces the outcome's object lies in, when the host
     /// located it. `None` (and absent on the wire) unless it asked.
     pub location: Option<Location>,
+    /// How an expression rule left it open. `None` (and absent on the
+    /// wire) for every other rule.
+    pub explanation: Option<Explanation>,
 }
 
 impl NotEvaluated {
@@ -1370,6 +1385,8 @@ struct NotEvaluatedWire {
     message: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     location: Option<Location>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    explanation: Option<Explanation>,
 }
 
 impl From<NotEvaluated> for NotEvaluatedWire {
@@ -1382,6 +1399,7 @@ impl From<NotEvaluated> for NotEvaluatedWire {
             reason: outcome.reason,
             message: outcome.message,
             location: outcome.location,
+            explanation: outcome.explanation,
         }
     }
 }
@@ -1395,6 +1413,7 @@ impl TryFrom<NotEvaluatedWire> for NotEvaluated {
             reason: wire.reason,
             message: wire.message,
             location: wire.location,
+            explanation: wire.explanation,
         })
     }
 }

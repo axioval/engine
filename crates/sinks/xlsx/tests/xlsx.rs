@@ -73,6 +73,7 @@ fn report() -> Report {
                 .with_related([wall(2)]),
         ],
         not_evaluated: vec![NotEvaluated {
+            explanation: None,
             rule_id: rule,
             scope: wall(2).into(),
             reason: NotEvaluatedReason::MissingService,

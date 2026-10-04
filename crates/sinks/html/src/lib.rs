@@ -645,6 +645,7 @@ impl View<'_> {
                     );
                 }
                 message.push_str(&escape(&finding.message));
+                message.push_str(&explanation(finding.explanation.as_ref()));
                 let id = finding
                     .id
                     .map(|id| format!("<br><code class=\"muted\">{id}</code>"))
@@ -676,11 +677,12 @@ impl View<'_> {
         for outcome in self.report.not_evaluated() {
             let _ = writeln!(
                 html,
-                "<tr><td><code>{}</code></td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+                "<tr><td><code>{}</code></td><td>{}</td><td>{}</td><td>{}{}</td><td>{}</td></tr>",
                 escape(&outcome.rule_id.to_string()),
                 self.subject(&outcome.scope),
                 reason(&outcome.reason),
                 escape(&outcome.message),
+                explanation(outcome.explanation.as_ref()),
                 location(outcome.location.as_ref()),
             );
         }
@@ -846,5 +848,19 @@ fn decision(decision: Option<&FindingDecision>) -> String {
             escape(&comment.text)
         );
     }
+    html
+}
+
+/// The deciding path of an expression rule's explanation, as a list under
+/// the message; nothing for any other rule.
+fn explanation(explanation: Option<&axioval_ir::Explanation>) -> String {
+    let Some(explanation) = explanation else {
+        return String::new();
+    };
+    let mut html = String::from("<ol class=\"why\">");
+    for step in explanation.deciding() {
+        let _ = write!(html, "<li>{}</li>", escape(&step.describe()));
+    }
+    html.push_str("</ol>");
     html
 }

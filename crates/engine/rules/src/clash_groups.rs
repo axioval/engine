@@ -151,6 +151,7 @@ impl Reported {
     /// The pair's own finding: on its subject, relating its counterpart.
     pub(crate) fn finding(self, rule: &CompiledRule) -> Finding {
         Finding {
+            explanation: None,
             id: None,
             decision: None,
             rule_id: rule.id.clone(),
@@ -410,6 +411,7 @@ fn group_finding(rule: &CompiledRule, by: GroupBy, key: &Key, members: Vec<Repor
         }
     }
     Finding {
+        explanation: None,
         id: None,
         decision: None,
         rule_id: rule.id.clone(),

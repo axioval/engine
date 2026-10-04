@@ -34,6 +34,7 @@ fn an_ifc_finding_selects_its_elements_by_global_id() {
     };
     let finding = |object: &str, related: &str| {
         Finding {
+            explanation: None,
             rule_id: RuleId::new("contact").unwrap(),
             scope: Scope::Object(id(object)),
             severity: Severity::Error,

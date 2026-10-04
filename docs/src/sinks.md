@@ -450,3 +450,5 @@ sorted, so identical input renders identical bytes.
 **PDF** is printing this HTML, outside the engine: a browser's print
 dialog, or a headless browser (`chromium --headless --print-to-pdf=report.pdf
 report.html`). The sink writes no PDF and depends on no browser.
+
+An expression rule's finding or not-evaluated outcome shows its deciding path under the message (`<ol class="why">`), one line per step, `cover (requirement.compare.left) = 0.035 m`; see [Explanations](./ir.md#explanations). A BCF topic of one lists the same lines after `Why:` in its description.

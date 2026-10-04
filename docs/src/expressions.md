@@ -106,7 +106,10 @@ operand index. `requirement.and[2].compare.left` is the left side of the
 comparison that is the third operand of the requirement's `and`. A node's
 author `label` is shown with its path. The evaluation also lists every leaf
 it read (property, parameter, derived value, table cell) with its path and
-evidence, for findings to cite.
+evidence, for findings to cite, and traces every subexpression it evaluated
+with its value: an expression rule's findings and not-evaluated outcomes
+carry the trace as their `explanation`, its deciding path marked (see
+[Explanations](./ir.md#explanations)).
 
 ## Types and units
 

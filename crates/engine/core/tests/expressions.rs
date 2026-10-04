@@ -668,3 +668,40 @@ fn aggregates_widen_over_undecided_members_and_follow_kleene_logic() {
         );
     }
 }
+
+#[test]
+fn an_explanation_keeps_the_deciding_path_and_bounds_the_rest() {
+    let mut context = Context::default();
+    context.parameters.insert("a".into(), Value::number(1.0));
+    // Seventy-odd steps that hold, then one that fails.
+    let mut operands: Vec<serde_json::Value> = (0..70)
+        .map(|_| json!({"kind": "isDefined", "operand": parameter("a")}))
+        .collect();
+    operands.push(json!({"kind": "compare", "operator": "greaterThan",
+        "left": parameter("a"), "right": {"kind": "literal", "value": {"type": "number", "value": 2.0}}}));
+    let evaluation = evaluate(
+        &expression(json!({"kind": "and", "operands": operands})),
+        "r",
+        &mut context,
+    );
+    assert_eq!(evaluation.outcome, Ok(Value::Boolean(false)));
+    let explanation = evaluation.explain("r.and[70]");
+    assert!(explanation.truncated);
+    assert_eq!(
+        explanation.entries.len(),
+        axioval_ir::MAX_EXPLANATION_ENTRIES
+    );
+    let deciding: Vec<&str> = explanation
+        .deciding()
+        .map(|step| step.path.as_str())
+        .collect();
+    assert_eq!(
+        deciding,
+        [
+            "r.and[70].compare.left",
+            "r.and[70].compare.right",
+            "r.and[70]",
+            "r"
+        ]
+    );
+}

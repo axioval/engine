@@ -39,6 +39,7 @@ fn model() -> Project {
 fn report() -> Report {
     let source = SourceId::new("ifc-step", "a.ifc").unwrap();
     let finding = |rule: &str, object, severity, message: &str| Finding {
+        explanation: None,
         id: None,
         decision: None,
         rule_id: RuleId::new(rule).unwrap(),
@@ -67,6 +68,7 @@ fn report() -> Report {
             ),
         ],
         not_evaluated: vec![NotEvaluated {
+            explanation: None,
             rule_id: RuleId::new("stair-headroom").unwrap(),
             scope: Scope::Project,
             reason: NotEvaluatedReason::MissingService,

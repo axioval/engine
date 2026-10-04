@@ -21,7 +21,10 @@ use axioval_ir::contract::{
     AggregateFunction, AggregateSource, Branch, Expression, ExpressionComparison, PropertyScope,
     ScalarValue, Selector, SlopeForm,
 };
-use axioval_ir::{Date, DateTime, Evidence, PropertyValue, QuantityDimension};
+use axioval_ir::{
+    Date, DateTime, Evidence, Explanation, ExplanationEntry, MAX_EXPLANATION_ENTRIES,
+    PropertyValue, QuantityDimension,
+};
 
 use super::interval::{Interval, IntervalFailure};
 use super::unit::{Unit, parse_unit};
@@ -448,6 +451,52 @@ pub struct Evaluation {
     /// The value of every labelled subexpression evaluated, by label: the
     /// first, where a label repeats.
     pub labelled: BTreeMap<String, Value>,
+    /// Every subexpression evaluated, operands before the node they feed.
+    pub trace: Vec<ExplanationEntry>,
+}
+
+impl Evaluation {
+    /// The explanation of a verdict decided at `deciding` (the path of the
+    /// subexpression that failed or was not evaluated): every step on its
+    /// path from the root and below it, then the other steps in evaluation
+    /// order while [`MAX_EXPLANATION_ENTRIES`] allows.
+    #[must_use]
+    pub fn explain(&self, deciding: &str) -> Explanation {
+        let on_path = |path: &str| {
+            let within = |outer: &str, inner: &str| {
+                inner == outer
+                    || inner
+                        .strip_prefix(outer)
+                        .is_some_and(|rest| rest.starts_with(['.', '[']))
+            };
+            within(path, deciding) || within(deciding, path)
+        };
+        let deciding_steps = self.trace.iter().filter(|step| on_path(&step.path)).count();
+        let mut room = MAX_EXPLANATION_ENTRIES.saturating_sub(deciding_steps);
+        let mut truncated = false;
+        let steps = self
+            .trace
+            .iter()
+            .filter_map(|step| {
+                let deciding = on_path(&step.path);
+                if !deciding {
+                    if room == 0 {
+                        truncated = true;
+                        return None;
+                    }
+                    room -= 1;
+                }
+                Some(ExplanationEntry {
+                    deciding,
+                    ..step.clone()
+                })
+            })
+            .collect();
+        Explanation {
+            entries: steps,
+            truncated,
+        }
+    }
 }
 
 /// Evaluates `expression`, whose path is `root` (`requirement`).
@@ -460,12 +509,14 @@ pub fn evaluate(
         context,
         reads: Vec::new(),
         labelled: BTreeMap::new(),
+        trace: Vec::new(),
     };
     let outcome = evaluator.eval(expression, root);
     Evaluation {
         outcome,
         reads: evaluator.reads,
         labelled: evaluator.labelled,
+        trace: evaluator.trace,
     }
 }
 
@@ -475,6 +526,7 @@ struct Evaluator<'c> {
     context: &'c mut dyn ExpressionContext,
     reads: Vec<Read>,
     labelled: BTreeMap<String, Value>,
+    trace: Vec<ExplanationEntry>,
 }
 
 fn fail(expression: &Expression, path: &str, reason: Reason) -> NotEvaluated {
@@ -504,6 +556,18 @@ impl Evaluator<'_> {
                 .entry(label.to_owned())
                 .or_insert_with(|| value.clone());
         }
+        let (value, not_evaluated) = match &outcome {
+            Ok(value) => (Some(value.to_string()), None),
+            Err(why) => (None, Some(why.reason.to_string())),
+        };
+        self.trace.push(ExplanationEntry {
+            path: path.to_owned(),
+            kind: expression.kind().to_owned(),
+            label: expression.label().map(str::to_owned),
+            value,
+            not_evaluated,
+            deciding: false,
+        });
         outcome
     }
 

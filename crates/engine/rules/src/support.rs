@@ -507,6 +507,7 @@ pub(crate) fn finding(
     evidence.sort_by(|a, b| (&a.source, &a.locator).cmp(&(&b.source, &b.locator)));
     evidence.dedup();
     Finding {
+        explanation: None,
         id: None,
         decision: None,
         rule_id: rule.id.clone(),

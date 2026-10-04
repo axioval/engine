@@ -599,6 +599,7 @@ impl Run<'_> {
     ) {
         self.evaluation.push_finding(
             Finding {
+                explanation: None,
                 id: None,
                 decision: None,
                 rule_id: self.rule.id.clone(),

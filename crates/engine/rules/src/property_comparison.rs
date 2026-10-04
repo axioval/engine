@@ -1496,6 +1496,7 @@ fn make_finding(
     evidence: Vec<Evidence>,
 ) -> Finding {
     Finding {
+        explanation: None,
         id: None,
         decision: None,
         rule_id: rule.id.clone(),

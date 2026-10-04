@@ -82,3 +82,8 @@ Keep this crate serializable and deterministic. It must not depend on a source f
   description, expression) is omitted when empty so rulesets serialize as
   before; `VALUE_SET` is a derived set. The MCS ruleset schema must mirror
   it.
+- `Finding::explanation` and `NotEvaluated::explanation` (`explanation.rs`)
+  are absent on the wire unless an expression rule set them, so reports
+  serialize as before. An explanation keeps its deciding path whole and at
+  most `MAX_EXPLANATION_ENTRIES` other steps, in evaluation order; never
+  sort or drop deciding steps.

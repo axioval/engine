@@ -304,6 +304,7 @@ mod scope {
     #[test]
     fn a_rule_level_outcome_still_writes_a_null_object() {
         let outcome = NotEvaluated {
+            explanation: None,
             rule_id: RuleId::new("r").unwrap(),
             scope: Scope::Project,
             reason: NotEvaluatedReason::MissingService,
@@ -398,6 +399,7 @@ mod tables {
                 "m",
             )],
             not_evaluated: vec![NotEvaluated {
+                explanation: None,
                 rule_id: RuleId::new("r").unwrap(),
                 scope: Scope::Project,
                 reason: NotEvaluatedReason::MissingService,

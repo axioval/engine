@@ -67,7 +67,7 @@ impl RuleCapability for ExpressionRequirement {
             match &result.outcome {
                 Ok(Value::Boolean(true)) => {}
                 Ok(Value::Boolean(false) | Value::Null) => {
-                    let failed = failing(requirement, REQUIREMENT, &mut leaves);
+                    let (deciding, failed) = failing(requirement, REQUIREMENT, &result);
                     let mut labelled = result.labelled.clone();
                     let mut cited = evidence(&result);
                     let deviation = match rule.parameters.get(DEVIATION) {
@@ -92,10 +92,9 @@ impl RuleCapability for ExpressionRequirement {
                             read_values(&result)
                         ),
                     };
-                    evaluation.push_finding_deviating(
-                        finding(rule, &object.id, message, cited, vec![]),
-                        deviation,
-                    );
+                    let mut found = finding(rule, &object.id, message, cited, vec![]);
+                    found.explanation = Some(result.explain(&deciding));
+                    evaluation.push_finding_deviating(found, deviation);
                 }
                 Ok(other) => evaluation.push_object_not_evaluated(
                     object.id.clone(),
@@ -110,10 +109,11 @@ impl RuleCapability for ExpressionRequirement {
                         .first_reason()
                         .filter(|_| matches!(why.reason, Reason::Unreadable(_)))
                         .unwrap_or_else(|| reason_of(why));
-                    evaluation.push_object_not_evaluated(
+                    evaluation.push_object_not_evaluated_explained(
                         object.id.clone(),
                         reason,
                         format!("expression: {why}{}", read_values(&result)),
+                        result.explain(&why.path),
                     );
                 }
             }
@@ -158,30 +158,35 @@ pub(crate) fn reason_of(why: &NotEvaluated) -> NotEvaluatedReason {
     }
 }
 
-/// The subexpression a false requirement fails on: its label, or its path
-/// and kind. Descends through `and` (the first false operand), `not` of an
-/// `or`, and the consequent of an `implies` that holds its antecedent.
-fn failing(expression: &Expression, path: &str, leaves: &mut ObjectLeaves<'_>) -> String {
-    let name = || match expression.label() {
+/// The subexpression a false requirement fails on, by its path, and how a
+/// finding names it: its label, or its path and kind. Descends through
+/// `and` (the first operand the evaluation found false) and the consequent
+/// of an `implies`, reading the values the evaluation traced.
+fn failing(expression: &Expression, path: &str, evaluation: &Evaluation) -> (String, String) {
+    let name = match expression.label() {
         Some(label) => format!("`{label}`"),
         None => format!("`{path}` ({})", expression.kind()),
     };
+    let untrue = |path: &str| {
+        evaluation.trace.iter().any(|step| {
+            step.path == path && matches!(step.value.as_deref(), Some("false" | "null"))
+        })
+    };
     match expression {
-        Expression::And { operands, .. } => {
-            for (index, operand) in operands.iter().enumerate() {
-                let operand_path = format!("{path}.and[{index}]");
-                let outcome = evaluate(operand, &operand_path, leaves).outcome;
-                if matches!(outcome, Ok(Value::Boolean(false) | Value::Null)) {
-                    return failing(operand, &operand_path, leaves);
-                }
-            }
-            name()
-        }
-        Expression::Implies { consequent, .. } => {
-            let consequent_path = format!("{path}.implies.consequent");
-            failing(consequent, &consequent_path, leaves)
-        }
-        _ => name(),
+        Expression::And { operands, .. } => operands
+            .iter()
+            .enumerate()
+            .map(|(index, operand)| (operand, format!("{path}.and[{index}]")))
+            .find(|(_, operand_path)| untrue(operand_path))
+            .map_or((path.to_owned(), name), |(operand, operand_path)| {
+                failing(operand, &operand_path, evaluation)
+            }),
+        Expression::Implies { consequent, .. } => failing(
+            consequent,
+            &format!("{path}.implies.consequent"),
+            evaluation,
+        ),
+        _ => (path.to_owned(), name),
     }
 }
 

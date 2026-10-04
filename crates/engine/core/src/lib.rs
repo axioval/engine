@@ -376,6 +376,7 @@ pub struct CapabilityNotEvaluated {
     reason: NotEvaluatedReason,
     message: String,
     location: Option<Location>,
+    explanation: Option<axioval_ir::Explanation>,
 }
 impl CapabilityNotEvaluated {
     /// The object that could not be evaluated, if the outcome is about one.
@@ -557,6 +558,19 @@ impl CapabilityEvaluation {
     ) {
         self.push_unavailable(Scope::Object(object_id), reason, message);
     }
+    /// An object left not evaluated, with how an expression left it open.
+    pub fn push_object_not_evaluated_explained(
+        &mut self,
+        object_id: ObjectId,
+        reason: NotEvaluatedReason,
+        message: impl Into<String>,
+        explanation: axioval_ir::Explanation,
+    ) {
+        self.push_unavailable(Scope::Object(object_id), reason, message);
+        if let Some(outcome) = self.not_evaluated.last_mut() {
+            outcome.explanation = Some(explanation);
+        }
+    }
     fn push_unavailable(
         &mut self,
         scope: Scope,
@@ -568,6 +582,7 @@ impl CapabilityEvaluation {
             reason,
             message: message.into(),
             location: None,
+            explanation: None,
         });
     }
 }
@@ -1029,6 +1044,7 @@ fn collapse_source_wide(
                 .or_default()
                 .push(object),
             (reason, scope) => kept.push(NotEvaluated {
+                explanation: outcome.explanation,
                 rule_id: rule_id.clone(),
                 scope,
                 reason,
@@ -1051,6 +1067,7 @@ fn collapse_source_wide(
             String::new()
         };
         NotEvaluated {
+            explanation: None,
             rule_id: rule_id.clone(),
             scope: Scope::Source(source.clone()),
             reason,
@@ -1275,6 +1292,7 @@ impl Runtime {
                 }
             })
             .map(|rule| NotEvaluated {
+                explanation: None,
                 rule_id: rule.id,
                 scope: Scope::Project,
                 reason: NotEvaluatedReason::InvalidDeclaration,

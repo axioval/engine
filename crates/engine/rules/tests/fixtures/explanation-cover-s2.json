@@ -1,0 +1,48 @@
+{
+  "entries": [
+    {
+      "path": "requirement.compare.left",
+      "kind": "property",
+      "value": "0.035 m",
+      "deciding": true
+    },
+    {
+      "path": "requirement.compare.right.if.branches[0].when.compare.left",
+      "kind": "property",
+      "value": "`XC4`",
+      "deciding": true
+    },
+    {
+      "path": "requirement.compare.right.if.branches[0].when.compare.right",
+      "kind": "literal",
+      "value": "`XC4`",
+      "deciding": true
+    },
+    {
+      "path": "requirement.compare.right.if.branches[0].when",
+      "kind": "compare",
+      "value": "true",
+      "deciding": true
+    },
+    {
+      "path": "requirement.compare.right.if.branches[0].then",
+      "kind": "literal",
+      "value": "0.04 m",
+      "deciding": true
+    },
+    {
+      "path": "requirement.compare.right",
+      "kind": "if",
+      "label": "required cover",
+      "value": "0.04 m",
+      "deciding": true
+    },
+    {
+      "path": "requirement",
+      "kind": "compare",
+      "label": "cover",
+      "value": "false",
+      "deciding": true
+    }
+  ]
+}

@@ -50,6 +50,7 @@ fn report(document: &str, first: u64) -> Report {
     Report {
         findings: vec![wall, door],
         not_evaluated: vec![NotEvaluated {
+            explanation: None,
             rule_id: RuleId::new("headroom").unwrap(),
             scope: Scope::Project,
             reason: NotEvaluatedReason::MissingService,

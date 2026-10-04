@@ -71,6 +71,7 @@ fn report() -> Report {
     Report {
         findings: vec![finding],
         not_evaluated: vec![NotEvaluated {
+            explanation: None,
             rule_id: RuleId::new("doors").unwrap(),
             scope: wall(2).into(),
             reason: NotEvaluatedReason::MissingService,
@@ -233,4 +234,54 @@ fn a_clean_run_says_it_passed_and_a_decision_is_shown() {
     at(&html, "<strong>accepted</strong> by reviewer");
     at(&html, "changed since the decision");
     at(&html, "assigned to structure");
+}
+
+#[test]
+fn an_expression_rules_finding_shows_its_deciding_path() {
+    let step = |path: &str, kind: &str, label: Option<&str>, value: &str, deciding: bool| {
+        axioval_ir::ExplanationEntry {
+            path: path.to_owned(),
+            kind: kind.to_owned(),
+            label: label.map(str::to_owned),
+            value: Some(value.to_owned()),
+            not_evaluated: None,
+            deciding,
+        }
+    };
+    let mut report = report();
+    let mut finding = Finding::new(
+        RuleId::new("cover").unwrap(),
+        wall(3),
+        Severity::Error,
+        "requirement does not hold",
+    );
+    finding.explanation = Some(axioval_ir::Explanation {
+        entries: vec![
+            step("requirement.and[0]", "isDefined", None, "true", false),
+            step(
+                "requirement.and[1].compare.left",
+                "property",
+                Some("cover"),
+                "0.035 m",
+                true,
+            ),
+            step("requirement.and[1]", "compare", None, "false", true),
+            step("requirement", "and", None, "false", true),
+        ],
+        truncated: false,
+    });
+    report.findings.push(finding);
+    let html = render(&report, &project(), &Template::default(), &options());
+    assert!(
+        html.contains(
+            "<ol class=\"why\"><li>cover (requirement.and[1].compare.left) = 0.035 m</li>\
+             <li>requirement.and[1] (compare) = false</li>\
+             <li>requirement (and) = false</li></ol>"
+        ),
+        "{html}"
+    );
+    assert!(
+        !html.contains("isDefined"),
+        "only the deciding path is shown"
+    );
 }

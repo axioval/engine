@@ -1093,6 +1093,7 @@ impl ModelComparison {
         let mut not_evaluated = Vec::new();
         for (side, object) in &self.unidentified {
             not_evaluated.push(NotEvaluated {
+                explanation: None,
                 rule_id: rule_id.clone(),
                 scope: Scope::Object(object.clone()),
                 reason: NotEvaluatedReason::IncompleteEvidence,
@@ -1106,6 +1107,7 @@ impl ModelComparison {
         for ambiguous in &self.ambiguous {
             for object in &ambiguous.objects {
                 not_evaluated.push(NotEvaluated {
+                    explanation: None,
                     rule_id: rule_id.clone(),
                     scope: Scope::Object(object.clone()),
                     reason: NotEvaluatedReason::InvalidEvidence,
@@ -1122,6 +1124,7 @@ impl ModelComparison {
         }
         for undecided in &self.undecided {
             not_evaluated.push(NotEvaluated {
+                explanation: None,
                 rule_id: rule_id.clone(),
                 scope: Scope::Object(undecided.object.clone()),
                 reason: undecided.reason.clone(),
@@ -1175,6 +1178,7 @@ impl ModelComparison {
             match out_of_scope(compared) {
                 Some((object, reason, message)) => {
                     projection.not_evaluated.push(NotEvaluated {
+                        explanation: None,
                         rule_id: projection.rule("identity"),
                         scope: Scope::Object(object),
                         reason,
@@ -1262,6 +1266,7 @@ impl Projection<'_> {
             self.severity.clone()
         };
         let finding = Finding {
+            explanation: None,
             id: None,
             decision: None,
             rule_id: self.rule(suffix),
@@ -1283,6 +1288,7 @@ impl Projection<'_> {
 
     fn gap(&mut self, facet: Facet, scope: Scope, message: String) {
         self.not_evaluated.push(NotEvaluated {
+            explanation: None,
             rule_id: self.rule(facet.name()),
             scope,
             reason: NotEvaluatedReason::IncompleteEvidence,

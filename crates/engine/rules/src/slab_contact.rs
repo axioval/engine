@@ -436,6 +436,7 @@ fn judge(
             };
             evaluation.push_finding(
                 Finding {
+                    explanation: None,
                     id: None,
                     decision: None,
                     rule_id: rule.id.clone(),

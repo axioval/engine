@@ -144,6 +144,10 @@ lists decisions whose finding is gone. All three are absent on the wire
 unless set, so a report serializes exactly as before. See
 [Review decisions](./decisions.md).
 
+### Explanations
+
+A finding or not-evaluated outcome of an expression rule carries an `explanation` (`axioval_ir::Explanation`, absent on the wire for every other rule, so reports serialize as before): its `entries` are the subexpressions the evaluation went through, in evaluation order (operands before the node they feed), each with its `path`, `kind`, `label`, rendered `value` or why it was `notEvaluated`, and whether it is `deciding`. The deciding path is the subexpression that failed or was not evaluated, its ancestors and everything below it, and is always kept whole; at most `MAX_EXPLANATION_ENTRIES` (64) other entries follow, and `truncated` says when some were left out. The order is the evaluation's, so the same run explains the same way. The HTML and BCF sinks show the deciding path under the message.
+
 ### Rule status
 
 `Report::rules` holds one `RuleSummary` per rule when the host asked for

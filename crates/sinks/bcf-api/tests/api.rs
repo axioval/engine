@@ -59,6 +59,7 @@ fn report() -> Report {
             ),
         ],
         not_evaluated: vec![NotEvaluated {
+            explanation: None,
             rule_id: RuleId::new("stair-headroom").unwrap(),
             scope: Scope::Project,
             reason: NotEvaluatedReason::MissingService,

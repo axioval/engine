@@ -50,6 +50,7 @@ fn report(document: &str, first: u64) -> Report {
         stale_decisions: Vec::new(),
         findings: vec![
             Finding {
+                explanation: None,
                 id: None,
                 decision: None,
                 rule_id: RuleId::new("slab-contact").unwrap(),
@@ -63,6 +64,7 @@ fn report(document: &str, first: u64) -> Report {
             }
             .with_related([id(document, first + 1)]),
             Finding {
+                explanation: None,
                 id: None,
                 decision: None,
                 rule_id: RuleId::new("door-fire-rating").unwrap(),
@@ -76,6 +78,7 @@ fn report(document: &str, first: u64) -> Report {
             },
         ],
         not_evaluated: vec![NotEvaluated {
+            explanation: None,
             rule_id: RuleId::new("stair-headroom").unwrap(),
             scope: Scope::Project,
             reason: NotEvaluatedReason::MissingService,
@@ -350,6 +353,7 @@ fn related_objects_alone_are_never_selected() {
     let mut report = report("a.ifc", 1);
     report.findings = vec![
         Finding {
+            explanation: None,
             id: None,
             decision: None,
             rule_id: RuleId::new("door-in-wall").unwrap(),
@@ -392,6 +396,7 @@ fn scoped_report(document: &str, first: u64) -> Report {
             .with_evidence([Evidence::exact(source.clone(), "selection:count")]),
         ],
         not_evaluated: vec![NotEvaluated {
+            explanation: None,
             rule_id: RuleId::new("storey-exists").unwrap(),
             scope: Scope::Source(source),
             reason: NotEvaluatedReason::IncompleteEvidence,

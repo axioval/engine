@@ -1137,3 +1137,22 @@ fn a_slope_rule_grades_its_findings_by_how_far_the_slope_exceeds_the_limit() {
     assert_eq!(graded["slight"].1, "the ramp slopes 6.5 %, 0.5 % over 6 %");
     assert_eq!(graded["steep"].1, "the ramp slopes 8 %, 2 % over 6 %");
 }
+
+#[test]
+fn an_explanation_traces_the_deciding_path_deterministically() {
+    let registry = registry();
+    let package = vocabulary(&registry, &[]);
+    let explanation = |report: &Report| {
+        let finding = report
+            .findings()
+            .iter()
+            .find(|finding| common::subject(finding) == "s2")
+            .unwrap();
+        serde_json::to_string_pretty(finding.explanation.as_ref().unwrap()).unwrap()
+    };
+    let first = explanation(&check(&package, vec![cover_rule()], &session(slabs())));
+    let second = explanation(&check(&package, vec![cover_rule()], &session(slabs())));
+    assert_eq!(first, second);
+    let golden = include_str!("fixtures/explanation-cover-s2.json");
+    assert_eq!(first, golden.trim_end());
+}

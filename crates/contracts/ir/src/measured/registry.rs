@@ -1,9 +1,9 @@
 //! Every measured value's descriptor, sorted by name.
 
 use super::{
-    ANGLE_TO, BEARING, CROSS_FALL, GRADIENT_DIRECTION, INCLINATION, LocalizedText,
-    MeasuredDescriptor, MeasuredExactness, MeasuredParameter, MeasuredParameterKind, SKEW, SLOPE,
-    SLOPE_ALONG,
+    ANGLE_TO, BEARING, CROSS_FALL, EXTENT, GRADIENT_DIRECTION, INCLINATION, LENGTH, LocalizedText,
+    MeasuredDescriptor, MeasuredExactness, MeasuredParameter, MeasuredParameterKind, PERIMETER,
+    SKEW, SLOPE, SLOPE_ALONG, THICKNESS,
 };
 use crate::{
     MEASURED_AREA, MEASURED_BOTTOM, MEASURED_BOTTOM_ABOVE_LEVEL, MEASURED_BOUNDARY_AREA,
@@ -60,6 +60,10 @@ const REFERENCE_PATH: MeasuredParameter = MeasuredParameter {
         "Die Beziehungsschritte vom Objekt zu den Objekten, gegen die gemessen wird; \
          der Winkel ist die Hülle über alle erreichten, keiner, wenn keines erreicht wird.",
     ),
+};
+
+const OWN_AXIS: MeasuredParameterKind = MeasuredParameterKind::Choice {
+    options: &["own_x", "own_y", "own_z", "x", "y", "z"],
 };
 
 const PLAN_AXIS: MeasuredParameterKind = MeasuredParameterKind::Choice {
@@ -281,6 +285,44 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              Winkel; die Hülle über ihre Teile.",
         ),
     },
+    MeasuredDescriptor {
+        name: EXTENT,
+        parameters: &[
+            MeasuredParameter {
+                key: "axis",
+                kind: OWN_AXIS,
+                required: false,
+                default: None,
+                help: &en_de(
+                    "An own axis of the placement (`own_x`, `own_y`, `own_z`) or a world \
+                     axis (`x`, `y`, `z`); this or `direction`.",
+                    "Eine eigene Achse der Platzierung (`own_x`, `own_y`, `own_z`) oder \
+                     eine Weltachse (`x`, `y`, `z`); dies oder `direction`.",
+                ),
+            },
+            MeasuredParameter {
+                key: "direction",
+                kind: MeasuredParameterKind::Vector,
+                required: false,
+                default: None,
+                help: &en_de(
+                    "A world direction `x,y,z`; this or `axis`.",
+                    "Eine Weltrichtung `x,y,z`; dies oder `axis`.",
+                ),
+            },
+        ],
+        dimension: QuantityDimension::Length,
+        services: &["vertical-extent", "object-frame"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_GEOMETRY, "the placement is not stated exactly"],
+        label: &en_de("Extent", "Ausdehnung"),
+        help: &en_de(
+            "The body's depth along an axis: its highest less its lowest point \
+             projected onto it.",
+            "Die Tiefe des Körpers entlang einer Achse: sein höchster weniger sein \
+             tiefster Punkt, auf sie projiziert.",
+        ),
+    },
     plain!(
         MEASURED_EXTENT_X,
         QuantityDimension::Length,
@@ -364,6 +406,33 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             "Die Neigung einer Achse der Platzierung des Objekts.",
         ),
     },
+    MeasuredDescriptor {
+        name: LENGTH,
+        parameters: &[MeasuredParameter {
+            key: "axis",
+            kind: MeasuredParameterKind::Choice {
+                options: &["own_x", "own_y", "own_z"],
+            },
+            required: false,
+            default: Some("own_x"),
+            help: &en_de(
+                "The member's own axis it is swept along: `own_x` for a beam or member \
+                 as placed, `own_z` for a column.",
+                "Die eigene Achse, entlang der das Bauteil verläuft: `own_x` für einen \
+                 Träger, `own_z` für eine Stütze.",
+            ),
+        }],
+        dimension: QuantityDimension::Length,
+        services: &["vertical-extent", "object-frame"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_GEOMETRY, "the placement is not stated exactly"],
+        label: &en_de("Length", "Länge"),
+        help: &en_de(
+            "A member's length: its body's extent along its own sweep axis.",
+            "Die Länge eines Bauteils: die Ausdehnung seines Körpers entlang seiner \
+             eigenen Achse.",
+        ),
+    },
     plain!(
         MEASURED_LEVEL_HEIGHT,
         QuantityDimension::Length,
@@ -376,6 +445,18 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              source states it; none for the highest storey.",
             "Die Höhe eines Geschosses bis zum nächsten Geschoss desselben räumlichen \
              Elternteils, wie die Quelle sie angibt; keine für das oberste Geschoss."
+        )
+    ),
+    plain!(
+        PERIMETER,
+        QuantityDimension::Length,
+        &["plan-area"],
+        MeasuredExactness::Measured,
+        &[NO_GEOMETRY],
+        en_de("Perimeter", "Umfang"),
+        en_de(
+            "The length of the footprint's boundary in plan, holes included.",
+            "Die Länge des Grundrissrands, Löcher eingeschlossen."
         )
     ),
     MeasuredDescriptor {
@@ -437,6 +518,48 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              it is positive.",
             "Das Gefälle der Fläche in einer Grundrissrichtung als Winkel mit \
              Vorzeichen: steigend ist positiv.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: THICKNESS,
+        parameters: &[
+            MeasuredParameter {
+                key: "direction",
+                kind: OWN_AXIS,
+                required: false,
+                default: None,
+                help: &en_de(
+                    "The axis the thickness is measured along; this or `face`.",
+                    "Die Achse, entlang der die Dicke gemessen wird; dies oder `face`.",
+                ),
+            },
+            MeasuredParameter {
+                key: "face",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["top", "bottom"],
+                },
+                required: false,
+                default: None,
+                help: &en_de(
+                    "Measure square to this planar face; this or `direction`.",
+                    "Rechtwinklig zu dieser ebenen Fläche messen; dies oder `direction`.",
+                ),
+            },
+        ],
+        dimension: QuantityDimension::Length,
+        services: &["vertical-extent", "object-frame"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[
+            NO_GEOMETRY,
+            "the body is not closed, so it has no inside",
+            "the face is not planar",
+        ],
+        label: &en_de("Thickness", "Dicke"),
+        help: &en_de(
+            "How thick the body is along a direction: an interval holding every local \
+             thickness, so a tapered member spans its thinnest and thickest.",
+            "Wie dick der Körper entlang einer Richtung ist: ein Intervall mit jeder \
+             örtlichen Dicke, ein verjüngtes Bauteil reicht von dünnster bis dickster.",
         ),
     },
     plain!(

@@ -41,15 +41,15 @@ use axiolid_core::Point2;
 use axiolid_mesh::TriMesh;
 use axiolid_overlay::{Polygon, Ring};
 use axioval_engine::{
-    CoverageEvidence, CoverageRequest, ElevationCover, ElevationRequest, GeometryFidelity,
-    PlanArea, PlanAreaError, PlanAreaService, PlanBand,
+    CoverageEvidence, CoverageRequest, ElevationCover, ElevationRequest, FootprintPerimeter,
+    GeometryFidelity, PlanArea, PlanAreaError, PlanAreaService, PlanBand,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
 use crate::geometry::{AxiolidGeometry, Triangle, triangles};
 use crate::planar::{
-    Disc, footprint_measure, grown_polygons, hull_of, plan_overlap_area, polygons_overlap_area,
-    projected_polygons, ring_area,
+    Disc, certified_perimeter, footprint_measure, footprint_polygons, grown_polygons, hull_of,
+    plan_overlap_area, polygons_overlap_area, projected_polygons, ring_area,
 };
 
 /// How far a computed band cut is moved, in metres, plus `CUT_SCALE` of the
@@ -327,6 +327,44 @@ impl PlanAreaService for AxiolidPlanAreaService {
             band(footprint.perimeter, footprint.deviation),
             f64::INFINITY,
             format!("footprint:{object}"),
+        )
+    }
+
+    /// The union's boundary, its rounding bounded; a tessellated body's
+    /// true boundary lies within its chord deviation `d` of the measured
+    /// one, which moves a convex ring's length by at most `2πd`.
+    fn measure_footprint_perimeter(
+        &self,
+        object: &ObjectId,
+    ) -> Result<FootprintPerimeter, PlanAreaError> {
+        let footprint = self.measure(object)?;
+        let polygons = footprint_polygons(&footprint.soup, tolerance()?).ok_or_else(|| {
+            PlanAreaError::Unavailable(format!("the footprint of {object} cannot be computed"))
+        })?;
+        let (perimeter, rounding) = certified_perimeter(&polygons);
+        let rings: usize = polygons.iter().map(|polygon| 1 + polygon.holes.len()).sum();
+        #[allow(clippy::cast_precision_loss)]
+        let tessellation = 2.0 * std::f64::consts::PI * footprint.deviation * rings as f64;
+        let slack = rounding + tessellation;
+        let locator = format!("footprint-perimeter:{object}");
+        if slack == 0.0 {
+            return FootprintPerimeter::try_new(
+                object.clone(),
+                perimeter,
+                perimeter,
+                Evidence::exact(self.source.clone(), locator),
+            );
+        }
+        let evidence = Evidence {
+            source: self.source.clone(),
+            locator,
+            exact: false,
+        };
+        FootprintPerimeter::try_new(
+            object.clone(),
+            (perimeter - slack).next_down().max(0.0),
+            (perimeter + slack).next_up(),
+            evidence,
         )
     }
 

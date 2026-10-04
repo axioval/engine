@@ -104,6 +104,72 @@ impl PlanArea {
     }
 }
 
+/// The length of a footprint's boundary in plan, holes included, in
+/// metres, with its evidence.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FootprintPerimeter {
+    object: ObjectId,
+    lower: f64,
+    upper: f64,
+    evidence: Evidence,
+}
+
+impl FootprintPerimeter {
+    /// A perimeter of `object` known to lie in `[lower, upper]`; the
+    /// evidence is exact exactly when the bounds coincide.
+    ///
+    /// # Errors
+    ///
+    /// [`PlanAreaError::InvalidMeasurement`] for bounds not finite,
+    /// negative or reversed; [`PlanAreaError::InexactEvidence`] for evidence
+    /// that does not match them.
+    pub fn try_new(
+        object: ObjectId,
+        lower: f64,
+        upper: f64,
+        evidence: Evidence,
+    ) -> Result<Self, PlanAreaError> {
+        if !lower.is_finite() || !upper.is_finite() || lower < 0.0 || lower > upper {
+            return Err(PlanAreaError::InvalidMeasurement);
+        }
+        #[allow(clippy::float_cmp)]
+        let exact = lower == upper;
+        if evidence.exact != exact || evidence.locator.trim().is_empty() {
+            return Err(PlanAreaError::InexactEvidence);
+        }
+        Ok(Self {
+            object,
+            lower,
+            upper,
+            evidence,
+        })
+    }
+
+    /// The measured object.
+    #[must_use]
+    pub fn object(&self) -> &ObjectId {
+        &self.object
+    }
+
+    /// The least length the boundary may have, in metres.
+    #[must_use]
+    pub fn lower_metres(&self) -> f64 {
+        self.lower
+    }
+
+    /// The greatest length the boundary may have, in metres.
+    #[must_use]
+    pub fn upper_metres(&self) -> f64 {
+        self.upper
+    }
+
+    /// Reviewable provenance of the measurement.
+    #[must_use]
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
 /// The band between two footprints facing each other along a direction.
 ///
 /// It is the convex hull of the two footprints, cut to the positions along
@@ -348,6 +414,18 @@ pub trait PlanAreaService: Send + Sync + 'static {
     /// The area of `object`'s footprint: its geometry projected onto the
     /// horizontal plane, overlapping parts counted once.
     fn measure_footprint(&self, object: &ObjectId) -> Result<PlanArea, PlanAreaError>;
+    /// The length of the boundary of `object`'s footprint, holes included.
+    ///
+    /// A service that does not measure perimeters refuses.
+    fn measure_footprint_perimeter(
+        &self,
+        object: &ObjectId,
+    ) -> Result<FootprintPerimeter, PlanAreaError> {
+        let _ = object;
+        Err(PlanAreaError::Unavailable(
+            "this service does not measure perimeters".into(),
+        ))
+    }
     /// The area where the footprints of `first` and `second` overlap.
     fn measure_plan_overlap(
         &self,
@@ -430,6 +508,18 @@ impl PlanAreaServiceHandle {
     #[must_use]
     pub fn new(service: Arc<dyn PlanAreaService>) -> Self {
         Self(service)
+    }
+
+    /// The footprint area of `object`.
+    pub fn measure_footprint_perimeter(
+        &self,
+        object: &ObjectId,
+    ) -> Result<FootprintPerimeter, PlanAreaError> {
+        let perimeter = self.0.measure_footprint_perimeter(object)?;
+        if perimeter.object() != object {
+            return Err(PlanAreaError::InvalidMeasurement);
+        }
+        Ok(perimeter)
     }
 
     /// The footprint area of `object`.

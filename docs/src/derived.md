@@ -372,6 +372,10 @@ ignoring ASCII case):
 | `cross_fall;axis=x\|y\|own_x\|own_y[;face=…]` | a face's unsigned gradient across a plan axis, an angle | as `slope_along` |
 | `gradient_direction[;face=…]` | the plan bearing of a face's steepest descent, an angle | `VerticalExtentService::measure_face_normals` |
 | `inclination;axis=own_x\|own_y\|own_z` | the tilt of one of the placement's axes, an angle | `ObjectFrameService` |
+| `extent;axis=own_x\|own_y\|own_z\|x\|y\|z` or `extent;direction=<x,y,z>` | the body's extent along an axis or direction, a length | `VerticalExtentService::measure_directional_extent`, `ObjectFrameService` for own axes |
+| `length[;axis=own_x\|own_y\|own_z]` | a member's extent along its own sweep axis (`own_x` by default), a length | as `extent` |
+| `thickness;direction=…` or `thickness;face=top\|bottom` | every local thickness along an axis or square to a planar face, a length | `VerticalExtentService::measure_thickness` |
+| `perimeter` | the length of the footprint's boundary, holes included | `PlanAreaService::measure_footprint_perimeter` |
 | `angle_to;path=<steps>[;between=axis\|face_normal]` | the angle to the objects a path reaches, an angle | `PlanSpanService::measure_rectangle` or `VerticalExtentService::measure_face_normals`, `RelationshipSelectionService` |
 | `skew;path=<steps>` | how far the long axis is from square to the reached objects', an angle | `PlanSpanService::measure_rectangle`, `RelationshipSelectionService` |
 | `bearing;axis=own_x\|own_y\|long[;reference=project_north\|true_north]` | an axis's plan bearing clockwise from north, an angle | `ObjectFrameService` or `PlanSpanService`, `CoordinateSystemService` for true north |
@@ -466,6 +470,40 @@ triangle too small for its deviation leaves the face unmeasured. On a
 ramp, the steepest piece of the top face is the run that
 `WalkingSurfaceService::measure_sloped_runs` measures, and the landings
 are level.
+
+### Dimensions
+
+`extent` is the body's depth along an axis: its highest less its lowest
+point projected onto it, as `body-extent` measures it. The axis is an own
+axis of the placement (`own_x`, `own_y`, `own_z`), a world axis, or a
+stated direction `x,y,z`; exactly one of `axis` and `direction` is stated.
+`length` is the extent along a member's own sweep axis: `own_x` unless
+stated, `own_z` for a column.
+
+`thickness` is an interval holding every local thickness of the body
+along a direction: the length inside the body of each line along it,
+between the faces looking along it (within 60°) and those looking back.
+The body's steeper sides are not crossed. A tapered member therefore
+spans its thinnest and thickest, and a sloped slab measured square to its
+top (`face=top`, whose pieces must share one normal) is as thick
+everywhere. The body must be closed. Exactly one of `direction` and `face`
+is stated.
+
+`perimeter` is the length of the footprint's boundary in plan, holes
+included.
+
+### Measured by built-in code
+
+Some measured values reuse a capability's own measurement, such as a
+distance in a mode or a clear width with its deductions, so the value and
+the capability never disagree. They are measured by trusted built-in code
+(`MeasuredProvider`) that a host registers with the capabilities:
+`CapabilityRegistry::register_measured` refuses a name the registry does
+not list, one the engine measures itself, and one another provider
+measures. A run installs the providers. `CapabilityRegistry::install_measured`
+installs them for `axioval_engine::measured_value` outside a run. Reading
+a name no provider measures leaves the object not evaluated: a missing
+service, never a value.
 
 ### Angles between objects
 

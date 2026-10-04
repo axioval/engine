@@ -14,7 +14,7 @@
 use axiolid_core::Tolerance;
 use axiolid_mesh::audit_mesh;
 use axioval_engine::{
-    DirectionalExtent, ElevationInterval, FaceNormals, MetricDirection, SurfaceFace,
+    DirectionalExtent, ElevationInterval, FaceNormals, MetricDirection, SurfaceFace, Thickness,
     VerticalExtent, VerticalExtentError, VerticalExtentService,
 };
 use axioval_ir::{Evidence, ObjectId};
@@ -206,6 +206,21 @@ impl VerticalExtentService for AxiolidVerticalExtentService {
             widen(highest)?,
             evidence,
         )
+    }
+
+    /// The least and greatest length inside the body of a line along
+    /// `direction`, between the faces looking along it and back.
+    fn measure_thickness(
+        &self,
+        object: &ObjectId,
+        direction: MetricDirection,
+    ) -> Result<Thickness, VerticalExtentError> {
+        let Body {
+            soup,
+            tessellation,
+            closed,
+        } = self.body(object)?;
+        crate::thickness::measure(object, direction, &soup, tessellation, closed)
     }
 
     /// The certified normals of the face's triangles: chosen by their

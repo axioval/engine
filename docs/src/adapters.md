@@ -759,6 +759,12 @@ facing length are measured on its own footprint, exactly for a planar mesh;
 a tessellated subject widens the gap by its chord deviation `d` and the
 facing by `2d`.
 
+`AxiolidPlanAreaService` also measures a footprint's perimeter: the
+union's boundary, holes included, exact when every segment runs along an
+axis and every difference and sum is exact, otherwise widened by a bound
+on its rounding. A tessellation widens it by `2πd` per ring for chord
+deviation `d`, which bounds a convex ring's change.
+
 `AxiolidVerticalExtentService` measures the lowest and highest points of a
 mesh. A planar mesh measures exactly; a tessellated mesh with chord deviation
 `d` reports each elevation as `[z - d, z + d]` with approximate evidence, even
@@ -778,7 +784,13 @@ by a bound on the rounding; a component computed without rounding stays a
 point, so exactly stated vertices give exact normals. A tessellated
 triangle widens its box by `2d / h` of its normal's length, for chord
 deviation `d` and least height `h`, and a triangle too small for that
-refuses the face. Degenerate triangles are skipped. See
+refuses the face. Degenerate triangles are skipped. Thicknesses
+(`measure_thickness`) are measured on a closed mesh between the triangles
+looking along the direction within 60° and those looking back, at every
+projected corner and every crossing of their projected edges, where the
+thickness, linear between them, takes its extremes. They are widened by a
+part in a billion of the body's size and twice the chord deviation, and
+are never exact. See
 [Slopes, falls and tilts](./derived.md#slopes-falls-and-tilts).
 
 `AxiolidWalkingSurfaceService` measures stair flights, ramps and headroom. Only a mesh that is closed and faces outward is measured, since whether a face looks up is read from its winding. A flight's treads are the planes plane detection finds (`axiolid_inspect::detect_planes`, axiolid-inspect 0.3.2, axiolid/kernel#131) facing up and level: each plane's certified deviation and its corners' spread in elevation stay within 64 units in the last place of the coordinates (the rounding a placement transform leaves) plus twice a tessellation's chord deviation, and a tread is measured at the interval of its corners' elevations. Planes at one elevation make one tread. A tessellated flight is measured too, every position widened by its chord deviation and never exact. The walking direction comes from the treads, never the placement: in plan from the centre of the lowest tread's bounding rectangle to the highest's. When every tread's centre lies within 1 µm (plus twice the chord deviation) of that line and further along it than the one below, the flight is straight; otherwise it turns (winders, a quarter turn) and is walked along a polyline with a vertex on each tread, midway across it or at the requested distance from the side the winders turn towards, its positions arc lengths along it: floating-point constructions widened by a relative margin over the sine of the angle at which the line crosses a tread's edge, never exact, and a grazing crossing refuses. A tread's nosing is the boundary edge the walking line climbs onto it across; the riser below it is open where the lower tread's back edge meets a face falling away, closed where every part of it meets a face rising, and the first riser closed only where faces in its nosing's vertical plane cover the strip below it to the base, otherwise not measured. A flight must be one piece, since its lowest point is where its first riser starts; one in several pieces (separate treads) is refused, and so is a flight with a sloped face flatter than 45° looking up. A ramp is measured only from an exact planar mesh, a tessellated one refused. A ramp's runs are the connected sets of upward sloped faces flatter than 45°, each planar within 10⁻⁹ of the coordinates' magnitude (two slopes meeting without a landing are refused), climbing along the plane's steepest ascent. A direction along a coordinate axis projects exactly; any other is widened by a bound on the projection's rounding and reported as approximate. Headroom clips each walking face against each face of a requested obstacle in plan and takes the least height difference over the regions they share, widened by a numerical margin, so it is never exact. A bodiless obstacle is skipped; an unmeasured one refuses, and so does a tessellated one within the walking surface's plan box or an obstacle whose faces lie both below and above the walking surface (it crosses it). The clear width of a straight flight or a run clips each requested obstacle's triangles to the band in the stretch's frame, one convex piece per segment of the pitch line, and takes the least free width over the clipped polygons' vertices and the stretch's ends: the free width is piecewise linear in the position along, least at one of those. Its lower bound grows the band by the pitch line's uncertainty and every obstacle by the largest chord deviation; its upper bound shrinks the band and leaves tessellated obstacles out, which can only widen it; both carry a relative margin of 10⁻⁹, so the width is never exact. An obstacle reaching over the middle of the walking surface, or with no face in the band while its box holds the band's middle, refuses.

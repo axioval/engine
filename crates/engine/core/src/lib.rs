@@ -42,6 +42,10 @@ pub enum EngineError {
     /// Two trusted implementations claimed an ID.
     #[error("duplicate capability `{0}`")]
     DuplicateCapability(String),
+    /// A measured-value provider claimed a name that is not registered,
+    /// that the engine measures itself, or that another provider measures.
+    #[error("measured value `{0}` cannot be provided: {1}")]
+    InvalidProvider(String, String),
     /// A package supplied a non-declared parameter.
     #[error("capability `{capability}` does not declare parameter `{parameter}`")]
     UnknownParameter {
@@ -639,6 +643,7 @@ pub trait RuleCapability: Send + Sync {
 pub struct CapabilityRegistry {
     capabilities: BTreeMap<String, Arc<dyn RuleCapability>>,
     refiner: Option<Arc<dyn OutcomeRefiner>>,
+    measured: Vec<Arc<dyn MeasuredProvider>>,
 }
 impl CapabilityRegistry {
     /// Creates an empty registry.
@@ -659,6 +664,51 @@ impl CapabilityRegistry {
             return Err(EngineError::DuplicateCapability(id));
         }
         Ok(self)
+    }
+    /// Registers trusted code measuring registered values
+    /// ([`MeasuredProvider`]). Each name must be in the registry of measured
+    /// values and measured by neither the engine nor another provider.
+    ///
+    /// # Errors
+    ///
+    /// [`EngineError::InvalidProvider`] naming the first name refused.
+    pub fn register_measured<P: MeasuredProvider>(
+        mut self,
+        provider: P,
+    ) -> Result<Self, EngineError> {
+        for name in provider.names() {
+            let refused = |why: &str| Err(EngineError::InvalidProvider((*name).into(), why.into()));
+            if axioval_ir::measured::descriptor(name).is_none_or(|known| known.name != *name) {
+                return refused("it is not in the registry of measured values");
+            }
+            if measured::measured_by_core(name) {
+                return refused("the engine measures it");
+            }
+            if self
+                .measured
+                .iter()
+                .any(|other| other.names().contains(name))
+            {
+                return refused("another provider measures it");
+            }
+        }
+        self.measured.push(Arc::new(provider));
+        Ok(self)
+    }
+    /// Whether a registered provider or the engine measures `name`.
+    #[must_use]
+    pub fn measures(&self, name: &str) -> bool {
+        measured::measured_by_core(name)
+            || self
+                .measured
+                .iter()
+                .any(|provider| provider.names().contains(&name))
+    }
+    /// Installs the registered measured-value providers into `services`
+    /// for `project`, as a run does, so [`measured_value`] reads what a run
+    /// would.
+    pub fn install_measured(&self, services: &mut ServiceRegistry, project: &Project) {
+        measured::provider::install(services, &self.measured, project);
     }
     /// Every registered capability ID, sorted.
     pub fn ids(&self) -> impl Iterator<Item = &str> {
@@ -921,6 +971,7 @@ pub use linear_quantity::{
     LinearQuantityRequest, LinearQuantityService, LinearQuantityServiceHandle, ShelfGeometry,
 };
 pub use measured::measured_value;
+pub use measured::provider::{MeasuredProvider, Measurement};
 pub use metric_routing::{
     BlockedMetricRouteEvidence, ClimbLength, CompleteMetricEvidence, ConnectorRouting,
     FarthestPointEvidence, FarthestPointOutcome, FarthestPointRequest, ForcedWalkEvidence,
@@ -938,7 +989,7 @@ pub use pairwise::{
 };
 pub use path::PathSegment;
 pub use plan_area::{
-    ElevationCover, ElevationRequest, PlanArea, PlanAreaError, PlanAreaService,
+    ElevationCover, ElevationRequest, FootprintPerimeter, PlanArea, PlanAreaError, PlanAreaService,
     PlanAreaServiceHandle, PlanBand,
 };
 pub use plan_region::ConvexPlanRegion;
@@ -1009,8 +1060,8 @@ pub use triangle_count::{
     TriangleCount, TriangleCountError, TriangleCountService, TriangleCountServiceHandle,
 };
 pub use vertical_extent::{
-    DirectionalExtent, ElevationInterval, FaceNormal, FaceNormals, SurfaceFace, VerticalExtent,
-    VerticalExtentError, VerticalExtentService, VerticalExtentServiceHandle,
+    DirectionalExtent, ElevationInterval, FaceNormal, FaceNormals, SurfaceFace, Thickness,
+    VerticalExtent, VerticalExtentError, VerticalExtentService, VerticalExtentServiceHandle,
 };
 pub use walkability::{
     PassageAdmission, StretchLimit, VerifiedWalkablePassage, VerticalConnector,
@@ -1338,6 +1389,7 @@ impl Runtime {
             })
             .collect();
         self.install_expressions(&mut services, &plan.values);
+        self.registry.install_measured(&mut services, project);
         // Measured values are answered through the host's resolver in
         // every run; classifications are derived first when the plan has
         // any.

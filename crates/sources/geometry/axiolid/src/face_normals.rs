@@ -83,7 +83,7 @@ fn length(vector: [f64; 3]) -> f64 {
 
 /// Six times the signed volume the triangles enclose: positive when they
 /// are wound outward.
-fn signed_volume(soup: &[Triangle]) -> f64 {
+pub(crate) fn signed_volume(soup: &[Triangle]) -> f64 {
     soup.iter()
         .map(|triangle| {
             let [a, b, c] = triangle.map(|point| point.to_array());

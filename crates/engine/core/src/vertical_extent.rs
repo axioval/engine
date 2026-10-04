@@ -472,6 +472,83 @@ impl FaceNormals {
     }
 }
 
+/// How thick a body is along a direction: every local thickness, the
+/// length inside the body of a line along the direction, lies in `[lower,
+/// upper]`. A slab of constant thickness is a point; a tapered or sloped
+/// one spans the thicknesses it has.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Thickness {
+    object: ObjectId,
+    direction: MetricDirection,
+    lower: f64,
+    upper: f64,
+    evidence: Evidence,
+}
+
+impl Thickness {
+    /// The thicknesses of `object` along `direction`, in `[lower, upper]`
+    /// metres; the evidence is exact exactly when the bounds coincide.
+    ///
+    /// # Errors
+    ///
+    /// [`VerticalExtentError::InvalidMeasurement`] for bounds not finite,
+    /// negative or reversed; [`VerticalExtentError::InexactEvidence`] for
+    /// evidence that does not match them.
+    pub fn try_new(
+        object: ObjectId,
+        direction: MetricDirection,
+        lower: f64,
+        upper: f64,
+        evidence: Evidence,
+    ) -> Result<Self, VerticalExtentError> {
+        if !lower.is_finite() || !upper.is_finite() || lower < 0.0 || lower > upper {
+            return Err(VerticalExtentError::InvalidMeasurement);
+        }
+        #[allow(clippy::float_cmp)]
+        let exact = lower == upper;
+        if evidence.exact != exact || evidence.locator.trim().is_empty() {
+            return Err(VerticalExtentError::InexactEvidence);
+        }
+        Ok(Self {
+            object,
+            direction,
+            lower,
+            upper,
+            evidence,
+        })
+    }
+
+    /// The measured object.
+    #[must_use]
+    pub fn object(&self) -> &ObjectId {
+        &self.object
+    }
+
+    /// The direction measured along.
+    #[must_use]
+    pub fn direction(&self) -> MetricDirection {
+        self.direction
+    }
+
+    /// The least thickness the body may have anywhere, in metres.
+    #[must_use]
+    pub fn lower_metres(&self) -> f64 {
+        self.lower
+    }
+
+    /// The greatest thickness the body may have anywhere, in metres.
+    #[must_use]
+    pub fn upper_metres(&self) -> f64 {
+        self.upper
+    }
+
+    /// The source and exactness of the measurement.
+    #[must_use]
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
 /// Measures the vertical extents of model objects.
 pub trait VerticalExtentService: Send + Sync + 'static {
     /// The elevations of `object`'s lowest and highest points.
@@ -493,6 +570,20 @@ pub trait VerticalExtentService: Send + Sync + 'static {
         let _ = (object, direction);
         Err(VerticalExtentError::Unavailable(
             "this service measures vertical extents only".into(),
+        ))
+    }
+
+    /// How thick `object`'s body is along `direction`.
+    ///
+    /// A service that does not measure thicknesses refuses.
+    fn measure_thickness(
+        &self,
+        object: &ObjectId,
+        direction: MetricDirection,
+    ) -> Result<Thickness, VerticalExtentError> {
+        let _ = (object, direction);
+        Err(VerticalExtentError::Unavailable(
+            "this service does not measure thicknesses".into(),
         ))
     }
 
@@ -548,6 +639,20 @@ impl VerticalExtentServiceHandle {
             return Err(VerticalExtentError::InvalidMeasurement);
         }
         Ok(extent)
+    }
+
+    /// How thick `object` is along `direction`. A thickness naming another
+    /// object or direction answers a different question and is refused.
+    pub fn measure_thickness(
+        &self,
+        object: &ObjectId,
+        direction: MetricDirection,
+    ) -> Result<Thickness, VerticalExtentError> {
+        let thickness = self.0.measure_thickness(object, direction)?;
+        if thickness.object() != object || thickness.direction() != direction {
+            return Err(VerticalExtentError::InvalidMeasurement);
+        }
+        Ok(thickness)
     }
 
     /// The normals of `object`'s `face`. Normals naming another object or

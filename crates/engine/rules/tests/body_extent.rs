@@ -481,3 +481,55 @@ fn without_its_services_nothing_is_judged() {
         [("-".into(), NotEvaluatedReason::MissingService)]
     );
 }
+
+/// The measured value `extent` along an own axis reads what `body-extent`
+/// judges: the same extents on the same fixtures.
+#[test]
+fn the_measured_extent_along_an_own_axis_is_the_body_extent() {
+    use axioval_engine::{PropertyResolution, measured_value};
+    let (model, frames, boxes) = walls();
+    let project = model.project();
+    let mut services = ServiceRegistry::new();
+    services
+        .register(ObjectFrameServiceHandle::new(Arc::new(frames)))
+        .unwrap();
+    services
+        .register(VerticalExtentServiceHandle::new(Arc::new(boxes)))
+        .unwrap();
+    for (wall, along_forward, along_right) in [
+        ("fits", 0.3, 5.0),
+        ("thin", 0.25, 5.0),
+        ("turned", 0.24, 5.0),
+    ] {
+        for (name, expected) in [
+            ("extent;axis=own_y", along_forward),
+            ("extent;axis=own_x", along_right),
+            ("length", along_right),
+        ] {
+            let PropertyResolution::Present(resolved) =
+                measured_value(&services, &project, &id(wall), name).unwrap()
+            else {
+                panic!("{wall} has no {name}");
+            };
+            assert_eq!(
+                resolved.property().value(),
+                &metres(expected),
+                "{wall} {name}"
+            );
+        }
+    }
+    // A world direction reads the box as it lies: the turned wall is 5 m
+    // along y, and 0.24 m along x.
+    let PropertyResolution::Present(along_y) =
+        measured_value(&services, &project, &id("turned"), "extent;direction=0,2,0").unwrap()
+    else {
+        panic!("no extent");
+    };
+    assert_eq!(along_y.property().value(), &metres(5.0));
+    for refused in ["extent", "extent;axis=own_x;direction=1,0,0"] {
+        assert!(
+            measured_value(&services, &project, &id("turned"), refused).is_err(),
+            "{refused}"
+        );
+    }
+}

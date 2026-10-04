@@ -64,6 +64,12 @@ impl Default for Model {
 
 impl Model {
     /// A source that resolves names but cannot list properties.
+    /// The model's objects as a project.
+    #[allow(dead_code)]
+    pub fn project(&self) -> axioval_ir::Project {
+        axioval_ir::Project::new(self.objects.clone()).unwrap()
+    }
+
     pub fn names_only(mut self) -> Self {
         self.enumerable = false;
         self

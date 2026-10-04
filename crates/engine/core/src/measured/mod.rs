@@ -22,11 +22,12 @@ use axioval_ir::{
 };
 
 mod angles;
+pub(crate) mod provider;
 mod surface;
 
 use axioval_ir::measured::{
-    ANGLE_TO, BEARING, CROSS_FALL, GRADIENT_DIRECTION, INCLINATION, MeasuredCall, SKEW, SLOPE,
-    SLOPE_ALONG,
+    ANGLE_TO, BEARING, CROSS_FALL, EXTENT, GRADIENT_DIRECTION, INCLINATION, LENGTH,
+    MeasuredArgument, MeasuredCall, PERIMETER, SKEW, SLOPE, SLOPE_ALONG, THICKNESS,
 };
 
 use crate::ServiceRegistry;
@@ -63,12 +64,52 @@ pub(crate) enum MeasuredName {
     Surface(MeasuredCall),
     /// An angle to other objects or a bearing, with the path's steps.
     Angle(MeasuredCall, Vec<PathSegment>),
+    /// A dimension of the body: an extent, length, thickness or perimeter.
+    Dimension(MeasuredCall),
+    /// A value a registered provider measures.
+    Provided(MeasuredCall),
+}
+
+/// The names without parameters the engine measures itself.
+const CORE: &[&str] = &[
+    MEASURED_AREA,
+    MEASURED_BOTTOM,
+    MEASURED_EXTENT_X,
+    MEASURED_EXTENT_Y,
+    MEASURED_EXTENT_Z,
+    MEASURED_LEVEL_HEIGHT,
+    MEASURED_TOP,
+    MEASURED_VOLUME,
+    MEASURED_X,
+    MEASURED_Y,
+    MEASURED_Z,
+];
+
+/// Whether the engine measures `name` itself, rather than a provider.
+pub(crate) fn measured_by_core(name: &str) -> bool {
+    CORE.contains(&name)
+        || [
+            MEASURED_BOTTOM_ABOVE_LEVEL,
+            MEASURED_BOUNDARY_AREA,
+            SLOPE,
+            SLOPE_ALONG,
+            CROSS_FALL,
+            INCLINATION,
+            GRADIENT_DIRECTION,
+            ANGLE_TO,
+            BEARING,
+            SKEW,
+            EXTENT,
+            LENGTH,
+            THICKNESS,
+            PERIMETER,
+        ]
+        .contains(&name)
 }
 
 /// Parses a name in the measured set through the registry
 /// ([`axioval_ir::measured`]), or says why it is none.
 pub(crate) fn parse(name: &str) -> Result<MeasuredName, String> {
-    use axioval_ir::measured::MeasuredArgument;
     let call = axioval_ir::measured::parse(name).map_err(|error| error.to_string())?;
     Ok(match call.descriptor.name {
         MEASURED_BOTTOM_ABOVE_LEVEL => {
@@ -97,6 +138,21 @@ pub(crate) fn parse(name: &str) -> Result<MeasuredName, String> {
         SLOPE | SLOPE_ALONG | CROSS_FALL | INCLINATION | GRADIENT_DIRECTION => {
             MeasuredName::Surface(call)
         }
+        EXTENT | THICKNESS => {
+            let (first, second) = if call.name() == EXTENT {
+                ("axis", "direction")
+            } else {
+                ("direction", "face")
+            };
+            if call.argument(first).is_some() == call.argument(second).is_some() {
+                return Err(format!(
+                    "`{}` takes either `{first}` or `{second}`",
+                    call.name()
+                ));
+            }
+            MeasuredName::Dimension(call)
+        }
+        LENGTH | PERIMETER => MeasuredName::Dimension(call),
         ANGLE_TO | BEARING | SKEW => {
             let steps = match call.argument("path") {
                 Some(MeasuredArgument::Path(steps)) => steps
@@ -107,8 +163,8 @@ pub(crate) fn parse(name: &str) -> Result<MeasuredName, String> {
             };
             MeasuredName::Angle(call, steps)
         }
-        name if call.descriptor.parameters.is_empty() => MeasuredName::Plain(name),
-        name => return Err(format!("`{name}` is registered but not measured")),
+        name if CORE.contains(&name) => MeasuredName::Plain(name),
+        _ => MeasuredName::Provided(call),
     })
 }
 
@@ -152,6 +208,7 @@ pub(crate) struct Measures {
     rectangles: Option<PlanSpanServiceHandle>,
     coordinates: Option<CoordinateSystemServiceHandle>,
     host: Option<PropertyResolutionServiceHandle>,
+    providers: Option<(provider::Providers, ServiceRegistry)>,
     kinds: Arc<BTreeMap<ObjectId, String>>,
 }
 
@@ -174,6 +231,9 @@ impl Measures {
             rectangles: services.get::<PlanSpanServiceHandle>().cloned(),
             coordinates: services.get::<CoordinateSystemServiceHandle>().cloned(),
             host: host.cloned(),
+            providers: services
+                .get::<provider::Providers>()
+                .map(|providers| (providers.clone(), services.clone())),
             kinds: Arc::new(
                 project
                     .objects()
@@ -268,6 +328,8 @@ impl Measures {
             MeasuredName::BoundaryArea { kind, plane } => self.boundary_area(kind, *plane, object),
             MeasuredName::Surface(call) => self.surface(call, object),
             MeasuredName::Angle(call, steps) => self.angle(call, steps, object),
+            MeasuredName::Dimension(call) => self.dimension(call, object),
+            MeasuredName::Provided(call) => self.provided(call, object),
         }
     }
 
@@ -391,6 +453,135 @@ impl Measures {
     ) -> Result<([f64; 3], String), PropertyResolutionError> {
         let (frame, locator) = self.frame(name, object)?;
         Ok((frame.origin().coordinates_metres(), locator))
+    }
+
+    /// The direction an axis argument names for `object`: an own axis of
+    /// its placement, a world axis, or a stated vector.
+    fn direction(
+        &self,
+        name: &str,
+        argument: &MeasuredArgument,
+        object: &ObjectId,
+    ) -> Result<MetricDirection, PropertyResolutionError> {
+        let vector = match argument {
+            MeasuredArgument::Vector(vector) => *vector,
+            MeasuredArgument::Choice("x") => [1.0, 0.0, 0.0],
+            MeasuredArgument::Choice("y") => [0.0, 1.0, 0.0],
+            MeasuredArgument::Choice("z") => [0.0, 0.0, 1.0],
+            MeasuredArgument::Choice(own) => {
+                let (frame, _) = self.frame(name, object)?;
+                match *own {
+                    "own_y" => frame.forward(),
+                    "own_z" => frame.up(),
+                    _ => frame.right(),
+                }
+                .components()
+            }
+            _ => return Err(PropertyResolutionError::InvalidRequest),
+        };
+        MetricDirection::try_new(vector)
+            .map_err(|error| Self::unavailable(name, object, &error.to_string()))
+    }
+
+    /// An extent, length, thickness or perimeter of `object`'s body.
+    fn dimension(
+        &self,
+        call: &MeasuredCall,
+        object: &ObjectId,
+    ) -> Result<Answer, PropertyResolutionError> {
+        let name = call.name();
+        let unavailable = |error: String| Self::unavailable(name, object, &error);
+        let length = QuantityDimension::Length;
+        if name == PERIMETER {
+            let perimeter = self
+                .plan
+                .as_ref()
+                .ok_or_else(|| Self::missing(name, "plan-area"))?
+                .measure_footprint_perimeter(object)
+                .map_err(|error| unavailable(error.to_string()))?;
+            return Ok(Answer::Value(
+                perimeter.lower_metres(),
+                perimeter.upper_metres(),
+                length,
+                perimeter.evidence().locator.clone(),
+            ));
+        }
+        let service = self
+            .vertical
+            .as_ref()
+            .ok_or_else(|| Self::missing(name, "vertical-extent"))?;
+        let along = |key: &str| call.argument(key);
+        if name == THICKNESS {
+            let direction = match (along("direction"), call.choice("face")) {
+                (Some(argument), _) => self.direction(name, argument, object)?,
+                (None, face) => {
+                    let face = if face == Some("bottom") {
+                        SurfaceFace::Bottom
+                    } else {
+                        SurfaceFace::Top
+                    };
+                    let normals = service
+                        .measure_face_normals(object, face)
+                        .map_err(|error| unavailable(error.to_string()))?;
+                    surface::plane_normal(normals.normals())
+                        .and_then(|normal| {
+                            MetricDirection::try_new(normal).map_err(|error| error.to_string())
+                        })
+                        .map_err(unavailable)?
+                }
+            };
+            let thickness = service
+                .measure_thickness(object, direction)
+                .map_err(|error| unavailable(error.to_string()))?;
+            return Ok(Answer::Value(
+                thickness.lower_metres(),
+                thickness.upper_metres(),
+                length,
+                thickness.evidence().locator.clone(),
+            ));
+        }
+        let argument = along("axis")
+            .or_else(|| along("direction"))
+            .ok_or(PropertyResolutionError::InvalidRequest)?;
+        let direction = self.direction(name, argument, object)?;
+        let extent = service
+            .measure_directional_extent(object, direction)
+            .map_err(|error| unavailable(error.to_string()))?;
+        let (lower, upper) = extent.length_metres();
+        Ok(Answer::Value(
+            lower,
+            upper,
+            length,
+            extent.evidence().locator.clone(),
+        ))
+    }
+
+    /// What the provider registered for `call`'s name measures of `object`.
+    fn provided(
+        &self,
+        call: &MeasuredCall,
+        object: &ObjectId,
+    ) -> Result<Answer, PropertyResolutionError> {
+        let name = call.name();
+        let Some((providers, services)) = &self.providers else {
+            return Err(Self::missing(name, "built-in measurement"));
+        };
+        let provider = providers
+            .of(name)
+            .ok_or_else(|| Self::missing(name, "built-in measurement"))?;
+        let context = crate::RuleContext {
+            project: &providers.project,
+            services,
+        };
+        Ok(match provider.measure(call, object, &context)? {
+            provider::Measurement::Value {
+                lower,
+                upper,
+                dimension,
+                locator,
+            } => Answer::Value(lower, upper, dimension, locator),
+            provider::Measurement::Absent { locator } => Answer::Absent(locator),
+        })
     }
 
     /// The least-area rectangle of `object`'s footprint.

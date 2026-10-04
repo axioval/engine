@@ -163,6 +163,46 @@ pub(crate) fn ring_perimeter(ring: &Ring) -> f64 {
         .sum()
 }
 
+/// `a + b` and the exact error of its rounding.
+fn two_sum(a: f64, b: f64) -> (f64, f64) {
+    let sum = a + b;
+    let back = sum - a;
+    (sum, (a - (sum - back)) + (b - back))
+}
+
+/// The total boundary length of `polygons`, holes included, and a bound on
+/// its rounding: zero when every segment runs along an axis and every
+/// difference and sum is exact, so an axis-aligned footprint measures
+/// exactly.
+pub(crate) fn certified_perimeter(polygons: &[Polygon]) -> (f64, f64) {
+    let mut total = 0.0_f64;
+    let mut bound = 0.0_f64;
+    for ring in polygons
+        .iter()
+        .flat_map(|polygon| std::iter::once(&polygon.outer).chain(&polygon.holes))
+    {
+        for (a, b) in ring_segments(ring) {
+            let (dx, ex) = two_sum(b.x, -a.x);
+            let (dy, ey) = two_sum(b.y, -a.y);
+            let length = if dx == 0.0 || dy == 0.0 {
+                dx.abs() + dy.abs()
+            } else {
+                dx.hypot(dy)
+            };
+            // A rounded difference moves the length by at most its error; a
+            // hypotenuse rounds within an ulp or two of its length.
+            bound += ex.abs() + ey.abs();
+            if dx != 0.0 && dy != 0.0 {
+                bound += 2.0 * f64::EPSILON * length;
+            }
+            let (sum, error) = two_sum(total, length);
+            total = sum;
+            bound += error.abs();
+        }
+    }
+    (total, bound)
+}
+
 /// Area and perimeter of a triangle set's footprint, holes included.
 ///
 /// `None` when the overlay cannot be computed; an empty footprint measures

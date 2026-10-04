@@ -15,6 +15,14 @@ use serde::Serialize;
 
 mod registry;
 
+/// The body's extent along an own axis or a direction.
+pub const EXTENT: &str = "extent";
+/// A member's length along its own axis.
+pub const LENGTH: &str = "length";
+/// How thick the body is along a direction or across a face.
+pub const THICKNESS: &str = "thickness";
+/// The length of the footprint's boundary.
+pub const PERIMETER: &str = "perimeter";
 /// The angle between the object and the objects a path reaches.
 pub const ANGLE_TO: &str = "angle_to";
 /// The plan bearing of an axis from north.
@@ -113,6 +121,8 @@ pub enum MeasuredParameterKind {
     Length { minimum: f64 },
     /// One of `options`, matched ignoring ASCII case.
     Choice { options: &'static [&'static str] },
+    /// A direction in world coordinates, written `x,y,z`, not zero.
+    Vector,
 }
 
 /// How exact a measured value can be.
@@ -170,6 +180,8 @@ pub enum MeasuredArgument {
     Length(f64),
     /// The option chosen, as the registry spells it.
     Choice(&'static str),
+    /// A direction's components, as written.
+    Vector([f64; 3]),
 }
 
 /// Why a name is no measured value.
@@ -275,46 +287,64 @@ pub fn parse(text: &str) -> Result<MeasuredCall, MeasuredError> {
             key: parameter.key.to_owned(),
             detail,
         };
-        let argument = match parameter.kind {
-            MeasuredParameterKind::Path => {
-                let steps: Vec<String> = value
-                    .split(',')
-                    .map(|step| step.trim().to_owned())
-                    .collect();
-                if steps.iter().any(String::is_empty) {
-                    return Err(invalid("a step is empty".into()));
-                }
-                MeasuredArgument::Path(steps)
-            }
-            MeasuredParameterKind::SourceKind => {
-                if value.is_empty() {
-                    return Err(invalid("it is empty".into()));
-                }
-                MeasuredArgument::SourceKind(value.to_owned())
-            }
-            MeasuredParameterKind::Length { minimum } => MeasuredArgument::Length(
-                value
-                    .parse::<f64>()
-                    .ok()
-                    .filter(|length| length.is_finite() && *length >= minimum)
-                    .ok_or_else(|| {
-                        invalid(format!("`{value}` is no length of at least {minimum} m"))
-                    })?,
-            ),
-            MeasuredParameterKind::Choice { options } => MeasuredArgument::Choice(
-                options
-                    .iter()
-                    .find(|option| option.eq_ignore_ascii_case(value))
-                    .ok_or_else(|| {
-                        invalid(format!("`{value}` is none of {}", options.join(", ")))
-                    })?,
-            ),
-        };
+        let argument = argument(parameter.kind, value).map_err(invalid)?;
         arguments.insert(parameter.key, argument);
     }
     Ok(MeasuredCall {
         descriptor,
         arguments,
+    })
+}
+
+/// The argument `value` states for a parameter of `kind`, or why it is
+/// none.
+fn argument(kind: MeasuredParameterKind, value: &str) -> Result<MeasuredArgument, String> {
+    Ok(match kind {
+        MeasuredParameterKind::Path => {
+            let steps: Vec<String> = value
+                .split(',')
+                .map(|step| step.trim().to_owned())
+                .collect();
+            if steps.iter().any(String::is_empty) {
+                return Err("a step is empty".into());
+            }
+            MeasuredArgument::Path(steps)
+        }
+        MeasuredParameterKind::SourceKind => {
+            if value.is_empty() {
+                return Err("it is empty".into());
+            }
+            MeasuredArgument::SourceKind(value.to_owned())
+        }
+        MeasuredParameterKind::Length { minimum } => MeasuredArgument::Length(
+            value
+                .parse::<f64>()
+                .ok()
+                .filter(|length| length.is_finite() && *length >= minimum)
+                .ok_or_else(|| format!("`{value}` is no length of at least {minimum} m"))?,
+        ),
+        MeasuredParameterKind::Choice { options } => MeasuredArgument::Choice(
+            options
+                .iter()
+                .find(|option| option.eq_ignore_ascii_case(value))
+                .ok_or_else(|| format!("`{value}` is none of {}", options.join(", ")))?,
+        ),
+        MeasuredParameterKind::Vector => {
+            let components: Vec<f64> = value
+                .split(',')
+                .map(|component| component.trim().parse::<f64>())
+                .collect::<Result<_, _>>()
+                .map_err(|_| format!("`{value}` is no `x,y,z` direction"))?;
+            match components[..] {
+                [x, y, z]
+                    if [x, y, z].iter().all(|c| c.is_finite())
+                        && [x, y, z].iter().any(|c| *c != 0.0) =>
+                {
+                    MeasuredArgument::Vector([x, y, z])
+                }
+                _ => return Err(format!("`{value}` is no `x,y,z` direction")),
+            }
+        }
     })
 }
 

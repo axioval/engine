@@ -36,6 +36,7 @@ mod side_distance;
 pub mod sight;
 pub mod space;
 pub(crate) mod support_coverage;
+mod thickness;
 pub mod triangle_count;
 pub mod vertical_extent;
 pub(crate) mod vertical_surface;

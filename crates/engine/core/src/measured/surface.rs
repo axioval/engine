@@ -89,6 +89,27 @@ fn level([x, y, _]: &[Interval; 3]) -> bool {
     x.is_point() && y.is_point() && x.lower == 0.0 && y.lower == 0.0
 }
 
+/// The one normal of a planar face, from its pieces' boxes: every piece
+/// must lean the same way, within a part in a billion.
+pub(crate) fn plane_normal(normals: &[FaceNormal]) -> Result<[f64; 3], String> {
+    let centre = |normal: &FaceNormal| {
+        let (lower, upper) = (normal.lower(), normal.upper());
+        let vector = [0, 1, 2].map(|axis| f64::midpoint(lower[axis], upper[axis]));
+        let length = vector.iter().map(|c| c * c).sum::<f64>().sqrt();
+        vector.map(|c| c / length)
+    };
+    let first = normals.first().ok_or("the face has no pieces")?;
+    let normal = centre(first);
+    for other in &normals[1..] {
+        let other = centre(other);
+        let dot: f64 = (0..3).map(|axis| normal[axis] * other[axis]).sum();
+        if dot.abs() < 1.0 - 1e-9 {
+            return Err("the face is not planar, so it has no one direction square to it".into());
+        }
+    }
+    Ok(normal)
+}
+
 /// The hull of `measure` over every piece.
 fn over(
     normals: &[FaceNormal],
@@ -312,6 +333,14 @@ mod tests {
         assert!(holds(south, PI));
         let opposed = gradient_direction(&[exact([1.0, 0.0, 1.0]), exact([-1.0, 0.0, 1.0])]);
         assert!(opposed.is_err());
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn a_planar_face_has_one_normal_and_a_folded_one_none() {
+        let normal = plane_normal(&[exact([0.0, 0.0, 2.0]), exact([0.0, 0.0, 1.0])]).unwrap();
+        assert_eq!(normal, [0.0, 0.0, 1.0]);
+        assert!(plane_normal(&[exact([0.0, 0.0, 1.0]), exact([0.1, 0.0, 1.0])]).is_err());
     }
 
     #[test]

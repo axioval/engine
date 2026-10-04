@@ -887,8 +887,8 @@ pub use sight::{
 pub use source_metadata::{SourceMetadata, SourceMetadataIndex};
 pub use space::{
     BoundaryGap, BoundaryRequest, Cap, CapCoverage, CapRequest, ClearHeightEvidence, Containment,
-    OverlapRequest, SpaceError, SpaceOverlap, SpaceService, SpaceServiceHandle, SupportCounts,
-    UnallocatedRegion,
+    OverlapRequest, SpaceAspect, SpaceError, SpaceOverlap, SpaceService, SpaceServiceHandle,
+    SupportCounts, UnallocatedRegion, UnmeasuredObjects,
 };
 pub use table_files::{
     PackageDirectory, PackageFiles, TABLE_FILE_LIMIT_BYTES, TableFileError,

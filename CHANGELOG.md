@@ -104,6 +104,23 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Breaking:** space measurements refuse only for the unmeasured objects
+  that could change them, and name them (#212). One unmeasured slab or roof
+  anywhere used to refuse every space measurement of the model with
+  "unavailable for the requested aspect". `SpaceError` gains
+  `Unmeasured(UnmeasuredObjects)` (the `SpaceAspect` and the objects, its
+  message naming five and counting the rest) and is no longer `Copy`.
+  `AxiolidGeometry::with_unmeasured_bound` states a box an unmeasured body
+  lies within; `AxiolidSpaceService` then refuses a space's overlaps,
+  duplicates, caps and boundary gaps only for unmeasured candidates whose
+  box reaches the space (its cap plane for caps, its plan extent for
+  boundary gaps), and the clear height only for the space itself. An object
+  without a box may be anywhere and still refuses every space. Support
+  counts read no body and no longer refuse. The CLI bounds each unmeasured
+  product for the space service: a whole whose parts could not be composed
+  by its parts' boxes and bounds (`AxiolidGeometry::parts_bound`, none if
+  any part is unbounded), otherwise by the box its `Box` representation
+  states, placed like its body.
 - Moved to `axiolid-mesh-compile` 0.3.12, `axiolid-construct` 0.3.13 and
   `axiolid-brep-boolean` 0.1.4. A disk swept round a sharp polyline corner
   without a fillet radius is mitred again and certified within the chord

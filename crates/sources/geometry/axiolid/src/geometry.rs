@@ -33,6 +33,7 @@ pub struct AxiolidGeometry {
     chord_deviations: BTreeMap<ObjectId, f64>,
     bodiless: BTreeSet<ObjectId>,
     unmeasured: BTreeMap<ObjectId, String>,
+    unmeasured_bounds: BTreeMap<ObjectId, Extent>,
     groups: BTreeMap<ObjectId, Result<Vec<ObjectId>, String>>,
     boundaries: BTreeMap<ObjectId, Arc<ExactBody>>,
     /// Wholes measured through their parts ([`Self::with_composed_body`]).
@@ -128,6 +129,38 @@ impl AxiolidGeometry {
     pub fn with_unmeasured(mut self, object: ObjectId, reason: impl Into<String>) -> Self {
         self.unmeasured.insert(object, reason.into());
         self
+    }
+
+    /// Declares a box an unmeasured object's body is known to lie within,
+    /// in world metres, such as one the source states beside the body it
+    /// could not mesh.
+    ///
+    /// The body stays unmeasured; the box only lets a service tell where it
+    /// cannot be, so a measurement far from it need not refuse. A box that
+    /// is not finite or whose minimum exceeds its maximum is ignored: an
+    /// object without a bound may be anywhere.
+    #[must_use]
+    pub fn with_unmeasured_bound(mut self, object: ObjectId, min: [f64; 3], max: [f64; 3]) -> Self {
+        let valid = min
+            .iter()
+            .zip(&max)
+            .all(|(low, high)| low.is_finite() && high.is_finite() && low <= high);
+        if valid {
+            self.unmeasured_bounds.insert(object, (min, max));
+        } else {
+            self.unmeasured_bounds.remove(&object);
+        }
+        self
+    }
+
+    /// The box an unmeasured object's body lies within, when the host
+    /// declared one; `None` for a measured object or one that may be
+    /// anywhere.
+    pub(crate) fn unmeasured_bound(&self, object: &ObjectId) -> Option<&Extent> {
+        if !self.is_unmeasured(object) {
+            return None;
+        }
+        self.unmeasured_bounds.get(object)
     }
 
     /// Declares a bodiless group (a zone, say) and the objects it groups.
@@ -423,6 +456,40 @@ impl AxiolidGeometry {
             deviation,
             exact,
         })
+    }
+
+    /// The box enclosing a whole whose body is the union of `parts` but
+    /// could not be composed, in world metres: each meshed part's mesh box
+    /// grown by its chord deviation and each unmeasured part's declared
+    /// bound ([`Self::with_unmeasured_bound`]); a bodiless part adds
+    /// nothing.
+    ///
+    /// `None` when any part is unbounded (unmeasured without a bound,
+    /// undescribed, or with an invalid deviation) or none occupies
+    /// material: the whole may then be anywhere. Hand the result to
+    /// [`Self::with_unmeasured_bound`] for the whole.
+    #[must_use]
+    pub fn parts_bound(&self, parts: &[ObjectId]) -> Option<([f64; 3], [f64; 3])> {
+        let mut bound: Option<Extent> = None;
+        for part in parts {
+            let extent = if self.meshes.contains_key(part) {
+                self.enclosing_extent(part)?
+            } else if self.is_unmeasured(part) {
+                *self.unmeasured_bound(part)?
+            } else if self.bodiless.contains(part) {
+                continue;
+            } else {
+                return None;
+            };
+            bound = Some(match bound {
+                None => extent,
+                Some((min, max)) => (
+                    std::array::from_fn(|axis| min[axis].min(extent.0[axis])),
+                    std::array::from_fn(|axis| max[axis].max(extent.1[axis])),
+                ),
+            });
+        }
+        bound
     }
 
     /// Registers a whole with no body of its own, measured as the union of

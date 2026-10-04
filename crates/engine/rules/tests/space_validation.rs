@@ -11,9 +11,10 @@ use std::{
 };
 
 use axioval_engine::{
-    BoundaryGap, BoundaryRequest, CapCoverage, CapRequest, ClearHeightEvidence, CompiledRule,
+    BoundaryGap, BoundaryRequest, Cap, CapCoverage, CapRequest, ClearHeightEvidence, CompiledRule,
     Containment, NotEvaluatedReason, OverlapRequest, RuleCapability, RuleContext, ServiceRegistry,
-    SpaceError, SpaceOverlap, SpaceService, SpaceServiceHandle, SupportCounts, UnallocatedRegion,
+    SpaceAspect, SpaceError, SpaceOverlap, SpaceService, SpaceServiceHandle, SupportCounts,
+    UnallocatedRegion,
 };
 use axioval_ir::contract::{ParameterValue, Selector, Severity as RuleSeverity};
 use axioval_ir::{Evidence, Object, ObjectId, Project, RuleId, Severity, SourceId};
@@ -108,7 +109,7 @@ impl SpaceService for Stub {
         self.duplicates.clone().unwrap_or(Ok(Vec::new()))
     }
     fn measure_clear_height(&self, space: &ObjectId) -> Result<ClearHeightEvidence, SpaceError> {
-        let metres = self.height.unwrap_or(Ok(3.0))?;
+        let metres = self.height.clone().unwrap_or(Ok(3.0))?;
         ClearHeightEvidence::try_new(space.clone(), metres, evidence())
     }
     fn measure_boundary_gaps(
@@ -145,7 +146,7 @@ impl SpaceService for Stub {
         request: &CapRequest,
     ) -> Result<CapCoverage, SpaceError> {
         self.cap_requests.lock().unwrap().push(request.clone());
-        let (whole, covered) = self.cap.unwrap_or(Ok((10.0, 10.0)))?;
+        let (whole, covered) = self.cap.clone().unwrap_or(Ok((10.0, 10.0)))?;
         CapCoverage::try_new(whole, covered, Vec::new())
     }
     fn measure_unallocated_regions(&self) -> Result<Vec<UnallocatedRegion>, SpaceError> {
@@ -164,7 +165,7 @@ impl SpaceService for Stub {
     }
     fn measure_support_counts(&self) -> Result<SupportCounts, SpaceError> {
         *self.support_calls.lock().unwrap() += 1;
-        let (slabs, roofs) = self.support.unwrap_or(Ok((2, 1)))?;
+        let (slabs, roofs) = self.support.clone().unwrap_or(Ok((2, 1)))?;
         Ok(SupportCounts::new(slabs, roofs, vec![oid("bldg")]))
     }
     fn evidence(&self) -> Evidence {
@@ -477,6 +478,34 @@ fn one_unavailable_aspect_does_not_sink_the_others() {
     assert_eq!(
         outcome.not_evaluated_outcomes()[0].reason(),
         &NotEvaluatedReason::IncompleteEvidence
+    );
+}
+
+/// A measurement refused for unmeasured objects is incomplete evidence, and
+/// the outcome names the aspect and the objects that blocked it.
+#[test]
+fn an_unmeasured_refusal_names_what_blocked_it() {
+    let outcome = evaluate(
+        Stub {
+            cap: Some(Err(SpaceError::unmeasured(
+                SpaceAspect::CapCoverage(Cap::Top),
+                vec![oid("roof")],
+            ))),
+            ..Stub::default()
+        },
+        &rule_with(&[("check_top_cap", ParameterValue::Boolean { value: true })]),
+    );
+    let refused = outcome
+        .not_evaluated_outcomes()
+        .iter()
+        .find(|outcome| outcome.message().contains("cap coverage"))
+        .expect("the cap is not evaluated");
+    assert_eq!(refused.reason(), &NotEvaluatedReason::IncompleteEvidence);
+    assert!(
+        refused.message().contains("top cap coverage")
+            && refused.message().contains("cad:model/roof"),
+        "{}",
+        refused.message()
     );
 }
 

@@ -145,7 +145,7 @@ impl RuleCapability for SpaceValidation {
                 for object in selected {
                     evaluation.push_object_not_evaluated(
                         object.id.clone(),
-                        reason(error),
+                        reason(&error),
                         error.to_string(),
                     );
                 }
@@ -268,9 +268,11 @@ impl Policy {
     }
 }
 
-fn reason(error: SpaceError) -> NotEvaluatedReason {
+fn reason(error: &SpaceError) -> NotEvaluatedReason {
     match error {
-        SpaceError::Unavailable => NotEvaluatedReason::IncompleteEvidence,
+        SpaceError::Unavailable | SpaceError::Unmeasured(_) => {
+            NotEvaluatedReason::IncompleteEvidence
+        }
         SpaceError::InexactEvidence | SpaceError::InvalidQuantity => {
             NotEvaluatedReason::InvalidEvidence
         }
@@ -466,7 +468,7 @@ fn check_duplicates(
             );
         }
         Err(error) => {
-            evaluation.push_object_not_evaluated(space.clone(), reason(error), error.to_string());
+            evaluation.push_object_not_evaluated(space.clone(), reason(&error), error.to_string());
         }
     }
 }
@@ -496,7 +498,7 @@ fn check_height(
             }
         }
         Err(error) => {
-            evaluation.push_object_not_evaluated(space.clone(), reason(error), error.to_string());
+            evaluation.push_object_not_evaluated(space.clone(), reason(&error), error.to_string());
         }
     }
 }
@@ -540,7 +542,7 @@ fn check_boundary(
             }
         }
         Err(error) => {
-            evaluation.push_object_not_evaluated(space.clone(), reason(error), error.to_string());
+            evaluation.push_object_not_evaluated(space.clone(), reason(&error), error.to_string());
         }
     }
 }
@@ -590,7 +592,7 @@ fn check_overlaps(
             }
         }
         Err(error) => {
-            evaluation.push_object_not_evaluated(space.clone(), reason(error), error.to_string());
+            evaluation.push_object_not_evaluated(space.clone(), reason(&error), error.to_string());
         }
     }
 }
@@ -639,7 +641,7 @@ fn check_cap(
             }
         }
         Err(error) => {
-            evaluation.push_object_not_evaluated(space.clone(), reason(error), error.to_string());
+            evaluation.push_object_not_evaluated(space.clone(), reason(&error), error.to_string());
         }
     }
 }
@@ -768,7 +770,7 @@ fn check_residuals(
             }
         }
         Err(error) => {
-            evaluation.push_not_evaluated(reason(error), error.to_string());
+            evaluation.push_not_evaluated(reason(&error), error.to_string());
         }
     }
 }

@@ -322,6 +322,8 @@ pub fn attach(
     // Physical products with no body of their own, measured through their
     // parts once every part is.
     let mut wholes: Vec<ObjectId> = Vec::new();
+    // The box each whole's `Box` representation states, if any.
+    let mut stated: BTreeMap<ObjectId, ([f64; 3], [f64; 3])> = BTreeMap::new();
 
     for object in session.project().objects() {
         let id = object.id.clone();
@@ -385,10 +387,19 @@ pub fn attach(
                 geometry = geometry.with_no_body(id);
                 report.no_body += 1;
             }
-            Ok(None) => wholes.push(id),
+            Ok(None) => {
+                // Kept for the whole in case its parts cannot measure it.
+                if let Some(bound) = stated_box(model, units, entity) {
+                    stated.insert(id.clone(), bound);
+                }
+                wholes.push(id);
+            }
             Err(error) => {
                 report.unmeasured.push((id.clone(), error.clone()));
-                geometry = geometry.with_unmeasured(id, error);
+                geometry = geometry.with_unmeasured(id.clone(), error);
+                if let Some((min, max)) = stated_box(model, units, entity) {
+                    geometry = geometry.with_unmeasured_bound(id, min, max);
+                }
             }
         }
     }
@@ -400,6 +411,7 @@ pub fn attach(
         geometry,
         parts: decompositions(relationships, &kinds),
         wholes: wholes.iter().cloned().collect(),
+        stated,
         decided: BTreeSet::new(),
         report: &mut report,
         keep_meshes: options.keep_meshes,
@@ -465,6 +477,8 @@ struct Composer<'r> {
     parts: Result<BTreeMap<ObjectId, Vec<ObjectId>>, String>,
     /// The products with no body of their own.
     wholes: BTreeSet<ObjectId>,
+    /// The box a whole's `Box` representation states.
+    stated: BTreeMap<ObjectId, ([f64; 3], [f64; 3])>,
     /// Wholes measured or left unmeasured, and those being decided.
     decided: BTreeSet<ObjectId>,
     report: &'r mut GeometryReport,
@@ -492,12 +506,12 @@ impl Composer<'_> {
                 let reason = format!(
                     "no body representation, and whether it decomposes into parts that                      carry its body cannot be read: {error}"
                 );
-                self.unmeasured(whole, reason);
+                self.unmeasured(whole, reason, None);
                 return;
             }
         };
         if parts.is_empty() {
-            self.unmeasured(whole, "no body representation".to_owned());
+            self.unmeasured(whole, "no body representation".to_owned(), None);
             return;
         }
         for part in &parts {
@@ -525,17 +539,32 @@ impl Composer<'_> {
                 self.geometry = geometry.with_composed_body(whole.clone(), body);
             }
             Err(error) => {
+                // Its body is the union of its parts', so the box around
+                // their bodies and declared boxes bounds it.
+                let bound = self.geometry.parts_bound(&parts);
                 self.unmeasured(
                     whole,
                     format!("no body representation of its own, and {error}"),
+                    bound,
                 );
             }
         }
     }
 
-    fn unmeasured(&mut self, whole: &ObjectId, reason: String) {
-        let geometry = std::mem::take(&mut self.geometry);
-        self.geometry = geometry.with_unmeasured(whole.clone(), reason.clone());
+    /// Leaves `whole` unmeasured, bounded by its parts' box when they give
+    /// one, else by the box its file states, else nowhere.
+    fn unmeasured(
+        &mut self,
+        whole: &ObjectId,
+        reason: String,
+        parts: Option<([f64; 3], [f64; 3])>,
+    ) {
+        let mut geometry = std::mem::take(&mut self.geometry);
+        geometry = geometry.with_unmeasured(whole.clone(), reason.clone());
+        if let Some((min, max)) = parts.or_else(|| self.stated.get(whole).copied()) {
+            geometry = geometry.with_unmeasured_bound(whole.clone(), min, max);
+        }
+        self.geometry = geometry;
         self.report.unmeasured.push((whole.clone(), reason));
     }
 }
@@ -1227,6 +1256,81 @@ fn snapshot_mesh(mesh: &axiolid_mesh::TriMesh) -> Option<bcf_snapshot::Mesh> {
 
 fn entity_id(id: &ObjectId) -> Option<EntityId> {
     id.local_id.strip_prefix('#')?.parse().ok().map(EntityId)
+}
+
+/// `IfcProduct.Representation`.
+const PRODUCT_REPRESENTATION: usize = 6;
+
+/// The world box, in metres, that a product's `Box` representation states:
+/// every `IfcBoundingBox` item's eight corners placed as the product's
+/// representations are (the context's `WorldCoordinateSystem` above the
+/// placement chain) and enclosed. A box is authored in the
+/// representation's own axes, so its corners are placed one by one, never
+/// its corner and extents as world axes.
+///
+/// `None` when the product states no box or any part of it cannot be read:
+/// an unmeasured product without one may be anywhere.
+fn stated_box(
+    model: &Model,
+    units: &ifc_geometry::units::UnitScale,
+    product: EntityId,
+) -> Option<([f64; 3], [f64; 3])> {
+    let shape =
+        ifc_geometry::Slots::new(product, model.get(product)?).opt_ref(PRODUCT_REPRESENTATION)?;
+    let representations = ifc_geometry::ProductShape::new(shape, model.get(shape)?)
+        .representations()
+        .ok()?;
+    let placement = ifc_geometry::product_world_transform(model, units, product).ok()?;
+    let mut bound: Option<([f64; 3], [f64; 3])> = None;
+    for id in representations {
+        let representation = ifc_geometry::Representation::new(id, model.get(id)?);
+        if !representation
+            .identifier()
+            .is_some_and(|identifier| identifier.eq_ignore_ascii_case("Box"))
+        {
+            continue;
+        }
+        let context = match ifc_geometry::context_of(model, id)
+            .and_then(|context| context.world_coordinate_system(model))
+        {
+            Some(system) => ifc_geometry::resource::placement::axis_placement_transform(
+                model,
+                system,
+                model.get(system)?,
+            )
+            .ok()?
+            .to_metres(units),
+            None => Transform::identity(),
+        };
+        let frame = context.compose(&placement);
+        for item in representation.items().ok()? {
+            let entity = model.get(item)?;
+            if !entity.type_name.eq_ignore_ascii_case("IFCBOUNDINGBOX") {
+                return None;
+            }
+            let item = ifc_geometry::solid::BoundingBox::new(item, entity);
+            let corner = item.corner_point(model).ok()?.coordinates_3d().ok()?;
+            let size = item.checked_dimensions().ok()?;
+            for index in 0..8 {
+                let local: [f64; 3] = std::array::from_fn(|axis| {
+                    let far = (index >> axis) & 1 == 1;
+                    units.length(corner[axis] + if far { size[axis] } else { 0.0 })
+                });
+                let world = frame.apply(local);
+                if world.iter().any(|value| !value.is_finite()) {
+                    return None;
+                }
+                bound = Some(match bound {
+                    None => (world, world),
+                    Some((min, max)) => (
+                        std::array::from_fn(|axis| min[axis].min(world[axis])),
+                        std::array::from_fn(|axis| max[axis].max(world[axis])),
+                    ),
+                });
+            }
+        }
+    }
+    bound
 }
 
 /// One product's net body (openings subtracted), whether it is exact, and

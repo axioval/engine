@@ -892,7 +892,7 @@ states:
 | exact | every face is planar (polygonal extrusions, including steel sections without fillets or rounded edges, faceted B-reps, meshes, booleans of these and clips by half-spaces, bounded by a polygon or not), so the mesh is the shape; a whole measured through its parts when every part is exact | measured as exact |
 | tessellated | some face is curved; the mesh is within the deviation the mesh compiler certifies for it (the 1 mm chord budget, or the bound it computed); a whole measured through its parts when some part is tessellated, within the largest deviation of its parts | measured as approximate, never exact |
 | no body | the object occupies no material: spatial structure, openings, annotations, grids, ports, structural analysis items, non-products | ignored as an obstacle |
-| unmeasured | a physical product that could not be meshed: one without a Body representation and without parts (`no body representation`), a whole one of whose parts is unmeasured, or a curved one whose mesh the compiler certifies no deviation for | measurements it could affect are not evaluated |
+| unmeasured | a physical product that could not be meshed: one without a Body representation and without parts (`no body representation`), a whole one of whose parts is unmeasured, or a curved one whose mesh the compiler certifies no deviation for | measurements it could affect are not evaluated; with a bound (below), space measurements it cannot reach are evaluated |
 
 The planarity check is conservative. Anything it does not recognise counts as
 tessellated, which only loses exactness, never presents an approximation as
@@ -934,6 +934,21 @@ to the nearest part, which is exactly the distance to the union. Services
 that look at every body in a scene (facade areas, guards, space
 measurements) see the whole and its parts as separate bodies, as a rule
 selecting both asks.
+
+**Bounds of unmeasured products.** The space service is told where an
+unmeasured product's body can be, so that it refuses only the space
+measurements the body could reach. A whole whose parts could not be
+composed is bounded by its parts: the boxes of the measured ones and the
+bounds of the unmeasured ones, enclosed; one part with no bound leaves
+the whole without one. Otherwise a product that states a `Box`
+representation (`IfcBoundingBox` items) is bounded by that box: its eight
+corners are placed as the product's representations are (the context's
+world coordinate system above the placement chain) and enclosed. A whole
+measured through its parts is measured and needs no bound. A space
+measurement no bound can reach is evaluated; one a bound reaches is not
+evaluated and names the product. Without a bound, or with one that cannot
+be read, the product may be anywhere and refuses every space measurement
+it could change.
 
 The kernel keeps every surface point of a revolution (tapered too), a sphere,
 a torus and a sweep along one circle or ellipse arc within the 1 mm of its

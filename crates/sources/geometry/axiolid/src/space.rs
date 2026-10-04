@@ -14,11 +14,12 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_engine::{
     BoundaryRequest, Cap, CapCoverage, CapRequest, ClearHeightEvidence, Containment,
-    OverlapRequest, SpaceError, SpaceOverlap, SpaceService, SupportCounts, UnallocatedRegion,
+    OverlapRequest, SpaceAspect, SpaceError, SpaceOverlap, SpaceService, SupportCounts,
+    UnallocatedRegion,
 };
 use axioval_ir::{Evidence, ObjectId, SourceId};
 
-use crate::geometry::{AxiolidGeometry, Triangle, triangles};
+use crate::geometry::{AxiolidGeometry, Triangle, extent_gap, triangles};
 use crate::planar::{
     boundary_rings, footprint_polygons, plan_frame, polygon_area, projected_polygons, ring_segments,
 };
@@ -40,6 +41,11 @@ const CONTAINMENT_RATIO: f64 = 0.999;
 
 /// How far an element may sit from a cap plane and still cap it.
 const CAP_PLANE_TOLERANCE_M: f64 = 1.0e-6;
+
+/// How far an unmeasured object's declared bound may lie from a space and
+/// still be taken to reach it: the rounding of placing that bound in world
+/// coordinates, which the host computes from the source.
+const BOUND_MARGIN_M: f64 = 1.0e-6;
 
 /// One storey's geometry while unallocated floor regions are measured.
 #[derive(Default)]
@@ -116,32 +122,94 @@ impl AxiolidSpaceService {
         self
     }
 
-    /// Refuses while a declared space, slab, roof or storey member could
-    /// not be measured: every measurement here scans those objects, and one
-    /// missing would change clear heights, overlaps, coverage or residuals.
-    fn complete(&self) -> Result<(), SpaceError> {
-        if self
-            .roles
-            .keys()
-            .chain(self.storeys.keys())
-            .any(|object| self.geometry.is_unmeasured(object))
-        {
-            return Err(SpaceError::Unavailable);
-        }
-        Ok(())
+    /// Whether an unmeasured object is one space validation scans: a
+    /// declared space, slab, roof or storey member, or an element a request
+    /// names.
+    fn concerns(&self, object: &ObjectId, requested: &[ObjectId]) -> bool {
+        self.roles.contains_key(object)
+            || self.storeys.contains_key(object)
+            || requested.binary_search(object).is_ok()
     }
 
-    /// Refuses as [`Self::complete`] does, and also while an element a
-    /// request names could not be measured: it may be the one that caps.
-    fn complete_with(&self, requested: &[ObjectId]) -> Result<(), SpaceError> {
-        self.complete()?;
-        if requested
-            .iter()
-            .any(|object| self.geometry.is_unmeasured(object))
-        {
-            return Err(SpaceError::Unavailable);
+    /// Refuses the model-wide `aspect` while any declared space, slab, roof
+    /// or storey member could not be measured: it scans every one of them,
+    /// and one missing would change the residuals.
+    fn complete(&self, aspect: SpaceAspect) -> Result<(), SpaceError> {
+        let blockers: Vec<ObjectId> = self
+            .geometry
+            .unmeasured()
+            .map(|(object, _)| object)
+            .filter(|object| self.concerns(object, &[]))
+            .cloned()
+            .collect();
+        if blockers.is_empty() {
+            Ok(())
+        } else {
+            Err(SpaceError::unmeasured(aspect, blockers))
         }
-        Ok(())
+    }
+
+    /// Refuses `aspect` of `space` while an unmeasured object could change
+    /// it: a declared role, storey member or `requested` element that
+    /// `affects` accepts and that may lie within `reach` of the space (in
+    /// plan when `plan` is set; only of its plane `at` a cap, when set).
+    ///
+    /// Only a bound the host declared
+    /// ([`AxiolidGeometry::with_unmeasured_bound`]) places an unmeasured
+    /// object; one without may be anywhere, so it refuses every space. The
+    /// refusal names every object that blocks this space.
+    #[allow(clippy::too_many_arguments)]
+    fn complete_near(
+        &self,
+        aspect: SpaceAspect,
+        space: &ObjectId,
+        requested: &[ObjectId],
+        reach: f64,
+        plan: bool,
+        at: Option<Cap>,
+        affects: impl Fn(&ObjectId) -> bool,
+    ) -> Result<(), SpaceError> {
+        let extent = self.geometry.enclosing_extent(space).map(|(min, max)| {
+            // A cap element must reach the cap's plane: the space's lowest
+            // or highest point, as its coverage is measured.
+            let plane = match at {
+                None => return (min, max),
+                Some(Cap::Top) => max[2],
+                Some(Cap::Bottom) => min[2],
+            };
+            ([min[0], min[1], plane], [max[0], max[1], plane])
+        });
+        let blockers: Vec<ObjectId> = self
+            .geometry
+            .unmeasured()
+            .map(|(object, _)| object)
+            .filter(|object| {
+                *object != space
+                    && self.concerns(object, requested)
+                    && affects(object)
+                    && match (&extent, self.geometry.unmeasured_bound(object)) {
+                        (Some(extent), Some(bound)) => {
+                            extent_gap(extent, bound, plan) <= reach + BOUND_MARGIN_M
+                        }
+                        _ => true,
+                    }
+            })
+            .cloned()
+            .collect();
+        if blockers.is_empty() {
+            Ok(())
+        } else {
+            Err(SpaceError::unmeasured(aspect, blockers))
+        }
+    }
+
+    /// The triangles of the space `aspect` measures, refused by name when
+    /// the space itself could not be measured.
+    fn subject(&self, aspect: SpaceAspect, space: &ObjectId) -> Result<Vec<Triangle>, SpaceError> {
+        if self.geometry.is_unmeasured(space) {
+            return Err(SpaceError::unmeasured(aspect, vec![space.clone()]));
+        }
+        self.triangles_of(space)
     }
 
     /// Whether `candidate` may form `request`'s cap: one of the requested
@@ -281,8 +349,12 @@ fn containment(subject_area: f64, other_area: f64, shared: f64) -> Containment {
 
 impl SpaceService for AxiolidSpaceService {
     fn measure_duplicates(&self, space: &ObjectId) -> Result<Vec<ObjectId>, SpaceError> {
-        self.complete()?;
-        let subject = self.triangles_of(space)?;
+        let aspect = SpaceAspect::Duplicates;
+        let subject = self.subject(aspect, space)?;
+        // Only another space can duplicate it, and only one meeting it.
+        self.complete_near(aspect, space, &[], 0.0, false, None, |candidate| {
+            self.is_space(candidate)
+        })?;
         self.require_exact(space, 0.0, false, |candidate| self.is_space(candidate))?;
         let tolerance = tolerance()?;
         let subject_area = plan_area(&subject, tolerance);
@@ -316,8 +388,8 @@ impl SpaceService for AxiolidSpaceService {
     }
 
     fn measure_clear_height(&self, space: &ObjectId) -> Result<ClearHeightEvidence, SpaceError> {
-        self.complete()?;
-        let subject = self.triangles_of(space)?;
+        // Measured from the space's own body: no other object changes it.
+        let subject = self.subject(SpaceAspect::ClearHeight, space)?;
         self.require_exact(space, 0.0, false, |_| false)?;
         let (floor, ceiling) = vertical_span(&subject).ok_or(SpaceError::Unavailable)?;
         ClearHeightEvidence::try_new(
@@ -332,8 +404,19 @@ impl SpaceService for AxiolidSpaceService {
         space: &ObjectId,
         request: &BoundaryRequest,
     ) -> Result<Vec<axioval_engine::BoundaryGap>, SpaceError> {
-        self.complete_with(request.elements().unwrap_or_default())?;
-        let subject = self.triangles_of(space)?;
+        let aspect = SpaceAspect::BoundaryGaps;
+        let subject = self.subject(aspect, space)?;
+        // Coverage is judged in plan alone, so an element on another storey
+        // may cover the boundary too.
+        self.complete_near(
+            aspect,
+            space,
+            request.elements().unwrap_or_default(),
+            0.0,
+            true,
+            None,
+            |candidate| self.bounds(request.elements(), candidate),
+        )?;
         // Any bounding footprint touching the boundary in plan may cover it.
         self.require_exact(space, 0.0, true, |candidate| {
             self.bounds(request.elements(), candidate)
@@ -391,11 +474,21 @@ impl SpaceService for AxiolidSpaceService {
         request: &OverlapRequest,
     ) -> Result<Vec<SpaceOverlap>, SpaceError> {
         let requested = request.elements();
-        self.complete_with(requested.unwrap_or_default())?;
-        let subject = self.triangles_of(space)?;
+        let aspect = SpaceAspect::Overlaps;
+        let subject = self.subject(aspect, space)?;
         let chosen = |candidate: &ObjectId| {
             requested.is_none_or(|elements| elements.binary_search(candidate).is_ok())
         };
+        // An overlap needs shared plan area and shared height.
+        self.complete_near(
+            aspect,
+            space,
+            requested.unwrap_or_default(),
+            0.0,
+            false,
+            None,
+            chosen,
+        )?;
         self.require_exact(space, 0.0, false, chosen)?;
         let tolerance = tolerance()?;
         let subject_area = plan_area(&subject, tolerance);
@@ -436,9 +529,19 @@ impl SpaceService for AxiolidSpaceService {
         space: &ObjectId,
         request: &CapRequest,
     ) -> Result<CapCoverage, SpaceError> {
-        self.complete_with(request.elements().unwrap_or_default())?;
         let cap = request.cap();
-        let subject = self.triangles_of(space)?;
+        let aspect = SpaceAspect::CapCoverage(cap);
+        let subject = self.subject(aspect, space)?;
+        // A cap element meets the space's cap plane and its plan footprint.
+        self.complete_near(
+            aspect,
+            space,
+            request.elements().unwrap_or_default(),
+            CAP_PLANE_TOLERANCE_M,
+            false,
+            Some(cap),
+            |candidate| self.caps(request, candidate),
+        )?;
         self.require_exact(space, CAP_PLANE_TOLERANCE_M, false, |candidate| {
             self.caps(request, candidate)
         })?;
@@ -523,7 +626,7 @@ impl SpaceService for AxiolidSpaceService {
     }
 
     fn measure_unallocated_regions(&self) -> Result<Vec<UnallocatedRegion>, SpaceError> {
-        self.complete()?;
+        self.complete(SpaceAspect::UnallocatedRegions)?;
         let tolerance = tolerance()?;
         // Regions are cut from every storey-assigned body, so any tessellated
         // one makes them estimates.
@@ -594,8 +697,9 @@ impl SpaceService for AxiolidSpaceService {
         Ok(regions)
     }
 
+    /// Counts the declared roles, measured or not: an unmeasured slab is
+    /// still a slab, and no body is read.
     fn measure_support_counts(&self) -> Result<SupportCounts, SpaceError> {
-        self.complete()?;
         let mut slabs = 0usize;
         let mut roofs = 0usize;
         for role in self.roles.values() {

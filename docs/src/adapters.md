@@ -566,6 +566,27 @@ measurements refuse while one exists that could affect them, and
 free-space checks refuse it as an obstacle. Treating an unmeasured slab as
 absent would make a wall above it look unsupported, exactly.
 
+A host may also state a box an unmeasured body lies within
+(`with_unmeasured_bound`, in world metres), such as `parts_bound` of a whole
+whose parts could not be composed. The body stays unmeasured; the
+box only says where it cannot be. `AxiolidSpaceService` refuses a space's
+measurement only for the unmeasured objects that could change it, each
+refusal (`SpaceError::Unmeasured`) naming the aspect and those objects:
+
+| Aspect | Unmeasured objects that refuse it |
+|---|---|
+| clear height | the space itself |
+| duplicates | spaces whose box meets the space's extent |
+| overlaps | the request's elements (every declared object without one) whose box meets the space's extent |
+| top or bottom cap coverage | the cap's elements whose box comes within 1 µm of that cap's plane over the space's plan extent |
+| boundary gaps | the bounding elements whose box meets the space's plan extent (coverage is judged in plan) |
+| unallocated regions | any declared space, slab, roof or storey member |
+
+Boxes are judged with a 1 µm margin for the rounding of placing them. An
+unmeasured object without a box, or with one that is not finite or is
+inverted, may be anywhere and refuses every space as before. The support
+counts read no body, so they count an unmeasured slab and never refuse.
+
 `AxiolidPlanAreaService` measures plan footprints and footprint overlaps
 through the same plan overlay. A planar mesh measures exactly. A tessellated
 mesh with chord deviation `d` and footprint perimeter `P` measures within

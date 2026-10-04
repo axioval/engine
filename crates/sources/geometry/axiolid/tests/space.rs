@@ -4,7 +4,8 @@ use axiolid_core::Point3;
 use axiolid_mesh::TriMesh;
 use axioval_axiolid::{AxiolidGeometry, AxiolidSpaceService};
 use axioval_engine::{
-    BoundaryRequest, Cap, CapRequest, Containment, OverlapRequest, SpaceError, SpaceService,
+    BoundaryRequest, Cap, CapRequest, Containment, OverlapRequest, SpaceAspect, SpaceError,
+    SpaceService,
 };
 use axioval_ir::{ObjectId, SourceId};
 
@@ -457,29 +458,233 @@ fn closed_coincident_spaces_are_duplicates() {
     );
 }
 
+/// The refusal for `aspect` naming `objects`.
+fn blocked(aspect: SpaceAspect, objects: &[&str]) -> SpaceError {
+    SpaceError::unmeasured(aspect, objects.iter().map(|local| id(local)).collect())
+}
+
 /// A declared slab that could not be measured would silently drop out of
-/// every scan, so every space measurement refuses instead.
+/// every scan, so every measurement it could change refuses, naming it.
+/// Without a bound it may be anywhere, so it refuses every space.
 #[test]
-fn an_unmeasured_declared_object_makes_space_measurements_unavailable() {
+fn an_unmeasured_declared_object_refuses_what_it_could_change() {
     let geometry = AxiolidGeometry::new()
         .with_mesh(id("space"), body(0.0, 4.0, 0.0, 4.0, 0.0, 2.7))
+        .with_mesh(id("far"), body(50.0, 54.0, 0.0, 4.0, 0.0, 2.7))
         .with_unmeasured(id("slab"), "unsupported representation");
     let service = AxiolidSpaceService::new(geometry, source())
         .with_space(id("space"))
+        .with_space(id("far"))
         .with_slab(id("slab"));
+    let top = CapRequest::new(Cap::Top);
+    for space in ["space", "far"] {
+        assert_eq!(
+            service.measure_cap_coverage(&id(space), &top),
+            Err(blocked(SpaceAspect::CapCoverage(Cap::Top), &["slab"]))
+        );
+        assert_eq!(
+            service.measure_overlaps(&id(space), &OverlapRequest::new()),
+            Err(blocked(SpaceAspect::Overlaps, &["slab"]))
+        );
+        assert_eq!(
+            service.measure_boundary_gaps(&id(space), &BoundaryRequest::new()),
+            Err(blocked(SpaceAspect::BoundaryGaps, &["slab"]))
+        );
+        // Only another space can duplicate a space, and the clear height
+        // is the space's own: an unmeasured slab changes neither.
+        assert!(service.measure_duplicates(&id(space)).is_ok());
+        assert!(service.measure_clear_height(&id(space)).is_ok());
+    }
+    let refusal = service
+        .measure_overlaps(&id("space"), &OverlapRequest::new())
+        .expect_err("refused");
+    assert!(refusal.to_string().contains("cad:model/slab"), "{refusal}");
+    // Storey residuals scan every storey member, so they stay refused.
     assert_eq!(
-        service
-            .measure_clear_height(&id("space"))
-            .map(|m| m.metres()),
-        Err(SpaceError::Unavailable)
+        service.measure_unallocated_regions(),
+        Err(blocked(SpaceAspect::UnallocatedRegions, &["slab"]))
     );
-    assert!(service.measure_unallocated_regions().is_err());
+    // The slab is still a declared slab: the counts read no body.
+    assert_eq!(service.measure_support_counts().map(|c| c.slabs()), Ok(1));
     // An unmeasured object with no role or storey does not concern spaces.
     let unrelated = AxiolidGeometry::new()
         .with_mesh(id("space"), body(0.0, 4.0, 0.0, 4.0, 0.0, 2.7))
         .with_unmeasured(id("railing"), "unsupported representation");
     let service = AxiolidSpaceService::new(unrelated, source()).with_space(id("space"));
-    assert!(service.measure_clear_height(&id("space")).is_ok());
+    assert!(
+        service
+            .measure_overlaps(&id("space"), &OverlapRequest::new())
+            .is_ok()
+    );
+}
+
+/// An unmeasured slab whose declared bound lies on another storey refuses
+/// only the spaces it can reach: the space below it, whose ceiling it may
+/// cap and whose volume it may enter. A space on the storey below that one
+/// is measured.
+#[test]
+fn an_unmeasured_object_with_a_bound_refuses_only_the_spaces_it_reaches() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("ground"), body(0.0, 4.0, 0.0, 4.0, 0.0, 2.7))
+        .with_mesh(id("ground-slab"), body(0.0, 4.0, 0.0, 4.0, 2.7, 3.0))
+        .with_mesh(id("upper"), body(0.0, 4.0, 0.0, 4.0, 3.0, 5.7))
+        .with_unmeasured(id("roof-slab"), "unsupported representation")
+        .with_unmeasured_bound(id("roof-slab"), [0.0, 0.0, 5.7], [4.0, 4.0, 6.0]);
+    let service = AxiolidSpaceService::new(geometry, source())
+        .with_space(id("ground"))
+        .with_space(id("upper"))
+        .with_slab(id("ground-slab"))
+        .with_slab(id("roof-slab"))
+        .with_storey(id("ground"), id("level-0"))
+        .with_storey(id("ground-slab"), id("level-0"))
+        .with_storey(id("upper"), id("level-1"))
+        .with_storey(id("roof-slab"), id("level-1"));
+    let top = CapRequest::new(Cap::Top);
+
+    // The ground floor space lies 2.7 m below the bound: measured.
+    let covered = service
+        .measure_cap_coverage(&id("ground"), &top)
+        .expect("the unmeasured slab cannot reach the ground floor");
+    assert_eq!(covered.elements(), &[id("ground-slab")]);
+    assert!(
+        service
+            .measure_overlaps(&id("ground"), &OverlapRequest::new())
+            .is_ok()
+    );
+    // The upper space's ceiling meets the bound: refused, naming the slab.
+    assert_eq!(
+        service.measure_cap_coverage(&id("upper"), &top),
+        Err(blocked(SpaceAspect::CapCoverage(Cap::Top), &["roof-slab"]))
+    );
+    assert_eq!(
+        service.measure_overlaps(&id("upper"), &OverlapRequest::new()),
+        Err(blocked(SpaceAspect::Overlaps, &["roof-slab"]))
+    );
+    // Its floor is the measured slab below, which the bound cannot reach.
+    assert!(
+        service
+            .measure_cap_coverage(&id("upper"), &CapRequest::new(Cap::Bottom))
+            .is_ok()
+    );
+    // Boundary coverage is judged in plan, where the bound covers both.
+    for space in ["ground", "upper"] {
+        assert_eq!(
+            service.measure_boundary_gaps(&id(space), &BoundaryRequest::new()),
+            Err(blocked(SpaceAspect::BoundaryGaps, &["roof-slab"]))
+        );
+    }
+}
+
+/// Two spaces side by side on one storey: an unmeasured wall bounded far
+/// from one of them refuses only the other, even in plan.
+#[test]
+fn a_bound_far_away_in_plan_leaves_the_space_measured() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("near"), body(0.0, 4.0, 0.0, 4.0, 0.0, 3.0))
+        .with_mesh(id("far"), body(20.0, 24.0, 0.0, 4.0, 0.0, 3.0))
+        .with_unmeasured(id("wall"), "unsupported representation")
+        .with_unmeasured_bound(id("wall"), [4.0, 0.0, 0.0], [4.2, 4.0, 3.0])
+        .with_unmeasured(id("pillar"), "unsupported representation");
+    let service = AxiolidSpaceService::new(geometry, source())
+        .with_space(id("near"))
+        .with_space(id("far"))
+        .with_storey(id("near"), id("level"))
+        .with_storey(id("far"), id("level"))
+        .with_storey(id("wall"), id("level"));
+    let gaps = |space: &str| service.measure_boundary_gaps(&id(space), &BoundaryRequest::new());
+    assert!(gaps("far").is_ok());
+    assert_eq!(
+        gaps("near"),
+        Err(blocked(SpaceAspect::BoundaryGaps, &["wall"]))
+    );
+
+    // A second unmeasured object without a bound refuses both, and the
+    // refusal of the near space names both.
+    let service = service.with_storey(id("pillar"), id("level"));
+    let gaps = |space: &str| service.measure_boundary_gaps(&id(space), &BoundaryRequest::new());
+    assert_eq!(
+        gaps("far"),
+        Err(blocked(SpaceAspect::BoundaryGaps, &["pillar"]))
+    );
+    assert_eq!(
+        gaps("near"),
+        Err(blocked(SpaceAspect::BoundaryGaps, &["pillar", "wall"]))
+    );
+}
+
+/// A whole whose parts could not be composed is bounded by them: the
+/// measured parts' boxes and the unmeasured parts' bounds, a bodiless part
+/// adding nothing. One unbounded part leaves the whole unbounded. Bounded,
+/// it refuses only the space it reaches.
+#[test]
+fn a_whole_is_bounded_by_its_parts() {
+    let base = || {
+        AxiolidGeometry::new()
+            .with_mesh(id("near"), body(0.0, 4.0, 0.0, 4.0, 0.0, 3.0))
+            .with_mesh(id("far"), body(20.0, 24.0, 0.0, 4.0, 0.0, 3.0))
+            .with_mesh(id("layer"), body(0.0, 4.0, 0.0, 4.0, 3.0, 3.1))
+            .with_unmeasured(id("finish"), "unsupported representation")
+            .with_no_body(id("opening"))
+    };
+    let parts = [id("layer"), id("finish"), id("opening")];
+    assert_eq!(base().parts_bound(&parts), None, "an unbounded part");
+    let geometry = base().with_unmeasured_bound(id("finish"), [0.0, 0.0, 3.1], [4.0, 4.5, 3.2]);
+    let bound = geometry.parts_bound(&parts).expect("every part is bounded");
+    assert_eq!(bound, ([0.0, 0.0, 3.0], [4.0, 4.5, 3.2]));
+    assert_eq!(geometry.parts_bound(&[id("unknown")]), None);
+
+    let geometry = geometry
+        .with_unmeasured(id("roof"), "a part is unmeasured")
+        .with_unmeasured_bound(id("roof"), bound.0, bound.1);
+    let service = AxiolidSpaceService::new(geometry, source())
+        .with_space(id("near"))
+        .with_space(id("far"))
+        .with_roof(id("roof"));
+    let top = CapRequest::new(Cap::Top);
+    assert!(service.measure_cap_coverage(&id("far"), &top).is_ok());
+    assert_eq!(
+        service.measure_cap_coverage(&id("near"), &top),
+        Err(blocked(SpaceAspect::CapCoverage(Cap::Top), &["roof"]))
+    );
+}
+
+/// A bound that cannot hold a body (not finite, or inverted) is no bound:
+/// the object may be anywhere.
+#[test]
+fn an_invalid_bound_places_nothing() {
+    for (min, max) in [
+        ([10.0, 10.0, 10.0], [f64::NAN, 11.0, 11.0]),
+        ([11.0, 10.0, 10.0], [10.0, 11.0, 11.0]),
+    ] {
+        let geometry = AxiolidGeometry::new()
+            .with_mesh(id("space"), body(0.0, 4.0, 0.0, 4.0, 0.0, 3.0))
+            .with_unmeasured(id("slab"), "unsupported representation")
+            .with_unmeasured_bound(id("slab"), min, max);
+        let service = AxiolidSpaceService::new(geometry, source())
+            .with_space(id("space"))
+            .with_slab(id("slab"));
+        assert_eq!(
+            service.measure_overlaps(&id("space"), &OverlapRequest::new()),
+            Err(blocked(SpaceAspect::Overlaps, &["slab"]))
+        );
+    }
+}
+
+/// A space whose own body could not be measured refuses every aspect by
+/// its own name.
+#[test]
+fn an_unmeasured_space_names_itself() {
+    let geometry =
+        AxiolidGeometry::new().with_unmeasured(id("space"), "unsupported representation");
+    let service = AxiolidSpaceService::new(geometry, source()).with_space(id("space"));
+    assert_eq!(
+        service.measure_clear_height(&id("space")),
+        Err(blocked(SpaceAspect::ClearHeight, &["space"]))
+    );
+    assert_eq!(
+        service.measure_duplicates(&id("space")),
+        Err(blocked(SpaceAspect::Duplicates, &["space"]))
+    );
 }
 
 /// A request naming its cap elements replaces the host's declared slabs and
@@ -534,7 +739,7 @@ fn an_unmeasured_requested_cap_element_makes_the_cap_unavailable() {
             &id("space"),
             &CapRequest::new(Cap::Top).with_elements(vec![id("ceiling")]),
         ),
-        Err(SpaceError::Unavailable)
+        Err(blocked(SpaceAspect::CapCoverage(Cap::Top), &["ceiling"]))
     );
     // Not requested, it concerns no space measurement.
     assert!(
@@ -650,13 +855,13 @@ fn an_unmeasured_requested_element_makes_boundary_and_overlaps_unavailable() {
             &id("space"),
             &BoundaryRequest::new().with_elements(vec![id("wall")])
         ),
-        Err(SpaceError::Unavailable)
+        Err(blocked(SpaceAspect::BoundaryGaps, &["wall"]))
     );
     assert_eq!(
         service.measure_overlaps(
             &id("space"),
             &OverlapRequest::new().with_elements(vec![id("wall")])
         ),
-        Err(SpaceError::Unavailable)
+        Err(blocked(SpaceAspect::Overlaps, &["wall"]))
     );
 }

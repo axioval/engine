@@ -142,7 +142,15 @@ Geometry evidence for any source, measured with the Axiolid kernel.
 - `src/space.rs` implements `SpaceService`: seven independent space
   measurements over storey-assigned, role-tagged geometry. A cap, boundary
   or overlap request naming its elements replaces the declared default,
-  and an unmeasured requested element refuses. Unallocated regions are the
+  and an unmeasured requested element refuses. Unmeasured objects refuse a
+  space's measurement only where they could change it (`complete_near`:
+  the aspect's candidates whose host-declared bound,
+  `with_unmeasured_bound`, meets the space's extent, its plan extent for
+  boundary gaps, its cap plane for caps), and the refusal names them
+  (`SpaceError::Unmeasured`). One without a bound may be anywhere and
+  refuses every space; never place it by its storey, which bounds nothing.
+  Unallocated regions still refuse for any unmeasured declared object;
+  support counts read no body and never refuse. Unallocated regions are the
   polygons of each storey's floor footprint less its spaces' footprint, one
   per connected region, each relating the bodies its rings touch.
 - `src/envelope_membership.rs` derives envelope membership: an object bounds
@@ -494,8 +502,12 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   bodiless: its extent is unknown, so a measurement it could affect refuses.
   Contact measures only the request's candidates and refuses while one of
   them is unmeasured or undescribed; space refuses while a declared role,
-  storey member or requested cap element is; free space refuses it as an
-  obstacle.
+  storey member or requested element that could reach the space is; free
+  space refuses it as an obstacle. A host-declared bound
+  (`with_unmeasured_bound`) only says where the body cannot be; an invalid
+  one is no bound. `parts_bound` encloses the parts of a whole that could
+  not be composed (mesh boxes grown by deviation, declared bounds), and is
+  `None` when any part is unbounded: never skip an unbounded part.
 - A geometry set may hold several sources. Evidence about one object (contact,
   proximity, facade area, vertical and directional extent, triangle count, shelf
   length, clear height, derived relationships, a walkability passage, a

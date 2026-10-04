@@ -16114,3 +16114,123 @@ fn the_not_evaluated_inventory_packages_bind_and_run_with_geometry() {
         "{result:#}"
     );
 }
+
+/// Spaces #16 (x 0..4) and #26 (x 20..24), 3 m high, and slab #36, whose
+/// only representation is a `Box` (with `bound`) or nothing: it has no body,
+/// so it is unmeasured. Its box lies over the first space's ceiling. With
+/// `roof`, roof #50 has no body and is made of slab #36, so it is
+/// unmeasured through its part and bounded by the part's box.
+fn spaces_beside_an_unmeasured_slab(bound: bool, roof: bool) -> String {
+    let space = |first: u32, x: f64| {
+        body(
+            first,
+            x,
+            4.0,
+            3.0,
+            &format!(
+                "IFCSPACE('00000000000000000000{:02}',$,$,$,$,#3,REP,$,.ELEMENT.,$,$)",
+                first + 6
+            ),
+        )
+    };
+    let slab = if bound {
+        "#30=IFCCARTESIANPOINT((0.,0.,3.));\n\
+         #31=IFCBOUNDINGBOX(#30,4.,4.,0.2);\n\
+         #32=IFCSHAPEREPRESENTATION(#5,'Box','BoundingBox',(#31));\n\
+         #33=IFCPRODUCTDEFINITIONSHAPE($,$,(#32));\n\
+         #36=IFCSLAB('0000000000000000000036',$,$,$,$,#3,#33,$,.FLOOR.);\n"
+    } else {
+        "#36=IFCSLAB('0000000000000000000036',$,$,$,$,#3,$,$,.FLOOR.);\n"
+    };
+    let roof = if roof {
+        "#50=IFCROOF('0000000000000000000050',$,$,$,$,#3,$,$,.NOTDEFINED.);\n\
+         #51=IFCRELAGGREGATES('0000000000000000000051',$,$,$,#50,(#36));\n"
+    } else {
+        ""
+    };
+    format!(
+        "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('n','t',(''),(''),'p','o','a');\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+         #1=IFCCARTESIANPOINT((0.,0.,0.));\n\
+         #2=IFCAXIS2PLACEMENT3D(#1,$,$);\n\
+         #3=IFCLOCALPLACEMENT($,#2);\n\
+         #4=IFCDIRECTION((0.,0.,1.));\n\
+         #5=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#2,$);\n\
+         {}{}{slab}{roof}\
+         ENDSEC;\nEND-ISO-10303-21;\n",
+        space(10, 2.0),
+        space(20, 22.0),
+    )
+}
+
+/// An unmeasured slab refuses only the space measurements it could change
+/// (#212): with the box the file states, the far space is judged and the
+/// space under the box keeps only its top cap, overlaps and boundary gaps
+/// not evaluated; without one it may be anywhere and refuses them for both.
+/// Every refusal names the slab. A roof made of the slab is unmeasured
+/// through it and bounded by its box, so it blocks only where the slab does.
+#[test]
+fn with_geometry_an_unmeasured_slab_refuses_only_the_spaces_it_reaches() {
+    let inventory = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../scripts/inventory");
+    let definitions = format!("{inventory}/definitions.json");
+    let ruleset = format!("{inventory}/ruleset.json");
+    let refused = |bound: bool, roof: bool| {
+        let case = Case::new(&format!("space-unmeasured-slab-{bound}-{roof}"));
+        let model = case.write("model.ifc", &spaces_beside_an_unmeasured_slab(bound, roof));
+        let saved = case.path("result.json");
+        let output = Command::new(env!("CARGO_BIN_EXE_axioval"))
+            .args(["check", "--geometry", "--model"])
+            .arg(&model)
+            .args([
+                "--definitions",
+                &definitions,
+                "--ruleset",
+                &ruleset,
+                "--report",
+            ])
+            .arg(&saved)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+        let result: Value =
+            serde_json::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
+        let mut refused: Vec<(String, String)> = result["report"]["not_evaluated"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|outcome| outcome["rule_id"] == "space-validation")
+            .map(|outcome| {
+                let message = outcome["message"].as_str().unwrap();
+                assert!(message.contains("/#36"), "{message}");
+                assert_eq!(message.contains("/#50"), roof, "{message}");
+                (
+                    outcome["object_id"]["local_id"]
+                        .as_str()
+                        .unwrap()
+                        .to_owned(),
+                    message.split(" is unavailable").next().unwrap().to_owned(),
+                )
+            })
+            .collect();
+        refused.sort();
+        refused
+    };
+    let near = |local: &str| {
+        [
+            "space boundary gaps",
+            "space overlaps",
+            "space top cap coverage",
+        ]
+        .map(|aspect| (local.to_owned(), aspect.to_owned()))
+    };
+    assert_eq!(refused(true, false), near("#16"));
+    assert_eq!(refused(true, true), near("#16"));
+    // Without a box the slab may be anywhere, the floors included.
+    let anywhere = |local: &str| {
+        let mut aspects = vec![(local.to_owned(), "space bottom cap coverage".to_owned())];
+        aspects.extend(near(local));
+        aspects
+    };
+    let mut everywhere = anywhere("#16");
+    everywhere.extend(anywhere("#26"));
+    assert_eq!(refused(false, false), everywhere);
+}

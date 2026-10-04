@@ -18,7 +18,7 @@ use axioval_ir::{Evidence, ObjectId};
 use crate::services::reviewable_exact_evidence;
 
 /// Why a space measurement could not be produced.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum SpaceError {
     /// A reported quantity is negative, non-finite, or incoherent.
     #[error("space quantities must be finite and non-negative")]
@@ -29,6 +29,107 @@ pub enum SpaceError {
     /// The adapter cannot measure this aspect for this space.
     #[error("space measurement is unavailable for the requested aspect")]
     Unavailable,
+    /// Objects whose bodies could not be measured could change the
+    /// measurement, so it is refused rather than taken without them.
+    #[error("{0}")]
+    Unmeasured(Box<UnmeasuredObjects>),
+}
+
+impl SpaceError {
+    /// Refuses `aspect` for the unmeasured `objects` that could change it.
+    #[must_use]
+    pub fn unmeasured(aspect: SpaceAspect, objects: Vec<ObjectId>) -> Self {
+        Self::Unmeasured(Box::new(UnmeasuredObjects::new(aspect, objects)))
+    }
+}
+
+/// One space measurement, as a refusal names it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpaceAspect {
+    /// [`SpaceService::measure_duplicates`].
+    Duplicates,
+    /// [`SpaceService::measure_clear_height`].
+    ClearHeight,
+    /// [`SpaceService::measure_boundary_gaps`].
+    BoundaryGaps,
+    /// [`SpaceService::measure_overlaps`].
+    Overlaps,
+    /// [`SpaceService::measure_cap_coverage`] of one cap.
+    CapCoverage(Cap),
+    /// [`SpaceService::measure_unallocated_regions`].
+    UnallocatedRegions,
+}
+
+impl std::fmt::Display for SpaceAspect {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Duplicates => "duplicate spaces",
+            Self::ClearHeight => "clear height",
+            Self::BoundaryGaps => "boundary gaps",
+            Self::Overlaps => "overlaps",
+            Self::CapCoverage(Cap::Top) => "top cap coverage",
+            Self::CapCoverage(Cap::Bottom) => "bottom cap coverage",
+            Self::UnallocatedRegions => "unallocated regions",
+        })
+    }
+}
+
+/// How many unmeasured objects a refusal names before it counts the rest.
+const NAMED_UNMEASURED: usize = 5;
+
+/// The unmeasured objects that refused one space measurement.
+///
+/// Named so a reviewer can open what blocks the measurement: one slab the
+/// host could not mesh must not leave a building's spaces unjudged without
+/// saying which.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UnmeasuredObjects {
+    aspect: SpaceAspect,
+    objects: Vec<ObjectId>,
+}
+
+impl UnmeasuredObjects {
+    /// The objects that refused `aspect`, sorted and deduplicated.
+    #[must_use]
+    pub fn new(aspect: SpaceAspect, objects: Vec<ObjectId>) -> Self {
+        Self {
+            aspect,
+            objects: canonical(objects),
+        }
+    }
+    /// The refused measurement.
+    #[must_use]
+    pub fn aspect(&self) -> SpaceAspect {
+        self.aspect
+    }
+    /// Every unmeasured object that could change it, in identity order.
+    #[must_use]
+    pub fn objects(&self) -> &[ObjectId] {
+        &self.objects
+    }
+}
+
+impl std::fmt::Display for UnmeasuredObjects {
+    /// The aspect and the first objects by name, then a count of the rest.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "space {} is unavailable: {} unmeasured object(s) could change it (",
+            self.aspect,
+            self.objects.len()
+        )?;
+        for (index, object) in self.objects.iter().take(NAMED_UNMEASURED).enumerate() {
+            if index > 0 {
+                f.write_str(", ")?;
+            }
+            write!(f, "{object}")?;
+        }
+        let more = self.objects.len().saturating_sub(NAMED_UNMEASURED);
+        if more > 0 {
+            write!(f, ", +{more} more")?;
+        }
+        f.write_str(")")
+    }
 }
 
 fn finite_non_negative(value: f64) -> bool {
@@ -466,6 +567,35 @@ mod tests {
     }
     fn oid(local: &str) -> ObjectId {
         ObjectId::new(source(), local).unwrap()
+    }
+
+    /// A refusal names its aspect and the first unmeasured objects in
+    /// identity order, then counts the rest.
+    #[test]
+    fn an_unmeasured_refusal_names_the_aspect_and_a_bounded_list() {
+        let few = SpaceError::unmeasured(
+            SpaceAspect::CapCoverage(Cap::Top),
+            vec![oid("slab"), oid("roof"), oid("slab")],
+        );
+        assert_eq!(
+            few.to_string(),
+            "space top cap coverage is unavailable: 2 unmeasured object(s) could change it \
+             (cad:m/roof, cad:m/slab)"
+        );
+        let many = SpaceError::unmeasured(
+            SpaceAspect::Overlaps,
+            (0..8).map(|i| oid(&format!("o{i}"))).collect(),
+        );
+        assert!(
+            many.to_string()
+                .ends_with("(cad:m/o0, cad:m/o1, cad:m/o2, cad:m/o3, cad:m/o4, +3 more)"),
+            "{many}"
+        );
+        let SpaceError::Unmeasured(blocked) = many else {
+            panic!("an unmeasured refusal");
+        };
+        assert_eq!(blocked.aspect(), SpaceAspect::Overlaps);
+        assert_eq!(blocked.objects().len(), 8);
     }
 
     #[test]

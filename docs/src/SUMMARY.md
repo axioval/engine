@@ -16,6 +16,7 @@
 - [Gated rules](./gates.md)
 - [Derived properties](./derived.md)
 - [Expressions](./expressions.md)
+- [Authoring catalogue](./catalogue.md)
 - [Review decisions](./decisions.md)
 - [JSON Schemas](./json-schema.md)
 - [Connectivity and routes](./topology.md)

@@ -7,6 +7,8 @@ mod accessible_route;
 mod allowed_profile;
 mod body_extent;
 mod body_facts;
+pub mod catalogue;
+mod catalogue_texts;
 mod centre_line_distance;
 mod clash;
 mod clash_cases;

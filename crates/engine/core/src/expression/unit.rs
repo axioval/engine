@@ -188,40 +188,220 @@ fn power(base: &str, exponent: i8) -> String {
     format!("{base}{digits}")
 }
 
+/// One unit symbol a written unit may use: its scale to the coherent unit
+/// and its exponents of the SI base units and the radian.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnitSymbol {
+    pub symbol: &'static str,
+    /// Other spellings of the same symbol.
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    pub aliases: &'static [&'static str],
+    /// The factor to the coherent unit (`mm` is `0.001` m).
+    pub scale: f64,
+    /// Exponents of `m`, `kg`, `s`, `A`, `K`, `mol`, `cd` and `rad`.
+    pub exponents: [i8; 8],
+    pub label: &'static [axioval_ir::measured::LocalizedText],
+}
+
+const fn e(m: i8, kg: i8, s: i8, a: i8, k: i8, rad: i8) -> [i8; 8] {
+    [m, kg, s, a, k, 0, 0, rad]
+}
+
+/// Every unit symbol a written unit may use, in a stable order; a factor
+/// may raise it to a power, and a currency (three capital letters) or `1`
+/// stands beside them.
+pub const UNIT_SYMBOLS: &[UnitSymbol] = &[
+    UnitSymbol {
+        symbol: "m",
+        aliases: &[],
+        scale: 1.0,
+        exponents: e(1, 0, 0, 0, 0, 0),
+        label: &axioval_ir::measured::en_de("metre", "Meter"),
+    },
+    UnitSymbol {
+        symbol: "cm",
+        aliases: &[],
+        scale: 1e-2,
+        exponents: e(1, 0, 0, 0, 0, 0),
+        label: &axioval_ir::measured::en_de("centimetre", "Zentimeter"),
+    },
+    UnitSymbol {
+        symbol: "mm",
+        aliases: &[],
+        scale: 1e-3,
+        exponents: e(1, 0, 0, 0, 0, 0),
+        label: &axioval_ir::measured::en_de("millimetre", "Millimeter"),
+    },
+    UnitSymbol {
+        symbol: "km",
+        aliases: &[],
+        scale: 1e3,
+        exponents: e(1, 0, 0, 0, 0, 0),
+        label: &axioval_ir::measured::en_de("kilometre", "Kilometer"),
+    },
+    UnitSymbol {
+        symbol: "l",
+        aliases: &["L"],
+        scale: 1e-3,
+        exponents: e(3, 0, 0, 0, 0, 0),
+        label: &axioval_ir::measured::en_de("litre", "Liter"),
+    },
+    UnitSymbol {
+        symbol: "g",
+        aliases: &[],
+        scale: 1e-3,
+        exponents: e(0, 1, 0, 0, 0, 0),
+        label: &axioval_ir::measured::en_de("gram", "Gramm"),
+    },
+    UnitSymbol {
+        symbol: "kg",
+        aliases: &[],
+        scale: 1.0,
+        exponents: e(0, 1, 0, 0, 0, 0),
+        label: &axioval_ir::measured::en_de("kilogram", "Kilogramm"),
+    },
+    UnitSymbol {
+        symbol: "t",
+        aliases: &[],
+        scale: 1e3,
+        exponents: e(0, 1, 0, 0, 0, 0),
+        label: &axioval_ir::measured::en_de("tonne", "Tonne"),
+    },
+    UnitSymbol {
+        symbol: "s",
+        aliases: &[],
+        scale: 1.0,
+        exponents: e(0, 0, 1, 0, 0, 0),
+        label: &axioval_ir::measured::en_de("second", "Sekunde"),
+    },
+    UnitSymbol {
+        symbol: "min",
+        aliases: &[],
+        scale: 60.0,
+        exponents: e(0, 0, 1, 0, 0, 0),
+        label: &axioval_ir::measured::en_de("minute", "Minute"),
+    },
+    UnitSymbol {
+        symbol: "h",
+        aliases: &[],
+        scale: 3600.0,
+        exponents: e(0, 0, 1, 0, 0, 0),
+        label: &axioval_ir::measured::en_de("hour", "Stunde"),
+    },
+    UnitSymbol {
+        symbol: "A",
+        aliases: &[],
+        scale: 1.0,
+        exponents: e(0, 0, 0, 1, 0, 0),
+        label: &axioval_ir::measured::en_de("ampere", "Ampere"),
+    },
+    UnitSymbol {
+        symbol: "K",
+        aliases: &[],
+        scale: 1.0,
+        exponents: e(0, 0, 0, 0, 1, 0),
+        label: &axioval_ir::measured::en_de("kelvin", "Kelvin"),
+    },
+    UnitSymbol {
+        symbol: "mol",
+        aliases: &[],
+        scale: 1.0,
+        exponents: [0, 0, 0, 0, 0, 1, 0, 0],
+        label: &axioval_ir::measured::en_de("mole", "Mol"),
+    },
+    UnitSymbol {
+        symbol: "cd",
+        aliases: &[],
+        scale: 1.0,
+        exponents: [0, 0, 0, 0, 0, 0, 1, 0],
+        label: &axioval_ir::measured::en_de("candela", "Candela"),
+    },
+    UnitSymbol {
+        symbol: "rad",
+        aliases: &[],
+        scale: 1.0,
+        exponents: e(0, 0, 0, 0, 0, 1),
+        label: &axioval_ir::measured::en_de("radian", "Radiant"),
+    },
+    UnitSymbol {
+        symbol: "deg",
+        aliases: &["°"],
+        scale: std::f64::consts::PI / 180.0,
+        exponents: e(0, 0, 0, 0, 0, 1),
+        label: &axioval_ir::measured::en_de("degree", "Grad"),
+    },
+    UnitSymbol {
+        symbol: "N",
+        aliases: &[],
+        scale: 1.0,
+        exponents: e(1, 1, -2, 0, 0, 0),
+        label: &axioval_ir::measured::en_de("newton", "Newton"),
+    },
+    UnitSymbol {
+        symbol: "kN",
+        aliases: &[],
+        scale: 1e3,
+        exponents: e(1, 1, -2, 0, 0, 0),
+        label: &axioval_ir::measured::en_de("kilonewton", "Kilonewton"),
+    },
+    UnitSymbol {
+        symbol: "Pa",
+        aliases: &[],
+        scale: 1.0,
+        exponents: e(-1, 1, -2, 0, 0, 0),
+        label: &axioval_ir::measured::en_de("pascal", "Pascal"),
+    },
+    UnitSymbol {
+        symbol: "kPa",
+        aliases: &[],
+        scale: 1e3,
+        exponents: e(-1, 1, -2, 0, 0, 0),
+        label: &axioval_ir::measured::en_de("kilopascal", "Kilopascal"),
+    },
+    UnitSymbol {
+        symbol: "MPa",
+        aliases: &[],
+        scale: 1e6,
+        exponents: e(-1, 1, -2, 0, 0, 0),
+        label: &axioval_ir::measured::en_de("megapascal", "Megapascal"),
+    },
+    UnitSymbol {
+        symbol: "J",
+        aliases: &[],
+        scale: 1.0,
+        exponents: e(2, 1, -2, 0, 0, 0),
+        label: &axioval_ir::measured::en_de("joule", "Joule"),
+    },
+    UnitSymbol {
+        symbol: "kWh",
+        aliases: &[],
+        scale: 3.6e6,
+        exponents: e(2, 1, -2, 0, 0, 0),
+        label: &axioval_ir::measured::en_de("kilowatt-hour", "Kilowattstunde"),
+    },
+    UnitSymbol {
+        symbol: "W",
+        aliases: &[],
+        scale: 1.0,
+        exponents: e(2, 1, -3, 0, 0, 0),
+        label: &axioval_ir::measured::en_de("watt", "Watt"),
+    },
+    UnitSymbol {
+        symbol: "kW",
+        aliases: &[],
+        scale: 1e3,
+        exponents: e(2, 1, -3, 0, 0, 0),
+        label: &axioval_ir::measured::en_de("kilowatt", "Kilowatt"),
+    },
+];
+
 /// A unit symbol's scale to the coherent unit and its exponents.
 fn symbol(name: &str) -> Option<(f64, [i8; 8])> {
-    const fn e(m: i8, kg: i8, s: i8, a: i8, k: i8, rad: i8) -> [i8; 8] {
-        [m, kg, s, a, k, 0, 0, rad]
-    }
-    Some(match name {
-        "m" => (1.0, e(1, 0, 0, 0, 0, 0)),
-        "cm" => (1e-2, e(1, 0, 0, 0, 0, 0)),
-        "mm" => (1e-3, e(1, 0, 0, 0, 0, 0)),
-        "km" => (1e3, e(1, 0, 0, 0, 0, 0)),
-        "l" | "L" => (1e-3, e(3, 0, 0, 0, 0, 0)),
-        "g" => (1e-3, e(0, 1, 0, 0, 0, 0)),
-        "kg" => (1.0, e(0, 1, 0, 0, 0, 0)),
-        "t" => (1e3, e(0, 1, 0, 0, 0, 0)),
-        "s" => (1.0, e(0, 0, 1, 0, 0, 0)),
-        "min" => (60.0, e(0, 0, 1, 0, 0, 0)),
-        "h" => (3600.0, e(0, 0, 1, 0, 0, 0)),
-        "A" => (1.0, e(0, 0, 0, 1, 0, 0)),
-        "K" => (1.0, e(0, 0, 0, 0, 1, 0)),
-        "mol" => (1.0, [0, 0, 0, 0, 0, 1, 0, 0]),
-        "cd" => (1.0, [0, 0, 0, 0, 0, 0, 1, 0]),
-        "rad" => (1.0, e(0, 0, 0, 0, 0, 1)),
-        "deg" | "°" => (std::f64::consts::PI / 180.0, e(0, 0, 0, 0, 0, 1)),
-        "N" => (1.0, e(1, 1, -2, 0, 0, 0)),
-        "kN" => (1e3, e(1, 1, -2, 0, 0, 0)),
-        "Pa" => (1.0, e(-1, 1, -2, 0, 0, 0)),
-        "kPa" => (1e3, e(-1, 1, -2, 0, 0, 0)),
-        "MPa" => (1e6, e(-1, 1, -2, 0, 0, 0)),
-        "J" => (1.0, e(2, 1, -2, 0, 0, 0)),
-        "kWh" => (3.6e6, e(2, 1, -2, 0, 0, 0)),
-        "W" => (1.0, e(2, 1, -3, 0, 0, 0)),
-        "kW" => (1e3, e(2, 1, -3, 0, 0, 0)),
-        _ => return None,
-    })
+    UNIT_SYMBOLS
+        .iter()
+        .find(|unit| unit.symbol == name || unit.aliases.contains(&name))
+        .map(|unit| (unit.scale, unit.exponents))
 }
 
 /// A unit as written, such as `m2`, `m²`, `EUR/m²` or `W/m²·K`, and its

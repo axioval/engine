@@ -29,6 +29,7 @@
 use std::fmt;
 use std::sync::Arc;
 
+use axioval_ir::measured::{LocalizedText, en_de};
 use axioval_ir::{Evidence, ObjectId};
 
 use crate::relationships::{
@@ -112,6 +113,177 @@ pub enum Derivation {
     },
 }
 
+/// One derivation the session answers, as an editor offers it.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DerivationEntry {
+    /// The identity without parameters.
+    pub id: &'static str,
+    /// The parameters it takes, each in metres or a plain ratio.
+    pub parameters: &'static [DerivationParameter],
+    pub label: &'static [LocalizedText],
+    pub help: &'static [LocalizedText],
+}
+
+/// One parameter of a derivation, written `;key=value`.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DerivationParameter {
+    pub key: &'static str,
+    pub default: f64,
+    /// Whether the value must be above zero (else at least zero).
+    pub positive: bool,
+    pub help: &'static [LocalizedText],
+}
+
+const fn parameter(
+    key: &'static str,
+    default: f64,
+    positive: bool,
+    help: &'static [LocalizedText],
+) -> DerivationParameter {
+    DerivationParameter {
+        key,
+        default,
+        positive,
+        help,
+    }
+}
+
+/// Every derivation, in a stable order.
+pub const DERIVATIONS: &[DerivationEntry] = &[
+    DerivationEntry {
+        id: "axioval:derived.contained-in-space",
+        parameters: &[
+            parameter(
+                "horizontal",
+                0.0,
+                false,
+                &en_de(
+                    "Largest plan offset to a space's nearest surface, in metres.",
+                    "Größter Versatz im Grundriss zur nächsten Raumoberfläche, in Metern.",
+                ),
+            ),
+            parameter(
+                "vertical",
+                0.0,
+                false,
+                &en_de(
+                    "Largest elevation offset to it, in metres.",
+                    "Größter Höhenversatz zu ihr, in Metern.",
+                ),
+            ),
+        ],
+        label: &en_de("Stands in space", "Steht in Raum"),
+        help: &en_de(
+            "An element to the spaces whose body contains its reference point, or else the \
+             nearest one within the offsets.",
+            "Ein Bauteil zu den Räumen, deren Körper seinen Bezugspunkt enthält, sonst zum \
+             nächsten innerhalb der Versätze.",
+        ),
+    },
+    DerivationEntry {
+        id: "axioval:derived.adjacent-space",
+        parameters: &[parameter(
+            "reach",
+            1.0,
+            true,
+            &en_de(
+                "How far each probe sweeps from the element's face, in metres.",
+                "Wie weit jede Sonde von der Bauteilfläche aus reicht, in Metern.",
+            ),
+        )],
+        label: &en_de("Connects spaces", "Verbindet Räume"),
+        help: &en_de(
+            "A door, window or opening to the spaces on either side of it.",
+            "Eine Tür, ein Fenster oder eine Öffnung zu den Räumen auf beiden Seiten.",
+        ),
+    },
+    DerivationEntry {
+        id: "axioval:derived.overlapping-group-space",
+        parameters: &[
+            parameter(
+                "ratio",
+                0.5,
+                true,
+                &en_de(
+                    "Smallest share of the space's footprint the larger space must cover.",
+                    "Kleinster Anteil der Grundfläche, den der größere Raum überdecken muss.",
+                ),
+            ),
+            parameter(
+                "vertical",
+                0.0,
+                false,
+                &en_de(
+                    "Largest vertical gap between both extents, in metres.",
+                    "Größter lotrechter Abstand zwischen beiden Ausdehnungen, in Metern.",
+                ),
+            ),
+        ],
+        label: &en_de("Lies in larger space", "Liegt in größerem Raum"),
+        help: &en_de(
+            "A space to every larger space covering enough of its footprint.",
+            "Ein Raum zu jedem größeren Raum, der genug seiner Grundfläche überdeckt.",
+        ),
+    },
+    DerivationEntry {
+        id: "axioval:derived.spans-level",
+        parameters: &[parameter(
+            "overlap",
+            1.0,
+            true,
+            &en_de(
+                "Smallest vertical overlap with a level's band, in metres.",
+                "Kleinste lotrechte Überdeckung mit dem Band eines Geschosses, in Metern.",
+            ),
+        )],
+        label: &en_de("Spans level", "Reicht über Geschoss"),
+        help: &en_de(
+            "A space to every level whose height band it reaches into.",
+            "Ein Raum zu jedem Geschoss, in dessen Höhenband er hineinreicht.",
+        ),
+    },
+    DerivationEntry {
+        id: "axioval:derived.intersects",
+        parameters: &[],
+        label: &en_de("Intersects", "Durchdringt"),
+        help: &en_de(
+            "An element to every object whose body shares volume with its own, both ways.",
+            "Ein Bauteil zu jedem Objekt, dessen Körper Volumen mit seinem teilt, in beide \
+             Richtungen.",
+        ),
+    },
+    DerivationEntry {
+        id: "axioval:derived.adjacent-across",
+        parameters: &[
+            parameter(
+                "tolerance",
+                0.05,
+                false,
+                &en_de(
+                    "Largest gap between a face and a space, in metres.",
+                    "Größter Abstand zwischen einer Fläche und einem Raum, in Metern.",
+                ),
+            ),
+            parameter(
+                "overlap",
+                0.3,
+                true,
+                &en_de(
+                    "Least length the space must share with the face, in metres.",
+                    "Kleinste Länge, die der Raum mit der Fläche teilen muss, in Metern.",
+                ),
+            ),
+        ],
+        label: &en_de("Spaces on either face", "Räume auf beiden Seiten"),
+        help: &en_de(
+            "A wall or slab to the spaces lying along either of its faces.",
+            "Eine Wand oder Decke zu den Räumen entlang einer ihrer beiden Seiten.",
+        ),
+    },
+];
+
 const CONTAINED_IN_SPACE: &str = "contained-in-space";
 const ADJACENT_SPACE: &str = "adjacent-space";
 const OVERLAPPING_GROUP_SPACE: &str = "overlapping-group-space";
@@ -154,43 +326,49 @@ impl Derivation {
             }
             parameters.push((key, value));
         }
-        let allowed: &[&str] = match name {
-            CONTAINED_IN_SPACE => &["horizontal", "vertical"],
-            ADJACENT_SPACE => &["reach"],
-            OVERLAPPING_GROUP_SPACE => &["ratio", "vertical"],
-            SPANS_LEVEL => &["overlap"],
-            INTERSECTS => &[],
-            ADJACENT_ACROSS => &["tolerance", "overlap"],
-            _ => return Err(RelationshipSelectionError::InvalidRequest),
-        };
-        if parameters.iter().any(|(key, _)| !allowed.contains(key)) {
+        let entry = DERIVATIONS
+            .iter()
+            .find(|entry| entry.id.strip_prefix(DERIVED_RELATIONSHIP_PREFIX) == Some(name))
+            .ok_or(RelationshipSelectionError::InvalidRequest)?;
+        if parameters
+            .iter()
+            .any(|(key, _)| entry.parameters.iter().all(|known| known.key != *key))
+        {
             return Err(RelationshipSelectionError::InvalidRequest);
         }
-        let get = |key: &str, default: f64| {
+        let get = |key: &str| {
             parameters
                 .iter()
                 .find(|(seen, _)| *seen == key)
-                .map_or(default, |(_, value)| *value)
+                .map(|(_, value)| *value)
+                .or_else(|| {
+                    entry
+                        .parameters
+                        .iter()
+                        .find(|known| known.key == key)
+                        .map(|known| known.default)
+                })
+                .unwrap_or_default()
         };
         let derivation = match name {
             CONTAINED_IN_SPACE => Self::ContainedInSpace {
-                horizontal_metres: get("horizontal", 0.0),
-                vertical_metres: get("vertical", 0.0),
+                horizontal_metres: get("horizontal"),
+                vertical_metres: get("vertical"),
             },
             ADJACENT_SPACE => Self::AdjacentSpace {
-                reach_metres: get("reach", 1.0),
+                reach_metres: get("reach"),
             },
             SPANS_LEVEL => Self::SpansLevel {
-                overlap_metres: get("overlap", 1.0),
+                overlap_metres: get("overlap"),
             },
             INTERSECTS => Self::Intersects,
             ADJACENT_ACROSS => Self::AdjacentAcross {
-                tolerance_metres: get("tolerance", 0.05),
-                overlap_metres: get("overlap", 0.3),
+                tolerance_metres: get("tolerance"),
+                overlap_metres: get("overlap"),
             },
             _ => Self::OverlappingGroupSpace {
-                minimum_ratio: get("ratio", 0.5),
-                vertical_metres: get("vertical", 0.0),
+                minimum_ratio: get("ratio"),
+                vertical_metres: get("vertical"),
             },
         };
         match derivation {

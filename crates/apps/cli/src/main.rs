@@ -64,6 +64,20 @@ enum Command {
         #[arg(long = "ruleset", required = true)]
         rulesets: Vec<PathBuf>,
     },
+    /// Print the authoring catalogue: every capability with its
+    /// parameters, the measured values, expression node kinds, operators,
+    /// selector kinds, relationships and units, labelled in English and
+    /// German, as versioned JSON a rule editor is generated from.
+    ///
+    /// With `--definitions`, it also lists each package's concept
+    /// vocabulary. Exit status: 0 written, 1 nothing written.
+    Catalogue {
+        #[arg(long)]
+        definitions: Vec<PathBuf>,
+        /// Write to this file instead of standard output.
+        #[arg(long, value_name = "FILE")]
+        output: Option<PathBuf>,
+    },
     /// Check a model against a ruleset.
     ///
     /// Exit status: 0 every rule was evaluated and nothing was found; 3 at
@@ -703,6 +717,23 @@ fn run() -> Result<Outcome, Box<dyn Error>> {
             let (definitions, rulesets) = packages(&definitions, &rulesets)?;
             let plan = compile_rulesets(&axioval::default_registry()?, &definitions, &rulesets)?;
             println!("validated {} executable rule(s)", plan.rules().len());
+            Ok(Outcome::Passed)
+        }
+        Command::Catalogue {
+            definitions,
+            output,
+        } => {
+            let packages = definitions
+                .iter()
+                .map(|path| load_definitions(path))
+                .collect::<Result<Vec<_>, _>>()?;
+            let catalogue = axioval::catalogue(&packages).map_err(|error| error.to_string())?;
+            let mut json = serde_json::to_string_pretty(&catalogue)?;
+            json.push('\n');
+            match output {
+                Some(path) => fs::write(&path, json)?,
+                None => std::io::Write::write_all(&mut std::io::stdout(), json.as_bytes())?,
+            }
             Ok(Outcome::Passed)
         }
         Command::Check(args) => check(args),

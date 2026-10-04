@@ -21,6 +21,9 @@ pub mod schema;
 /// The registry of measured values: descriptors, parameters and parsing.
 pub mod measured;
 
+/// The authoring vocabulary: node kinds, operators and selector kinds.
+pub mod catalogue;
+
 /// Explanations of expression verdicts in findings and outcomes.
 pub mod explanation;
 pub use explanation::{Explanation, ExplanationEntry, MAX_EXPLANATION_ENTRIES};

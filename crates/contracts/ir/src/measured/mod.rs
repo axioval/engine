@@ -255,7 +255,7 @@ fn takes(accepted: &str) -> String {
     }
 }
 
-pub use registry::MEASURED_VALUES;
+pub use registry::{MEASURED_VALUES, en_de};
 
 /// The descriptor of `name` (without parameters), ignoring ASCII case.
 #[must_use]

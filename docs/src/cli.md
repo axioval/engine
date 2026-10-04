@@ -22,6 +22,16 @@ directory holding that package file. A file that is missing, outside that
 directory, of another digest or not fitting its declared columns fails the
 command (status 1) before any model is read.
 
+## `axioval catalogue`
+
+Prints the [authoring catalogue](./catalogue.md): every capability with its
+parameters, the measured values, expression node kinds, operators,
+selector kinds, relationships and units, labelled in English and German,
+as versioned JSON a rule editor is generated from. `--definitions` (repeat
+for several) adds each package's concept vocabulary; `--output FILE`
+writes to a file instead of standard output. Exit status: 0 written, 1
+nothing written (an unreadable package, or a capability without texts).
+
 ## `axioval check`
 
 ```bash

@@ -12,7 +12,8 @@ use crate::{
     MEASURED_VOLUME, MEASURED_X, MEASURED_Y, MEASURED_Z, QuantityDimension,
 };
 
-pub(super) const fn en_de(en: &'static str, de: &'static str) -> [LocalizedText; 2] {
+/// English and German texts, in that order.
+pub const fn en_de(en: &'static str, de: &'static str) -> [LocalizedText; 2] {
     [
         LocalizedText {
             language: "en",

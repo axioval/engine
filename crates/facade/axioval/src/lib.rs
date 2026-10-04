@@ -37,3 +37,17 @@ pub use axioval_xlsx as xlsx;
 pub fn default_registry() -> Result<engine::CapabilityRegistry, engine::EngineError> {
     rules::register_builtins(engine::CapabilityRegistry::new())
 }
+
+/// The authoring catalogue of the default registry, with the concept
+/// vocabulary of `packages`: what a rule may be built from, as versioned
+/// JSON (see [`engine::catalogue`]).
+///
+/// # Errors
+///
+/// When the registry cannot be built or a capability lacks catalogue
+/// texts.
+pub fn catalogue(
+    packages: &[ir::DefinitionPackage],
+) -> Result<engine::catalogue::Catalogue, Box<dyn std::error::Error + Send + Sync>> {
+    Ok(rules::catalogue::catalogue(&default_registry()?, packages)?)
+}

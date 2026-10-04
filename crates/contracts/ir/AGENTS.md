@@ -4,6 +4,12 @@ Source-neutral identities, values, selectors, provenance, evidence, findings, an
 
 Keep this crate serializable and deterministic. It must not depend on a source format, federation format, geometry backend, or executable rule implementation.
 
+- `catalogue.rs` holds the authoring vocabulary the catalogue emits: every
+  expression node kind, operator, aggregate function and source, slope form
+  and selector kind, with fields and labels in English and German. Adding a
+  kind to the contract fails its tests until it is catalogued here; never
+  hand-maintain a list an editor reads anywhere else.
+
 - `identity.rs` derives `FindingId`s: UUIDv5 over rule, the objects' aliases
   in a host-named stable scheme (source-qualified id without one), scope kind
   and message, qualified by sources only when a key repeats. The BCF sink's

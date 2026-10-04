@@ -3012,3 +3012,214 @@ fn a_space_without_a_door_walks_its_passages_from_its_farthest_point() {
         )]
     );
 }
+
+/// The travel requirement of each use row as an expression over
+/// `travel_distance`: at most the row's maximum. It flags and leaves open
+/// what `escape-route` does, per row.
+#[test]
+#[allow(
+    clippy::too_many_lines,
+    clippy::type_complexity,
+    clippy::items_after_statements
+)]
+fn travel_distance_reaches_the_verdicts_per_use_row() {
+    use serde_json::{Value, json};
+    let travel = |name: &str, maximum: f64| -> Value {
+        json!({"kind": "compare", "operator": "lessThanOrEquals",
+            "left": {"kind": "property", "propertySet": "axioval:measured", "property": name},
+            "right": {"kind": "literal", "value": {"type": "quantity", "value": maximum, "unit": "m"}}})
+    };
+    let farthest =
+        "travel_distance;exits=bounds:backward;kinds=door;walking_height=2;walking_step=0.02";
+    let from_door = "travel_distance;exits=serves:backward;kinds=exit;start=door;doors=bounds:backward;\
+                     door_kinds=door;walking_height=2;walking_step=0.02";
+    let lab_model = || {
+        model()
+            .object("lab", "lab")
+            .object("d3", "door")
+            .edge("bounds", "d3", "lab")
+    };
+    let door_model = || {
+        Model::default()
+            .object("office", "space")
+            .object("hall", "space")
+            .object("d1", "door")
+            .object("x1", "exit")
+            .edge("bounds", "d1", "office")
+            .edge("bounds", "d1", "hall")
+            .edge("serves", "x1", "office")
+    };
+    let door_rule = || {
+        vec![
+            (
+                "uses",
+                ParameterValue::Table {
+                    value: vec![
+                        [
+                            ("spaces".to_owned(), selector(kind("space"))),
+                            ("maximum_travel".to_owned(), number(30.0)),
+                            ("route_start".to_owned(), string("door")),
+                        ]
+                        .into_iter()
+                        .collect(),
+                    ],
+                },
+            ),
+            ("exit_path", strings(&["serves:backward"])),
+            ("exit_selector", selector(kind("exit"))),
+            ("door_path", strings(&["bounds:backward"])),
+            ("door_selector", selector(kind("door"))),
+            ("walking_height", number(2.0)),
+            ("walking_step", number(0.02)),
+        ]
+    };
+    let rows = |hall: f64, lab: f64| {
+        let row = |of: &str, maximum: f64| -> TableRow {
+            [
+                ("spaces".to_owned(), selector(kind(of))),
+                ("maximum_travel".to_owned(), number(maximum)),
+            ]
+            .into_iter()
+            .collect()
+        };
+        with(
+            exits(kind("door")),
+            vec![(
+                "uses",
+                ParameterValue::Table {
+                    value: vec![row("space", hall), row("lab", lab)],
+                },
+            )],
+        )
+    };
+    let between = |lower: f64, upper: f64| {
+        move || {
+            Geometry::default()
+                .walk("hall", "d1,d2", Walk::Between(lower, upper))
+                .walk("lab", "d3", Walk::Between(30.0, 30.0))
+        }
+    };
+    type Case = (
+        Box<dyn Fn() -> Model>,
+        Box<dyn Fn() -> Geometry>,
+        Vec<(&'static str, ParameterValue)>,
+        Vec<(&'static str, Value)>,
+    );
+    let one = |maximum: f64| {
+        with(
+            exits(kind("door")),
+            vec![uses(&[("maximum_travel", number(maximum))])],
+        )
+    };
+    let cases: Vec<Case> = vec![
+        (
+            Box::new(model),
+            Box::new(between(21.0, 21.01)),
+            one(20.0),
+            vec![("space", travel(farthest, 20.0))],
+        ),
+        (
+            Box::new(model),
+            Box::new(between(21.0, 21.01)),
+            one(25.0),
+            vec![("space", travel(farthest, 25.0))],
+        ),
+        (
+            Box::new(model),
+            Box::new(between(21.0, 21.01)),
+            one(21.005),
+            vec![("space", travel(farthest, 21.005))],
+        ),
+        (
+            Box::new(model),
+            Box::new(|| Geometry::default().walk("hall", "d1,d2", Walk::Unreachable)),
+            one(35.0),
+            vec![("space", travel(farthest, 35.0))],
+        ),
+        (
+            Box::new(model),
+            Box::new(|| Geometry::default().walk("hall", "d1,d2", Walk::Refused)),
+            one(20.0),
+            vec![("space", travel(farthest, 20.0))],
+        ),
+        (
+            Box::new(door_model),
+            Box::new(|| Geometry::default().walk("d1", "x1", Walk::Between(32.0, 32.5))),
+            door_rule(),
+            vec![("space", travel(from_door, 30.0))],
+        ),
+        (
+            Box::new(door_model),
+            Box::new(|| Geometry::default().walk("d1", "x1", Walk::Between(12.0, 12.5))),
+            door_rule(),
+            vec![("space", travel(from_door, 30.0))],
+        ),
+        // Two use rows: halls at most 20 m, labs at most 35 m.
+        (
+            Box::new(lab_model),
+            Box::new(between(21.0, 21.01)),
+            rows(20.0, 35.0),
+            vec![
+                ("space", travel(farthest, 20.0)),
+                ("lab", travel(farthest, 35.0)),
+            ],
+        ),
+        (
+            Box::new(lab_model),
+            Box::new(between(12.0, 12.0)),
+            rows(20.0, 25.0),
+            vec![
+                ("space", travel(farthest, 20.0)),
+                ("lab", travel(farthest, 25.0)),
+            ],
+        ),
+    ];
+    for (index, (model, geometry, parameters, per_row)) in cases.into_iter().enumerate() {
+        let expected = {
+            let selected = Selector::AnyOf {
+                operands: per_row.iter().map(|(of, _)| kind(of)).collect(),
+            };
+            model().evaluate_with(
+                &EscapeRoute,
+                &rule(CAPABILITY, selected, parameters),
+                |services| {
+                    geometry().register(services);
+                },
+            )
+        };
+        let mut found = Vec::new();
+        let mut open = Vec::new();
+        for (of, requirement) in per_row {
+            let rule = rule(
+                "axioval:capability.expression",
+                kind(of),
+                vec![(
+                    "requirement",
+                    ParameterValue::Expression {
+                        value: serde_json::from_value(requirement).unwrap(),
+                    },
+                )],
+            );
+            let outcome = model().evaluate_measured(
+                &axioval_rules::ExpressionRequirement,
+                &rule,
+                |services| geometry().register(services),
+            );
+            found.extend(findings(&outcome).into_iter().map(|(object, _)| object));
+            open.extend(unevaluated(&outcome));
+        }
+        let mut expected_found: Vec<String> = findings(&expected)
+            .into_iter()
+            .map(|(object, _)| object)
+            .collect();
+        let mut expected_open = unevaluated(&expected);
+        for list in [&mut found, &mut expected_found] {
+            list.sort();
+            list.dedup();
+        }
+        open.sort();
+        expected_open.sort();
+        assert_eq!(found, expected_found, "case {index}: {open:?}");
+        assert_eq!(open, expected_open, "case {index}");
+    }
+}

@@ -731,6 +731,26 @@ capabilities' verdicts on their fixtures (a recess whose depth straddles a
 row boundary but is wide enough under either row passes as an expression,
 where the capability leaves it open).
 
+### Searches
+
+Searches that must stay algorithms answer values the decision is taken
+over. `travel_distance` is the longest walk from a start (`start`
+`farthest-point`, or each of the `doors` of the `door_kinds`) to the
+nearest exit (the `exits` path, of the `kinds`), along a walking profile
+(`walking_height`, `walking_step`), walked exactly as `escape-route` walks
+it: from the sure starts' least walk to every start's greatest, at most
+`f64::MAX` where a walk is unbounded, and none where the space has no exit
+or a start reaches none. "At most 20 m for offices, 35 m for labs" is one
+expression rule per use row (or one `if`), and reaches `escape-route`'s
+verdicts on its fixtures. Multiplied sections, common paths, compartments
+and passages stay in the capability.
+
+Whether a shape fits is `count` of the measured `free_placements` at least
+1: the free-space service searches exactly as `free-floor-circle` and
+`free-floor-rectangle` do, with their obstacles, band, merged spaces, door
+swings and entrance path, and a search the selections leave open is one
+undecided member, so the count straddles 1 and the fit is not evaluated.
+
 ### Measured members
 
 Some measurements are many per object: a flight's steps, a ramp's runs, the
@@ -748,6 +768,7 @@ and declare their parameters and typed fields:
 | `recesses` | the pockets between a footprint's boundary and its convex hull | `width`, `depth` |
 | `end_walls` (`corridor`, `kinds`) | the walls the ends of the corridors an opening faces run into | `gap`, `facing` |
 | `exit_pairs` (`exits`, `kinds`, `between`) | every pair of a space's exits | `separation` |
+| `free_placements` (`shape`, `diameter`, `width`, `length`, `height`, `obstacles`, `band_from`, `band_to`, `merge`, `swings`, `entrance_width`, `access`, `doors`, `openings`) | a placement of the shape on a space's free floor: one found, none possible, or one undecided | none |
 | `guard_edges` (`barrier_gap`, `platform_gap`, `landing_gap`, `landing_width`, `climb_distance`, `climb_side`, `measure_from`, `barriers`, `landings`, `climbables`) | the exposed edges of a walking surface, as the guard service samples them | `guarded_height`, `tallest_barrier`, `barrier_share`, `landing_fall`, `climbable_height` |
 
 Step `j` climbs riser `j` onto tread `j`; its `going`, `nosing` and

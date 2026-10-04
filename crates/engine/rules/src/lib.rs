@@ -260,5 +260,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(stair_geometry::StairMeasures))
         .and_then(|registry| registry.register_measured(horizontal_guard::GuardMeasures))
         .and_then(|registry| registry.register_measured(measured_plan::PlanMeasures))
+        .and_then(|registry| registry.register_measured(escape_route::TravelMeasures))
+        .and_then(|registry| registry.register_measured(free_floor::PlacementMeasures))
         .map(|registry| registry.with_refiner(Refiner))
 }

@@ -466,3 +466,124 @@ fn the_shape_must_be_reached_from_the_entrances() {
 fn model_with_door() -> Model {
     model().object("door", "door").edge("Opens", "door", "room")
 }
+
+/// Whether the shape fits as an expression over the measured placements:
+/// at least one. It flags and leaves open what the free-floor capabilities
+/// do, options included.
+#[test]
+#[allow(clippy::type_complexity, clippy::too_many_lines)]
+fn a_fit_as_a_count_of_placements_reaches_the_verdicts() {
+    use serde_json::json;
+    let fits = |list: &str| {
+        json!({"kind": "compare", "operator": "greaterThanOrEquals",
+            "left": {"kind": "aggregate", "function": "count",
+                "over": {"kind": "measured", "name": list}},
+            "right": {"kind": "literal", "value": {"type": "integer", "value": 1}}})
+    };
+    let circle_list = "free_placements;shape=circle;diameter=1.5;height=2";
+    let rectangle = || {
+        rule(
+            "axioval:capability.free-floor-rectangle",
+            kind("room"),
+            vec![
+                ("width_metres", number(1.8)),
+                ("length_metres", number(1.5)),
+                ("height_metres", number(2.0)),
+                ("orientation", string("any")),
+                ("obstacles", selector(kind("furniture"))),
+                ("band_to_metres", number(0.67)),
+                ("merge_path", strings(&["Groups:forward"])),
+            ],
+        )
+    };
+    let rectangle_list = "free_placements;shape=rectangle;width=1.8;length=1.5;height=2;\
+                          obstacles=furniture;band_to=0.67;merge=Groups:forward";
+    let cases: Vec<(&dyn RuleCapability, CompiledRule, &[&str], String)> = vec![
+        (
+            &FreeFloorCircle,
+            circle(vec![]),
+            &[],
+            circle_list.to_owned(),
+        ),
+        (
+            &FreeFloorCircle,
+            circle(vec![]),
+            &["wall"],
+            circle_list.to_owned(),
+        ),
+        (
+            &FreeFloorCircle,
+            circle(vec![("obstacles", selector(kind("furniture")))]),
+            &["cabinet"],
+            format!("{circle_list};obstacles=furniture"),
+        ),
+        (
+            &FreeFloorCircle,
+            circle(vec![("obstacles", selector(kind("furniture")))]),
+            &["wall"],
+            format!("{circle_list};obstacles=furniture"),
+        ),
+        (
+            &FreeFloorCircle,
+            circle(vec![("merge_path", strings(&["Groups:forward"]))]),
+            &["wall"],
+            format!("{circle_list};merge=Groups:forward"),
+        ),
+        (
+            &FreeFloorCircle,
+            circle(vec![("band_to_metres", number(0.67))]),
+            &[],
+            format!("{circle_list};band_to=0.67"),
+        ),
+        (
+            &FreeFloorRectangle,
+            rectangle(),
+            &["crate"],
+            rectangle_list.to_owned(),
+        ),
+        (
+            &FreeFloorRectangle,
+            rectangle(),
+            &["wall"],
+            rectangle_list.to_owned(),
+        ),
+    ];
+    for (index, (capability, declared, blocking, list)) in cases.into_iter().enumerate() {
+        let (expected, _) = run(model(), capability, &declared, blocking);
+        let expression = rule(
+            "axioval:capability.expression",
+            kind("room"),
+            vec![(
+                "requirement",
+                ParameterValue::Expression {
+                    value: serde_json::from_value(fits(&list)).unwrap(),
+                },
+            )],
+        );
+        let outcome = model().evaluate_measured(
+            &axioval_rules::ExpressionRequirement,
+            &expression,
+            |services| {
+                let service = Arc::new(Scripted {
+                    blocking: blocking.iter().map(|local| id(local)).collect(),
+                    requests: Mutex::new(Vec::new()),
+                });
+                services
+                    .register(FreeSpaceServiceHandle::new(service))
+                    .unwrap();
+                services.register(Doors::default().handle()).unwrap();
+            },
+        );
+        assert_eq!(
+            outcome.findings().len().min(1),
+            expected.findings().len().min(1),
+            "case {index}: {:?}",
+            outcome.not_evaluated_outcomes()
+        );
+        assert_eq!(
+            unevaluated(&outcome),
+            unevaluated(&expected),
+            "case {index}"
+        );
+    }
+}

@@ -93,6 +93,26 @@ const fn required_length(key: &'static str, help: &'static [LocalizedText]) -> M
     }
 }
 
+const fn optional_length(key: &'static str, help: &'static [LocalizedText]) -> MeasuredParameter {
+    MeasuredParameter {
+        key,
+        kind: MeasuredParameterKind::Length { minimum: 0.0 },
+        required: false,
+        default: None,
+        help,
+    }
+}
+
+const fn optional_kinds(key: &'static str, help: &'static [LocalizedText]) -> MeasuredParameter {
+    MeasuredParameter {
+        key,
+        kind: MeasuredParameterKind::SourceKind,
+        required: false,
+        default: None,
+        help,
+    }
+}
+
 const fn field(
     name: &'static str,
     kind: MemberFieldKind,
@@ -245,6 +265,128 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
                 "Wie weit die beiden Ausgänge im Grundriss auseinanderliegen.",
             ),
         )],
+    },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
+            name: "free_placements",
+            parameters: &[
+                MeasuredParameter {
+                    key: "shape",
+                    kind: MeasuredParameterKind::Choice {
+                        options: &["circle", "rectangle"],
+                    },
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The shape placed: a circle of `diameter`, or a rectangle `width` by \
+                         `length` in any orientation, each `height` high.",
+                        "Die platzierte Form: ein Kreis mit `diameter` oder ein Rechteck \
+                         `width` mal `length` in beliebiger Ausrichtung, jeweils `height` hoch.",
+                    ),
+                },
+                optional_length(
+                    "diameter",
+                    &en_de("The circle's diameter.", "Der Durchmesser des Kreises."),
+                ),
+                optional_length(
+                    "width",
+                    &en_de("The rectangle's width.", "Die Breite des Rechtecks."),
+                ),
+                optional_length(
+                    "length",
+                    &en_de("The rectangle's length.", "Die Länge des Rechtecks."),
+                ),
+                required_length(
+                    "height",
+                    &en_de("The shape's height.", "Die Höhe der Form."),
+                ),
+                optional_kinds(
+                    "obstacles",
+                    &en_de(
+                        "The source kinds that obstruct the floor; every other object without it.",
+                        "Die Quellarten, die den Boden verstellen; ohne Angabe jedes andere \
+                         Objekt.",
+                    ),
+                ),
+                optional_length(
+                    "band_from",
+                    &en_de(
+                        "Where above the floor obstacles start to count.",
+                        "Ab welcher Höhe über dem Boden Hindernisse zählen.",
+                    ),
+                ),
+                optional_length(
+                    "band_to",
+                    &en_de(
+                        "Where above the floor obstacles stop counting.",
+                        "Bis zu welcher Höhe über dem Boden Hindernisse zählen.",
+                    ),
+                ),
+                MeasuredParameter {
+                    key: "merge",
+                    kind: MeasuredParameterKind::Path,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The relationship steps to the spaces searched with it.",
+                        "Die Beziehungsschritte zu den mitdurchsuchten Räumen.",
+                    ),
+                },
+                optional_kinds(
+                    "swings",
+                    &en_de(
+                        "The source kinds of doors whose swings obstruct the floor.",
+                        "Die Quellarten der Türen, deren Aufschlag den Boden verstellt.",
+                    ),
+                ),
+                optional_length(
+                    "entrance_width",
+                    &en_de(
+                        "How wide a path from an entrance must reach the shape.",
+                        "Wie breit ein Weg von einem Zugang die Form erreichen muss.",
+                    ),
+                ),
+                MeasuredParameter {
+                    key: "access",
+                    kind: MeasuredParameterKind::Path,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The relationship steps from the space to its entrances.",
+                        "Die Beziehungsschritte vom Raum zu seinen Zugängen.",
+                    ),
+                },
+                optional_kinds(
+                    "doors",
+                    &en_de(
+                        "The source kinds of entrance doors.",
+                        "Die Quellarten der Zugangstüren.",
+                    ),
+                ),
+                optional_kinds(
+                    "openings",
+                    &en_de(
+                        "The source kinds of entrance openings.",
+                        "Die Quellarten der Zugangsöffnungen.",
+                    ),
+                ),
+            ],
+            dimension: None,
+            services: &["free-space", "relationship-selection"],
+            exactness: MeasuredExactness::Measured,
+            not_evaluated: &["the free-space service cannot search the floor"],
+            label: &en_de("Free placements", "Freie Stellflächen"),
+            help: &en_de(
+                "A placement of the shape on the space's free floor: one when one is found, \
+                 none when none can be, and one undecided when the selections leave it open, \
+                 so `count` of them at least 1 is whether the shape fits.",
+                "Eine Platzierung der Form auf der freien Bodenfläche des Raums: eine, wenn \
+                 eine gefunden wird, keine, wenn keine möglich ist, und eine unentschiedene, \
+                 wenn die Auswahlen es offenlassen; `count` mindestens 1 ist also, ob die Form \
+                 passt.",
+            ),
+        },
+        fields: &[],
     },
     MemberDescriptor {
         list: MeasuredDescriptor {

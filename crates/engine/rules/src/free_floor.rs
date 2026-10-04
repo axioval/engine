@@ -2,6 +2,10 @@
 //! elevation band, merged spaces, the path from the entrances and the
 //! three-valued placement judgement.
 
+mod measured;
+
+pub(crate) use measured::PlacementMeasures;
+
 use std::collections::BTreeSet;
 
 use axioval_engine::{

@@ -138,6 +138,10 @@
 //! connectors and tighten that bracket as on one level; forced walks are
 //! measured on one level only.
 
+mod measured;
+
+pub(crate) use measured::TravelMeasures;
+
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -805,45 +809,7 @@ impl RuleCapability for EscapeRoute {
                 );
             }
         };
-        let exits = Candidates::select(context, declared.exit_selector);
-        let doors = declared
-            .doors
-            .as_ref()
-            .map(|(_, selector)| Candidates::select(context, selector));
-        let passages = declared
-            .passages
-            .as_ref()
-            .map(|passages| Candidates::select(context, passages.selector));
-        let judge = Judge {
-            context,
-            rule,
-            declared: &declared,
-            exits,
-            doors,
-            sections: possible_sections(context, rule, &declared),
-            passages,
-            no_escape: declared
-                .no_escape
-                .map(|selector| Candidates::select(context, selector)),
-            route_doors: declared
-                .route_doors
-                .map(|selector| Candidates::select(context, selector)),
-            compartments: declared
-                .compartments
-                .as_ref()
-                .map(|compartments| Candidates::select(context, compartments.selector)),
-            zones: declared
-                .zones
-                .iter()
-                .map(|zone| Candidates::select(context, zone.objects))
-                .collect(),
-            membership: RefCell::new(BTreeMap::new()),
-            walks: RefCell::new(BTreeMap::new()),
-            connectors: declared
-                .climbing
-                .as_ref()
-                .map(|climbing| climbing.routing(context)),
-        };
+        let judge = Judge::new(context, rule, &declared);
         let (spaces, mut evaluation) = select_objects(context, &rule.selector);
         judge.no_compartment(&spaces, &mut evaluation);
         let mut served = Served::default();
@@ -1487,6 +1453,52 @@ struct Judge<'r, 'c> {
     walks: RefCell<BTreeMap<WalkKey, Result<Travel, Unavailable>>>,
     /// The connectors walks may climb, when the rule selects any.
     connectors: Option<Result<ConnectorRouting, Unavailable>>,
+}
+
+impl<'r, 'c> Judge<'r, 'c> {
+    /// The judge of `rule`, declaring `declared`.
+    fn new(
+        context: &'r RuleContext<'c>,
+        rule: &'r CompiledRule,
+        declared: &'r Declaration<'r>,
+    ) -> Self {
+        Self {
+            context,
+            rule,
+            declared,
+            exits: Candidates::select(context, declared.exit_selector),
+            doors: declared
+                .doors
+                .as_ref()
+                .map(|(_, selector)| Candidates::select(context, selector)),
+            sections: possible_sections(context, rule, declared),
+            passages: declared
+                .passages
+                .as_ref()
+                .map(|passages| Candidates::select(context, passages.selector)),
+            no_escape: declared
+                .no_escape
+                .map(|selector| Candidates::select(context, selector)),
+            route_doors: declared
+                .route_doors
+                .map(|selector| Candidates::select(context, selector)),
+            compartments: declared
+                .compartments
+                .as_ref()
+                .map(|compartments| Candidates::select(context, compartments.selector)),
+            zones: declared
+                .zones
+                .iter()
+                .map(|zone| Candidates::select(context, zone.objects))
+                .collect(),
+            membership: RefCell::new(BTreeMap::new()),
+            walks: RefCell::new(BTreeMap::new()),
+            connectors: declared
+                .climbing
+                .as_ref()
+                .map(|climbing| climbing.routing(context)),
+        }
+    }
 }
 
 impl Judge<'_, '_> {
@@ -3417,66 +3429,9 @@ impl Judge<'_, '_> {
             return;
         };
         // What could change the verdict, reported only if it stays open.
-        let Placed {
-            sure,
-            all,
-            complete: placed,
-            doubts,
-        } = &escape.placed;
-        let mut doubts = doubts.clone();
-        let bounds = |door: Option<&ObjectId>| -> [Result<Travel, Unavailable>; 2] {
-            let measure = |targets: &[Target], avoided: Vec<ObjectId>| {
-                if targets.is_empty() {
-                    return Ok(Travel::unbounded(f64::INFINITY));
-                }
-                match door {
-                    None => self.farthest(routes, &space.id, targets, &avoided, profile, &[]),
-                    Some(door) => self.nearest(routes, door, targets, &avoided, profile),
-                }
-            };
-            let from = door.unwrap_or(&space.id);
-            let most = escape.avoid.most(from);
-            let mut upper = measure(sure, most.clone());
-            // The farthest point is measured on the plain walk, which no
-            // walk around anything undercuts: a lower bound either way.
-            let least = if door.is_some() {
-                escape.avoid.least(from)
-            } else {
-                Vec::new()
-            };
-            let mut lower = if !placed {
-                // A target without a point might lie anywhere.
-                Ok(Travel::unbounded(0.0))
-            } else if sure.len() == all.len() && least == most {
-                upper.clone()
-            } else {
-                measure(all, least.clone())
-            };
-            // Weighted by the sections' costs: every possible section for
-            // the upper bound, the sure ones for the lower bound.
-            if let Ok(upper) = &mut upper
-                && upper.upper.is_finite()
-                && let Some(weighted) =
-                    self.weighted(routes, &space.id, door, sure, &most, profile, false)
-            {
-                upper.weighted = Some(weighted.upper);
-                upper.evidence.extend(weighted.evidence);
-            }
-            if *placed
-                && let Ok(lower) = &mut lower
-                && lower.lower.is_finite()
-                && let Some(weighted) =
-                    self.weighted(routes, &space.id, door, all, &least, profile, true)
-                && weighted.lower > lower.lower
-            {
-                lower.lower = weighted.lower;
-                lower.upper = weighted.upper.max(weighted.lower);
-                lower.at = weighted.at.or(lower.at);
-                lower.weighed = weighted.weighed;
-                lower.evidence.extend(weighted.evidence);
-            }
-            [lower, upper]
-        };
+        let mut doubts = escape.placed.doubts.clone();
+        let bounds =
+            |door: Option<&ObjectId>| self.start_bounds(routes, profile, &space.id, &escape, door);
         let measured: Vec<Measured> = match use_.start {
             Start::FarthestPoint => vec![(None, true, bounds(None))],
             Start::Door => {
@@ -3658,6 +3613,134 @@ impl Judge<'_, '_> {
                 format!("at least {}", shown(least, least))
             }
         )));
+    }
+
+    /// The bounds of the walk from one start (`door`, or the space's
+    /// farthest point) to the nearest exit: `[lower, upper]`.
+    fn start_bounds(
+        &self,
+        routes: &MetricRoutingServiceHandle,
+        profile: MobilityProfile,
+        space: &ObjectId,
+        escape: &Escape,
+        door: Option<&ObjectId>,
+    ) -> [Result<Travel, Unavailable>; 2] {
+        let Placed {
+            sure,
+            all,
+            complete: placed,
+            ..
+        } = &escape.placed;
+        let measure = |targets: &[Target], avoided: Vec<ObjectId>| {
+            if targets.is_empty() {
+                return Ok(Travel::unbounded(f64::INFINITY));
+            }
+            match door {
+                None => self.farthest(routes, space, targets, &avoided, profile, &[]),
+                Some(door) => self.nearest(routes, door, targets, &avoided, profile),
+            }
+        };
+        let from = door.unwrap_or(space);
+        let most = escape.avoid.most(from);
+        let mut upper = measure(sure, most.clone());
+        // The farthest point is measured on the plain walk, which no
+        // walk around anything undercuts: a lower bound either way.
+        let least = if door.is_some() {
+            escape.avoid.least(from)
+        } else {
+            Vec::new()
+        };
+        let mut lower = if !placed {
+            // A target without a point might lie anywhere.
+            Ok(Travel::unbounded(0.0))
+        } else if sure.len() == all.len() && least == most {
+            upper.clone()
+        } else {
+            measure(all, least.clone())
+        };
+        // Weighted by the sections' costs: every possible section for
+        // the upper bound, the sure ones for the lower bound.
+        if let Ok(upper) = &mut upper
+            && upper.upper.is_finite()
+            && let Some(weighted) = self.weighted(routes, space, door, sure, &most, profile, false)
+        {
+            upper.weighted = Some(weighted.upper);
+            upper.evidence.extend(weighted.evidence);
+        }
+        if *placed
+            && let Ok(lower) = &mut lower
+            && lower.lower.is_finite()
+            && let Some(weighted) = self.weighted(routes, space, door, all, &least, profile, true)
+            && weighted.lower > lower.lower
+        {
+            lower.lower = weighted.lower;
+            lower.upper = weighted.upper.max(weighted.lower);
+            lower.at = weighted.at.or(lower.at);
+            lower.weighed = weighted.weighed;
+            lower.evidence.extend(weighted.evidence);
+        }
+        [lower, upper]
+    }
+
+    /// The longest walk from a start (the space's farthest point, or each
+    /// of its doors) to the nearest exit, unmultiplied: from the sure
+    /// starts' least walks to every start's greatest, `f64::MAX` where one
+    /// is unbounded. `None` where the space has no exit, or a sure start
+    /// surely reaches none.
+    fn plain_travel(
+        &self,
+        space: &ObjectId,
+        start: Start,
+    ) -> Result<Option<(f64, f64)>, Unavailable> {
+        let escape = self.escape(space)?;
+        if escape.known && escape.targets.sure.is_empty() && escape.targets.maybe.is_empty() {
+            return Ok(None);
+        }
+        let routes = self
+            .context
+            .services
+            .get::<MetricRoutingServiceHandle>()
+            .ok_or_else(|| missing("metric-routing"))?;
+        let profile = self
+            .declared
+            .profile
+            .ok_or_else(|| invalid("travel needs a walking profile"))?;
+        let starts: Vec<(Option<ObjectId>, bool)> = match start {
+            Start::FarthestPoint => vec![(None, true)],
+            Start::Door => {
+                let doors = self.start_doors(space)?;
+                if doors.sure.is_empty() && doors.maybe.is_empty() {
+                    return Err(incomplete(format!(
+                        "{space} reaches no door usable for escape to start from"
+                    )));
+                }
+                doors
+                    .sure
+                    .iter()
+                    .map(|door| (Some(door.clone()), true))
+                    .chain(doors.maybe.iter().map(|door| (Some(door.clone()), false)))
+                    .collect()
+            }
+        };
+        let (mut least, mut most) = (0.0_f64, 0.0_f64);
+        for (door, sure_start) in starts {
+            let [lower, upper] = self.start_bounds(routes, profile, space, &escape, door.as_ref());
+            most = most.max(upper.map_or(f64::INFINITY, |upper| upper.upper));
+            if sure_start && let Ok(lower) = lower {
+                least = least.max(lower.lower);
+            }
+        }
+        if least.is_infinite() {
+            return Ok(None);
+        }
+        Ok(Some((
+            least,
+            if most.is_finite() {
+                most.max(least)
+            } else {
+                f64::MAX
+            },
+        )))
     }
 
     /// The representative points of `exits`: of the sure ones, of all, and

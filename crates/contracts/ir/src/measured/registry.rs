@@ -2069,6 +2069,104 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             "Die Höhe des höchsten Punkts des Objekts."
         )
     ),
+    MeasuredDescriptor {
+        name: "travel_distance",
+        parameters: &[
+            MeasuredParameter {
+                key: "exits",
+                kind: MeasuredParameterKind::Path,
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The relationship steps from the space to its exits.",
+                    "Die Beziehungsschritte vom Raum zu seinen Ausgängen.",
+                ),
+            },
+            kinds(
+                "kinds",
+                &en_de(
+                    "The source kinds of the exits, `,`-separated, subtypes included.",
+                    "Die Quellarten der Ausgänge, durch `,` getrennt, Untertypen eingeschlossen.",
+                ),
+            ),
+            MeasuredParameter {
+                key: "start",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["farthest-point", "door"],
+                },
+                required: false,
+                default: Some("farthest-point"),
+                help: &en_de(
+                    "Where the walk starts: every point of the space's walkable area, or each \
+                     of its doors.",
+                    "Wo der Weg beginnt: an jedem Punkt der begehbaren Fläche des Raums oder \
+                     an jeder seiner Türen.",
+                ),
+            },
+            MeasuredParameter {
+                key: "doors",
+                kind: MeasuredParameterKind::Path,
+                required: false,
+                default: None,
+                help: &en_de(
+                    "The relationship steps from the space to its doors, for `start=door`.",
+                    "Die Beziehungsschritte vom Raum zu seinen Türen, für `start=door`.",
+                ),
+            },
+            MeasuredParameter {
+                key: "door_kinds",
+                kind: MeasuredParameterKind::SourceKind,
+                required: false,
+                default: None,
+                help: &en_de(
+                    "The source kinds of the doors, `,`-separated.",
+                    "Die Quellarten der Türen, durch `,` getrennt.",
+                ),
+            },
+            MeasuredParameter {
+                key: "walking_height",
+                kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The height a walker needs clear above the floor.",
+                    "Die lichte Höhe, die ein Gehender über dem Boden braucht.",
+                ),
+            },
+            MeasuredParameter {
+                key: "walking_step",
+                kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The highest step a walker takes.",
+                    "Die höchste Stufe, die ein Gehender nimmt.",
+                ),
+            },
+        ],
+        dimension: Some(QuantityDimension::Length),
+        services: &[
+            "metric-routing",
+            "plan-span",
+            "vertical-extent",
+            "relationship-selection",
+        ],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[
+            "an exit has no representative point",
+            "the walk cannot be measured",
+            "no door to start from",
+        ],
+        label: &en_de("Travel distance", "Fluchtweglänge"),
+        help: &en_de(
+            "The longest walk from a start to the nearest exit, as `escape-route` walks it \
+             without multiplied sections; none where the space has no exit or a start \
+             reaches none.",
+            "Der längste Weg von einem Startpunkt zum nächsten Ausgang, wie `escape-route` \
+             ihn geht, ohne vervielfachte Abschnitte; keiner, wo der Raum keinen Ausgang hat \
+             oder ein Startpunkt keinen erreicht.",
+        ),
+    },
     plain!(
         "unallocated_share",
         None,

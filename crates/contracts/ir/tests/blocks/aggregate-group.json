@@ -8,8 +8,8 @@
     },
     "value": {
       "kind": "property",
-      "propertySet": "Pset_StairFlightCommon",
-      "property": "RiserHeight"
+      "propertySet": "ex:pset-stair-flight-common",
+      "property": "ex:riser-height"
     }
   },
   "blocks": {
@@ -30,8 +30,8 @@
         "block": {
           "type": "expression.property",
           "fields": {
-            "property": "RiserHeight",
-            "propertySet": "Pset_StairFlightCommon"
+            "property": "ex:riser-height",
+            "propertySet": "ex:pset-stair-flight-common"
           }
         }
       }

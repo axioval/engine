@@ -3,15 +3,15 @@
     "kind": "implies",
     "antecedent": {
       "kind": "property",
-      "propertySet": "Pset_WallCommon",
-      "property": "IsExternal"
+      "propertySet": "ex:pset-wall-common",
+      "property": "ex:is-external"
     },
     "consequent": {
       "kind": "isDefined",
       "operand": {
         "kind": "property",
-        "propertySet": "Pset_WallCommon",
-        "property": "ThermalTransmittance"
+        "propertySet": "ex:pset-wall-common",
+        "property": "ex:thermal-transmittance"
       }
     }
   },
@@ -22,8 +22,8 @@
         "block": {
           "type": "expression.property",
           "fields": {
-            "property": "IsExternal",
-            "propertySet": "Pset_WallCommon"
+            "property": "ex:is-external",
+            "propertySet": "ex:pset-wall-common"
           }
         }
       },
@@ -35,8 +35,8 @@
               "block": {
                 "type": "expression.property",
                 "fields": {
-                  "property": "ThermalTransmittance",
-                  "propertySet": "Pset_WallCommon"
+                  "property": "ex:thermal-transmittance",
+                  "propertySet": "ex:pset-wall-common"
                 }
               }
             }

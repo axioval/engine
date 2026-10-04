@@ -4,12 +4,12 @@
   "keys": {
     "key_1": {
       "kind": "property",
-      "propertySet": "Pset_WallCommon",
-      "property": "FireClass"
+      "propertySet": "ex:pset-wall-common",
+      "property": "ex:fire-class"
     },
     "key_2": {
       "kind": "property",
-      "property": "OccupancyType"
+      "property": "ex:occupancy-type"
     }
   },
   "column": "maximum"

@@ -9,7 +9,7 @@
   },
   "where": {
     "kind": "entityType",
-    "objectType": "Opening",
+    "objectType": "ex:opening",
     "includeSubtypes": true
   },
   "value": {

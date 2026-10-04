@@ -3,8 +3,8 @@
   "operands": [
     {
       "kind": "property",
-      "propertySet": "Pset_WallCommon",
-      "property": "NominalWidth"
+      "propertySet": "ex:pset-wall-common",
+      "property": "ex:nominal-width"
     },
     {
       "kind": "property",

@@ -5,7 +5,7 @@
     "kind": "selector",
     "selector": {
       "kind": "entityType",
-      "objectType": "Door",
+      "objectType": "ex:door",
       "includeSubtypes": true
     }
   },

@@ -4,13 +4,13 @@
     "operands": [
       {
         "kind": "property",
-        "propertySet": "Pset_WallCommon",
-        "property": "IsExternal"
+        "propertySet": "ex:pset-wall-common",
+        "property": "ex:is-external"
       },
       {
         "kind": "property",
-        "propertySet": "Pset_WallCommon",
-        "property": "LoadBearing"
+        "propertySet": "ex:pset-wall-common",
+        "property": "ex:load-bearing"
       }
     ]
   },
@@ -22,15 +22,15 @@
           {
             "type": "expression.property",
             "fields": {
-              "property": "IsExternal",
-              "propertySet": "Pset_WallCommon"
+              "property": "ex:is-external",
+              "propertySet": "ex:pset-wall-common"
             }
           },
           {
             "type": "expression.property",
             "fields": {
-              "property": "LoadBearing",
-              "propertySet": "Pset_WallCommon"
+              "property": "ex:load-bearing",
+              "propertySet": "ex:pset-wall-common"
             }
           }
         ]

@@ -2,7 +2,7 @@
   "kind": "isDefined",
   "operand": {
     "kind": "property",
-    "propertySet": "Pset_WallCommon",
-    "property": "FireRating"
+    "propertySet": "ex:pset-wall-common",
+    "property": "ex:fire-rating"
   }
 }

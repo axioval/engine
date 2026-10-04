@@ -3,8 +3,8 @@
     "kind": "noneOf",
     "operand": {
       "kind": "property",
-      "propertySet": "Pset_WallCommon",
-      "property": "Status"
+      "propertySet": "ex:pset-wall-common",
+      "property": "ex:status"
     },
     "values": [
       {
@@ -27,8 +27,8 @@
         "block": {
           "type": "expression.property",
           "fields": {
-            "property": "Status",
-            "propertySet": "Pset_WallCommon"
+            "property": "ex:status",
+            "propertySet": "ex:pset-wall-common"
           }
         }
       },

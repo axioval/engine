@@ -2,15 +2,15 @@
   "kind": "implies",
   "antecedent": {
     "kind": "property",
-    "propertySet": "Pset_WallCommon",
-    "property": "IsExternal"
+    "propertySet": "ex:pset-wall-common",
+    "property": "ex:is-external"
   },
   "consequent": {
     "kind": "isDefined",
     "operand": {
       "kind": "property",
-      "propertySet": "Pset_WallCommon",
-      "property": "ThermalTransmittance"
+      "propertySet": "ex:pset-wall-common",
+      "property": "ex:thermal-transmittance"
     }
   }
 }

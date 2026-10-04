@@ -3,13 +3,13 @@
     "kind": "xor",
     "left": {
       "kind": "property",
-      "propertySet": "Pset_WallCommon",
-      "property": "IsExternal"
+      "propertySet": "ex:pset-wall-common",
+      "property": "ex:is-external"
     },
     "right": {
       "kind": "property",
-      "propertySet": "Pset_WallCommon",
-      "property": "LoadBearing"
+      "propertySet": "ex:pset-wall-common",
+      "property": "ex:load-bearing"
     }
   },
   "blocks": {
@@ -19,8 +19,8 @@
         "block": {
           "type": "expression.property",
           "fields": {
-            "property": "IsExternal",
-            "propertySet": "Pset_WallCommon"
+            "property": "ex:is-external",
+            "propertySet": "ex:pset-wall-common"
           }
         }
       },
@@ -28,8 +28,8 @@
         "block": {
           "type": "expression.property",
           "fields": {
-            "property": "LoadBearing",
-            "propertySet": "Pset_WallCommon"
+            "property": "ex:load-bearing",
+            "propertySet": "ex:pset-wall-common"
           }
         }
       }

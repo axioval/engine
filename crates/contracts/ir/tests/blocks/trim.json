@@ -3,8 +3,8 @@
     "kind": "trim",
     "operand": {
       "kind": "property",
-      "propertySet": "Pset_WallCommon",
-      "property": "Reference"
+      "propertySet": "ex:pset-wall-common",
+      "property": "ex:reference"
     }
   },
   "blocks": {
@@ -14,8 +14,8 @@
         "block": {
           "type": "expression.property",
           "fields": {
-            "property": "Reference",
-            "propertySet": "Pset_WallCommon"
+            "property": "ex:reference",
+            "propertySet": "ex:pset-wall-common"
           }
         }
       }

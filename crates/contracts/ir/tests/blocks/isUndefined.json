@@ -3,8 +3,8 @@
     "kind": "isUndefined",
     "operand": {
       "kind": "property",
-      "propertySet": "Pset_WallCommon",
-      "property": "FireRating"
+      "propertySet": "ex:pset-wall-common",
+      "property": "ex:fire-rating"
     }
   },
   "blocks": {
@@ -14,8 +14,8 @@
         "block": {
           "type": "expression.property",
           "fields": {
-            "property": "FireRating",
-            "propertySet": "Pset_WallCommon"
+            "property": "ex:fire-rating",
+            "propertySet": "ex:pset-wall-common"
           }
         }
       }

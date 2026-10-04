@@ -3,8 +3,8 @@
     "kind": "not",
     "operand": {
       "kind": "property",
-      "propertySet": "Pset_WallCommon",
-      "property": "IsExternal"
+      "propertySet": "ex:pset-wall-common",
+      "property": "ex:is-external"
     }
   },
   "blocks": {
@@ -14,8 +14,8 @@
         "block": {
           "type": "expression.property",
           "fields": {
-            "property": "IsExternal",
-            "propertySet": "Pset_WallCommon"
+            "property": "ex:is-external",
+            "propertySet": "ex:pset-wall-common"
           }
         }
       }

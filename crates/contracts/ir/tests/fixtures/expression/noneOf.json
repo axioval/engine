@@ -2,8 +2,8 @@
   "kind": "noneOf",
   "operand": {
     "kind": "property",
-    "propertySet": "Pset_WallCommon",
-    "property": "Status"
+    "propertySet": "ex:pset-wall-common",
+    "property": "ex:status"
   },
   "values": [
     {

@@ -2,12 +2,12 @@
   "kind": "xor",
   "left": {
     "kind": "property",
-    "propertySet": "Pset_WallCommon",
-    "property": "IsExternal"
+    "propertySet": "ex:pset-wall-common",
+    "property": "ex:is-external"
   },
   "right": {
     "kind": "property",
-    "propertySet": "Pset_WallCommon",
-    "property": "LoadBearing"
+    "propertySet": "ex:pset-wall-common",
+    "property": "ex:load-bearing"
   }
 }

@@ -2,7 +2,7 @@
   "kind": "not",
   "operand": {
     "kind": "property",
-    "propertySet": "Pset_WallCommon",
-    "property": "IsExternal"
+    "propertySet": "ex:pset-wall-common",
+    "property": "ex:is-external"
   }
 }

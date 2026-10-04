@@ -8,8 +8,8 @@
           "operator": "equals",
           "left": {
             "kind": "property",
-            "propertySet": "Pset_WallCommon",
-            "property": "ExposureClass"
+            "propertySet": "ex:pset-wall-common",
+            "property": "ex:exposure-class"
           },
           "right": {
             "kind": "literal",
@@ -34,8 +34,8 @@
           "operator": "equals",
           "left": {
             "kind": "property",
-            "propertySet": "Pset_WallCommon",
-            "property": "ExposureClass"
+            "propertySet": "ex:pset-wall-common",
+            "property": "ex:exposure-class"
           },
           "right": {
             "kind": "literal",
@@ -82,8 +82,8 @@
                   "block": {
                     "type": "expression.property",
                     "fields": {
-                      "property": "ExposureClass",
-                      "propertySet": "Pset_WallCommon"
+                      "property": "ex:exposure-class",
+                      "propertySet": "ex:pset-wall-common"
                     }
                   }
                 },
@@ -122,8 +122,8 @@
                   "block": {
                     "type": "expression.property",
                     "fields": {
-                      "property": "ExposureClass",
-                      "propertySet": "Pset_WallCommon"
+                      "property": "ex:exposure-class",
+                      "propertySet": "ex:pset-wall-common"
                     }
                   }
                 },

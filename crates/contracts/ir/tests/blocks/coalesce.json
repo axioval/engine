@@ -4,8 +4,8 @@
     "operands": [
       {
         "kind": "property",
-        "propertySet": "Pset_WallCommon",
-        "property": "NominalWidth"
+        "propertySet": "ex:pset-wall-common",
+        "property": "ex:nominal-width"
       },
       {
         "kind": "property",
@@ -22,8 +22,8 @@
           {
             "type": "expression.property",
             "fields": {
-              "property": "NominalWidth",
-              "propertySet": "Pset_WallCommon"
+              "property": "ex:nominal-width",
+              "propertySet": "ex:pset-wall-common"
             }
           },
           {

@@ -2,7 +2,7 @@
   "kind": "length",
   "operand": {
     "kind": "property",
-    "propertySet": "Pset_WallCommon",
-    "property": "Reference"
+    "propertySet": "ex:pset-wall-common",
+    "property": "ex:reference"
   }
 }

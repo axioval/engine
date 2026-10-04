@@ -3,8 +3,8 @@
   "operator": "like",
   "left": {
     "kind": "property",
-    "propertySet": "Pset_WallCommon",
-    "property": "Reference"
+    "propertySet": "ex:pset-wall-common",
+    "property": "ex:reference"
   },
   "right": {
     "kind": "literal",

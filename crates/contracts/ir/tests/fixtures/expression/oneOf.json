@@ -2,8 +2,8 @@
   "kind": "oneOf",
   "operand": {
     "kind": "property",
-    "propertySet": "Pset_WallCommon",
-    "property": "ExposureClass"
+    "propertySet": "ex:pset-wall-common",
+    "property": "ex:exposure-class"
   },
   "values": [
     {

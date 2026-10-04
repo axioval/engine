@@ -238,6 +238,12 @@ impl Interval {
 
     /// The nearest multiple of `step`, halves away from zero.
     ///
+    /// A step that is the double nearest a decimal (`0.001`, `0.005`)
+    /// stands for that decimal: each multiple is the double nearest the
+    /// decimal multiple, as a literal states it, so `round(x, 0.001)` of a
+    /// value near 0.17 is the same double as the literal `0.17`. Any other
+    /// step's multiples are the exact products, widened.
+    ///
     /// # Errors
     ///
     /// [`IntervalFailure::Domain`] unless `step` is one positive value,
@@ -250,6 +256,17 @@ impl Interval {
         // quotients are widened first so a bound at a half rounds both ways.
         let lower = self.divided_by(step)?.lower.round();
         let upper = self.divided_by(step)?.upper.round();
+        if let Some((digits, scale)) = decimal(step.lower) {
+            // `count * digits` is an exact integer, divided by an exact
+            // power of ten, which rounds correctly.
+            let multiple = |count: f64| {
+                let product = count * digits;
+                (product.abs() < 9.0e15).then(|| product / scale)
+            };
+            if let (Some(lower), Some(upper)) = (multiple(lower), multiple(upper)) {
+                return Ok(Self { lower, upper });
+            }
+        }
         Self { lower, upper }.times(step)
     }
 
@@ -393,6 +410,17 @@ impl Interval {
     }
 }
 
+/// The decimal `value` is the nearest double to, as integer digits over a
+/// power of ten up to `10^15`; `None` for any other value.
+#[allow(clippy::float_cmp)]
+fn decimal(value: f64) -> Option<(f64, f64)> {
+    (0..=15).find_map(|exponent| {
+        let scale = 10f64.powi(exponent);
+        let digits = (value * scale).round();
+        ((1.0..9.0e15).contains(&digits) && digits / scale == value).then_some((digits, scale))
+    })
+}
+
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod tests {
@@ -468,5 +496,26 @@ mod tests {
             Interval::point(1.0).round_to(Interval::point(0.0)),
             Err(IntervalFailure::Domain)
         );
+    }
+
+    #[test]
+    fn a_decimal_step_rounds_to_the_literal_of_the_decimal_multiple() {
+        let near = Interval {
+            lower: 0.169_999_999_999_999_98,
+            upper: 0.170_000_000_000_000_04,
+        };
+        let rounded = near.round_to(Interval::point(0.001)).unwrap();
+        assert_eq!(rounded, Interval::point(0.17));
+        let rounded = near.round_to(Interval::point(1e-6)).unwrap();
+        assert_eq!(rounded, Interval::point(0.17));
+        let rounded = Interval::point(0.173)
+            .round_to(Interval::point(0.005))
+            .unwrap();
+        assert_eq!(rounded, Interval::point(0.175));
+        // A step no decimal is nearest to rounds by exact products.
+        let third = Interval::point(1.0)
+            .round_to(Interval::point(1.0 / 3.0))
+            .unwrap();
+        assert!(third.lower <= 1.0 && 1.0 <= third.upper);
     }
 }

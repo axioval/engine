@@ -556,6 +556,51 @@ fn well_typed_expressions_infer_their_types() {
     );
 }
 
+#[test]
+fn measured_member_fields_are_typed_inside_their_aggregate_only() {
+    let field =
+        |name: &str| json!({"kind": "property", "propertySet": "axioval:member", "property": name});
+    let over = |value: serde_json::Value| {
+        json!({"kind": "aggregate", "function": "max", "over": {"kind": "measured", "name": "steps"},
+            "value": value})
+    };
+    let length = Type::Number(Unit::of(Some(QuantityDimension::Length)));
+    let infer = |value: serde_json::Value| check(&expression(value), "v", &Environment);
+    assert_eq!(infer(over(field("riser"))).unwrap(), length);
+    let truth = json!({"kind": "aggregate", "function": "none",
+        "over": {"kind": "measured", "name": "steps"}, "value": field("open_riser")});
+    assert_eq!(infer(truth).unwrap(), Type::Boolean);
+    // Outside the aggregate, and a field the list does not state.
+    let error = infer(field("riser")).unwrap_err();
+    assert!(
+        format!("{:?}", error.kind).contains("only inside an aggregate"),
+        "{error:?}"
+    );
+    let error = infer(over(field("slope"))).unwrap_err();
+    assert_eq!(error.path, "v.aggregate.value");
+    assert!(format!("{:?}", error.kind).contains("`steps` members state no `slope`"));
+    // A nested aggregate over objects reads no member.
+    let nested = over(json!({"kind": "aggregate", "function": "max",
+        "over": {"kind": "path", "path": ["Hosts"]}, "value": field("riser")}));
+    assert!(infer(nested).is_err());
+    // Measured members take no `where`, and only a known list.
+    let filtered: Result<Expression, _> = serde_json::from_value(json!({"kind": "aggregate",
+        "function": "count", "over": {"kind": "measured", "name": "steps"},
+        "where": {"kind": "all"}}));
+    let error = filtered.unwrap().validate().unwrap_err().to_string();
+    assert!(error.contains("takes no `where`"), "{error}");
+    let unknown: Expression = serde_json::from_value(json!({"kind": "aggregate",
+        "function": "count", "over": {"kind": "measured", "name": "treads"}}))
+    .unwrap();
+    assert!(
+        unknown
+            .validate()
+            .unwrap_err()
+            .to_string()
+            .contains("no measured member list")
+    );
+}
+
 /// Members handed to an aggregate as stated: membership and value.
 struct Members(Vec<(bool, Value)>);
 

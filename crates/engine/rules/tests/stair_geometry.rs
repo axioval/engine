@@ -3796,3 +3796,495 @@ fn measured_clearances_reproduce_the_capabilities_measurements() {
     let runs = format!("{width};along=runs");
     assert!(near(measured(narrowed, "gentle", &runs), 1.2));
 }
+
+/// Each `stair-geometry` and `ramp-geometry` check rewritten as an
+/// expression over the measured steps, runs, rise, width and landings
+/// flags and leaves open the same objects as the capability on its own
+/// fixtures. Measured values are rounded to a micrometre, where the
+/// capability allows a few units in the last place.
+#[allow(clippy::needless_pass_by_value)]
+mod as_expressions {
+    use std::collections::BTreeSet;
+
+    use axioval_engine::RuleCapability;
+    use axioval_rules::ExpressionRequirement;
+    use serde_json::{Value, json};
+
+    use super::*;
+
+    fn field(name: &str) -> Value {
+        json!({"kind": "property", "propertySet": "axioval:member", "property": name})
+    }
+
+    fn measured(name: &str) -> Value {
+        json!({"kind": "property", "propertySet": "axioval:measured", "property": name})
+    }
+
+    fn quantity(value: f64, unit: &str) -> Value {
+        json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": unit}})
+    }
+
+    fn m(value: f64) -> Value {
+        quantity(value, "m")
+    }
+
+    fn plain(value: f64) -> Value {
+        json!({"kind": "literal", "value": {"type": "number", "value": value}})
+    }
+
+    fn rounded(operand: Value, step: Value) -> Value {
+        json!({"kind": "round", "operand": operand, "step": step})
+    }
+
+    fn mm(operand: Value) -> Value {
+        rounded(operand, m(1e-6))
+    }
+
+    fn compare(operator: &str, left: Value, right: Value) -> Value {
+        json!({"kind": "compare", "operator": operator, "left": left, "right": right})
+    }
+
+    fn at_most(left: Value, right: Value) -> Value {
+        compare("lessThanOrEquals", left, right)
+    }
+
+    fn at_least(left: Value, right: Value) -> Value {
+        compare("greaterThanOrEquals", left, right)
+    }
+
+    /// Holds where `test` of `value` does, and where `value` is `null`.
+    fn unless_null(value: &Value, test: Value) -> Value {
+        json!({"kind": "implies", "antecedent": {"kind": "isDefined", "operand": value},
+            "consequent": test})
+    }
+
+    fn over(function: &str, list: &str, value: Option<Value>) -> Value {
+        let mut aggregate = json!({"kind": "aggregate", "function": function,
+            "over": {"kind": "measured", "name": list}});
+        if let Some(value) = value {
+            aggregate["value"] = value;
+        }
+        aggregate
+    }
+
+    /// The flagged and the open objects of an evaluation.
+    fn verdicts(evaluation: &CapabilityEvaluation) -> (BTreeSet<String>, BTreeSet<String>) {
+        let flagged = findings(evaluation)
+            .into_iter()
+            .map(|(object, _)| object)
+            .collect();
+        let open = unevaluated(evaluation)
+            .into_iter()
+            .map(|(object, _)| object)
+            .collect();
+        (flagged, open)
+    }
+
+    /// Checks that `requirement` over the objects of `kind` reaches the
+    /// capability's verdicts under `parameters`, and returns them.
+    fn parity(
+        fixture: fn() -> Stairs,
+        capability: (&dyn RuleCapability, &str, &str),
+        parameters: Vec<(&str, ParameterValue)>,
+        requirement: &Value,
+    ) -> (BTreeSet<String>, BTreeSet<String>) {
+        let (check, id, of) = capability;
+        let register = |services: &mut axioval_engine::ServiceRegistry| {
+            services
+                .register(WalkingSurfaceServiceHandle::new(Arc::new(fixture())))
+                .unwrap();
+        };
+        let expected =
+            verdicts(&model().evaluate_with(check, &rule(id, kind(of), parameters), register));
+        let rule = rule(
+            "axioval:capability.expression",
+            kind(of),
+            vec![(
+                "requirement",
+                ParameterValue::Expression {
+                    value: serde_json::from_value(requirement.clone()).unwrap(),
+                },
+            )],
+        );
+        let evaluation = model().evaluate_measured(&ExpressionRequirement, &rule, register);
+        assert_eq!(
+            verdicts(&evaluation),
+            expected,
+            "{requirement}: {:?}",
+            evaluation.not_evaluated_outcomes()
+        );
+        expected
+    }
+
+    fn stair(
+        fixture: fn() -> Stairs,
+        parameters: Vec<(&str, ParameterValue)>,
+        requirement: &Value,
+    ) -> (BTreeSet<String>, BTreeSet<String>) {
+        parity(
+            fixture,
+            (&StairGeometryCheck, STAIR, "flight"),
+            parameters,
+            requirement,
+        )
+    }
+
+    fn set(objects: &[&str]) -> BTreeSet<String> {
+        objects.iter().map(|object| (*object).to_owned()).collect()
+    }
+
+    #[test]
+    fn steps_risers_and_the_rise_reach_the_verdicts() {
+        let riser = |test: Value| over("all", "steps", Some(test));
+        let checks = [
+            (
+                vec![("riser_maximum", metres(0.19))],
+                riser(at_most(mm(field("riser")), m(0.19))),
+                set(&["irregular"]),
+            ),
+            (
+                vec![
+                    ("riser_minimum", metres(0.17)),
+                    ("riser_maximum", metres(0.21)),
+                ],
+                riser(json!({"kind": "between", "operand": mm(field("riser")),
+                    "low": m(0.17), "high": m(0.21)})),
+                set(&[]),
+            ),
+            (
+                vec![("going_minimum", metres(0.26))],
+                riser(unless_null(
+                    &field("going"),
+                    at_least(mm(field("going")), m(0.26)),
+                )),
+                set(&[]),
+            ),
+            (
+                vec![("going_minimum", metres(0.29))],
+                riser(unless_null(
+                    &field("going"),
+                    at_least(mm(field("going")), m(0.29)),
+                )),
+                set(&["irregular", "regular"]),
+            ),
+            (
+                vec![
+                    ("step_length_minimum", metres(0.59)),
+                    ("step_length_maximum", metres(0.65)),
+                ],
+                riser(unless_null(
+                    &field("step_length"),
+                    json!({"kind": "between",
+                    "operand": mm(field("step_length")), "low": m(0.59), "high": m(0.65)}),
+                )),
+                set(&["irregular"]),
+            ),
+            (
+                vec![("riser_tolerance", metres(0.005))],
+                at_most(
+                    mm(json!({"kind": "subtract",
+                        "left": over("max", "steps", Some(field("riser"))),
+                        "right": over("min", "steps", Some(field("riser")))})),
+                    m(0.005),
+                ),
+                set(&["irregular"]),
+            ),
+            (
+                vec![("maximum_risers", ParameterValue::Integer { value: 3 })],
+                at_most(
+                    over("count", "steps", None),
+                    json!({"kind": "literal", "value": {"type": "integer", "value": 3}}),
+                ),
+                set(&["irregular", "regular"]),
+            ),
+            (
+                vec![("maximum_rise", metres(0.7))],
+                at_most(mm(measured("flight_rise")), m(0.7)),
+                set(&["irregular"]),
+            ),
+        ];
+        for (parameters, requirement, flagged) in checks {
+            let (found, open) = stair(stairs, parameters, &requirement);
+            assert_eq!(found, flagged, "{requirement}");
+            // The flight in pieces is not measured either way.
+            assert_eq!(open, set(&["winder"]), "{requirement}");
+        }
+    }
+
+    fn narrow() -> Stairs {
+        stairs()
+            .flight(wide_flight("regular", &[0.17; 4], 0.0, 1.0))
+            .landing("regular", WalkingEnd::FlightTop, "slab", Some((0.9, 1.0)))
+            .landing(
+                "regular",
+                WalkingEnd::FlightBottom,
+                "floor",
+                Some((3.0, 4.0)),
+            )
+            .landing("irregular", WalkingEnd::FlightTop, "slab", Some((1.5, 1.5)))
+    }
+
+    #[test]
+    fn widths_and_landings_reach_the_verdicts() {
+        let (found, _) = stair(
+            narrow,
+            vec![("width_minimum", metres(1.1))],
+            &at_least(mm(measured("flight_width")), m(1.1)),
+        );
+        assert_eq!(found, set(&["regular"]));
+        let landing = |end: &str, size: &str| {
+            let size = measured(&format!("landing_{size};landing=slab;end={end}"));
+            unless_null(&size, at_least(mm(size.clone()), m(1.0)))
+        };
+        let (found, _) = stair(
+            narrow,
+            vec![
+                ("landing_objects", slabs()),
+                ("landing_depth_minimum", metres(1.0)),
+                ("landing_width_minimum", metres(1.0)),
+            ],
+            &json!({"kind": "and", "operands": [
+                landing("bottom", "depth"), landing("top", "depth"),
+                landing("bottom", "width"), landing("top", "width")]}),
+        );
+        assert_eq!(found, set(&["regular"]));
+    }
+
+    fn turning() -> Stairs {
+        stairs().parts("winder", winder())
+    }
+
+    #[test]
+    fn winders_goings_along_a_line_and_open_risers_reach_the_verdicts() {
+        let (found, open) = stair(
+            turning,
+            vec![("winder_angle_maximum", degrees(30.0))],
+            &over(
+                "all",
+                "steps",
+                Some(unless_null(
+                    &field("winder_angle"),
+                    at_most(field("winder_angle"), quantity(30.0, "deg")),
+                )),
+            ),
+        );
+        assert_eq!(found, set(&["winder"]));
+        assert_eq!(open, set(&["irregular", "regular"]));
+        let (found, _) = stair(
+            turning,
+            vec![
+                ("going_minimum", metres(0.25)),
+                ("walking_line_offset", metres(0.3)),
+            ],
+            &over(
+                "all",
+                "steps;walking_line_offset=0.3",
+                Some(unless_null(
+                    &field("going"),
+                    at_least(mm(field("going")), m(0.25)),
+                )),
+            ),
+        );
+        assert_eq!(found, set(&["winder"]));
+        let (found, open) = stair(
+            || {
+                use RiserClosure::{Closed, NotMeasured, Open};
+                let closing = |risers: [RiserClosure; 4], object: &str| {
+                    let mut parts = Parts::from(flight(object, &[0.17; 4], 0.0));
+                    parts.treads = parts
+                        .treads
+                        .iter()
+                        .zip(risers)
+                        .map(|(tread, riser)| tread.with_riser_below(riser))
+                        .collect();
+                    parts
+                };
+                Stairs::default()
+                    .parts("regular", closing([Closed, Open, Open, Closed], "regular"))
+                    .parts(
+                        "irregular",
+                        closing([NotMeasured, Closed, Closed, Closed], "irregular"),
+                    )
+                    .parts("winder", closing([Closed; 4], "winder"))
+            },
+            vec![("forbid_open_risers", boolean(true))],
+            &over("none", "steps", Some(field("open_riser"))),
+        );
+        assert_eq!(found, set(&["regular"]));
+        assert_eq!(open, set(&["irregular"]));
+    }
+
+    fn ramp_parity(
+        fixture: fn() -> Stairs,
+        parameters: Vec<(&str, ParameterValue)>,
+        requirement: &Value,
+    ) -> (BTreeSet<String>, BTreeSet<String>) {
+        parity(
+            fixture,
+            (&RampGeometryCheck, RAMP, "ramp"),
+            parameters,
+            requirement,
+        )
+    }
+
+    #[test]
+    fn ramp_runs_reach_the_verdicts() {
+        let slope = || rounded(field("slope"), plain(1e-6));
+        let row = |maximum: f64, (size, bound): (&str, f64)| {
+            json!({"kind": "and", "operands": [
+                at_most(slope(), plain(maximum)),
+                at_most(mm(field(size)), m(bound))]})
+        };
+        let (found, open) = ramp_parity(
+            stairs,
+            vec![(
+                "slope_limits",
+                ParameterValue::Table {
+                    value: vec![
+                        limit(1.0 / 12.0, None, Some(0.5)),
+                        limit(1.0 / 6.0, Some(2.0), None),
+                    ],
+                },
+            )],
+            &over(
+                "all",
+                "runs",
+                Some(json!({"kind": "or", "operands": [
+                    row(0.083_333, ("rise", 0.5)), row(0.166_667, ("length", 2.0))]})),
+            ),
+        );
+        assert_eq!(found, set(&["steep"]));
+        assert!(open.is_empty());
+        let spread = |tolerance: f64| {
+            at_most(
+                rounded(
+                    json!({"kind": "subtract",
+                        "left": over("max", "runs", Some(field("slope"))),
+                        "right": over("min", "runs", Some(field("slope")))}),
+                    plain(1e-6),
+                ),
+                plain(tolerance),
+            )
+        };
+        let (found, _) = ramp_parity(stairs, vec![("slope_tolerance", number(0.0))], &spread(0.0));
+        assert!(found.is_empty());
+        let (found, open) = ramp_parity(
+            || Stairs::default().ramp(ramp("gentle", &[(0.5, 6.0), (0.5, 5.0)])),
+            vec![("slope_tolerance", number(0.01))],
+            &spread(0.01),
+        );
+        assert_eq!(found, set(&["gentle"]));
+        assert_eq!(open, set(&["steep"]));
+    }
+
+    fn railed() -> Stairs {
+        stairs()
+            .rail(
+                "regular",
+                WalkingStretch::Flight,
+                "left_rail",
+                rail((1.25, 1.3), (-0.3, 1.14), (0.9, 0.9), LEVEL),
+            )
+            .rail(
+                "regular",
+                WalkingStretch::Flight,
+                "low_rail",
+                rail((-0.1, -0.05), (-0.1, 1.14), (0.75, 0.76), (None, Some(0.0))),
+            )
+            .rail(
+                "irregular",
+                WalkingStretch::Flight,
+                "short_rail",
+                rail(
+                    (1.25, 1.3),
+                    (-0.3, 1.14),
+                    (0.9, 0.9),
+                    (Some(0.0), Some(0.05)),
+                ),
+            )
+    }
+
+    #[test]
+    fn handrail_heights_extensions_and_sides_reach_the_verdicts() {
+        let list = "handrails;rails=railing;reach_across=0.2;reach_above=1.5;level_over=0.3";
+        let rails = |function: &str, value: Value| over(function, list, Some(value));
+        let and = |operands: Vec<Value>| json!({"kind": "and", "operands": operands});
+        let (found, open) = stair(
+            railed,
+            handrail_parameters(vec![
+                ("handrail_height_minimum", metres(0.8)),
+                ("handrail_height_maximum", metres(1.0)),
+            ]),
+            &rails(
+                "all",
+                and(vec![
+                    at_least(mm(field("height_lowest")), m(0.8)),
+                    at_most(mm(field("height_highest")), m(1.0)),
+                ]),
+            ),
+        );
+        assert_eq!(found, set(&["regular"]));
+        assert_eq!(open, set(&["winder"]));
+        let level = |rise: &str| at_most(json!({"kind": "abs", "operand": field(rise)}), m(1e-6));
+        let reaches = |piece: &str, extension: &str, rise: &str| {
+            json!({"kind": "implies", "antecedent": field(piece), "consequent":
+                and(vec![at_least(mm(field(extension)), m(0.3)), level(rise)])})
+        };
+        let (found, _) = stair(
+            railed,
+            handrail_parameters(vec![("handrail_extension_minimum", metres(0.3))]),
+            &rails(
+                "all",
+                and(vec![
+                    reaches("first_on_side", "extension_bottom", "bottom_rise"),
+                    reaches("last_on_side", "extension_top", "top_rise"),
+                ]),
+            ),
+        );
+        assert_eq!(found, set(&["irregular", "regular"]));
+        let (found, _) = stair(
+            railed,
+            handrail_parameters(vec![("handrail_sides", string("both"))]),
+            &and(vec![
+                rails("any", field("left")),
+                rails("any", field("right")),
+            ]),
+        );
+        assert_eq!(found, set(&["irregular"]));
+    }
+
+    fn overlapping() -> Stairs {
+        in_pieces()
+            .rail(
+                "irregular",
+                WalkingStretch::Flight,
+                "lower_piece",
+                rail((1.25, 1.3), (-0.3, 1.14), (0.9, 0.9), LEVEL),
+            )
+            .rail(
+                "irregular",
+                WalkingStretch::Flight,
+                "upper_piece",
+                rail((1.3, 1.35), (0.0, 0.84), (0.9, 0.9), (None, None)),
+            )
+    }
+
+    #[test]
+    fn gaps_between_handrail_pieces_reach_the_verdicts() {
+        let gaps = |maximum: f64| {
+            // `all` needs a member; a flight with no rail has no gap.
+            over(
+                "none",
+                "handrails;rails=railing;reach_across=0.2;reach_above=1.5",
+                Some(compare("greaterThan", mm(field("gap_after")), m(maximum))),
+            )
+        };
+        let parameters =
+            |gap: f64| handrail_parameters(vec![("handrail_gap_maximum", metres(gap))]);
+        let (found, open) = stair(overlapping, parameters(0.05), &gaps(0.05));
+        assert_eq!(found, set(&["regular"]));
+        assert_eq!(open, set(&["irregular", "winder"]));
+        let (found, _) = stair(in_pieces, parameters(0.15), &gaps(0.15));
+        assert!(found.is_empty());
+    }
+}

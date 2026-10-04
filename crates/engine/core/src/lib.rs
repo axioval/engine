@@ -692,8 +692,30 @@ impl CapabilityRegistry {
                 return refused("another provider measures it");
             }
         }
+        for name in provider.member_lists() {
+            let refused = |why: &str| Err(EngineError::InvalidProvider((*name).into(), why.into()));
+            if axioval_ir::measured::member_descriptor(name)
+                .is_none_or(|known| known.list.name != *name)
+            {
+                return refused("it is not in the registry of measured member lists");
+            }
+            if self
+                .measured
+                .iter()
+                .any(|other| other.member_lists().contains(name))
+            {
+                return refused("another provider measures it");
+            }
+        }
         self.measured.push(Arc::new(provider));
         Ok(self)
+    }
+    /// Whether a registered provider measures the member list `name`.
+    #[must_use]
+    pub fn measures_members(&self, name: &str) -> bool {
+        self.measured
+            .iter()
+            .any(|provider| provider.member_lists().contains(&name))
     }
     /// Whether a registered provider or the engine measures `name`.
     #[must_use]
@@ -971,7 +993,9 @@ pub use linear_quantity::{
     LinearQuantityRequest, LinearQuantityService, LinearQuantityServiceHandle, ShelfGeometry,
 };
 pub use measured::measured_value;
-pub use measured::provider::{MeasuredProvider, Measurement};
+pub use measured::provider::{
+    MeasuredMember, MeasuredProvider, Measurement, MemberValue, measured_members,
+};
 pub use metric_routing::{
     BlockedMetricRouteEvidence, ClimbLength, CompleteMetricEvidence, ConnectorRouting,
     FarthestPointEvidence, FarthestPointOutcome, FarthestPointRequest, ForcedWalkEvidence,

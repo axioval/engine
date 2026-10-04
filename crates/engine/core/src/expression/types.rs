@@ -208,6 +208,36 @@ pub fn measured_type(name: &str) -> Result<Type, String> {
     Ok(Type::Number(Unit::of(call.descriptor.dimension)))
 }
 
+/// The type of the member field `name` of `member`'s list.
+fn member_type(
+    member: Option<&'static axioval_ir::measured::MemberDescriptor>,
+    name: &str,
+) -> Result<Type, String> {
+    use axioval_ir::measured::MemberFieldKind;
+    let member = member.ok_or_else(|| {
+        format!(
+            "`{}` `{name}` is read only inside an aggregate over measured members",
+            axioval_ir::MEMBER_SET
+        )
+    })?;
+    let field = member.field(name).ok_or_else(|| {
+        format!(
+            "`{}` members state no `{name}`; they state {}",
+            member.list.name,
+            member
+                .fields
+                .iter()
+                .map(|field| format!("`{}`", field.name))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    })?;
+    Ok(match field.kind {
+        MemberFieldKind::Number { dimension } => Type::Number(Unit::of(dimension)),
+        MemberFieldKind::Truth => Type::Boolean,
+    })
+}
+
 /// Infers the type of `expression`, whose path is `root`.
 ///
 /// # Errors
@@ -218,7 +248,11 @@ pub fn check(
     root: &str,
     environment: &dyn TypeEnvironment,
 ) -> Result<Type, TypeError> {
-    Checker { environment }.check(expression, root)
+    Checker {
+        environment,
+        member: None,
+    }
+    .check(expression, root)
 }
 
 /// Checks that `expression` is of type `expected` (a truth for a
@@ -275,6 +309,9 @@ fn join(left: &Type, right: &Type) -> Option<Type> {
 
 struct Checker<'e> {
     environment: &'e dyn TypeEnvironment,
+    /// The measured member list whose fields `axioval:member` reads: inside
+    /// an aggregate over it, none elsewhere.
+    member: Option<&'static axioval_ir::measured::MemberDescriptor>,
 }
 
 impl Checker<'_> {
@@ -303,6 +340,14 @@ impl Checker<'_> {
                 ScalarValue::DateTime { .. } => Type::DateTime,
             },
             Expression::Null { .. } => Type::Null,
+            Expression::Property {
+                property_set,
+                property,
+                ..
+            } if property_set.as_deref() == Some(axioval_ir::MEMBER_SET) => {
+                member_type(self.member, property)
+                    .map_err(|why| here(TypeErrorKind::Unknown(why)))?
+            }
             Expression::Property {
                 property_set,
                 property,
@@ -554,35 +599,57 @@ impl Checker<'_> {
             }
             Expression::Aggregate {
                 function,
+                over,
                 filter,
                 value,
                 ..
             } => {
                 use axioval_ir::contract::AggregateFunction as F;
+                let outer = Checker {
+                    environment: self.environment,
+                    member: None,
+                };
                 if let Some(filter) = filter {
                     for nested in filter.expressions() {
-                        self.boolean(nested, &child("where"))?;
+                        outer.boolean(nested, &child("where"))?;
                     }
                 }
+                let scoped = Checker {
+                    environment: self.environment,
+                    member: match over {
+                        axioval_ir::contract::AggregateSource::Measured { name } => Some(
+                            axioval_ir::measured::parse_members(name)
+                                .ok()
+                                .and_then(|call| axioval_ir::measured::members_of(&call))
+                                .ok_or_else(|| {
+                                    here(TypeErrorKind::Unknown(format!(
+                                        "`{name}` is no measured member list"
+                                    )))
+                                })?,
+                        ),
+                        _ => None,
+                    },
+                };
+                let this = &scoped;
                 let value_path = child("value");
                 match (function, value) {
                     (F::Count | F::DistinctCount, value) => {
                         if let Some(value) = value {
-                            self.check(value, &value_path)?;
+                            this.check(value, &value_path)?;
                         }
                         Type::Integer
                     }
                     (F::Any | F::All | F::None, Some(value)) => {
-                        self.boolean(value, &value_path)?;
+                        this.boolean(value, &value_path)?;
                         Type::Boolean
                     }
                     (F::Sum | F::Min | F::Max, Some(value)) => {
-                        match self.numeric(value, &value_path)? {
+                        match this.numeric(value, &value_path)? {
                             Type::Null => Type::Any,
                             found => found,
                         }
                     }
-                    (F::Average, Some(value)) => match self.numeric(value, &value_path)? {
+                    (F::Average, Some(value)) => match this.numeric(value, &value_path)? {
                         Type::Integer => Type::NUMBER,
                         Type::Null => Type::Any,
                         found => found,

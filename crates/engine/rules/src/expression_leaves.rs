@@ -8,7 +8,9 @@ use axioval_engine::expression::{
     EvaluationBudget, ExpressionContext, Interval, Leaf, Member, RuleRead, Unit, Value,
     derived_value, evaluate,
 };
-use axioval_engine::{ObjectVerdict, RuleContext, RuleOutcomes};
+use axioval_engine::{
+    MeasuredMember, Measurement, MemberValue, ObjectVerdict, RuleContext, RuleOutcomes,
+};
 use axioval_ir::contract::{
     AggregateSource, Expression, ParameterValue, ScalarValue, Selector, TableRow,
 };
@@ -33,6 +35,8 @@ pub(crate) struct ObjectLeaves<'a> {
     parameters: Option<&'a BTreeMap<String, ParameterValue>>,
     /// Why each unreadable leaf was unreadable, in reading order.
     reasons: RefCell<Vec<NotEvaluatedReason>>,
+    /// The measured member in scope, whose fields `axioval:member` reads.
+    fields: Option<&'a MeasuredMember>,
 }
 
 impl<'a> ObjectLeaves<'a> {
@@ -48,6 +52,7 @@ impl<'a> ObjectLeaves<'a> {
             subject: object,
             parameters,
             reasons: RefCell::new(Vec::new()),
+            fields: None,
         }
     }
 
@@ -60,7 +65,130 @@ impl<'a> ObjectLeaves<'a> {
             subject: self.subject,
             parameters: self.parameters,
             reasons: RefCell::new(Vec::new()),
+            fields: None,
         }
+    }
+
+    /// The leaves of a measured member of the object in scope: the same
+    /// object, its fields read in `axioval:member`.
+    fn measured_member(&self, member: &'a MeasuredMember) -> Self {
+        Self {
+            context: self.context,
+            object: self.object,
+            subject: self.subject,
+            parameters: self.parameters,
+            reasons: RefCell::new(Vec::new()),
+            fields: Some(member),
+        }
+    }
+
+    /// The field `name` of the measured member in scope.
+    fn member_field(&self, name: &str) -> Leaf {
+        let Some(member) = self.fields else {
+            self.reasons
+                .borrow_mut()
+                .push(NotEvaluatedReason::InvalidEvidence);
+            return Leaf::unreadable(format!(
+                "`{}` `{name}` is read only inside an aggregate over measured members",
+                axioval_ir::MEMBER_SET
+            ));
+        };
+        let source = self.object.id.source.clone();
+        let cited = |locator: &str, exact: bool| {
+            let locator = format!("{}/{name}:{locator}", axioval_ir::MEMBER_SET);
+            vec![Evidence {
+                source: source.clone(),
+                locator,
+                exact,
+            }]
+        };
+        match member.fields.get(name) {
+            None => {
+                self.reasons
+                    .borrow_mut()
+                    .push(NotEvaluatedReason::InvalidEvidence);
+                Leaf::unreadable(format!("the members state no `{name}`"))
+            }
+            Some(MemberValue::Undecided { why }) => {
+                self.reasons
+                    .borrow_mut()
+                    .push(NotEvaluatedReason::IncompleteEvidence);
+                Leaf::unreadable(format!("`{name}` is undecided: {why}"))
+            }
+            Some(MemberValue::Truth { value, locator }) => Leaf {
+                value: Ok(Value::Boolean(*value)),
+                evidence: cited(locator, true),
+            },
+            Some(MemberValue::Measured(Measurement::Absent { locator })) => Leaf {
+                value: Ok(Value::Null),
+                evidence: cited(locator, true),
+            },
+            Some(MemberValue::Measured(Measurement::Value {
+                lower,
+                upper,
+                dimension,
+                locator,
+            })) => {
+                #[allow(clippy::float_cmp)]
+                let exact = lower == upper;
+                let value = Value::from_property(&axioval_ir::PropertyValue::Measured {
+                    lower: *lower,
+                    upper: *upper,
+                    dimension: *dimension,
+                });
+                if value.is_err() {
+                    self.reasons
+                        .borrow_mut()
+                        .push(NotEvaluatedReason::InvalidEvidence);
+                }
+                Leaf {
+                    value,
+                    evidence: cited(locator, exact),
+                }
+            }
+        }
+    }
+
+    /// The members of `list` measured of the object in scope, each
+    /// evaluated with `value`.
+    fn measured_members(
+        &self,
+        list: &str,
+        value: Option<&Expression>,
+        path: &str,
+    ) -> Result<Vec<Member>, String> {
+        let measured =
+            axioval_engine::measured_members(self.context.services, &self.object.id, list)
+                .map_err(|error| {
+                    self.reasons
+                        .borrow_mut()
+                        .push(crate::selection::property_error(error.clone()).0);
+                    format!("`{list}` of {}: {error}", self.object.id)
+                })?;
+        let mut members = Vec::new();
+        for member in &measured {
+            let (value, evidence) = match value {
+                None => (Ok(Value::Null), Vec::new()),
+                Some(value) => {
+                    let mut leaves = self.measured_member(member);
+                    let evaluation = evaluate(value, path, &mut leaves);
+                    (
+                        evaluation.outcome,
+                        evaluation
+                            .reads
+                            .iter()
+                            .flat_map(|read| read.leaf.evidence.iter().cloned())
+                            .collect(),
+                    )
+                }
+            };
+            members.push(Member {
+                certain: member.certain,
+                value,
+                evidence,
+            });
+        }
+        Ok(members)
     }
 
     /// The candidate members `over` reaches from the object in scope, each
@@ -121,6 +249,7 @@ impl<'a> ObjectLeaves<'a> {
                     })
                     .collect()
             }
+            AggregateSource::Measured { .. } => Err("measured members are no objects".into()),
             AggregateSource::Selector { selector } => {
                 let mut candidates = Vec::new();
                 for object in context.project.objects() {
@@ -158,6 +287,9 @@ impl ExpressionContext for ObjectLeaves<'_> {
     }
 
     fn property(&mut self, set: Option<&str>, name: &str) -> Leaf {
+        if set == Some(axioval_ir::MEMBER_SET) {
+            return self.member_field(name);
+        }
         if set == Some(axioval_ir::VALUE_SET) {
             return self.derived(name);
         }
@@ -259,6 +391,9 @@ impl ExpressionContext for ObjectLeaves<'_> {
         value: Option<&Expression>,
         path: &str,
     ) -> Result<Vec<Member>, String> {
+        if let AggregateSource::Measured { name } = over {
+            return self.measured_members(name, value, path);
+        }
         let mut members = Vec::new();
         for (object, mut certain, mut evidence) in self.candidates(over)? {
             if let Some(filter) = filter {

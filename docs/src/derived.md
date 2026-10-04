@@ -699,6 +699,64 @@ it, and a source stating none leaves the object not evaluated.
 with a run's services, outside a run, for a host previewing a value or a
 test comparing it with a capability's judgement.
 
+### Stairs and ramps
+
+`flight_rise` and `flight_width` are a stair flight's rise and width,
+`landing_depth` and `landing_width` the landing at its `end` (`bottom` or
+`top`, a ramp's with `of=ramp`) among the objects of the `landing` kinds,
+none when none carries one. They are measured through the walking-surface
+service as `stair-geometry` and `ramp-geometry` measure them, each a
+flight measured first; the steps, runs and handrails are measured members
+(below). Headroom, the clearance below and the clear width are
+[clearances](#clearances).
+
+### Measured members
+
+Some measurements are many per object: a flight's steps, a ramp's runs, the
+rails along either. An aggregate over a measured member list ranges over
+them ([Expressions](./expressions.md#aggregates)); its `value` reads each
+member's fields in `axioval:member` (`axioval_ir::MEMBER_SET`). The lists,
+`axioval_ir::measured::MEASURED_MEMBERS`, are written like measured values
+and declare their parameters and typed fields:
+
+| List | Members | Fields |
+| --- | --- | --- |
+| `steps` (`walking_line_offset`) | one per riser of a flight, bottom to top | `riser`, `going`, `step_length` (`2r + g`), `nosing`, `winder_angle`, `open_riser` |
+| `runs` | a ramp's sloped runs, lowest first | `slope`, `length`, `rise`, `width` |
+| `handrails` (`rails`, `reach_across`, `reach_above`, `level_over`, `from`, `of`) | each rail along a flight or each run of a ramp | `run`, `left`, `right`, `height_lowest`, `height_highest`, `extension_bottom`, `extension_top`, `bottom_rise`, `top_rise`, `first_on_side`, `last_on_side`, `gap_after` |
+
+Step `j` climbs riser `j` onto tread `j`; its `going`, `nosing` and
+`winder_angle` are measured from the tread below, so the first step and a
+final riser have none (`null`). A field the measurement cannot decide (an
+unmeasured winder angle, whether a riser is closed, the order of pieces
+lying beside one another) leaves an expression reading it not evaluated.
+Built-in code registered beside the capabilities measures each list
+(`MeasuredProvider::member_lists`), never a package.
+
+"Every riser at most 0.19 m, and risers within 5 mm of one another":
+
+```json
+{"kind": "and", "operands": [
+  {"kind": "aggregate", "function": "all", "over": {"kind": "measured", "name": "steps"},
+   "value": {"kind": "compare", "operator": "lessThanOrEquals",
+     "left": {"kind": "round", "operand": {"kind": "property", "propertySet": "axioval:member", "property": "riser"},
+              "step": {"kind": "literal", "value": {"type": "quantity", "value": 0.001, "unit": "m"}}},
+     "right": {"kind": "literal", "value": {"type": "quantity", "value": 0.19, "unit": "m"}}}},
+  {"kind": "compare", "operator": "lessThanOrEquals",
+   "left": {"kind": "subtract",
+     "left": {"kind": "aggregate", "function": "max", "over": {"kind": "measured", "name": "steps"},
+              "value": {"kind": "property", "propertySet": "axioval:member", "property": "riser"}},
+     "right": {"kind": "aggregate", "function": "min", "over": {"kind": "measured", "name": "steps"},
+               "value": {"kind": "property", "propertySet": "axioval:member", "property": "riser"}}},
+   "right": {"kind": "literal", "value": {"type": "quantity", "value": 0.005, "unit": "m"}}}]}
+```
+
+Expressions over these values reach `stair-geometry`'s and
+`ramp-geometry`'s verdicts on their fixtures, check by check: risers,
+goings, step lengths, the riser count and spread, the rise, the width,
+landings, winders, open risers, ramp slope limits and spread, handrail
+heights, extensions, gaps and sides.
+
 ### Levels
 
 `level_elevation`, `level_index` and `height_above_ground` place an object

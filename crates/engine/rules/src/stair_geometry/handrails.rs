@@ -265,6 +265,37 @@ impl RiserOffsets {
     }
 }
 
+impl RiserOffsets {
+    /// A rail's extension beyond the pitch line's bottom (or top) end,
+    /// measured from the riser there instead.
+    pub(super) fn shift(
+        &self,
+        reach: MeasuredInterval,
+        bottom: bool,
+    ) -> Result<MeasuredInterval, String> {
+        let shifted = if bottom {
+            self.bottom.as_ref().map(|(low, high)| {
+                (
+                    (reach.lower() + low).next_down(),
+                    (reach.upper() + high).next_up(),
+                )
+            })
+        } else {
+            self.top.as_ref().map(|(low, high)| {
+                (
+                    (reach.lower() - high).next_down(),
+                    (reach.upper() - low).next_up(),
+                )
+            })
+        };
+        match shifted {
+            Ok((lower, upper)) => MeasuredInterval::try_new(lower, upper)
+                .map_err(|error| format!("the extension from the riser: {error}")),
+            Err(why) => Err(why.clone()),
+        }
+    }
+}
+
 /// The handrails along one stretch against the rule's handrail checks.
 pub(super) fn handrails(
     stairs: &WalkingSurfaceServiceHandle,
@@ -542,25 +573,7 @@ impl Judged<'_> {
         let Some(risers) = self.risers else {
             return Some(Ok(reach));
         };
-        let shifted = match end {
-            End::Bottom => risers.bottom.as_ref().map(|(low, high)| {
-                (
-                    (reach.lower() + low).next_down(),
-                    (reach.upper() + high).next_up(),
-                )
-            }),
-            End::Top => risers.top.as_ref().map(|(low, high)| {
-                (
-                    (reach.lower() - high).next_down(),
-                    (reach.upper() - low).next_up(),
-                )
-            }),
-        };
-        Some(match shifted {
-            Ok((lower, upper)) => MeasuredInterval::try_new(lower, upper)
-                .map_err(|error| format!("the extension from the riser: {error}")),
-            Err(why) => Err(why.clone()),
-        })
+        Some(risers.shift(reach, matches!(end, End::Bottom)))
     }
 
     /// Whether a rail surely reaches beyond one end farther than the

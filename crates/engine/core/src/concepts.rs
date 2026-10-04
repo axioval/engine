@@ -152,6 +152,9 @@ impl ConceptCatalog {
         if set == axioval_ir::GROUP_SET {
             return Some(name == axioval_ir::GROUP_KEY || name == axioval_ir::GROUP_MEMBERS);
         }
+        if set == axioval_ir::MEMBER_SET {
+            return Some(axioval_ir::measured::is_member_field(name));
+        }
         if set == axioval_ir::SOURCE_SET {
             return Some(crate::derived::source_field(name).is_some());
         }

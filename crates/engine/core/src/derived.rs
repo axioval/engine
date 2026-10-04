@@ -428,6 +428,9 @@ impl PropertyResolutionService for DerivedProperties {
         if request.property_set() == Some(axioval_ir::SOURCE_SET) {
             return self.sources.resolve(request);
         }
+        if request.property_set() == Some(axioval_ir::MEMBER_SET) {
+            return Err(PropertyResolutionError::InvalidRequest);
+        }
         match &self.inner {
             Some(inner) => inner.resolve(request),
             None => Err(PropertyResolutionError::Unavailable(

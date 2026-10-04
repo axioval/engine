@@ -12,7 +12,7 @@ use crate::{
     MEASURED_VOLUME, MEASURED_X, MEASURED_Y, MEASURED_Z, QuantityDimension,
 };
 
-const fn en_de(en: &'static str, de: &'static str) -> [LocalizedText; 2] {
+pub(super) const fn en_de(en: &'static str, de: &'static str) -> [LocalizedText; 2] {
     [
         LocalizedText {
             language: "en",
@@ -76,6 +76,47 @@ const fn kinds(key: &'static str, help: &'static [LocalizedText]) -> MeasuredPar
         help,
     }
 }
+
+const FLIGHT: &[&str] = &["walking-surface", "type-hierarchy"];
+const NO_FLIGHT: &str = "the walking-surface service cannot measure the flight or ramp";
+const LANDING_UNMEASURED: &str = "the landing fills no rectangle along the walking direction";
+
+const LANDING_OBJECTS: MeasuredParameter = kinds(
+    "landing",
+    &en_de(
+        "The source kinds that may carry a landing, `,`-separated, subtypes included.",
+        "Die Quellarten, die ein Podest tragen können, durch `,` getrennt, Untertypen \
+         eingeschlossen.",
+    ),
+);
+
+const LANDING_END: MeasuredParameter = MeasuredParameter {
+    key: "end",
+    kind: MeasuredParameterKind::Choice {
+        options: &["bottom", "top"],
+    },
+    required: true,
+    default: None,
+    help: &en_de(
+        "Which end: a flight's bottom or top, a ramp's lowest run's bottom or highest \
+         run's top.",
+        "Welches Ende: Fuß oder Kopf eines Laufs, Fuß des untersten oder Kopf des \
+         obersten Rampenlaufs.",
+    ),
+};
+
+const WALKING_KIND: MeasuredParameter = MeasuredParameter {
+    key: "of",
+    kind: MeasuredParameterKind::Choice {
+        options: &["flight", "ramp"],
+    },
+    required: false,
+    default: Some("flight"),
+    help: &en_de(
+        "Whether the object is a stair flight or a ramp.",
+        "Ob das Objekt ein Treppenlauf oder eine Rampe ist.",
+    ),
+};
 
 const PROXIMITY: &[&str] = &["proximity", "type-hierarchy"];
 
@@ -1132,6 +1173,34 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ),
     },
     MeasuredDescriptor {
+        name: "flight_rise",
+        parameters: &[],
+        dimension: Some(QuantityDimension::Length),
+        services: FLIGHT,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_FLIGHT],
+        label: &en_de("Flight rise", "Laufhöhe"),
+        help: &en_de(
+            "How far a stair flight rises, from its base to the top of its last riser.",
+            "Wie hoch ein Treppenlauf steigt, von seinem Fuß bis zur Oberkante der letzten \
+             Steigung.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "flight_width",
+        parameters: &[],
+        dimension: Some(QuantityDimension::Length),
+        services: FLIGHT,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_FLIGHT, "a tread fills no rectangle along the flight"],
+        label: &en_de("Flight width", "Laufbreite"),
+        help: &en_de(
+            "A stair flight's width: its narrowest tread's, across the direction it climbs.",
+            "Die Breite eines Treppenlaufs: die seiner schmalsten Stufe quer zur \
+             Laufrichtung.",
+        ),
+    },
+    MeasuredDescriptor {
         name: GRADIENT_DIRECTION,
         parameters: &[FACE],
         dimension: Some(QuantityDimension::PlaneAngle),
@@ -1245,6 +1314,36 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              space, as `space-validation` counts them.",
             "Wie viele Körper den Raum enthalten, in ihm liegen oder ihn wesentlich \
              durchdringen, wie `space-validation` sie zählt.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "landing_depth",
+        parameters: &[LANDING_OBJECTS, LANDING_END, WALKING_KIND],
+        dimension: Some(QuantityDimension::Length),
+        services: FLIGHT,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_FLIGHT, UNDECIDED_KIND, LANDING_UNMEASURED],
+        label: &en_de("Landing depth", "Podesttiefe"),
+        help: &en_de(
+            "How deep the landing at one end of a flight or ramp is along the walking \
+             direction; none when no selected object carries one.",
+            "Wie tief das Podest an einem Ende eines Laufs oder einer Rampe in \
+             Gehrichtung ist; keine, wenn kein ausgewähltes Objekt eines trägt.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "landing_width",
+        parameters: &[LANDING_OBJECTS, LANDING_END, WALKING_KIND],
+        dimension: Some(QuantityDimension::Length),
+        services: FLIGHT,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_FLIGHT, UNDECIDED_KIND, LANDING_UNMEASURED],
+        label: &en_de("Landing width", "Podestbreite"),
+        help: &en_de(
+            "How wide the landing at one end of a flight or ramp is across the walking \
+             direction; none when no selected object carries one.",
+            "Wie breit das Podest an einem Ende eines Laufs oder einer Rampe quer zur \
+             Gehrichtung ist; keine, wenn kein ausgewähltes Objekt eines trägt.",
         ),
     },
     plain!(

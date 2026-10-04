@@ -17,10 +17,13 @@ use std::fmt::Write as _;
 mod clear_width;
 mod continuity;
 mod handrails;
+mod measured;
 mod obstruction;
 mod ramp_ends;
 mod tactile;
 mod whole;
+
+pub(crate) use measured::StairMeasures;
 
 use axioval_engine::{
     CapabilityEvaluation, ClearanceBelowRequest, ColumnKind, CompiledRule, Deviation,

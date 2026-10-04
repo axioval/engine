@@ -13,7 +13,13 @@ use std::collections::BTreeMap;
 
 use serde::Serialize;
 
+mod members;
 mod registry;
+
+pub use members::{
+    MEASURED_MEMBERS, MemberDescriptor, MemberField, MemberFieldKind, is_member_field,
+    member_descriptor, members_of, parse_members,
+};
 
 /// The nearest or farthest counterpart's distance.
 pub const DISTANCE: &str = "distance";
@@ -210,8 +216,12 @@ pub enum MeasuredArgument {
 /// Why a name is no measured value.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum MeasuredError {
-    #[error("`{name}` is no measured value; known: {known}")]
-    Unknown { name: String, known: String },
+    #[error("`{name}` is no {what}; known: {known}")]
+    Unknown {
+        name: String,
+        what: &'static str,
+        known: String,
+    },
     #[error("`{part}` of `{name}` is not `key=value`")]
     NotKeyValue { name: String, part: String },
     #[error("`{name}` states `{key}` twice")]
@@ -257,16 +267,28 @@ pub fn descriptor(name: &str) -> Option<&'static MeasuredDescriptor> {
 /// An unknown name, a parameter stated twice, not taken or not given when
 /// required, or a value of the wrong kind.
 pub fn parse(text: &str) -> Result<MeasuredCall, MeasuredError> {
+    parse_in(text, MEASURED_VALUES.iter(), "measured value")
+}
+
+/// Parses `name[;key=value…]` against `descriptors`, which name `what`.
+fn parse_in(
+    text: &str,
+    descriptors: impl Iterator<Item = &'static MeasuredDescriptor> + Clone,
+    what: &'static str,
+) -> Result<MeasuredCall, MeasuredError> {
     let mut parts = text.split(';');
     let base = parts.next().unwrap_or_default().trim().to_ascii_lowercase();
-    let descriptor = descriptor(&base).ok_or_else(|| MeasuredError::Unknown {
-        name: base.clone(),
-        known: MEASURED_VALUES
-            .iter()
-            .map(|descriptor| descriptor.name)
-            .collect::<Vec<_>>()
-            .join(", "),
-    })?;
+    let descriptor = descriptors
+        .clone()
+        .find(|descriptor| descriptor.name == base)
+        .ok_or_else(|| MeasuredError::Unknown {
+            name: base.clone(),
+            what,
+            known: descriptors
+                .map(|descriptor| descriptor.name)
+                .collect::<Vec<_>>()
+                .join(", "),
+        })?;
     let name = || descriptor.name.to_owned();
     let mut stated = BTreeMap::new();
     for part in parts {

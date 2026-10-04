@@ -250,6 +250,8 @@ impl Model {
             .register(RelationshipSelectionServiceHandle::new(shared))
             .unwrap();
         extra(&mut services);
+        // Aggregates over measured members ask the providers directly.
+        registry.install_measured(&mut services, &project);
         capability.evaluate(
             &RuleContext {
                 project: &project,

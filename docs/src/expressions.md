@@ -46,6 +46,13 @@ a date-time. Numbers are intervals in coherent SI units with their unit
 interval when measured on a tessellated body. A quantity literal is
 converted to coherent units when read (`40 mm` is `0.04 m`).
 
+`round(value, step)` with a decimal step (`0.001`, `1e-6`, `0.005`) gives
+each multiple as the double nearest the decimal multiple, the same double
+its literal is, so a riser measured within a few units in the last place of
+0.17 m rounds to exactly the literal `0.17 m`. A comparison that must not
+fail on binary rounding compares rounded values, as a standard states its
+bounds to a precision.
+
 Arithmetic is sound: every result holds every value its operands allow.
 Where a floating-point operation rounds, the bound moves one step outward;
 an exact operation on points stays a point. Division by an interval holding
@@ -102,6 +109,7 @@ An `aggregate` computes one value over the objects `over` reaches from the objec
 - `{"kind": "path", "path": [...]}`: the objects a relationship path reaches, its steps written as a `related` selector's;
 - `{"kind": "group", "grouping": "…"}`: the members of the derived group the object is, or belongs to;
 - `{"kind": "selector", "selector": {…}}`: every object of the project the selector selects, the counterparts of a pair rule.
+- `{"kind": "measured", "name": "…"}`: the members built-in code measures of the object in scope, by a list of the registry `axioval_ir::measured::MEASURED_MEMBERS` written like a measured value (`steps;walking_line_offset=0.3`). The object in scope stays the owner, and `value` reads each member's fields in the reserved set `axioval:member` (`riser`, `going` of a flight's `steps`), typed by the registry; outside such an aggregate the set is refused when the ruleset compiles. It takes no `where`: a condition on the members is part of the `value`. See [Measured members](./derived.md#measured-members).
 
 `where` keeps the members a selector selects, and `value` is evaluated with each member in scope; inside it a property with `"of": "subject"` reads the rule's checked object instead. The functions are `count` (no `value`), `sum`, `min`, `max`, `average`, `any`, `all`, `none` (a truth `value`) and `distinctCount`. "The openings of a wall take at most 40 % of its side":
 

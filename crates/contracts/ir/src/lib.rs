@@ -677,6 +677,12 @@ pub const SOURCE_SET: &str = "axioval:source";
 /// The declared discipline of the object's source, in [`SOURCE_SET`].
 pub const SOURCE_DISCIPLINE: &str = "discipline";
 
+/// Property set holding the fields of a measured member (a flight's step,
+/// a ramp's run), read inside an aggregate over a measured member list
+/// ([`measured::MEASURED_MEMBERS`]); nothing outside one. Reserved like
+/// [`ATTRIBUTE_SET`].
+pub const MEMBER_SET: &str = "axioval:member";
+
 /// Whether `set` is one of the reserved sets, which bind to themselves.
 #[must_use]
 pub fn is_reserved_set(set: &str) -> bool {
@@ -776,6 +782,7 @@ pub fn is_derived_set(set: &str) -> bool {
         || set == GROUP_SET
         || set == VALUE_SET
         || set == SOURCE_SET
+        || set == MEMBER_SET
 }
 
 /// A named semantic property.

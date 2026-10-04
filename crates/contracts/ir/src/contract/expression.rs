@@ -411,6 +411,13 @@ pub enum AggregateSource {
     /// Every object of the project the selector selects, the object in
     /// scope included when it is selected: the counterparts of a pair rule.
     Selector { selector: Box<Selector> },
+    /// The members built-in code measures of the object in scope, by a
+    /// list of [`crate::measured::MEASURED_MEMBERS`] written
+    /// `name[;key=value…]` (a flight's `steps`). The object in scope stays
+    /// the owner; the `value` reads each member's fields in
+    /// [`crate::MEMBER_SET`]. It takes no `where`: a condition on members
+    /// is part of the value.
+    Measured { name: String },
 }
 
 /// One `when` → `then` branch of an [`Expression::If`].
@@ -526,6 +533,8 @@ pub enum ExpressionError {
     NotFinite,
     #[error("an aggregate `{function:?}` takes a `value` unless it counts, and a count takes none")]
     AggregateValue { function: AggregateFunction },
+    #[error("an aggregate over measured members: {detail}")]
+    MeasuredMembers { detail: String },
 }
 
 impl Expression {
@@ -1005,9 +1014,10 @@ impl Expression {
             Self::Aggregate {
                 function,
                 over,
+                filter,
                 value,
                 ..
-            } => validate_aggregate(*function, over, value.is_some())?,
+            } => validate_aggregate(*function, over, filter.is_some(), value.is_some())?,
             _ => {}
         }
         if let Self::Aggregate {
@@ -1031,6 +1041,7 @@ impl Expression {
 fn validate_aggregate(
     function: AggregateFunction,
     over: &AggregateSource,
+    has_filter: bool,
     has_value: bool,
 ) -> Result<(), ExpressionError> {
     let kind = "aggregate";
@@ -1047,6 +1058,14 @@ fn validate_aggregate(
             .try_for_each(|step| blank(kind, "path step", step)),
         AggregateSource::Group { grouping } => blank(kind, "grouping", grouping),
         AggregateSource::Selector { .. } => Ok(()),
+        AggregateSource::Measured { .. } if has_filter => Err(ExpressionError::MeasuredMembers {
+            detail: "it takes no `where`; state the condition in its `value`".into(),
+        }),
+        AggregateSource::Measured { name } => crate::measured::parse_members(name)
+            .map(drop)
+            .map_err(|error| ExpressionError::MeasuredMembers {
+                detail: error.to_string(),
+            }),
     }
 }
 

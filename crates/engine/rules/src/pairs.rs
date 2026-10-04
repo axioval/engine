@@ -68,7 +68,7 @@ pub(crate) fn counterpart_selector(rule: &CompiledRule) -> Option<&Selector> {
 
 pub(crate) fn reason(error: ProximityError) -> NotEvaluatedReason {
     match error {
-        ProximityError::Unavailable | ProximityError::NoBody => {
+        ProximityError::Unavailable | ProximityError::NoBody | ProximityError::Refused(_) => {
             NotEvaluatedReason::IncompleteEvidence
         }
         ProximityError::UnsupportedProjection => NotEvaluatedReason::BackendUnavailable,

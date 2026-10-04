@@ -201,7 +201,7 @@ impl ProximityService for Boxes {
             request.clone(),
             gap.max(0.0),
             Some((-gap).max(0.0)),
-            0.0,
+            Some(0.0),
             None,
             GeometryFidelity::Exact,
             Evidence::exact(

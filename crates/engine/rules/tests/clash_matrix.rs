@@ -77,7 +77,7 @@ impl ProximityService for Stub {
             request.clone(),
             0.0,
             Some(depth),
-            0.0,
+            Some(0.0),
             None,
             GeometryFidelity::Exact,
             Evidence::exact(source(), format!("proximity:{a}:{b}")),

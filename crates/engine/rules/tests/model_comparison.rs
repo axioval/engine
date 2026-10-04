@@ -435,7 +435,7 @@ impl ProximityService for Boxes {
             request.clone(),
             separation,
             Some(if separation > 0.0 { 0.0 } else { depth }),
-            0.0,
+            Some(0.0),
             None,
             GeometryFidelity::Exact,
             Evidence::exact(request.subject().source.clone(), "boxes"),

@@ -51,6 +51,12 @@ pub enum ProximityError {
     /// The adapter holds no measurable geometry for an object.
     #[error("proximity measurement is unavailable for the requested object")]
     Unavailable,
+    /// Both bodies are held, but the geometry kernel refused a measurement
+    /// on them, for the reason given (the plan overlay refusing a
+    /// footprint, say). Distinct from [`Self::Unavailable`] so a report
+    /// tells a kernel refusal from a body that could not be read.
+    #[error("the geometry kernel refused the measurement: {0}")]
+    Refused(&'static str),
     /// The object is declared to occupy no material, such as a storey or an
     /// opening. A fact about the object, not a failure to measure it: an
     /// object whose body could not be measured is [`Self::Unavailable`].
@@ -1102,7 +1108,7 @@ pub struct ProximityEvidence {
     request: ProximityRequest,
     separation_metres: f64,
     penetration_metres: Option<f64>,
-    plan_overlap_square_metres: f64,
+    plan_overlap_square_metres: Option<f64>,
     containment: Option<BodyContainment>,
     overlap_extents: Option<OverlapExtents>,
     hausdorff: Option<LengthInterval>,
@@ -1119,19 +1125,22 @@ impl ProximityEvidence {
     /// - `separation_metres`: shortest distance between the two surfaces.
     /// - `penetration_metres`: depth of the deepest witnessed point of either
     ///   body inside the other; `None` when neither body is a closed solid.
-    /// - `plan_overlap_square_metres`: area of the two footprints' overlap.
+    /// - `plan_overlap_square_metres`: area of the two footprints' overlap;
+    ///   `None` when the service could not measure it. No separation,
+    ///   penetration or containment rests on it, so an unmeasured plan
+    ///   overlap leaves them standing.
     pub fn try_new(
         request: ProximityRequest,
         separation_metres: f64,
         penetration_metres: Option<f64>,
-        plan_overlap_square_metres: f64,
+        plan_overlap_square_metres: Option<f64>,
         containment: Option<BodyContainment>,
         fidelity: GeometryFidelity,
         evidence: Evidence,
     ) -> Result<Self, ProximityError> {
         let finite_non_negative = |v: f64| v.is_finite() && v >= 0.0;
         if !finite_non_negative(separation_metres)
-            || !finite_non_negative(plan_overlap_square_metres)
+            || plan_overlap_square_metres.is_some_and(|area| !finite_non_negative(area))
             || penetration_metres.is_some_and(|depth| !finite_non_negative(depth))
             || !finite_non_negative(fidelity.deviation_metres())
         {
@@ -1282,7 +1291,8 @@ impl ProximityEvidence {
     pub fn penetration_metres(&self) -> Option<f64> {
         self.penetration_metres
     }
-    pub fn plan_overlap_square_metres(&self) -> f64 {
+    /// Area of the two footprints' overlap; `None` when it was not measured.
+    pub fn plan_overlap_square_metres(&self) -> Option<f64> {
         self.plan_overlap_square_metres
     }
     pub fn containment(&self) -> Option<BodyContainment> {
@@ -2138,7 +2148,15 @@ mod tests {
     fn evidence_exactness_must_match_fidelity() {
         let tessellated = GeometryFidelity::tessellated(0.002).unwrap();
         assert_eq!(
-            ProximityEvidence::try_new(request(), 0.1, Some(0.0), 0.0, None, tessellated, exact()),
+            ProximityEvidence::try_new(
+                request(),
+                0.1,
+                Some(0.0),
+                Some(0.0),
+                None,
+                tessellated,
+                exact()
+            ),
             Err(ProximityError::EvidenceFidelityMismatch)
         );
         assert_eq!(
@@ -2146,7 +2164,7 @@ mod tests {
                 request(),
                 0.1,
                 Some(0.0),
-                0.0,
+                Some(0.0),
                 None,
                 GeometryFidelity::Exact,
                 approximate()
@@ -2158,7 +2176,7 @@ mod tests {
                 request(),
                 0.1,
                 Some(0.0),
-                0.0,
+                Some(0.0),
                 None,
                 tessellated,
                 approximate()
@@ -2175,7 +2193,7 @@ mod tests {
                 request(),
                 0.1,
                 Some(0.05),
-                0.0,
+                Some(0.0),
                 None,
                 exact_fidelity,
                 exact()
@@ -2187,7 +2205,7 @@ mod tests {
                 request(),
                 0.1,
                 Some(0.05),
-                0.0,
+                Some(0.0),
                 Some(BodyContainment::SubjectInsideCounterpart),
                 exact_fidelity,
                 exact()
@@ -2200,7 +2218,7 @@ mod tests {
                 request(),
                 0.0,
                 Some(0.05),
-                0.0,
+                Some(0.0),
                 Some(BodyContainment::SubjectInsideCounterpart),
                 exact_fidelity,
                 exact()
@@ -2218,7 +2236,7 @@ mod tests {
             request(),
             0.01,
             Some(0.0),
-            0.0,
+            Some(0.0),
             None,
             fidelity,
             approximate(),
@@ -2312,7 +2330,7 @@ mod tests {
                 horizontal,
                 0.1,
                 Some(0.0),
-                0.0,
+                Some(0.0),
                 None,
                 GeometryFidelity::Exact,
                 exact()
@@ -2407,7 +2425,7 @@ mod tests {
                 request(),
                 separation,
                 penetration,
-                0.0,
+                Some(0.0),
                 None,
                 GeometryFidelity::Exact,
                 exact(),
@@ -2438,7 +2456,7 @@ mod tests {
             request(),
             0.2,
             Some(0.0),
-            0.0,
+            Some(0.0),
             None,
             GeometryFidelity::Exact,
             exact(),
@@ -2465,7 +2483,7 @@ mod tests {
             request(),
             2.004,
             None,
-            0.0,
+            Some(0.0),
             None,
             GeometryFidelity::tessellated(0.005).unwrap(),
             approximate(),
@@ -2550,7 +2568,7 @@ mod tests {
                 request(),
                 separation,
                 penetration,
-                0.0,
+                Some(0.0),
                 containment,
                 GeometryFidelity::Exact,
                 exact(),

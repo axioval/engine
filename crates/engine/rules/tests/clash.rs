@@ -126,6 +126,11 @@ impl Stub {
             .insert((a.into(), b.into()), Err(ProximityError::Unavailable));
         self
     }
+    fn refused(mut self, a: &str, b: &str, reason: &'static str) -> Self {
+        self.pairs
+            .insert((a.into(), b.into()), Err(ProximityError::Refused(reason)));
+        self
+    }
     fn fidelity(&self, local: &str) -> GeometryFidelity {
         self.boxes[local].unwrap().1
     }
@@ -165,7 +170,7 @@ impl ProximityService for Stub {
             request.clone(),
             pair.separation,
             pair.penetration,
-            0.0,
+            Some(0.0),
             pair.containment,
             fidelity,
             Evidence {
@@ -671,6 +676,41 @@ fn a_failed_measurement_is_not_a_pass() {
     assert_eq!(
         outcome.not_evaluated_outcomes()[0].object_id(),
         Some(&oid("pipe"))
+    );
+}
+
+/// A kernel refusing a measured pair is not evaluated, and the outcome says
+/// why, never that the object has nothing to measure.
+#[test]
+fn a_kernel_refusal_is_not_evaluated_with_its_reason() {
+    let stub = Stub::default()
+        .object("pipe", 0.0)
+        .object("wall", 1.0)
+        .object("far-wall", 50.0)
+        .refused("pipe", "wall", "the plan overlay refused the footprints");
+    let outcome = run(
+        &Clash,
+        &pipes_and_walls(),
+        stub,
+        &clash(&[("penetration_tolerance_metres", 0.01)]),
+    );
+    assert!(outcome.findings().is_empty());
+    let [refused] = outcome.not_evaluated_outcomes() else {
+        panic!("one refusal expected");
+    };
+    assert_eq!(refused.object_id(), Some(&oid("pipe")));
+    assert_eq!(refused.reason(), &NotEvaluatedReason::IncompleteEvidence);
+    assert!(
+        refused.message().ends_with(
+            "the geometry kernel refused the measurement: the plan overlay refused the footprints"
+        ),
+        "{}",
+        refused.message()
+    );
+    assert!(
+        !refused
+            .message()
+            .contains("unavailable for the requested object")
     );
 }
 

@@ -61,7 +61,9 @@ A `ProximityService` answers two questions:
   `GeometryFidelity`.
 - `measure_proximity(request)` gives a `ProximityEvidence` for one pair:
   - the **separation** between the surfaces (zero when they meet);
-  - the **plan overlap** area of the two footprints;
+  - the **plan overlap** area of the two footprints, `None` when the
+    service could not measure it (no clash class rests on it, so an
+    unmeasured plan overlap leaves the pair measured);
   - the witnessed **penetration** depth;
   - an optional **containment**, when one body lies wholly inside the other;
   - the **overlap extents**: how far the intersection reaches along x, y
@@ -221,7 +223,25 @@ primitives:
   skips pairs whose triangle boxes are already farther apart than the best
   distance found, a skip that loses nothing.
 - **Plan overlap** intersects the projected, uniformly oriented triangle soups
-  with `axiolid-overlay`.
+  with `axiolid-overlay`. The overlay refuses a whole input over one ring
+  with two corners within its tolerance or an area within its square, and
+  the near-vertical faces of modelled walls and slabs cast such slivers
+  after rounding. In `measure_proximity` a refused overlay leaves the plan
+  overlap `None`; separation, penetration and everything else are still
+  measured, and the clash is decided on them.
+  For the `PlanOverlap` projection and the footprint relation of a
+  `Vertical` one, the slivers are left out of the overlay and their area,
+  rounding included, kept as a bound: leaving shadows out only shrinks the
+  overlap, so the true overlap lies between the overlay's and that plus the
+  slivers' area. An exact pair is related when the overlap without the
+  slivers exceeds the overlap tolerance and unrelated when it does not
+  even with them; anything between is refused with that reason, since an
+  exact answer is a point. A tessellated pair's deep witness point is one
+  of the whole overlap as well. When the overlay still refuses, the
+  measurement is refused with `ProximityError::Refused` and the overlay's
+  reason (`RepeatedVertex`, `SelfIntersection`, …), which the outcome's
+  message carries, never as `Unavailable`, which means a body that could
+  not be read.
 - **Penetration** samples points of each body and tests them against the
   other's winding number. The samples are vertices, edge and face centres, the
   body's centre, and the midpoints between the points where each edge crosses

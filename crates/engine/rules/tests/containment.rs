@@ -138,7 +138,7 @@ impl ProximityService for Stub {
             request.clone(),
             pair.separation,
             Some(if pair.shared.0 > 0.0 { 0.1 } else { 0.0 }),
-            0.0,
+            Some(0.0),
             None,
             GeometryFidelity::Exact,
             evidence(format!("proximity:{a}:{b}")),

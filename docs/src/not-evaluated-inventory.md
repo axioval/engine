@@ -102,6 +102,16 @@ Cases 1, 2 and 4 alone account for 93 % of the outcomes, and none of them
 waits on an upstream kernel. Case 2 also feeds case 4: a slab made of parts
 leaves every space of its model refused.
 
+Cases 1 and 11 are fixed (#210). A clash or containment pair no longer
+needs the plan overlap, which no clash class reads, and the footprint
+relation leaves the overlay's slivers out with their area as a bound; an
+overlay refusal that remains names its error in the outcome. Re-run on two
+of the models (the office model behind most of case 1 and a small sample),
+case 1 went from 10,060 outcomes to none: those pairs are now decided, and
+the office model's findings rose from 874 to 1,333. A
+few pairs move on to case 8 (clash 12 to 20 there), which the plan overlay
+had hidden.
+
 Cases not observed on this corpus are listed with their capability (see
 [Capabilities](./capabilities.md), [Clash](./clash.md),
 [Metric routing](./metric-routing.md) and the

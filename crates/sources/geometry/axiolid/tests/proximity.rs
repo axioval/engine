@@ -110,7 +110,34 @@ fn a_pipe_through_a_wall_penetrates_by_half_the_wall() {
     // No vertex of either body lies inside the other: the witness is the
     // midpoint between where the pipe's edges cross the two wall faces.
     assert!((depth - 0.1).abs() < 1e-9, "depth {depth}");
-    assert!((measured.plan_overlap_square_metres() - 0.02).abs() < 1e-6);
+    assert!((measured.plan_overlap_square_metres().expect("measured") - 0.02).abs() < 1e-6);
+    assert!(measured.evidence().exact);
+}
+
+/// A wall whose front face leans by `lean` metres over its height: both
+/// its triangles cast slivers in plan, two corners `lean` apart, as the
+/// near-vertical faces of a modelled wall do after rounding.
+fn leaning_wall(lean: f64) -> TriMesh {
+    let mut mesh = wall();
+    for top_front in [4, 5] {
+        mesh.positions[top_front].y = lean;
+    }
+    mesh
+}
+
+/// The overlay refuses a ring with two corners within its tolerance, so
+/// the plan overlap of a leaning wall is unknown; nothing in space rests on
+/// it, and the clash is still measured.
+#[test]
+fn a_wall_casting_a_sliver_in_plan_is_still_measured() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("wall"), leaning_wall(1e-10))
+        .with_mesh(id("cross-wall"), cuboid([1.0, -1.0, 0.0], [1.2, 1.0, 3.0]));
+    let measured = measure(geometry, "cross-wall", "wall");
+    assert!(measured.separation_metres().abs() < f64::EPSILON);
+    let depth = measured.penetration_metres().expect("both are solids");
+    assert!(depth > 0.05, "depth {depth}");
+    assert_eq!(measured.plan_overlap_square_metres(), None);
     assert!(measured.evidence().exact);
 }
 
@@ -124,7 +151,7 @@ fn a_slab_resting_on_a_wall_touches_without_penetrating() {
     assert_eq!(measured.penetration_metres(), Some(0.0));
     // In plan the wall lies entirely under the slab.
     // The overlay rounds through single precision.
-    assert!((measured.plan_overlap_square_metres() - 0.8).abs() < 1e-6);
+    assert!((measured.plan_overlap_square_metres().expect("measured") - 0.8).abs() < 1e-6);
 }
 
 #[test]
@@ -159,7 +186,13 @@ fn separated_bodies_report_their_gap() {
     assert!((measured.separation_metres() - 0.3).abs() < 1e-9);
     assert_eq!(measured.penetration_metres(), Some(0.0));
     assert_eq!(measured.containment(), None);
-    assert!(measured.plan_overlap_square_metres().abs() < f64::EPSILON);
+    assert!(
+        measured
+            .plan_overlap_square_metres()
+            .expect("measured")
+            .abs()
+            < f64::EPSILON
+    );
 }
 
 #[test]

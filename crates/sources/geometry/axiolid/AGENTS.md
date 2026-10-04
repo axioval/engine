@@ -371,6 +371,15 @@ Geometry evidence for any source, measured with the Axiolid kernel.
   Fidelity comes from `AxiolidGeometry::with_tessellated_mesh`. A
   host-declared bodiless object is refused with `ProximityError::NoBody`,
   never `Unavailable`, so a comparison can tell "no body" from "unmeasured".
+  An overlay refusing the footprints leaves `measure_proximity`'s plan
+  overlap `None`, never the pair unmeasured. The footprint relation
+  (`relation`) measures `planar::bounded_plan_overlap`: shadows the overlay
+  would refuse as slivers (corners within its tolerance, area within its
+  square) are left out and their area, rounding included, bounds what
+  they could add; an exact pair they could tip is refused with that
+  reason. Every remaining overlay refusal is `ProximityError::Refused`
+  with the overlay's error (`overlay_refusal`), never `Unavailable`.
+  Never drop a shadow with area without counting it into that bound.
   `body_surface` hands out the registered mesh unchanged (world
   coordinates, its fidelity), and `measure_surface_distance` measures the
   service's own body against a surface from any session with the kernel's

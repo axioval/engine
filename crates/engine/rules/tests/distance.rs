@@ -129,7 +129,7 @@ impl ProximityService for SpaceOnly {
             request.clone(),
             0.5,
             Some(0.0),
-            0.0,
+            Some(0.0),
             None,
             GeometryFidelity::Exact,
             Evidence::exact(source(), "space"),

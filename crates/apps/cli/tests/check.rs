@@ -1855,6 +1855,79 @@ impl Case {
     }
 }
 
+/// The crossing walls with the wall along x (#16) a closed triangulated
+/// body whose front face leans by `lean` metres over its height: in plan
+/// its two triangles are slivers, two corners `lean` apart.
+fn crossing_walls_leaning(lean: f64) -> String {
+    let (y0, y1) = (-0.1_f64, 0.1_f64);
+    let corners = [
+        [0.0, y0, 0.0],
+        [4.0, y0, 0.0],
+        [4.0, y1, 0.0],
+        [0.0, y1, 0.0],
+        [0.0, y0 + lean, 3.0],
+        [4.0, y0 + lean, 3.0],
+        [4.0, y1, 3.0],
+        [0.0, y1, 3.0],
+    ];
+    let coordinates = corners
+        .iter()
+        .map(|[x, y, z]| format!("({x:?},{y:?},{z:?})"))
+        .collect::<Vec<_>>()
+        .join(",");
+    // A closed, outward box: bottom, top, front, back, left, right.
+    let faces: [[u32; 3]; 12] = [
+        [0, 2, 1],
+        [0, 3, 2],
+        [4, 5, 6],
+        [4, 6, 7],
+        [0, 1, 5],
+        [0, 5, 4],
+        [3, 7, 6],
+        [3, 6, 2],
+        [0, 4, 7],
+        [0, 7, 3],
+        [1, 2, 6],
+        [1, 6, 5],
+    ];
+    let indices = faces
+        .iter()
+        .map(|[a, b, c]| format!("({},{},{})", a + 1, b + 1, c + 1))
+        .collect::<Vec<_>>()
+        .join(",");
+    crossing_walls()
+        .replace(
+            "#13=IFCEXTRUDEDAREASOLID(#12,#2,#4,3.);\n",
+            &format!(
+                "#40=IFCCARTESIANPOINTLIST3D(({coordinates}));\n\
+                 #13=IFCTRIANGULATEDFACESET(#40,$,.T.,({indices}),$);\n"
+            ),
+        )
+        .replace("'Body','SweptSolid',(#13)", "'Body','Tessellation',(#13)")
+}
+
+/// A modelled wall's near-vertical face casts a sliver in plan the plan
+/// overlay refuses. The clash rests on measurements in space, so the pair
+/// is decided, never left unmeasured over the footprint.
+#[test]
+fn with_geometry_walls_casting_slivers_in_plan_are_decided() {
+    let case = Case::new("clash-sliver");
+    let model = crossing_walls_leaning(1e-10);
+    assert!(model.contains("IFCTRIANGULATEDFACESET"), "{model}");
+    let (output, result) = case.wall_clash(&model, &json!({}));
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let findings = result["report"]["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 1, "{result:#}");
+    assert!(
+        findings[0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("penetration"),
+        "{result:#}"
+    );
+    assert_eq!(result["report"]["not_evaluated"], json!([]), "{result:#}");
+}
+
 /// Only the wall running along x (4 m) is longer than a metre in x; the
 /// crossing wall is 0.2 m there. Neither states a reference.
 #[test]

@@ -949,6 +949,25 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- Clash and containment pairs between two meshed bodies are no longer left
+  unmeasured when the plan overlay refuses a sliver of their footprints
+  (#210), the most frequent not-evaluated case of the inventory. The
+  near-vertical faces of modelled walls and slabs cast slivers in plan
+  with two corners within the overlay's tolerance (`RepeatedVertex`),
+  and one such ring made the overlay refuse the pair's plan overlap and
+  the adapter the whole measurement. No clash class rests on the plan
+  overlap, so `ProximityEvidence::plan_overlap_square_metres` is now
+  optional and `measure_proximity` leaves it `None` instead. The
+  `PlanOverlap` projection and the footprint relation of `Vertical`
+  leave the slivers out of the overlay and bound the overlap by their
+  area (`planar::bounded_plan_overlap`): related only above the overlap
+  tolerance without them, unrelated only below it with them, and an exact
+  pair they could tip is refused with that reason. A measurement the
+  overlay still refuses is `ProximityError::Refused` with the overlay's
+  error in the outcome's message, never "unavailable for the requested
+  object". **Breaking:** `ProximityError` gains the variant
+  `Refused(&'static str)`, and `ProximityEvidence::try_new` and
+  `plan_overlap_square_metres` take and return `Option<f64>`.
 - A boolean body whose kernel report is not empty is never exact, even
   when every reported magnitude is zero (axiolid/kernel#251: a decision at
   `Tolerance::ZERO` can report none). It was counted exact and could

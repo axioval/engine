@@ -131,7 +131,8 @@ use axioval_ir::{Evidence, ObjectId};
 
 use crate::exact_boundary::ExactBody;
 use crate::geometry::{AxiolidGeometry, Triangle, triangles};
-use crate::planar::{plan_overlap_area, plan_overlap_polygons};
+use crate::planar::{BoundedOverlap, bounded_plan_overlap, plan_overlap_area, polygon_area};
+use axiolid_overlay::OverlayError;
 
 /// Linear tolerance for mesh audits, overlay and crossing tests.
 ///
@@ -1060,19 +1061,27 @@ fn footprint_overlap(
     depth: f64,
 ) -> Result<Relation, ProximityError> {
     if exact {
-        let area = plan_overlap_area(&subject.soup.items, &counterpart.soup.items, tolerance()?)
-            .ok_or(ProximityError::Unavailable)?;
-        return Ok(if area > OVERLAP_AREA_TOLERANCE {
-            Relation::Related
+        let overlap = footprints_overlap(subject, counterpart)?;
+        let area: f64 = overlap.polygons.iter().map(polygon_area).sum();
+        // The slivers left out may add up to their area to the overlap. An
+        // exact pair answers a point, so one they could tip is refused.
+        return if area > OVERLAP_AREA_TOLERANCE {
+            Ok(Relation::Related)
+        } else if area + overlap.slivers <= OVERLAP_AREA_TOLERANCE {
+            Ok(Relation::Unrelated)
         } else {
-            Relation::Unrelated
-        });
+            Err(ProximityError::Refused(
+                "the plan overlap lies within the area of footprint slivers the plan overlay \
+                 refuses (RepeatedVertex, ZeroArea)",
+            ))
+        };
     }
     if plan_separation(subject, counterpart)? > deviation {
         return Ok(Relation::Unrelated);
     }
-    let overlap = plan_overlap_polygons(&subject.soup.items, &counterpart.soup.items, tolerance()?)
-        .ok_or(ProximityError::Unavailable)?;
+    // A deep point of the overlap without the slivers is one of the whole
+    // overlap: leaving shadows out only shrinks it.
+    let overlap = footprints_overlap(subject, counterpart)?.polygons;
     Ok(
         if overlap.iter().any(|polygon| deep_point(polygon, depth)) {
             Relation::Related
@@ -1080,6 +1089,39 @@ fn footprint_overlap(
             Relation::Open
         },
     )
+}
+
+/// The pair's plan overlap without the slivers the overlay refuses, or the
+/// overlay's own refusal, with its reason.
+fn footprints_overlap(
+    subject: &Body<'_>,
+    counterpart: &Body<'_>,
+) -> Result<BoundedOverlap, ProximityError> {
+    bounded_plan_overlap(&subject.soup.items, &counterpart.soup.items, tolerance()?)
+        .map_err(|error| ProximityError::Refused(overlay_refusal(&error)))
+}
+
+/// Why the plan overlay refused a pair's footprints, in a report's words.
+fn overlay_refusal(error: &OverlayError) -> &'static str {
+    match error {
+        OverlayError::RepeatedVertex => {
+            "the plan overlay refused a footprint ring with two corners within its tolerance \
+             (RepeatedVertex)"
+        }
+        OverlayError::ZeroArea => {
+            "the plan overlay refused a footprint ring without area (ZeroArea)"
+        }
+        OverlayError::SelfIntersection => {
+            "the plan overlay refused a footprint whose edges cross (SelfIntersection)"
+        }
+        OverlayError::NonFinitePoint => {
+            "the plan overlay refused a footprint with a non-finite point (NonFinitePoint)"
+        }
+        OverlayError::RingTooShort => {
+            "the plan overlay refused a footprint ring of fewer than three points (RingTooShort)"
+        }
+        _ => "the plan overlay refused the footprints",
+    }
 }
 
 /// Whether `polygon` holds a point farther than `depth` from its boundary.
@@ -1948,9 +1990,11 @@ impl ProximityService for AxiolidProximityService {
             .combined(self.geometry.fidelity(request.counterpart())?);
 
         let separation = separation(&subject.soup, &counterpart.soup)?;
+        // No separation, penetration or containment rests on the plan
+        // overlap, so an overlay refusing the footprints leaves it unknown
+        // instead of the whole pair unmeasured.
         let plan_overlap =
-            plan_overlap_area(&subject.soup.items, &counterpart.soup.items, tolerance()?)
-                .ok_or(ProximityError::Unavailable)?;
+            plan_overlap_area(&subject.soup.items, &counterpart.soup.items, tolerance()?);
 
         let (penetration, containment) = penetration(&subject, &counterpart, separation)?;
         let subject_fidelity = self.geometry.fidelity(request.subject())?;
@@ -2195,6 +2239,23 @@ mod tests {
 
     fn id(local: &str) -> ObjectId {
         ObjectId::new(SourceId::new("cad", "m").unwrap(), local).unwrap()
+    }
+
+    /// An overlay refusal reaches the outcome with the overlay's own error,
+    /// never as a body that could not be read.
+    #[test]
+    fn an_overlay_refusal_names_the_overlays_error() {
+        for (error, name) in [
+            (OverlayError::RepeatedVertex, "RepeatedVertex"),
+            (OverlayError::SelfIntersection, "SelfIntersection"),
+            (OverlayError::ZeroArea, "ZeroArea"),
+        ] {
+            let refused = ProximityError::Refused(overlay_refusal(&error));
+            let message = refused.to_string();
+            assert!(message.contains(name), "{message}");
+            assert!(message.contains("plan overlay"), "{message}");
+            assert_ne!(refused, ProximityError::Unavailable);
+        }
     }
 
     /// A closed prism around `axis` with `sides` chords and `rings` bands.

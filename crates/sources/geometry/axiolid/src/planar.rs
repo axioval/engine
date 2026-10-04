@@ -5,7 +5,9 @@
 //! disagreeing about what 'in plan' means would be a silent measurement bug.
 
 use axiolid_core::{Frame2, Point2, Vec2};
-use axiolid_overlay::{FillRule, OverlayInput, OverlayOperation, Polygon, Ring, overlay};
+use axiolid_overlay::{
+    FillRule, OverlayError, OverlayInput, OverlayOperation, Polygon, Ring, overlay,
+};
 
 use crate::geometry::Triangle;
 
@@ -244,42 +246,124 @@ pub(crate) fn plan_overlap_area(
     tolerance: axiolid_core::Tolerance,
 ) -> Option<f64> {
     Some(
-        plan_overlap_polygons(first, second, tolerance)?
-            .iter()
-            .map(polygon_area)
-            .sum(),
+        overlap_of(
+            projected_polygons(first),
+            projected_polygons(second),
+            tolerance,
+        )
+        .ok()?
+        .iter()
+        .map(polygon_area)
+        .sum(),
     )
 }
 
-/// The overlap of two triangle sets' footprints, as polygons.
-///
-/// `None` when the overlay cannot be computed; an empty footprint overlaps
-/// nothing.
-pub(crate) fn plan_overlap_polygons(
-    first: &[Triangle],
-    second: &[Triangle],
+/// The overlay's intersection of two shadow sets under the non-zero rule;
+/// an empty set overlaps nothing.
+fn overlap_of(
+    first: Vec<Polygon>,
+    second: Vec<Polygon>,
     tolerance: axiolid_core::Tolerance,
-) -> Option<Vec<Polygon>> {
+) -> Result<Vec<Polygon>, OverlayError> {
+    if first.is_empty() || second.is_empty() {
+        return Ok(Vec::new());
+    }
     let first = OverlayInput {
         frame: plan_frame(),
-        polygons: projected_polygons(first),
+        polygons: first,
     };
     let second = OverlayInput {
         frame: plan_frame(),
-        polygons: projected_polygons(second),
+        polygons: second,
     };
-    if first.polygons.is_empty() || second.polygons.is_empty() {
-        return Some(Vec::new());
-    }
-    let result = overlay(
+    Ok(overlay(
         &first,
         &second,
         OverlayOperation::Intersection,
         FillRule::NonZero,
         tolerance,
-    )
-    .ok()?;
-    Some(result.polygons)
+    )?
+    .polygons)
+}
+
+/// The overlap of two triangle sets' footprints, measured without the
+/// shadows the overlay refuses as degenerate at `tolerance`.
+///
+/// The overlay refuses a whole input over one ring with two corners within
+/// its linear tolerance or an area within its square (`RepeatedVertex`,
+/// `ZeroArea`); the shadow of a near-vertical face of an ordinary wall is
+/// such a sliver, two of its corners a rounding apart. Shadows with no area
+/// within rounding are already gone (`projected_polygons`); a sliver
+/// that still has area is left out of the overlay and its area kept in
+/// [`BoundedOverlap::slivers`], so the true overlap lies between
+/// `polygons` and `polygons` plus `slivers`.
+pub(crate) fn bounded_plan_overlap(
+    first: &[Triangle],
+    second: &[Triangle],
+    tolerance: axiolid_core::Tolerance,
+) -> Result<BoundedOverlap, OverlayError> {
+    let (first, first_slivers) = without_slivers(projected_polygons(first), tolerance);
+    let (second, second_slivers) = without_slivers(projected_polygons(second), tolerance);
+    Ok(BoundedOverlap {
+        polygons: overlap_of(first, second, tolerance)?,
+        slivers: first_slivers + second_slivers,
+    })
+}
+
+/// A plan overlap measured without the slivers the overlay refuses.
+#[derive(Debug)]
+pub(crate) struct BoundedOverlap {
+    /// The overlap of the shadows the overlay accepts. Leaving shadows out
+    /// only shrinks a union, so it lies inside the true overlap.
+    pub(crate) polygons: Vec<Polygon>,
+    /// An upper bound on the area of the shadows left out, both sets
+    /// together, in square metres: the true overlap exceeds `polygons` by
+    /// at most this much. Zero when nothing was left out.
+    pub(crate) slivers: f64,
+}
+
+/// The shadows the overlay accepts at `tolerance`, and an upper bound on
+/// the area of the ones it would refuse.
+fn without_slivers(
+    polygons: Vec<Polygon>,
+    tolerance: axiolid_core::Tolerance,
+) -> (Vec<Polygon>, f64) {
+    let mut slivers = 0.0;
+    let kept = polygons
+        .into_iter()
+        .filter(|polygon| {
+            let refused = refused_ring(&polygon.outer, tolerance);
+            if refused {
+                slivers += area_bound(&polygon.outer.points);
+            }
+            !refused
+        })
+        .collect();
+    (kept, slivers)
+}
+
+/// Whether the overlay refuses a triangle's ring as degenerate: two corners
+/// within its linear tolerance, or an area within its square. The same
+/// tests `axiolid-overlay` runs (`validate_ring`), in the same arithmetic;
+/// a ring this misjudges as accepted is refused by the overlay itself,
+/// never measured wrongly.
+fn refused_ring(ring: &Ring, tolerance: axiolid_core::Tolerance) -> bool {
+    let points = &ring.points;
+    let linear = tolerance.linear();
+    (0..points.len())
+        .any(|index| (points[index] - points[(index + 1) % points.len()]).length() <= linear)
+        || ring_area(ring).abs() <= linear * linear
+}
+
+/// An upper bound on a triangle's area, its rounding included.
+///
+/// The edge vectors are differences of floating-point coordinates, each
+/// correctly rounded, so the cross product is computed from them to within
+/// a few units in the last place of `|ab| |ac|`; four of them bound it.
+fn area_bound(points: &[Point2]) -> f64 {
+    let [a, b, c] = [points[0], points[1], points[2]];
+    let (ab, ac) = (b - a, c - a);
+    0.5 * (ab.perp_dot(ac).abs() + 4.0 * f64::EPSILON * ab.length() * ac.length())
 }
 
 /// Sides of the regular polygons that stand in for a disc when a footprint
@@ -440,8 +524,8 @@ pub(crate) fn polygons_overlap_area(
 #[cfg(test)]
 mod polygon_area_tests {
     use super::{
-        Disc, collinear, footprint_polygons, grown_polygons, polygon_area, polygon_moments,
-        projected_polygons, ring_area,
+        Disc, bounded_plan_overlap, collinear, footprint_polygons, grown_polygons,
+        plan_overlap_area, polygon_area, polygon_moments, projected_polygons, ring_area,
     };
     use axiolid_core::{Point2, Point3, Tolerance};
     use axiolid_overlay::{Polygon, Ring};
@@ -476,6 +560,47 @@ mod polygon_area_tests {
         let with_face = footprint_polygons(&[floor, face[0], face[1]], tolerance).unwrap();
         assert_eq!(alone, with_face);
         assert!((polygon_area(&with_face[0]) - 0.5).abs() < 1e-6);
+    }
+
+    /// A near-vertical sliver that still has area is refused by the
+    /// overlay; the bounded overlap leaves it out and keeps its area.
+    #[test]
+    fn a_sliver_is_left_out_with_its_area() {
+        let tolerance = Tolerance::new(1e-9, 1e-9).unwrap();
+        let lean = 1e-10;
+        let sliver = [
+            Point3::new(0.0, 0.0, 0.0),
+            Point3::new(4.0, 0.0, 0.0),
+            Point3::new(4.0, lean, 3.0),
+        ];
+        assert_eq!(projected_polygons(&[sliver]).len(), 1, "not collinear");
+        let floor = [
+            [
+                Point3::new(-1.0, -1.0, 0.0),
+                Point3::new(5.0, -1.0, 0.0),
+                Point3::new(5.0, 1.0, 0.0),
+            ],
+            [
+                Point3::new(-1.0, -1.0, 0.0),
+                Point3::new(5.0, 1.0, 0.0),
+                Point3::new(-1.0, 1.0, 0.0),
+            ],
+        ];
+        assert_eq!(plan_overlap_area(&[sliver], &floor, tolerance), None);
+        let bounded = bounded_plan_overlap(&[sliver], &floor, tolerance).unwrap();
+        assert!(bounded.polygons.is_empty());
+        let area = 0.5 * 4.0 * lean;
+        assert!(
+            bounded.slivers >= area && bounded.slivers <= area + 1e-13,
+            "{}",
+            bounded.slivers
+        );
+        // Beside a footprint the overlay accepts, only the sliver is left out.
+        let footprint = [sliver, floor[0]];
+        let bounded = bounded_plan_overlap(&footprint, &floor, tolerance).unwrap();
+        let measured: f64 = bounded.polygons.iter().map(polygon_area).sum();
+        assert!((measured - 6.0).abs() < 1e-6, "{measured}");
+        assert!(bounded.slivers <= area + 1e-13);
     }
 
     #[test]

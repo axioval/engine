@@ -518,6 +518,71 @@ fn plan_overlap_needs_positive_area() {
     );
 }
 
+/// A wall `length` metres long whose front face leans by `lean` metres over
+/// its height: both its triangles cast slivers in plan, two corners `lean`
+/// apart, which the overlay refuses.
+fn leaning_wall(length: f64, lean: f64) -> TriMesh {
+    let mut mesh = cuboid([0.0, 0.0, 0.0], [length, 0.2, 3.0]);
+    for top_front in [4, 5] {
+        mesh.positions[top_front].y = lean;
+    }
+    mesh
+}
+
+/// The slivers are left out of the overlay and their area bounds what they
+/// could add: a wall crossing the leaning one overlaps it far beyond that.
+#[test]
+fn a_sliver_in_plan_leaves_a_clear_overlap_decided() {
+    let geometry = AxiolidGeometry::new()
+        .with_mesh(id("wall"), leaning_wall(4.0, 1e-10))
+        .with_mesh(id("cross-wall"), cuboid([1.0, -1.0, 0.0], [1.2, 1.0, 3.0]))
+        .with_mesh(id("away"), cuboid([1.0, 1.0, 0.0], [1.2, 2.0, 3.0]));
+    assert_point(
+        &measure(
+            &geometry,
+            "cross-wall",
+            "wall",
+            ProximityProjection::PlanOverlap,
+        ),
+        0.0,
+    );
+    assert_point(
+        &measure(&geometry, "away", "wall", ProximityProjection::PlanOverlap),
+        f64::INFINITY,
+    );
+}
+
+/// Slivers whose area could reach the overlap tolerance may hide an
+/// overlap: a box against the leaning face is neither related nor denied.
+/// An exact pair answers a point, so it is refused with the reason; a
+/// tessellated one is left open.
+#[test]
+fn slivers_that_could_hide_an_overlap_are_not_decided() {
+    let before = || cuboid([0.0, -1.0, 0.0], [40.0, 0.0, 3.0]);
+    let exact = AxiolidGeometry::new()
+        .with_mesh(id("wall"), leaning_wall(40.0, 5e-10))
+        .with_mesh(id("before"), before());
+    let request =
+        ProximityRequest::projected(id("before"), id("wall"), ProximityProjection::PlanOverlap)
+            .unwrap();
+    let Err(ProximityError::Refused(reason)) =
+        AxiolidProximityService::new(exact).measure_distance(&request)
+    else {
+        panic!("a sliver that could tip the relation refuses an exact pair");
+    };
+    assert!(reason.contains("slivers"), "{reason}");
+    let tessellated = AxiolidGeometry::new()
+        .with_tessellated_mesh(id("wall"), leaning_wall(40.0, 5e-10), 0.001)
+        .with_mesh(id("before"), before());
+    let measured = measure(
+        &tessellated,
+        "before",
+        "wall",
+        ProximityProjection::PlanOverlap,
+    );
+    assert_eq!(measured.interval_metres(), (0.0, f64::INFINITY));
+}
+
 /// Every projection on a tessellation is an interval, and inexact evidence.
 #[test]
 fn tessellated_projections_are_intervals() {

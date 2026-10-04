@@ -24,6 +24,7 @@ use std::{
 
 mod compare;
 mod digest;
+mod draft;
 mod export;
 mod geometry;
 mod ids;
@@ -56,14 +57,15 @@ struct Cli {
 }
 #[derive(Subcommand)]
 enum Command {
-    /// Strictly bind a ruleset to definitions and trusted capabilities.
-    Validate {
-        #[arg(long, required = true)]
-        definitions: Vec<PathBuf>,
-        /// A ruleset; repeat to bind several together, as `check` does.
-        #[arg(long = "ruleset", required = true)]
-        rulesets: Vec<PathBuf>,
-    },
+    /// Strictly bind a ruleset to definitions and trusted capabilities, or
+    /// check one rule or expression draft within them.
+    ///
+    /// With `--rule` or `--expression`, prints the draft's diagnostics as
+    /// JSON (code, message, expression path, JSON pointer, suggestion) and,
+    /// with `--model`, how it judges each object with its traces; with
+    /// `--serve`, answers drafts as JSON lines. Exit status: 0 valid, 3 the
+    /// draft is refused, 1 nothing could be checked, 2 invalid usage.
+    Validate(draft::ValidateArgs),
     /// Print the authoring catalogue: every capability with its
     /// parameters, the measured values, expression node kinds, operators,
     /// selector kinds, relationships and units, labelled in English and
@@ -715,15 +717,7 @@ fn packages(
 
 fn run() -> Result<Outcome, Box<dyn Error>> {
     match Cli::parse().command {
-        Command::Validate {
-            definitions,
-            rulesets,
-        } => {
-            let (definitions, rulesets) = packages(&definitions, &rulesets)?;
-            let plan = compile_rulesets(&axioval::default_registry()?, &definitions, &rulesets)?;
-            println!("validated {} executable rule(s)", plan.rules().len());
-            Ok(Outcome::Passed)
-        }
+        Command::Validate(args) => draft::run(&args),
         Command::Catalogue {
             definitions,
             output,

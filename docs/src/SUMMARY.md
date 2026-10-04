@@ -17,6 +17,7 @@
 - [Derived properties](./derived.md)
 - [Expressions](./expressions.md)
 - [Authoring catalogue](./catalogue.md)
+- [Rule drafts](./drafts.md)
 - [Review decisions](./decisions.md)
 - [JSON Schemas](./json-schema.md)
 - [Connectivity and routes](./topology.md)

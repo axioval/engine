@@ -14,6 +14,27 @@ Binds a ruleset to its definition packages and the built-in capabilities
 without a model. Exits 0 when the ruleset compiles, 1 otherwise. Several
 `--ruleset`s are bound together as `check` binds them.
 
+With a draft, the rulesets are its context and the draft is checked
+within them, as an editor needs while a rule is built (see
+[Rule drafts](drafts.md)):
+
+```bash
+axioval validate --definitions d.json --ruleset r.json --rule draft.json [--model m.ifc [--geometry]]
+axioval validate --definitions d.json --ruleset r.json --expression e.json --into RULE [--parameter requirement]
+axioval validate --definitions d.json --ruleset r.json --serve
+```
+
+`--rule` (a rule as a ruleset writes it; `-` reads standard input)
+replaces the context's rule of the same id or joins the first ruleset;
+`--expression` is placed as `--parameter` of the rule `--into`. Prints
+`{"valid", "rule", "diagnostics"}` as JSON; with `--model`, a valid draft
+is also run, and `dryRun` lists how the drafted rule judged each object:
+every expression's trace (`passed`, `failed` or `notEvaluated`) and the
+rule's findings and not-evaluated outcomes. `--serve` reads one request
+per line (`{"rule": …}` or `{"expression": …, "into": …}`) and answers
+each with one line, until standard input ends. Exit status: 0 valid, 3
+the draft is refused, 1 the context cannot be read.
+
 Every command reading packages (`validate`, `check`, `export`) loads the
 table files a ruleset's rules or a definition package's defaults name
 (`tableFile` parameters, see

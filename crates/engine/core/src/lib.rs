@@ -886,6 +886,7 @@ mod derived;
 mod derived_relationships;
 mod discipline_map;
 mod door_leaves;
+pub mod draft;
 mod envelope_membership;
 mod expression_binding;
 mod facade_area;

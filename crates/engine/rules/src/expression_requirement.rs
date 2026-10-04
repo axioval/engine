@@ -3,12 +3,13 @@
 use axioval_engine::expression::{Evaluation, NotEvaluated, Reason, Value, evaluate};
 use std::collections::BTreeMap;
 
+use axioval_engine::draft::{ExpressionTraces, ObjectTrace};
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, Deviation, ParameterDescriptor, ParameterType,
     RuleCapability, RuleContext,
 };
-use axioval_ir::NotEvaluatedReason;
 use axioval_ir::contract::{Expression, ParameterValue};
+use axioval_ir::{Explanation, NotEvaluatedReason};
 
 use crate::expression_leaves::ObjectLeaves;
 use crate::selection::select_objects;
@@ -64,6 +65,21 @@ impl RuleCapability for ExpressionRequirement {
         for object in selected {
             let mut leaves = ObjectLeaves::new(context, object, Some(&rule.parameters));
             let result = evaluate(requirement, REQUIREMENT, &mut leaves);
+            if let Some(traces) = context.services.get::<ExpressionTraces>() {
+                traces.record(ObjectTrace {
+                    rule: rule.id.to_string(),
+                    object: object.id.clone(),
+                    verdict: match &result.outcome {
+                        Ok(Value::Boolean(true)) => "passed",
+                        Ok(Value::Boolean(false) | Value::Null) => "failed",
+                        _ => "notEvaluated",
+                    },
+                    trace: Explanation {
+                        entries: result.trace.clone(),
+                        truncated: false,
+                    },
+                });
+            }
             match &result.outcome {
                 Ok(Value::Boolean(true)) => {}
                 Ok(Value::Boolean(false) | Value::Null) => {

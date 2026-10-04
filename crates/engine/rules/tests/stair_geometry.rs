@@ -3802,7 +3802,7 @@ fn measured_clearances_reproduce_the_capabilities_measurements() {
 /// flags and leaves open the same objects as the capability on its own
 /// fixtures. Measured values are rounded to a micrometre, where the
 /// capability allows a few units in the last place.
-#[allow(clippy::needless_pass_by_value)]
+#[allow(clippy::needless_pass_by_value, clippy::too_many_lines)]
 mod as_expressions {
     use std::collections::BTreeSet;
 
@@ -4285,5 +4285,1092 @@ mod as_expressions {
         assert_eq!(open, set(&["irregular", "winder"]));
         let (found, _) = stair(in_pieces, parameters(0.15), &gaps(0.15));
         assert!(found.is_empty());
+    }
+
+    /// The capability on `model` and its rewrite, both with `register`'s
+    /// services, held to the parity harness; their verdicts.
+    fn hold(
+        model: &dyn Fn() -> Model,
+        register: &dyn Fn(&mut axioval_engine::ServiceRegistry),
+        (check, id, of): (&dyn RuleCapability, &str, &str),
+        parameters: Vec<(&str, ParameterValue)>,
+        requirement: &Value,
+    ) -> (BTreeSet<String>, BTreeSet<String>) {
+        let evaluated = model().evaluate_with(check, &rule(id, kind(of), parameters), |services| {
+            register(services);
+        });
+        let rewrite = rule(
+            "axioval:capability.expression",
+            kind(of),
+            vec![(
+                "requirement",
+                ParameterValue::Expression {
+                    value: serde_json::from_value(requirement.clone()).unwrap(),
+                },
+            )],
+        );
+        let rewritten = model().evaluate_measured(&ExpressionRequirement, &rewrite, register);
+        let parity = axioval_rules::parity::compare_evaluations(
+            (id, &evaluated),
+            ("expression", &rewritten),
+        );
+        assert!(parity.holds(), "{requirement}:\n{}", parity.diff());
+        verdicts(&evaluated)
+    }
+
+    fn walking(stairs: impl Fn() -> Stairs) -> impl Fn(&mut axioval_engine::ServiceRegistry) {
+        move |services| {
+            services
+                .register(WalkingSurfaceServiceHandle::new(Arc::new(stairs())))
+                .unwrap();
+        }
+    }
+
+    const FLIGHTS: (&dyn RuleCapability, &str, &str) = (&StairGeometryCheck, STAIR, "flight");
+    const RAMPS: (&dyn RuleCapability, &str, &str) = (&RampGeometryCheck, RAMP, "ramp");
+
+    /// `name` is none: zero defects.
+    fn none_counted(name: &str) -> Value {
+        compare("equals", measured(name), plain(0.0))
+    }
+
+    fn defined(value: &Value) -> Value {
+        json!({"kind": "isDefined", "operand": value})
+    }
+
+    /// The flight is measured: as the capability, the rewrite measures it
+    /// before anything around it.
+    fn measurable() -> Value {
+        at_least(measured("flight_rise"), m(0.0))
+    }
+
+    fn and(operands: Vec<Value>) -> Value {
+        json!({"kind": "and", "operands": operands})
+    }
+
+    #[test]
+    fn headroom_above_and_below_reach_the_verdicts() {
+        let above = || {
+            stairs()
+                .above("regular", "beam", 1.95)
+                .above("regular", "duct", 2.3)
+                .above("irregular", "duct", 2.3)
+        };
+        let headroom = measured("headroom;obstacles=beam");
+        let (found, _) = hold(
+            &model,
+            &walking(above),
+            FLIGHTS,
+            vec![
+                ("minimum_headroom", metres(2.0)),
+                ("headroom_obstacles", selector(kind("beam"))),
+            ],
+            &and(vec![
+                measurable(),
+                unless_null(&headroom, at_least(mm(headroom.clone()), m(2.0))),
+            ]),
+        );
+        assert_eq!(found, set(&["regular"]));
+        let below = || {
+            stairs()
+                .below("regular", "hall", 1.5)
+                .below("irregular", "hall", 2.4)
+        };
+        let clearance = measured("clearance_below;spaces=space");
+        let (found, _) = hold(
+            &model,
+            &walking(below),
+            FLIGHTS,
+            vec![
+                ("minimum_headroom_below", metres(2.0)),
+                ("headroom_below_spaces", selector(kind("space"))),
+            ],
+            &and(vec![
+                measurable(),
+                unless_null(&clearance, at_least(mm(clearance.clone()), m(2.0))),
+            ]),
+        );
+        assert_eq!(found, set(&["regular"]));
+    }
+
+    #[test]
+    fn required_landings_and_landings_per_run_reach_the_verdicts() {
+        let flights = || {
+            stairs()
+                .landing("regular", WalkingEnd::FlightTop, "slab", Some((1.5, 1.5)))
+                .landing("regular", WalkingEnd::FlightBottom, "floor", None)
+                .landing("irregular", WalkingEnd::FlightTop, "slab", None)
+        };
+        let present = |end: &str| {
+            compare(
+                "greaterThanOrEquals",
+                measured(&format!("landing_count;landing=slab;end={end}")),
+                plain(1.0),
+            )
+        };
+        let (found, _) = hold(
+            &model,
+            &walking(flights),
+            FLIGHTS,
+            vec![
+                ("landing_objects", slabs()),
+                ("landings_required", boolean(true)),
+            ],
+            &and(vec![present("bottom"), present("top")]),
+        );
+        assert_eq!(found, set(&["irregular"]));
+        let runs = || {
+            stairs()
+                .landing(
+                    "gentle",
+                    WalkingEnd::RunBottom(0),
+                    "gentle",
+                    Some((1.5, 1.5)),
+                )
+                .landing("gentle", WalkingEnd::RunTop(0), "gentle", Some((1.2, 1.5)))
+                .landing(
+                    "gentle",
+                    WalkingEnd::RunBottom(1),
+                    "gentle",
+                    Some((1.5, 1.5)),
+                )
+                .landing("gentle", WalkingEnd::RunTop(1), "slab", Some((2.0, 1.5)))
+        };
+        let deep = |end: &str, minimum: f64| {
+            let depth = field(&format!("{end}_landing_depth"));
+            unless_null(&depth, at_least(mm(depth.clone()), m(minimum)))
+        };
+        let list = "runs;landing=slab,ramp";
+        let (found, _) = hold(
+            &model,
+            &walking(runs),
+            RAMPS,
+            vec![
+                ("width_minimum", metres(1.2)),
+                ("landing_objects", slabs()),
+                ("landing_depth_minimum", metres(1.5)),
+            ],
+            &over(
+                "all",
+                list,
+                Some(and(vec![
+                    deep("bottom", 1.5),
+                    deep("top", 1.5),
+                    at_least(mm(field("width")), m(1.2)),
+                ])),
+            ),
+        );
+        assert_eq!(found, set(&["gentle"]));
+        // A ramp's outermost landings take their own minimum.
+        let ends = || {
+            stairs()
+                .landing(
+                    "gentle",
+                    WalkingEnd::RunBottom(0),
+                    "floor",
+                    Some((1.4, 1.5)),
+                )
+                .landing("gentle", WalkingEnd::RunTop(0), "gentle", Some((1.4, 1.5)))
+                .landing(
+                    "gentle",
+                    WalkingEnd::RunBottom(1),
+                    "gentle",
+                    Some((1.4, 1.5)),
+                )
+                .landing("gentle", WalkingEnd::RunTop(1), "slab", Some((1.6, 1.5)))
+        };
+        let runs_counted = over("count", list, None);
+        let minimum = |end: Value| json!({"kind": "if", "branches": [{"when": end, "then": m(1.5)}], "else": m(1.2)});
+        let outermost = |end: &str| {
+            let depth = field(&format!("{end}_landing_depth"));
+            let first = if end == "bottom" {
+                compare("equals", field("run"), plain(1.0))
+            } else {
+                compare("equals", field("run"), runs_counted.clone())
+            };
+            unless_null(&depth, at_least(mm(depth.clone()), minimum(first)))
+        };
+        let (found, _) = hold(
+            &model,
+            &walking(ends),
+            RAMPS,
+            vec![
+                ("landing_objects", slabs()),
+                ("landing_depth_minimum", metres(1.2)),
+                ("end_landing_depth_minimum", metres(1.5)),
+            ],
+            &over(
+                "all",
+                list,
+                Some(and(vec![outermost("bottom"), outermost("top")])),
+            ),
+        );
+        assert_eq!(found, set(&["gentle"]));
+        // Every run end needs a landing when required.
+        let every = || {
+            stairs()
+                .landing("steep", WalkingEnd::RunBottom(0), "floor", None)
+                .landing("gentle", WalkingEnd::RunBottom(0), "floor", None)
+                .landing("gentle", WalkingEnd::RunTop(0), "gentle", None)
+                .landing("gentle", WalkingEnd::RunBottom(1), "gentle", None)
+                .landing("gentle", WalkingEnd::RunTop(1), "slab", None)
+        };
+        let (found, _) = hold(
+            &model,
+            &walking(every),
+            RAMPS,
+            vec![
+                ("landing_objects", slabs()),
+                ("landings_required", boolean(true)),
+            ],
+            &over(
+                "all",
+                list,
+                Some(and(vec![field("bottom_landing"), field("top_landing")])),
+            ),
+        );
+        assert_eq!(found, set(&["steep"]));
+    }
+
+    #[test]
+    fn handrails_on_both_sides_above_a_width_and_extensions_from_the_riser_reach_the_verdicts() {
+        let left = |stairs: Stairs| {
+            stairs.rail(
+                "regular",
+                WalkingStretch::Flight,
+                "left_rail",
+                rail((1.25, 1.3), (-0.3, 1.14), (0.9, 0.9), LEVEL),
+            )
+        };
+        let list = "handrails;rails=railing;reach_across=0.2;reach_above=1.5";
+        let rails = |function: &str, value: Value| over(function, list, Some(value));
+        for (width, flagged) in [
+            (1.0, set(&["irregular", "regular"])),
+            (1.5, set(&["irregular"])),
+        ] {
+            let both = and(vec![
+                rails("any", field("left")),
+                rails("any", field("right")),
+            ]);
+            let one = json!({"kind": "or", "operands": [
+                rails("any", field("left")), rails("any", field("right"))]});
+            let (found, _) = hold(
+                &model,
+                &walking(move || left(stairs())),
+                FLIGHTS,
+                handrail_parameters(vec![
+                    ("handrail_sides", string("one")),
+                    ("handrail_both_sides_above_width", metres(width)),
+                ]),
+                &json!({"kind": "if", "branches": [{
+                    "when": compare("greaterThan", mm(measured("flight_width")), m(width)),
+                    "then": both}], "else": one}),
+            );
+            assert_eq!(found, flagged, "{width}");
+        }
+        // At most 0.25 m beyond either end.
+        let (found, _) = hold(
+            &model,
+            &walking(move || left(stairs())),
+            FLIGHTS,
+            handrail_parameters(vec![("handrail_extension_maximum", metres(0.25))]),
+            &rails(
+                "none",
+                json!({"kind": "or", "operands": [
+                    and(vec![field("first_on_side"),
+                        compare("greaterThan", mm(field("extension_bottom")), m(0.25))]),
+                    and(vec![field("last_on_side"),
+                        compare("greaterThan", mm(field("extension_top")), m(0.25))])]}),
+            ),
+        );
+        assert_eq!(found, set(&["regular"]));
+        // From the riser: the top extension loses the last overhang.
+        let from_riser = |minimum: f64| {
+            rails(
+                "none",
+                json!({"kind": "or", "operands": [
+                    and(vec![field("first_on_side"),
+                        compare("lessThan", mm(field("extension_bottom")), m(minimum))]),
+                    and(vec![field("last_on_side"),
+                        compare("lessThan", mm(field("extension_top")), m(minimum))])]}),
+            )
+        };
+        let riser_list = format!("{list};from=riser");
+        let riser_rails = |minimum: f64| {
+            let mut value = from_riser(minimum);
+            value["over"]["name"] = json!(riser_list);
+            value
+        };
+        let (found, _) = hold(
+            &model,
+            &walking(move || left(stairs().flight(overhung()))),
+            FLIGHTS,
+            handrail_parameters(vec![
+                ("handrail_extension_minimum", metres(0.29)),
+                ("handrail_extension_from", string("riser")),
+            ]),
+            &riser_rails(0.29),
+        );
+        assert_eq!(found, set(&["regular"]));
+    }
+
+    #[test]
+    fn gentle_winders_reach_the_verdicts() {
+        for (minimum, flagged) in [(40.0, set(&["winder"])), (30.0, set(&[]))] {
+            let winder_angle = field("winder_angle");
+            let (found, _) = hold(
+                &model,
+                &walking(|| stairs().parts("winder", winder())),
+                FLIGHTS,
+                vec![("winder_angle_minimum", degrees(minimum))],
+                &json!({"kind": "implies",
+                    "antecedent": compare("equals", measured("walking_line_turns"), plain(1.0)),
+                    "consequent": over(
+                    "all",
+                    "steps",
+                    Some(json!({"kind": "implies",
+                        "antecedent": and(vec![
+                            defined(&winder_angle),
+                            compare("greaterThan", winder_angle.clone(), quantity(1e-9, "rad"))]),
+                        "consequent": at_least(winder_angle.clone(), quantity(minimum, "deg"))})),
+                )}),
+            );
+            assert_eq!(found, flagged, "{minimum}");
+        }
+    }
+
+    #[test]
+    fn end_spaces_and_landing_doors_reach_the_verdicts() {
+        // A cupboard before the bottom riser of each flight.
+        let ends = || {
+            stairs()
+                .end("regular", WalkingEnd::FlightBottom, minus_x(), 0.0)
+                .end("regular", WalkingEnd::FlightTop, x(), 0.84)
+                .end("irregular", WalkingEnd::FlightBottom, minus_x(), 0.0)
+                .end("irregular", WalkingEnd::FlightTop, x(), 0.84)
+        };
+        for (depth, floor) in [(1.5, true), (0.9, true), (1.5, false)] {
+            let register = move |services: &mut axioval_engine::ServiceRegistry| {
+                walking(ends)(services);
+                if floor {
+                    services
+                        .register(FreeSpaceServiceHandle::new(Arc::new(
+                            Floor::default().blocker("bin", [-1.2, 0.4], [-1.0, 0.8]),
+                        )))
+                        .unwrap();
+                }
+            };
+            hold(
+                &model,
+                &register,
+                FLIGHTS,
+                vec![
+                    ("end_space_depth", metres(depth)),
+                    ("end_space_width", metres(1.2)),
+                    ("end_space_height", metres(2.0)),
+                    ("end_space_obstacles", selector(kind("furniture"))),
+                ],
+                &none_counted(&format!(
+                    "obstructed_end_spaces;obstacles=furniture;depth={depth};width=1.2;height=2"
+                )),
+            );
+        }
+        // A ramp's end spaces and the doors at its landings.
+        let ramps = || stairs().landing("gentle", WalkingEnd::RunTop(1), "slab", Some((2.0, 1.5)));
+        for floor in [true, false] {
+            let register = move |services: &mut axioval_engine::ServiceRegistry| {
+                walking(ramps)(services);
+                if floor {
+                    services
+                        .register(FreeSpaceServiceHandle::new(Arc::new(
+                            Floor::default()
+                                .blocker("door", [0.5, 0.2], [1.0, 0.4])
+                                .blocker("bin", [3.5, 0.5], [4.0, 1.0]),
+                        )))
+                        .unwrap();
+                }
+            };
+            hold(
+                &model,
+                &register,
+                RAMPS,
+                vec![
+                    ("end_space_depth", metres(1.5)),
+                    ("end_space_width", metres(1.5)),
+                    ("end_space_height", metres(2.0)),
+                    ("end_space_obstacles", selector(kind("furniture"))),
+                ],
+                &none_counted(
+                    "obstructed_end_spaces;obstacles=furniture;depth=1.5;width=1.5;height=2;of=ramp",
+                ),
+            );
+            hold(
+                &model,
+                &register,
+                RAMPS,
+                vec![
+                    ("landing_objects", slabs()),
+                    ("landing_doors", selector(kind("door"))),
+                    ("landing_door_height", metres(2.0)),
+                ],
+                &none_counted("landing_door_conflicts;landing=slab;doors=door;height=2;of=ramp"),
+            );
+        }
+    }
+
+    #[test]
+    fn doors_swinging_over_landings_reach_the_verdicts() {
+        use common::doors::{Doors, hinged};
+        // Over a stair's top landing: standing on it, or swinging over it.
+        let stair_landing =
+            || stairs().landing("regular", WalkingEnd::FlightTop, "slab", Some((2.0, 1.2)));
+        for (open, swing, standing) in [
+            ([0.0, 1.0, 0.0], false, true),
+            ([0.0, -1.0, 0.0], true, false),
+            ([0.0, 1.0, 0.0], true, false),
+        ] {
+            let register = move |services: &mut axioval_engine::ServiceRegistry| {
+                walking(stair_landing)(services);
+                let floor = if standing {
+                    Floor::default().blocker("door", [0.5, 0.2], [1.0, 0.4])
+                } else {
+                    Floor::default()
+                };
+                services
+                    .register(FreeSpaceServiceHandle::new(Arc::new(floor)))
+                    .unwrap();
+                services
+                    .register(
+                        Doors::default()
+                            .door(
+                                "door",
+                                vec![hinged([1.0, 1.7, 0.0], [-1.0, 0.0, 0.0], open, 0.9, false)],
+                                1.0,
+                                None,
+                            )
+                            .handle(),
+                    )
+                    .unwrap();
+                services
+                    .register(axioval_engine::VerticalExtentServiceHandle::new(Arc::new(
+                        DoorHeights,
+                    )))
+                    .unwrap();
+            };
+            let mut parameters = vec![
+                ("landing_objects", slabs()),
+                ("landing_doors", selector(kind("door"))),
+                ("landing_door_height", metres(2.0)),
+            ];
+            if swing {
+                parameters.push(("landing_door_swing", boolean(true)));
+            }
+            let swings = if swing { "yes" } else { "no" };
+            hold(
+                &model,
+                &register,
+                FLIGHTS,
+                parameters,
+                &none_counted(&format!(
+                    "landing_door_conflicts;landing=slab;doors=door;height=2;swing={swings}"
+                )),
+            );
+        }
+        // Over a ramp's top landing, with or without the door's height.
+        for (open, heights) in [
+            ([0.0, -1.0, 0.0], true),
+            ([0.0, -1.0, 0.0], false),
+            ([0.0, 1.0, 0.0], false),
+        ] {
+            let register = move |services: &mut axioval_engine::ServiceRegistry| {
+                walking(|| {
+                    stairs().landing("gentle", WalkingEnd::RunTop(1), "slab", Some((2.0, 1.5)))
+                })(services);
+                services
+                    .register(FreeSpaceServiceHandle::new(Arc::new(Floor::default())))
+                    .unwrap();
+                services
+                    .register(
+                        Doors::default()
+                            .door(
+                                "door",
+                                vec![hinged([1.0, 2.0, 0.0], [-1.0, 0.0, 0.0], open, 0.9, false)],
+                                1.0,
+                                None,
+                            )
+                            .handle(),
+                    )
+                    .unwrap();
+                if heights {
+                    services
+                        .register(axioval_engine::VerticalExtentServiceHandle::new(Arc::new(
+                            DoorHeights,
+                        )))
+                        .unwrap();
+                }
+            };
+            hold(
+                &model,
+                &register,
+                RAMPS,
+                vec![
+                    ("landing_objects", slabs()),
+                    ("landing_doors", selector(kind("door"))),
+                    ("landing_door_height", metres(2.0)),
+                    ("landing_door_swing", boolean(true)),
+                ],
+                &none_counted(
+                    "landing_door_conflicts;landing=slab;doors=door;height=2;swing=yes;of=ramp",
+                ),
+            );
+        }
+    }
+
+    #[test]
+    fn a_whole_stair_its_rise_rails_and_strips_reach_the_verdicts() {
+        let stair = (&StairGeometryCheck as &dyn RuleCapability, STAIR, "stair");
+        let rails = || {
+            Rails::default()
+                .apart("r1", "r3", 0.0)
+                .apart("r3", "r2", 0.0)
+                .apart("l1", "l2", 1.0)
+        };
+        let whole = |floor: fn() -> Floor| {
+            move |services: &mut axioval_engine::ServiceRegistry| {
+                walking(two_flight_stairs)(services);
+                services
+                    .register(FreeSpaceServiceHandle::new(Arc::new(floor())))
+                    .unwrap();
+                services
+                    .register(ProximityServiceHandle::new(Arc::new(rails())))
+                    .unwrap();
+            }
+        };
+        let (found, open) = hold(
+            &two_flights,
+            &whole(Floor::default),
+            stair,
+            whole_parameters(vec![("maximum_total_rise", metres(1.2))]),
+            &at_most(
+                mm(measured("stair_rise;stair=parts;flights=flight")),
+                m(1.2),
+            ),
+        );
+        assert_eq!(found, set(&["stair"]));
+        assert!(open.is_empty());
+        let breaks = "handrail_breaks;rails=railing;reach_across=0.2;reach_above=1.5;stair=parts;\
+                      flights=flight";
+        let (found, _) = hold(
+            &two_flights,
+            &whole(Floor::default),
+            stair,
+            handrail_parameters(whole_parameters(vec![(
+                "handrail_continuous_across_landings",
+                boolean(true),
+            )])),
+            &none_counted(breaks),
+        );
+        assert_eq!(found, set(&["stair"]));
+        // A door beside the landing breaks the rail there; one elsewhere
+        // does not.
+        let doors = |floor: fn() -> Floor| {
+            (
+                whole(floor),
+                handrail_parameters(whole_parameters(vec![
+                    ("handrail_continuous_across_landings", boolean(true)),
+                    ("landing_objects", slabs()),
+                    ("handrail_break_doors", selector(kind("door"))),
+                    ("landing_door_height", metres(2.0)),
+                ])),
+            )
+        };
+        for (floor, flagged) in [
+            (
+                (|| Floor::default().blocker("exit", [0.5, -0.15], [1.0, -0.05])) as fn() -> Floor,
+                set(&[]),
+            ),
+            (
+                (|| Floor::default().blocker("exit", [5.0, 5.0], [6.0, 6.0])) as fn() -> Floor,
+                set(&["stair"]),
+            ),
+        ] {
+            let (register, parameters) = doors(floor);
+            let (found, _) = hold(
+                &two_flights,
+                &register,
+                stair,
+                parameters,
+                &none_counted(&format!("{breaks};break_doors=door;landing=slab;height=2")),
+            );
+            assert_eq!(found, flagged);
+        }
+    }
+
+    #[test]
+    fn tactile_strips_reach_the_verdicts() {
+        let ends = || {
+            stairs()
+                .end("regular", WalkingEnd::FlightBottom, minus_x(), 0.0)
+                .end("regular", WalkingEnd::FlightTop, x(), 0.84)
+                .end("irregular", WalkingEnd::FlightBottom, minus_x(), 10.0)
+                .end("irregular", WalkingEnd::FlightTop, x(), 20.0)
+        };
+        let strips = || {
+            Strips::default()
+                .strip("t1", [-0.6, 0.6], [0.3, 0.6], 0.0)
+                .strip("t2", [-10.45, 0.6], [0.15, 0.6], 0.0)
+                .strip("t3", [20.6, 0.6], [0.3, 0.6], -3.0)
+        };
+        let tactile = |stairs: fn() -> Stairs, strips: fn() -> Strips| {
+            move |services: &mut axioval_engine::ServiceRegistry| {
+                walking(stairs)(services);
+                services
+                    .register(PlanSpanServiceHandle::new(Arc::new(strips())))
+                    .unwrap();
+                services
+                    .register(PlanAreaServiceHandle::new(Arc::new(strips())))
+                    .unwrap();
+                services
+                    .register(VerticalExtentServiceHandle::new(Arc::new(strips())))
+                    .unwrap();
+            }
+        };
+        let with_strips = || {
+            model()
+                .object("t1", "tactile")
+                .object("t2", "tactile")
+                .object("t3", "tactile")
+        };
+        let list = "missing_tactile_strips;tactiles=tactile;offset=0.3;depth=0.6";
+        let (found, _) = hold(
+            &with_strips,
+            &tactile(ends, strips),
+            FLIGHTS,
+            tactile_parameters(vec![]),
+            &none_counted(list),
+        );
+        assert_eq!(found, set(&["irregular", "regular"]));
+        // In a whole stair, the landing between flights only when asked.
+        for intermediate in [false, true] {
+            let yes = if intermediate { "yes" } else { "no" };
+            // Each flight counts what the stair's check reports about it.
+            let per_flight = format!(
+                "{list};intermediate={yes};stair=parts;flights=flight;within=parts:backward"
+            );
+            let capability = two_flights().evaluate_with(
+                &StairGeometryCheck,
+                &rule(
+                    STAIR,
+                    kind("stair"),
+                    tactile_parameters(whole_parameters(vec![(
+                        "tactile_on_intermediate_landings",
+                        boolean(intermediate),
+                    )])),
+                ),
+                tactile(two_flight_stairs, Strips::default),
+            );
+            let rewrite = two_flights().evaluate_measured(
+                &ExpressionRequirement,
+                &rule(
+                    "axioval:capability.expression",
+                    kind("flight"),
+                    vec![(
+                        "requirement",
+                        ParameterValue::Expression {
+                            value: serde_json::from_value(none_counted(&per_flight)).unwrap(),
+                        },
+                    )],
+                ),
+                tactile(two_flight_stairs, Strips::default),
+            );
+            let parity = axioval_rules::parity::compare_evaluations(
+                (STAIR, &capability),
+                ("expression", &rewrite),
+            );
+            assert!(parity.holds(), "{intermediate}:\n{}", parity.diff());
+        }
+    }
+
+    #[test]
+    fn clear_widths_reach_the_verdicts() {
+        let clear = "clear_width;obstacles=railing;band_from=0.5;band_to=1.5";
+        let narrowed = || {
+            Narrowed {
+                stairs: stairs(),
+                ..Narrowed::default()
+            }
+            .width(
+                "regular",
+                WalkingStretch::Flight,
+                1.0,
+                &["left_rail", "low_rail"],
+            )
+            .width("gentle", WalkingStretch::Run(1), 1.3, &["ramp_rail"])
+        };
+        let narrow = |services: &mut axioval_engine::ServiceRegistry| {
+            services
+                .register(WalkingSurfaceServiceHandle::new(Arc::new(narrowed())))
+                .unwrap();
+        };
+        let with_wall = || model().object("wall", "wall");
+        hold(
+            &with_wall,
+            &narrow,
+            FLIGHTS,
+            clear_parameters(1.1),
+            &and(vec![measurable(), at_least(mm(measured(clear)), m(1.1))]),
+        );
+        hold(
+            &with_wall,
+            &narrow,
+            RAMPS,
+            clear_parameters(1.4),
+            &at_least(mm(measured(&format!("{clear};along=runs"))), m(1.4)),
+        );
+        // A landing's own and the least of the flight's and its landings'.
+        let landing = |high: &'static [&'static str]| {
+            move |services: &mut axioval_engine::ServiceRegistry| {
+                services
+                    .register(WalkingSurfaceServiceHandle::new(Arc::new(
+                        Narrowed {
+                            stairs: stairs(),
+                            ..Narrowed::default()
+                        }
+                        .landing(
+                            "regular",
+                            WalkingEnd::FlightTop,
+                            ("slab", 1.0),
+                            (&["left_rail"], high),
+                        ),
+                    )))
+                    .unwrap();
+            }
+        };
+        let landing_width = |end: &str| {
+            measured(&format!(
+                "landing_clear_width;landing=slab;end={end};obstacles=railing;band_from=0.5;\
+                 band_to=1.5"
+            ))
+        };
+        let wide = |value: Value, minimum: f64| {
+            unless_null(&value, at_least(mm(value.clone()), m(minimum)))
+        };
+        for (high, minimum) in [(&["low_rail"][..], 1.1), (&[][..], 0.9)] {
+            hold(
+                &with_wall,
+                &landing(high),
+                FLIGHTS,
+                landing_clear_parameters(minimum, minimum),
+                &and(vec![
+                    measurable(),
+                    wide(landing_width("bottom"), minimum),
+                    wide(landing_width("top"), minimum),
+                    at_least(
+                        mm(json!({"kind": "coalesce", "operands": [
+                            {"kind": "min", "operands": [measured(clear), landing_width("top")]},
+                            measured(clear)]})),
+                        m(minimum),
+                    ),
+                ]),
+            );
+        }
+    }
+
+    #[test]
+    fn ramp_rails_continuing_and_over_surfaces_reach_the_verdicts() {
+        let near = |proximity: fn() -> Box<dyn ProximityService>, stairs: fn() -> Stairs| {
+            move |services: &mut axioval_engine::ServiceRegistry| {
+                walking(stairs)(services);
+                services
+                    .register(ProximityServiceHandle::new(Arc::from(proximity())))
+                    .unwrap();
+            }
+        };
+        let breaks = "handrail_breaks;rails=railing;reach_across=0.2;reach_above=1.5;of=ramp;\
+                      tolerance=0.1";
+        let proximities: [fn() -> Box<dyn ProximityService>; 4] = [
+            || Box::new(Rails::default().apart("lower_piece", "upper_piece", 0.4)),
+            || Box::new(Rails::default().apart("lower_piece", "upper_piece", 0.05)),
+            || {
+                Box::new(
+                    Rails::default()
+                        .apart("lower_piece", "ramp_rail", 0.0)
+                        .apart("ramp_rail", "upper_piece", 0.0),
+                )
+            },
+            || {
+                let mut straddling = Measured::default();
+                straddling
+                    .0
+                    .insert(("lower_piece".into(), "upper_piece".into()), (0.05, 0.2));
+                Box::new(straddling)
+            },
+        ];
+        for proximity in proximities {
+            hold(
+                &model,
+                &near(proximity, ramp_in_pieces),
+                RAMPS,
+                continuity_parameters(0.1),
+                &none_counted(breaks),
+            );
+        }
+        let over = "rails_over_surfaces;rails=railing;reach_across=0.2;reach_above=1.5;\
+                    surfaces=space";
+        let footprints: [fn() -> Box<dyn ProximityService>; 4] = [
+            || Box::new(Footprints::default().plan("ramp_rail", "hall", (0.0, 0.0))),
+            || Box::new(Footprints::default()),
+            || {
+                Box::new(
+                    Footprints::default()
+                        .touching("ramp_rail", "lower_piece")
+                        .plan("lower_piece", "hall", (0.0, 0.0)),
+                )
+            },
+            || Box::new(Footprints::default().plan("ramp_rail", "hall", (0.0, f64::INFINITY))),
+        ];
+        for footprint in footprints {
+            hold(
+                &model,
+                &near(footprint, railed_ramp),
+                RAMPS,
+                obstruction_parameters(),
+                &none_counted(over),
+            );
+        }
+    }
+
+    /// The landing at `end` at least the width it is compared with.
+    fn landing_at_least_walking_width(end: &str) -> Value {
+        let size = |what: &str| measured(&format!("landing_{what};landing=slab;end={end}"));
+        let reference = mm(measured(&format!("end_width;end={end}")));
+        json!({"kind": "implies",
+            "antecedent": compare("greaterThanOrEquals",
+                measured(&format!("landing_count;landing=slab;end={end}")), plain(1.0)),
+            "consequent": and(vec![
+                at_least(mm(size("depth")), reference.clone()),
+                at_least(mm(size("width")), reference)])})
+    }
+
+    #[test]
+    fn landings_compared_with_the_walking_width_reach_the_verdicts() {
+        let unmeasured = || {
+            stairs()
+                .flight({
+                    let treads = vec![
+                        Tread::try_new(point(0.17), point(0.0), point(0.28)).unwrap(),
+                        Tread::try_new(point(0.34), point(0.28), point(0.56)).unwrap(),
+                    ];
+                    TreadFlight::try_new(
+                        straight("irregular"),
+                        WalkingLine::Straight(x()),
+                        point(0.0),
+                        point(0.34),
+                        treads,
+                        Evidence::exact(source(), "tread-flight:irregular"),
+                    )
+                    .unwrap()
+                })
+                .landing("regular", WalkingEnd::FlightTop, "slab", None)
+                .landing("irregular", WalkingEnd::FlightTop, "slab", Some((2.0, 2.0)))
+        };
+        hold(
+            &model,
+            &walking(unmeasured),
+            FLIGHTS,
+            vec![
+                ("landing_objects", slabs()),
+                ("landing_at_least_walking_width", boolean(true)),
+            ],
+            &and(vec![
+                landing_at_least_walking_width("bottom"),
+                landing_at_least_walking_width("top"),
+            ]),
+        );
+    }
+
+    #[test]
+    fn turning_flights_reach_the_verdicts() {
+        let rail_list = "handrails;rails=railing;reach_across=0.2;reach_above=1.5";
+        let present = |end: &str| {
+            compare(
+                "greaterThanOrEquals",
+                measured(&format!("landing_count;landing=slab;end={end}")),
+                plain(1.0),
+            )
+        };
+        let clearance = measured("clearance_below;spaces=space");
+        let open_parts = || {
+            Stairs::default()
+                .parts("winder", winder())
+                .below("winder", "hall", 1.8)
+                .landing("winder", WalkingEnd::FlightTop, "slab", Some((2.0, 2.0)))
+                .rail(
+                    "winder",
+                    WalkingStretch::Flight,
+                    "left_rail",
+                    rail((0.95, 1.0), (-0.3, 1.14), (0.9, 0.9), LEVEL),
+                )
+        };
+        hold(
+            &model,
+            &walking(open_parts),
+            FLIGHTS,
+            handrail_parameters(vec![
+                ("width_minimum", metres(0.8)),
+                ("landing_objects", slabs()),
+                ("landings_required", boolean(true)),
+                ("minimum_headroom_below", metres(2.0)),
+                ("headroom_below_spaces", selector(kind("space"))),
+                ("handrail_height_minimum", metres(0.8)),
+            ]),
+            &and(vec![
+                measurable(),
+                unless_null(&clearance, at_least(mm(clearance.clone()), m(2.0))),
+                at_least(mm(measured("flight_width")), m(0.8)),
+                present("bottom"),
+                present("top"),
+                over(
+                    "none",
+                    rail_list,
+                    Some(compare("lessThan", mm(field("height_lowest")), m(0.8))),
+                ),
+            ]),
+        );
+        // In parts: the landing against its tread, the rails per part.
+        let y = MetricDirection::try_new([0.0, 1.0, 0.0]).unwrap();
+        let in_parts = move || {
+            let parts = vec![
+                StretchPart::try_new(x(), (point(0.0), point(0.9))).unwrap(),
+                StretchPart::try_new(y, (point(-1.2), point(-0.3))).unwrap(),
+            ];
+            Stairs::default()
+                .parts("winder", winder())
+                .in_parts("winder", parts)
+                .landing("winder", WalkingEnd::FlightTop, "slab", Some((2.0, 0.8)))
+                .rail(
+                    "winder",
+                    WalkingStretch::Flight,
+                    "left_rail",
+                    rail((0.95, 1.0), (-0.3, 0.6), (0.9, 0.9), (Some(0.0), None)),
+                )
+                .rail(
+                    "winder",
+                    WalkingStretch::Flight,
+                    "upper_piece",
+                    rail((-0.25, -0.2), (0.5, 1.42), (0.9, 0.9), (None, Some(0.0))).in_part(1),
+                )
+                .rail(
+                    "winder",
+                    WalkingStretch::Flight,
+                    "low_rail",
+                    rail((-1.3, -1.25), (0.5, 1.42), (0.9, 0.9), (None, Some(0.0))).in_part(1),
+                )
+        };
+        let short = |piece: &str, extension: &str| {
+            let reach = field(extension);
+            and(vec![
+                field(piece),
+                json!({"kind": "or", "operands": [
+                    {"kind": "not", "operand": defined(&reach)},
+                    compare("lessThan", mm(reach.clone()), m(0.3))]}),
+            ])
+        };
+        let level = |rise: &str| {
+            compare(
+                "greaterThan",
+                json!({"kind": "abs", "operand": field(rise)}),
+                m(1e-6),
+            )
+        };
+        let list = format!("{rail_list};level_over=0.3");
+        let rails = |function: &str, value: Value| over(function, &list, Some(value));
+        hold(
+            &model,
+            &walking(in_parts),
+            FLIGHTS,
+            handrail_parameters(vec![
+                ("landing_objects", slabs()),
+                ("landing_at_least_walking_width", boolean(true)),
+                ("handrail_height_minimum", metres(0.8)),
+                ("handrail_extension_minimum", metres(0.3)),
+                ("handrail_gap_maximum", metres(0.05)),
+                ("handrail_sides", string("both")),
+            ]),
+            // The rails first: a rewrite cites what decided it, and the
+            // capability's findings read as inexact when any one is.
+            &and(vec![
+                rails(
+                    "none",
+                    json!({"kind": "or", "operands": [
+                        compare("lessThan", mm(field("height_lowest")), m(0.8)),
+                        short("first_on_side", "extension_bottom"),
+                        short("last_on_side", "extension_top"),
+                        and(vec![field("first_on_side"),
+                            defined(&field("extension_bottom")), level("bottom_rise")]),
+                        and(vec![field("last_on_side"),
+                            defined(&field("extension_top")), level("top_rise")]),
+                        compare("greaterThan", mm(field("gap_after")), m(0.05))]}),
+                ),
+                rails("any", field("left")),
+                rails("any", field("right")),
+                landing_at_least_walking_width("bottom"),
+                landing_at_least_walking_width("top"),
+            ]),
+        );
+    }
+
+    #[test]
+    fn a_service_without_landings_leaves_the_rewrite_open_too() {
+        struct FlightsOnly;
+        impl WalkingSurfaceService for FlightsOnly {
+            fn measure_tread_flight(
+                &self,
+                request: &TreadFlightRequest,
+            ) -> Result<TreadFlight, WalkingSurfaceError> {
+                stairs().measure_tread_flight(request)
+            }
+            fn measure_sloped_runs(
+                &self,
+                object: &ObjectId,
+            ) -> Result<SlopedSurface, WalkingSurfaceError> {
+                stairs().measure_sloped_runs(object)
+            }
+            fn measure_headroom(
+                &self,
+                request: &HeadroomRequest,
+            ) -> Result<Headroom, WalkingSurfaceError> {
+                stairs().measure_headroom(request)
+            }
+        }
+        let present = |end: &str| {
+            compare(
+                "greaterThanOrEquals",
+                measured(&format!("landing_count;landing=slab;end={end}")),
+                plain(1.0),
+            )
+        };
+        let clearance = measured("clearance_below;spaces=space");
+        hold(
+            &model,
+            &|services: &mut axioval_engine::ServiceRegistry| {
+                services
+                    .register(WalkingSurfaceServiceHandle::new(Arc::new(FlightsOnly)))
+                    .unwrap();
+            },
+            FLIGHTS,
+            vec![
+                ("landing_objects", slabs()),
+                ("landings_required", boolean(true)),
+                ("minimum_headroom_below", metres(2.0)),
+                ("headroom_below_spaces", selector(kind("space"))),
+            ],
+            &and(vec![
+                measurable(),
+                present("bottom"),
+                present("top"),
+                unless_null(&clearance, at_least(mm(clearance.clone()), m(2.0))),
+            ]),
+        );
     }
 }

@@ -912,7 +912,18 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
     MemberDescriptor {
         list: MeasuredDescriptor {
             name: "runs",
-            parameters: &[],
+            parameters: &[MeasuredParameter {
+                key: "landing",
+                kind: MeasuredParameterKind::SourceKind,
+                required: false,
+                default: None,
+                help: &en_de(
+                    "The source kinds that may carry a landing at a run's ends; without it \
+                     the landing fields are undecided.",
+                    "Die Quellarten, die ein Podest an den Enden eines Laufs tragen können; \
+                     ohne Angabe sind die Podestfelder unentschieden.",
+                ),
+            }],
             dimension: None,
             services: FLIGHTS,
             exactness: MeasuredExactness::Measured,
@@ -924,6 +935,15 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             ),
         },
         fields: &[
+            MemberField {
+                name: "run",
+                kind: RATIO,
+                label: &en_de("Run", "Lauf"),
+                help: &en_de(
+                    "The run's place, counted from 1 at the lowest.",
+                    "Die Stelle des Laufs, ab 1 beim untersten gezählt.",
+                ),
+            },
             MemberField {
                 name: "slope",
                 kind: RATIO,
@@ -957,6 +977,60 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
                      not measured.",
                     "Die Breite des Laufs quer zu seiner Richtung; `null`, wo seine Seiten \
                      nicht gemessen sind.",
+                ),
+            },
+            MemberField {
+                name: "bottom_landing",
+                kind: MemberFieldKind::Truth,
+                label: &en_de("Landing at the bottom", "Podest unten"),
+                help: &en_de(
+                    "Whether a landing of the `landing` kinds meets the run's bottom.",
+                    "Ob ein Podest der `landing`-Arten den Lauf unten trifft.",
+                ),
+            },
+            MemberField {
+                name: "bottom_landing_depth",
+                kind: LENGTH,
+                label: &en_de("Landing depth at the bottom", "Podesttiefe unten"),
+                help: &en_de(
+                    "How deep that landing is along the walking direction; `null` without one.",
+                    "Wie tief dieses Podest in Gehrichtung ist; `null` ohne.",
+                ),
+            },
+            MemberField {
+                name: "bottom_landing_width",
+                kind: LENGTH,
+                label: &en_de("Landing width at the bottom", "Podestbreite unten"),
+                help: &en_de(
+                    "How wide that landing is across the walking direction; `null` without one.",
+                    "Wie breit dieses Podest quer zur Gehrichtung ist; `null` ohne.",
+                ),
+            },
+            MemberField {
+                name: "top_landing",
+                kind: MemberFieldKind::Truth,
+                label: &en_de("Landing at the top", "Podest oben"),
+                help: &en_de(
+                    "Whether a landing of the `landing` kinds meets the run's top.",
+                    "Ob ein Podest der `landing`-Arten den Lauf oben trifft.",
+                ),
+            },
+            MemberField {
+                name: "top_landing_depth",
+                kind: LENGTH,
+                label: &en_de("Landing depth at the top", "Podesttiefe oben"),
+                help: &en_de(
+                    "How deep that landing is along the walking direction; `null` without one.",
+                    "Wie tief dieses Podest in Gehrichtung ist; `null` ohne.",
+                ),
+            },
+            MemberField {
+                name: "top_landing_width",
+                kind: LENGTH,
+                label: &en_de("Landing width at the top", "Podestbreite oben"),
+                help: &en_de(
+                    "How wide that landing is across the walking direction; `null` without one.",
+                    "Wie breit dieses Podest quer zur Gehrichtung ist; `null` ohne.",
                 ),
             },
         ],

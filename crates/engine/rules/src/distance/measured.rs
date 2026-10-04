@@ -228,6 +228,7 @@ impl MeasuredProvider for DistanceMeasures {
         };
         let (Measurement::Value { locator: cited, .. }
         | Measurement::Rounded { locator: cited, .. }
+        | Measurement::Cited { locator: cited, .. }
         | Measurement::Absent { locator: cited }) = &mut measurement;
         *cited = if cited.is_empty() {
             locator

@@ -995,6 +995,7 @@ pub use linear_quantity::{
 pub use measured::measured_value;
 pub use measured::provider::{
     MeasuredMember, MeasuredProvider, Measurement, MemberValue, measured_members,
+    measured_members_cited,
 };
 pub use metric_routing::{
     BlockedMetricRouteEvidence, ClimbLength, CompleteMetricEvidence, ConnectorRouting,

@@ -94,6 +94,30 @@ pub(super) fn parse<'a>(
     }
 }
 
+impl<'a> ClearWidthCheck<'a> {
+    /// A check measuring only, over `obstacles` between the heights `band`.
+    pub(super) fn measuring(obstacles: &'a Selector, band: (f64, f64)) -> Self {
+        Self {
+            obstacles,
+            minimum: None,
+            landing: None,
+            total: None,
+            band,
+        }
+    }
+}
+
+impl Width {
+    /// The measured width and whether its evidence is exact, or why it is
+    /// not known.
+    pub(super) fn interval(&self) -> Result<(MeasuredInterval, bool), String> {
+        self.measured
+            .as_ref()
+            .map(|measured| (measured.width, measured.evidence.exact))
+            .map_err(Clone::clone)
+    }
+}
+
 /// What a clear width was measured over.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Place {

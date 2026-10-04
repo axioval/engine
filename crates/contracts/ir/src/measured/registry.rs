@@ -129,6 +129,107 @@ const WELL_MEMBERS: MeasuredParameter = MeasuredParameter {
     ),
 };
 
+const fn need_metres(key: &'static str, help: &'static [LocalizedText]) -> MeasuredParameter {
+    MeasuredParameter {
+        key,
+        kind: MeasuredParameterKind::Length { minimum: 0.0 },
+        required: true,
+        default: None,
+        help,
+    }
+}
+
+const fn optional_kinds(key: &'static str, help: &'static [LocalizedText]) -> MeasuredParameter {
+    MeasuredParameter {
+        key,
+        kind: MeasuredParameterKind::SourceKind,
+        required: false,
+        default: None,
+        help,
+    }
+}
+
+const fn yes_no(key: &'static str, help: &'static [LocalizedText]) -> MeasuredParameter {
+    MeasuredParameter {
+        key,
+        kind: MeasuredParameterKind::Choice {
+            options: &["no", "yes"],
+        },
+        required: false,
+        default: Some("no"),
+        help,
+    }
+}
+
+const DEFECT_RAILS: MeasuredParameter = kinds(
+    "rails",
+    &en_de(
+        "The source kinds that may be handrails, `,`-separated, subtypes included.",
+        "Die Quellarten, die Handläufe sein können, durch `,` getrennt, Untertypen \
+         eingeschlossen.",
+    ),
+);
+const DEFECT_REACH_ACROSS: MeasuredParameter = need_metres(
+    "reach_across",
+    &en_de(
+        "How far outside the walking surface's sides a rail may run.",
+        "Wie weit außerhalb der Seiten der Lauffläche ein Handlauf liegen darf.",
+    ),
+);
+const DEFECT_REACH_ABOVE: MeasuredParameter = need_metres(
+    "reach_above",
+    &en_de(
+        "How far above the pitch line a rail may run.",
+        "Wie weit über der Steigungslinie ein Handlauf liegen darf.",
+    ),
+);
+const STAIR_PATH: MeasuredParameter = MeasuredParameter {
+    key: "stair",
+    kind: MeasuredParameterKind::Path,
+    required: false,
+    default: None,
+    help: &en_de(
+        "The relationship steps from a whole stair to its parts; the object is then a stair.",
+        "Die Beziehungsschritte von einer ganzen Treppe zu ihren Teilen; das Objekt ist dann \
+         eine Treppe.",
+    ),
+};
+const WITHIN_STAIR: MeasuredParameter = MeasuredParameter {
+    key: "within",
+    kind: MeasuredParameterKind::Path,
+    required: false,
+    default: None,
+    help: &en_de(
+        "The relationship steps from a flight to the whole stairs it is part of: the check \
+         runs on them, with `stair` and `flights`, and counts what it reports about the flight.",
+        "Die Beziehungsschritte von einem Lauf zu den ganzen Treppen, zu denen er gehört: die \
+         Prüfung läuft auf ihnen, mit `stair` und `flights`, und zählt, was sie über den Lauf \
+         meldet.",
+    ),
+};
+const STAIR_FLIGHTS: MeasuredParameter = optional_kinds(
+    "flights",
+    &en_de(
+        "The source kinds of the stair's flights among its parts.",
+        "Die Quellarten der Läufe unter den Teilen der Treppe.",
+    ),
+);
+const DEFECT_LANDING: MeasuredParameter = kinds(
+    "landing",
+    &en_de(
+        "The source kinds that may carry a landing, `,`-separated, subtypes included.",
+        "Die Quellarten, die ein Podest tragen können, durch `,` getrennt, Untertypen \
+         eingeschlossen.",
+    ),
+);
+const DEFECTS: &[&str] = &[
+    "walking-surface",
+    "free-space",
+    "proximity",
+    "type-hierarchy",
+];
+const DEFECT_OPEN: &str = "the capability's search leaves a defect open";
+
 const PROXIMITY: &[&str] = &["proximity", "type-hierarchy"];
 
 const COUNTERPARTS: MeasuredParameter = MeasuredParameter {
@@ -1273,6 +1374,21 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ),
     },
     MeasuredDescriptor {
+        name: "end_width",
+        parameters: &[LANDING_END],
+        dimension: Some(QuantityDimension::Length),
+        services: FLIGHT,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_FLIGHT, "the width at that end is not measured"],
+        label: &en_de("Width at an end", "Breite an einem Ende"),
+        help: &en_de(
+            "The width a landing at one end of a flight is compared with: the flight's, or \
+             a turning flight's tread meeting it.",
+            "Die Breite, mit der ein Podest an einem Ende eines Laufs verglichen wird: die \
+             des Laufs oder bei einem gewendelten Lauf die der angrenzenden Stufe.",
+        ),
+    },
+    MeasuredDescriptor {
         name: EXTENT,
         parameters: &[
             MeasuredParameter {
@@ -1422,6 +1538,63 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ),
     },
     MeasuredDescriptor {
+        name: "handrail_breaks",
+        parameters: &[
+            DEFECT_RAILS,
+            DEFECT_REACH_ACROSS,
+            DEFECT_REACH_ABOVE,
+            WALKING_KIND,
+            STAIR_PATH,
+            STAIR_FLIGHTS,
+            optional_kinds(
+                "break_doors",
+                &en_de(
+                    "The source kinds of doors at which a rail may break.",
+                    "Die Quellarten der Türen, an denen ein Handlauf enden darf.",
+                ),
+            ),
+            MeasuredParameter {
+                key: "landing",
+                kind: MeasuredParameterKind::SourceKind,
+                required: false,
+                default: None,
+                help: &en_de(
+                    "The source kinds that may carry a landing, for `break_doors`.",
+                    "Die Quellarten, die ein Podest tragen können, für `break_doors`.",
+                ),
+            },
+            MeasuredParameter {
+                key: "height",
+                kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                required: false,
+                default: None,
+                help: &en_de(
+                    "How high over a landing a break door stands, for `break_doors`.",
+                    "Wie hoch über einem Podest eine Unterbrechungstür steht, für `break_doors`.",
+                ),
+            },
+            MeasuredParameter {
+                key: "tolerance",
+                kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                required: false,
+                default: None,
+                help: &en_de(
+                    "The gap a ramp's rail may leave across a landing.",
+                    "Die Lücke, die der Handlauf einer Rampe über einem Podest lassen darf.",
+                ),
+            },
+        ],
+        dimension: None,
+        services: DEFECTS,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_FLIGHT, DEFECT_OPEN],
+        label: &en_de("Handrail breaks", "Handlaufunterbrechungen"),
+        help: &en_de(
+            "How many times the handrail along a whole stair breaks across its landings, or along a ramp across its landings between runs, as `stair-geometry` and `ramp-geometry` judge it.",
+            "Wie oft der Handlauf entlang einer ganzen Treppe über ihren Podesten oder entlang einer Rampe über den Podesten zwischen ihren Läufen unterbrochen ist, wie `stair-geometry` und `ramp-geometry` es beurteilen.",
+        ),
+    },
+    MeasuredDescriptor {
         name: HEADROOM,
         parameters: &[kinds(
             "obstacles",
@@ -1517,6 +1690,64 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ),
     },
     MeasuredDescriptor {
+        name: "landing_clear_width",
+        parameters: &[
+            LANDING_OBJECTS,
+            LANDING_END,
+            kinds(
+                "obstacles",
+                &en_de(
+                    "The source kinds that narrow it, `,`-separated, subtypes included.",
+                    "Die Quellarten, die sie einengen, durch `,` getrennt, Untertypen \
+                     eingeschlossen.",
+                ),
+            ),
+            need_metres(
+                "band_from",
+                &en_de(
+                    "The band's bottom above the landing's level.",
+                    "Die Unterkante des Bands über der Podesthöhe.",
+                ),
+            ),
+            need_metres(
+                "band_to",
+                &en_de(
+                    "The band's top above the landing's level.",
+                    "Die Oberkante des Bands über der Podesthöhe.",
+                ),
+            ),
+        ],
+        dimension: Some(QuantityDimension::Length),
+        services: FLIGHT,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[
+            NO_FLIGHT,
+            "no selected obstacle bounds a side of the landing",
+        ],
+        label: &en_de("Landing clear width", "Lichte Podestbreite"),
+        help: &en_de(
+            "The clear width of the landing at one end of a flight between two heights above \
+             its level, across the direction leaving the flight; none when no selected object \
+             carries one.",
+            "Die lichte Breite des Podests an einem Ende eines Laufs zwischen zwei Höhen über \
+             seiner Höhe, quer zur Richtung aus dem Lauf; keine, wenn kein ausgewähltes Objekt \
+             eines trägt.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "landing_count",
+        parameters: &[LANDING_OBJECTS, LANDING_END, WALKING_KIND],
+        dimension: None,
+        services: FLIGHT,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_FLIGHT, UNDECIDED_KIND],
+        label: &en_de("Landings at an end", "Podeste an einem Ende"),
+        help: &en_de(
+            "Whether a landing of the kinds meets one end of a flight or ramp: 1 or 0.",
+            "Ob ein Podest der Arten ein Ende eines Laufs oder einer Rampe trifft: 1 oder 0.",
+        ),
+    },
+    MeasuredDescriptor {
         name: "landing_depth",
         parameters: &[LANDING_OBJECTS, LANDING_END, WALKING_KIND],
         dimension: Some(QuantityDimension::Length),
@@ -1529,6 +1760,43 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              direction; none when no selected object carries one.",
             "Wie tief das Podest an einem Ende eines Laufs oder einer Rampe in \
              Gehrichtung ist; keine, wenn kein ausgewähltes Objekt eines trägt.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "landing_door_conflicts",
+        parameters: &[
+            DEFECT_LANDING,
+            kinds(
+                "doors",
+                &en_de(
+                    "The source kinds of doors, `,`-separated.",
+                    "Die Quellarten der Türen, durch `,` getrennt.",
+                ),
+            ),
+            need_metres(
+                "height",
+                &en_de(
+                    "How high the column over each landing reaches.",
+                    "Wie hoch die Säule über jedem Podest reicht.",
+                ),
+            ),
+            yes_no(
+                "swing",
+                &en_de(
+                    "Whether a door swinging over a landing counts too.",
+                    "Ob auch eine über ein Podest aufschlagende Tür zählt.",
+                ),
+            ),
+            WALKING_KIND,
+        ],
+        dimension: None,
+        services: DEFECTS,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_FLIGHT, DEFECT_OPEN],
+        label: &en_de("Doors at landings", "Türen an Podesten"),
+        help: &en_de(
+            "How many landings at the ends of a flight or ramp a door stands in the column over, or with `swing=yes` swings over.",
+            "An wie vielen Podesten an den Enden eines Laufs oder einer Rampe eine Tür in der Säule darüber steht oder mit `swing=yes` darüber aufschlägt.",
         ),
     },
     MeasuredDescriptor {
@@ -1669,6 +1937,85 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              negative below; levels at one elevation share an index.",
             "Der Index des Geschosses vom Erdgeschoss aus: 0 auf ihm, aufwärts darüber, \
              negativ darunter; Geschosse gleicher Höhe teilen einen Index.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "missing_tactile_strips",
+        parameters: &[
+            kinds(
+                "tactiles",
+                &en_de(
+                    "The source kinds that may be tactile surfaces.",
+                    "Die Quellarten, die taktile Flächen sein können.",
+                ),
+            ),
+            need_metres(
+                "offset",
+                &en_de(
+                    "How far before the first riser and beyond the last the strip lies.",
+                    "Wie weit vor der ersten und hinter der letzten Steigung der Streifen liegt.",
+                ),
+            ),
+            need_metres(
+                "depth",
+                &en_de("How deep the strip is.", "Wie tief der Streifen ist."),
+            ),
+            yes_no(
+                "intermediate",
+                &en_de(
+                    "Whether the landings between a stair's flights need strips too.",
+                    "Ob auch die Podeste zwischen den Läufen einer Treppe Streifen brauchen.",
+                ),
+            ),
+            STAIR_PATH,
+            STAIR_FLIGHTS,
+            WITHIN_STAIR,
+        ],
+        dimension: None,
+        services: DEFECTS,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_FLIGHT, DEFECT_OPEN],
+        label: &en_de("Missing tactile strips", "Fehlende taktile Streifen"),
+        help: &en_de(
+            "How many of the tactile strips required before the first riser and beyond the last of a flight (or a whole stair) no selected object covers.",
+            "Wie viele der vor der ersten und hinter der letzten Steigung eines Laufs (oder einer ganzen Treppe) geforderten taktilen Streifen kein ausgewähltes Objekt bedeckt.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "obstructed_end_spaces",
+        parameters: &[
+            kinds(
+                "obstacles",
+                &en_de(
+                    "The source kinds that obstruct an end space.",
+                    "Die Quellarten, die einen Freiraum am Ende verstellen.",
+                ),
+            ),
+            need_metres(
+                "depth",
+                &en_de(
+                    "How deep the free space before the end is.",
+                    "Wie tief der Freiraum vor dem Ende ist.",
+                ),
+            ),
+            need_metres(
+                "width",
+                &en_de("How wide the free space is.", "Wie breit der Freiraum ist."),
+            ),
+            need_metres(
+                "height",
+                &en_de("How high the free space is.", "Wie hoch der Freiraum ist."),
+            ),
+            WALKING_KIND,
+        ],
+        dimension: None,
+        services: DEFECTS,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_FLIGHT, DEFECT_OPEN],
+        label: &en_de("Obstructed end spaces", "Verstellte Freiräume an den Enden"),
+        help: &en_de(
+            "How many of the free spaces before the first riser and beyond the last of a flight (or before the lowest and beyond the highest run of a ramp) an obstacle reaches into.",
+            "In wie viele der Freiräume vor der ersten und hinter der letzten Steigung eines Laufs (oder vor dem untersten und hinter dem obersten Rampenlauf) ein Hindernis reicht.",
         ),
     },
     MeasuredDescriptor {
@@ -1992,6 +2339,40 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ),
     },
     MeasuredDescriptor {
+        name: "rails_over_surfaces",
+        parameters: &[
+            DEFECT_RAILS,
+            DEFECT_REACH_ACROSS,
+            DEFECT_REACH_ABOVE,
+            kinds(
+                "surfaces",
+                &en_de(
+                    "The source kinds of accessible surfaces.",
+                    "Die Quellarten der barrierefreien Flächen.",
+                ),
+            ),
+            MeasuredParameter {
+                key: "of",
+                kind: MeasuredParameterKind::Choice { options: &["ramp"] },
+                required: false,
+                default: Some("ramp"),
+                help: &en_de("A ramp.", "Eine Rampe."),
+            },
+        ],
+        dimension: None,
+        services: DEFECTS,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_FLIGHT, DEFECT_OPEN],
+        label: &en_de(
+            "Rails over accessible surfaces",
+            "Handläufe über barrierefreien Flächen",
+        ),
+        help: &en_de(
+            "How many times a rail of a ramp, or a rail joined to one, reaches over an accessible surface in plan.",
+            "Wie oft ein Handlauf einer Rampe oder ein damit verbundener über eine barrierefreie Fläche im Grundriss reicht.",
+        ),
+    },
+    MeasuredDescriptor {
         name: "rectangle_side",
         parameters: &[MeasuredParameter {
             key: "side",
@@ -2134,6 +2515,39 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              it is positive.",
             "Das Gefälle der Fläche in einer Grundrissrichtung als Winkel mit \
              Vorzeichen: steigend ist positiv.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "stair_rise",
+        parameters: &[
+            MeasuredParameter {
+                key: "stair",
+                kind: MeasuredParameterKind::Path,
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The relationship steps from the stair to its parts.",
+                    "Die Beziehungsschritte von der Treppe zu ihren Teilen.",
+                ),
+            },
+            kinds(
+                "flights",
+                &en_de(
+                    "The source kinds of its flights among its parts.",
+                    "Die Quellarten ihrer Läufe unter ihren Teilen.",
+                ),
+            ),
+        ],
+        dimension: Some(QuantityDimension::Length),
+        services: FLIGHT,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_FLIGHT, "the path reaches no flight"],
+        label: &en_de("Stair rise", "Treppenhöhe"),
+        help: &en_de(
+            "How far a whole stair rises, from its lowest flight's base to its highest \
+             flight's top.",
+            "Wie hoch eine ganze Treppe steigt, vom Fuß ihres untersten Laufs bis zum Kopf \
+             ihres obersten.",
         ),
     },
     MeasuredDescriptor {
@@ -2436,6 +2850,20 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             "Das vom Körper des Objekts umschlossene Volumen."
         )
     ),
+    MeasuredDescriptor {
+        name: "walking_line_turns",
+        parameters: &[],
+        dimension: None,
+        services: FLIGHT,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_FLIGHT],
+        label: &en_de("Turning flight", "Gewendelter Lauf"),
+        help: &en_de(
+            "Whether a stair flight turns, so has winders: 1, or 0 for a straight flight.",
+            "Ob ein Treppenlauf sich wendet und also Wendelstufen hat: 1, oder 0 für einen \
+             geraden Lauf.",
+        ),
+    },
     MeasuredDescriptor {
         name: "well_gap",
         parameters: &[WELL_MEMBERS],

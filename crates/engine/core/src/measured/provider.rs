@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use axioval_ir::measured::MeasuredCall;
-use axioval_ir::{ObjectId, Project, QuantityDimension};
+use axioval_ir::{Evidence, ObjectId, Project, QuantityDimension};
 
 use crate::properties::PropertyResolutionError;
 use crate::{RuleContext, ServiceRegistry};
@@ -44,6 +44,21 @@ pub enum Measurement {
         dimension: Option<QuantityDimension>,
         /// Where the measurement came from, for its evidence.
         locator: String,
+    },
+    /// A value whose evidence is exact exactly when `exact` says so, as
+    /// the capability measuring it cites its own: a count of what a search
+    /// found, say.
+    Cited {
+        /// The least value it may have.
+        lower: f64,
+        /// The greatest value it may have.
+        upper: f64,
+        /// The value's dimension; `None` for a plain number.
+        dimension: Option<QuantityDimension>,
+        /// Where the measurement came from, for its evidence.
+        locator: String,
+        /// Whether the measurement is exact.
+        exact: bool,
     },
     /// No value, known exactly: a path reaching nothing, a space with no
     /// obstacle above.
@@ -116,6 +131,22 @@ pub trait MeasuredProvider: Send + Sync + 'static {
         )))
     }
 
+    /// [`Self::members`], with the evidence of the measurement the list
+    /// comes from, cited even when it lists none; without it, none.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::measure`].
+    fn members_cited(
+        &self,
+        call: &MeasuredCall,
+        object: &ObjectId,
+        context: &RuleContext<'_>,
+    ) -> Result<(Vec<MeasuredMember>, Vec<Evidence>), PropertyResolutionError> {
+        self.members(call, object, context)
+            .map(|members| (members, Vec::new()))
+    }
+
     /// Measures `call` (one of [`Self::names`]) of `object`.
     ///
     /// # Errors
@@ -158,6 +189,20 @@ pub fn measured_members(
     object: &ObjectId,
     name: &str,
 ) -> Result<Vec<MeasuredMember>, PropertyResolutionError> {
+    measured_members_cited(services, object, name).map(|(members, _)| members)
+}
+
+/// [`measured_members`], with the evidence of the measurement the list
+/// comes from.
+///
+/// # Errors
+///
+/// As [`measured_members`].
+pub fn measured_members_cited(
+    services: &ServiceRegistry,
+    object: &ObjectId,
+    name: &str,
+) -> Result<(Vec<MeasuredMember>, Vec<Evidence>), PropertyResolutionError> {
     let call = axioval_ir::measured::parse_members(name)
         .map_err(|error| PropertyResolutionError::Unavailable(error.to_string()))?;
     let providers = services.get::<Providers>().ok_or_else(|| {
@@ -180,7 +225,7 @@ pub fn measured_members(
         project: &providers.project,
         services,
     };
-    provider.members(&call, object, &context)
+    provider.members_cited(&call, object, &context)
 }
 
 /// Installs `providers` for a run over `project`, if there are any.

@@ -486,6 +486,13 @@ pub trait ExpressionContext {
         let _ = (over, filter, value, path);
         Err("aggregates cannot be listed here".into())
     }
+
+    /// The evidence of the listing [`Self::members`] last answered beyond
+    /// its members' own: the measurement a measured member list comes
+    /// from, cited even when it lists none.
+    fn listing_evidence(&mut self) -> Vec<axioval_ir::Evidence> {
+        Vec::new()
+    }
 }
 
 /// An expression's value for one object, and every leaf it read.
@@ -919,13 +926,16 @@ impl Evaluator<'_> {
                 let members =
                     self.context
                         .members(over, filter.as_deref(), value.as_deref(), &value_path);
-                let leaf = Leaf {
-                    value: Ok(Value::Null),
-                    evidence: members
+                let mut evidence = self.context.listing_evidence();
+                evidence.extend(
+                    members
                         .iter()
                         .flatten()
-                        .flat_map(|member| member.evidence.iter().cloned())
-                        .collect(),
+                        .flat_map(|member| member.evidence.iter().cloned()),
+                );
+                let leaf = Leaf {
+                    value: Ok(Value::Null),
+                    evidence,
                 };
                 self.reads.push(Read {
                     path: path.to_owned(),

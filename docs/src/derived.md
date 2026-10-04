@@ -705,9 +705,24 @@ test comparing it with a capability's judgement.
 ### Stairs and ramps
 
 `flight_rise` and `flight_width` are a stair flight's rise and width,
-`landing_depth` and `landing_width` the landing at its `end` (`bottom` or
-`top`, a ramp's with `of=ramp`) among the objects of the `landing` kinds,
-none when none carries one. They are measured through the walking-surface
+`walking_line_turns` whether it turns (1) or is straight (0), and
+`stair_rise` a whole stair's rise from its lowest flight's base to its
+highest flight's top. `landing_depth`, `landing_width` and
+`landing_clear_width` (between two heights above it, among the `obstacles`)
+are the landing at an `end` (`bottom` or `top`, a ramp's with `of=ramp`)
+among the objects of the `landing` kinds, none when none carries one;
+`landing_count` is 1 or 0, and `end_width` the width such a landing is
+compared with (the flight's, or a turning flight's tread meeting it).
+
+The checks that are fixed-size searches count what they find, each by
+running that one check of `stair-geometry` or `ramp-geometry` alone with the
+sizes and kinds the value states: `obstructed_end_spaces`,
+`landing_door_conflicts` (with `swing=yes` doors swinging over too),
+`missing_tactile_strips` (on a whole stair's flights with `within`, the path
+to it), `handrail_breaks` across a whole stair's or a ramp's landings, and
+`rails_over_surfaces`. Each is an interval from what was found to what was
+found or left open, so `= 0` holds, fails or is not evaluated exactly as the
+check does. They are measured through the walking-surface
 service as `stair-geometry` and `ramp-geometry` measure them, each a
 flight measured first; the steps, runs and handrails are measured members
 (below). Headroom, the clearance below and the clear width are
@@ -766,7 +781,7 @@ and declare their parameters and typed fields:
 | List | Members | Fields |
 | --- | --- | --- |
 | `steps` (`walking_line_offset`) | one per riser of a flight, bottom to top | `riser`, `going`, `step_length` (`2r + g`), `nosing`, `winder_angle`, `open_riser` |
-| `runs` | a ramp's sloped runs, lowest first | `slope`, `length`, `rise`, `width` |
+| `runs` (`landing`) | a ramp's sloped runs, lowest first | `run`, `slope`, `length`, `rise`, `width`, and with `landing` `bottom_landing`, `top_landing` and their `_depth` and `_width` |
 | `handrails` (`rails`, `reach_across`, `reach_above`, `level_over`, `from`, `of`) | each rail along a flight or each run of a ramp | `run`, `left`, `right`, `height_lowest`, `height_highest`, `extension_bottom`, `extension_top`, `bottom_rise`, `top_rise`, `first_on_side`, `last_on_side`, `gap_after` |
 | `recesses` | the pockets between a footprint's boundary and its convex hull | `width`, `depth` |
 | `end_walls` (`corridor`, `kinds`) | the walls the ends of the corridors an opening faces run into | `gap`, `facing` |
@@ -782,7 +797,8 @@ final riser have none (`null`). A field the measurement cannot decide (an
 unmeasured winder angle, whether a riser is closed, the order of pieces
 lying beside one another) leaves an expression reading it not evaluated.
 Built-in code registered beside the capabilities measures each list
-(`MeasuredProvider::member_lists`), never a package. A member states
+(`MeasuredProvider::member_lists`), never a package. An aggregate over a list cites the measurement the list comes from
+(`MeasuredProvider::members_cited`), even when it lists none. A member states
 whether the measurement it comes from is exact: its fields' evidence is
 then exact, an interval holding only the rounding of exact arithmetic, as
 the capability measuring it cites it.
@@ -912,7 +928,8 @@ coarser (a tessellated body) is a `measured` value, an interval sure to hold
 the exact value, whose evidence is not exact. Built-in code measuring on
 exact geometry may answer an interval holding only the rounding of exact
 arithmetic (`Measurement::Rounded`): its evidence is exact, as the
-capability measuring it cites it:
+capability measuring it cites it. `Measurement::Cited` states the evidence's
+exactness outright, so a count found on inexact evidence is cited as such:
 
 ```json
 {"type": "measured", "value": {"lower": 0.045, "upper": 0.055, "dimension": "length"}}

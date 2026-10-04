@@ -16,6 +16,7 @@ use std::fmt::Write as _;
 
 mod clear_width;
 mod continuity;
+mod defects;
 mod handrails;
 mod measured;
 mod obstruction;
@@ -400,7 +401,7 @@ struct Selections {
 }
 
 /// Decided objects and whether the selector left any undecided.
-type Selected = Result<(Vec<ObjectId>, bool), Unavailable>;
+pub(super) type Selected = Result<(Vec<ObjectId>, bool), Unavailable>;
 
 impl Selections {
     fn select(

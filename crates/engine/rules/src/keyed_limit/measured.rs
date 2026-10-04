@@ -166,6 +166,19 @@ impl DoorMeasures {
                 dimension,
                 locator: format!("{}: {what}", locator("measured")),
             },
+            Measurement::Cited {
+                lower,
+                upper,
+                dimension,
+                locator: what,
+                exact,
+            } => Measurement::Cited {
+                lower,
+                upper,
+                dimension,
+                locator: format!("{}: {what}", locator("measured")),
+                exact,
+            },
             absent @ Measurement::Absent { .. } => absent,
         })
     }

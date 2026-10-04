@@ -37,6 +37,8 @@ pub(crate) struct ObjectLeaves<'a> {
     reasons: RefCell<Vec<NotEvaluatedReason>>,
     /// The measured member in scope, whose fields `axioval:member` reads.
     fields: Option<&'a MeasuredMember>,
+    /// The evidence of the measured member list last listed.
+    listed: Vec<Evidence>,
 }
 
 impl<'a> ObjectLeaves<'a> {
@@ -53,6 +55,7 @@ impl<'a> ObjectLeaves<'a> {
             parameters,
             reasons: RefCell::new(Vec::new()),
             fields: None,
+            listed: Vec::new(),
         }
     }
 
@@ -66,6 +69,7 @@ impl<'a> ObjectLeaves<'a> {
             parameters: self.parameters,
             reasons: RefCell::new(Vec::new()),
             fields: None,
+            listed: Vec::new(),
         }
     }
 
@@ -79,6 +83,7 @@ impl<'a> ObjectLeaves<'a> {
             parameters: self.parameters,
             reasons: RefCell::new(Vec::new()),
             fields: Some(member),
+            listed: Vec::new(),
         }
     }
 
@@ -136,6 +141,13 @@ impl<'a> ObjectLeaves<'a> {
                     upper,
                     dimension,
                     locator,
+                }
+                | Measurement::Cited {
+                    lower,
+                    upper,
+                    dimension,
+                    locator,
+                    ..
                 },
             )) => {
                 let value = Value::from_property(&axioval_ir::PropertyValue::Measured {
@@ -159,19 +171,20 @@ impl<'a> ObjectLeaves<'a> {
     /// The members of `list` measured of the object in scope, each
     /// evaluated with `value`.
     fn measured_members(
-        &self,
+        &mut self,
         list: &str,
         value: Option<&Expression>,
         path: &str,
     ) -> Result<Vec<Member>, String> {
-        let measured =
-            axioval_engine::measured_members(self.context.services, &self.object.id, list)
+        let (measured, listed) =
+            axioval_engine::measured_members_cited(self.context.services, &self.object.id, list)
                 .map_err(|error| {
                     self.reasons
                         .borrow_mut()
                         .push(crate::selection::property_error(error.clone()).0);
                     format!("`{list}` of {}: {error}", self.object.id)
                 })?;
+        self.listed = listed;
         let mut members = Vec::new();
         for member in &measured {
             let (value, evidence) = match value {
@@ -431,6 +444,10 @@ impl ExpressionContext for ObjectLeaves<'_> {
             });
         }
         Ok(members)
+    }
+
+    fn listing_evidence(&mut self) -> Vec<Evidence> {
+        std::mem::take(&mut self.listed)
     }
 
     fn lookup(&mut self, table: &str, keys: &BTreeMap<String, Value>, column: &str) -> Leaf {

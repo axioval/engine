@@ -227,9 +227,9 @@ pub(crate) fn rounded_difference(minuend: f64, subtrahend: f64) -> (f64, f64) {
 /// A measured answer before it becomes a property.
 enum Answer {
     Value(f64, f64, QuantityDimension, String),
-    /// A value measured exactly whose interval holds only rounding: its
-    /// evidence is exact.
-    Rounded(f64, f64, Option<QuantityDimension>, String),
+    /// A value whose evidence is exact exactly as stated (an interval
+    /// holding only rounding, or a count found on inexact evidence).
+    Cited(f64, f64, Option<QuantityDimension>, String, bool),
     /// A plain number, such as a count, known to lie in the interval.
     Number(f64, f64, String),
     Absent(String),
@@ -319,14 +319,14 @@ impl Measures {
                 request.property().to_ascii_lowercase()
             )
         };
-        let (lower, upper, dimension, locator, rounded) = match self.measure(&name, object)? {
+        let (lower, upper, dimension, locator, cited) = match self.measure(&name, object)? {
             Answer::Value(lower, upper, dimension, locator) => {
-                (lower, upper, Some(dimension), locator, false)
+                (lower, upper, Some(dimension), locator, None)
             }
-            Answer::Rounded(lower, upper, dimension, locator) => {
-                (lower, upper, dimension, locator, true)
+            Answer::Cited(lower, upper, dimension, locator, exact) => {
+                (lower, upper, dimension, locator, Some(exact))
             }
-            Answer::Number(lower, upper, locator) => (lower, upper, None, locator, false),
+            Answer::Number(lower, upper, locator) => (lower, upper, None, locator, None),
             Answer::Absent(locator) => {
                 return Ok(PropertyResolution::Absent(
                     CompletePropertyAbsenceEvidence::try_new(
@@ -339,8 +339,11 @@ impl Measures {
         if !(lower.is_finite() && upper.is_finite() && lower <= upper) {
             return Err(PropertyResolutionError::InvalidValue);
         }
-        let exact = lower.to_bits() == upper.to_bits();
-        let value = match (exact, dimension) {
+        let point = lower.to_bits() == upper.to_bits();
+        // A point is exact unless its measurement says otherwise; an
+        // interval is not unless its measurement says it is.
+        let exact = cited.unwrap_or(point);
+        let value = match (point && exact, dimension) {
             (true, Some(dimension)) => PropertyValue::Quantity {
                 value: lower,
                 dimension,
@@ -358,7 +361,7 @@ impl Measures {
             },
         };
         let mut evidence = Evidence::exact(object.source.clone(), locate(locator));
-        evidence.exact = exact || rounded;
+        evidence.exact = exact;
         let property = Property::new(MEASURED_SET, request.property(), value)
             .map_err(|_| PropertyResolutionError::InvalidRequest)?
             .with_evidence(evidence);
@@ -656,7 +659,14 @@ impl Measures {
                 upper,
                 dimension,
                 locator,
-            } => Answer::Rounded(lower, upper, dimension, locator),
+            } => Answer::Cited(lower, upper, dimension, locator, true),
+            provider::Measurement::Cited {
+                lower,
+                upper,
+                dimension,
+                locator,
+                exact,
+            } => Answer::Cited(lower, upper, dimension, locator, exact),
             provider::Measurement::Absent { locator } => Answer::Absent(locator),
         })
     }

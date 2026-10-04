@@ -6,13 +6,13 @@
 use std::collections::BTreeMap;
 
 use axioval_engine::{
-    HandrailEvidence, HandrailRequest, LandingRequest, MeasuredInterval, MeasuredMember,
-    MeasuredProvider, Measurement, MemberValue, PropertyResolutionError, RailMeasurement, RailSide,
-    RiserClosure, RuleContext, TreadFlight, TreadFlightRequest, WalkingEnd, WalkingStretch,
-    WalkingSurfaceServiceHandle,
+    ElevationInterval, HandrailEvidence, HandrailRequest, LandingRequest, MeasuredInterval,
+    MeasuredMember, MeasuredProvider, Measurement, MemberValue, PropertyResolutionError,
+    RailMeasurement, RailSide, RiserClosure, RuleContext, TreadFlight, TreadFlightRequest,
+    WalkingEnd, WalkingStretch, WalkingSurfaceServiceHandle,
 };
 use axioval_ir::measured::{MeasuredArgument, MeasuredCall};
-use axioval_ir::{ObjectId, QuantityDimension};
+use axioval_ir::{Evidence, ObjectId, QuantityDimension};
 
 use super::handrails::RiserOffsets;
 use super::service_error;
@@ -45,7 +45,13 @@ fn measured(interval: MeasuredInterval, exact: bool, locator: String) -> Measure
             locator,
         }
     } else {
-        value(interval, LENGTH, locator)
+        Measurement::Cited {
+            lower: interval.lower(),
+            upper: interval.upper(),
+            dimension: LENGTH,
+            locator,
+            exact: false,
+        }
     }
 }
 
@@ -319,7 +325,7 @@ fn handrails(
     object: &ObjectId,
     context: &RuleContext<'_>,
     stairs: &WalkingSurfaceServiceHandle,
-) -> Result<Vec<MeasuredMember>, PropertyResolutionError> {
+) -> Result<(Vec<MeasuredMember>, Vec<Evidence>), PropertyResolutionError> {
     let name = call.name();
     let rails = crate::measured_kinds::objects_of_kinds(context, call, "rails", object)?;
     let reach = (length(call, "reach_across"), length(call, "reach_above"));
@@ -337,6 +343,7 @@ fn handrails(
         (vec![WalkingStretch::Flight], risers)
     };
     let mut members = Vec::new();
+    let mut cited = Vec::new();
     for (index, stretch) in stretches.into_iter().enumerate() {
         let request = HandrailRequest::try_new(
             object.clone(),
@@ -350,8 +357,153 @@ fn handrails(
             .measure_handrails(&request)
             .map_err(|error| refused(name, object, &error))?;
         members.extend(rails_along(&measured, risers.as_ref(), (object, index + 1)));
+        cited.push(measured.evidence().clone());
     }
-    Ok(members)
+    Ok((members, cited))
+}
+
+/// The landing at `end` among `candidates`: whether there is one, its depth
+/// and width (none without one, undecided without a rectangle), and
+/// whether its evidence is exact.
+fn end_landing(
+    stairs: &WalkingSurfaceServiceHandle,
+    object: &ObjectId,
+    end: WalkingEnd,
+    candidates: impl Iterator<Item = ObjectId>,
+) -> Result<([MemberValue; 3], bool), String> {
+    let request = LandingRequest::new(object.clone(), end, candidates);
+    let measured = stairs
+        .measure_landing(&request)
+        .map_err(|error| service_error(&error).1)?;
+    let exact = measured.evidence().exact;
+    let locator = measured.evidence().locator.clone();
+    let Some(landing) = measured.landing() else {
+        return Ok((
+            [
+                MemberValue::Truth {
+                    value: false,
+                    locator: locator.clone(),
+                },
+                number(None, LENGTH, locator.clone()),
+                number(None, LENGTH, locator),
+            ],
+            exact,
+        ));
+    };
+    let size = |size: Option<MeasuredInterval>| match size {
+        Some(size) => number(Some(size), LENGTH, locator.clone()),
+        None => MemberValue::Undecided {
+            why: format!(
+                "the landing {} fills no rectangle along the walking direction",
+                landing.carrier()
+            ),
+        },
+    };
+    Ok((
+        [
+            MemberValue::Truth {
+                value: true,
+                locator: locator.clone(),
+            },
+            size(measured.depth()),
+            size(measured.width()),
+        ],
+        exact,
+    ))
+}
+
+/// The clear width of the landing at one end of a flight, as
+/// `stair-geometry` measures it; none when no landing meets it.
+fn landing_clear_width(
+    call: &MeasuredCall,
+    object: &ObjectId,
+    context: &RuleContext<'_>,
+) -> Result<Measurement, PropertyResolutionError> {
+    let name = call.name();
+    let stairs = walking(context)?;
+    let obstacles = crate::measured_kinds::objects_of_kinds(context, call, "obstacles", object)?;
+    let carriers = crate::measured_kinds::objects_of_kinds(context, call, "landing", object)?;
+    let selector = axioval_ir::contract::Selector::Objects {
+        objects: obstacles.clone(),
+    };
+    let band = (length(call, "band_from"), length(call, "band_to"));
+    let check = super::clear_width::ClearWidthCheck::measuring(&selector, band);
+    let landings: super::Selected = Ok((carriers.into_iter().collect(), false));
+    let top = call.choice("end") == Some("top");
+    let candidates: Vec<ObjectId> = obstacles.into_iter().collect();
+    let locator = format!("{name}:{object}:{}", if top { "top" } else { "bottom" });
+    match super::clear_width::landing_width(&stairs, &check, &candidates, &landings, (object, top))
+    {
+        None => Ok(Measurement::Absent {
+            locator: format!("{locator}: no selected object carries a landing there"),
+        }),
+        Some(width) => {
+            let (width, exact) = width.interval().map_err(|why| {
+                PropertyResolutionError::Incomplete(format!("`{name}` of {object}: {why}"))
+            })?;
+            Ok(measured(width, exact, locator))
+        }
+    }
+}
+
+/// A whole stair's rise, from its lowest flight's base to its highest
+/// flight's top, as `stair-geometry` measures it.
+fn stair_rise(
+    call: &MeasuredCall,
+    object: &ObjectId,
+    context: &RuleContext<'_>,
+) -> Result<Measurement, PropertyResolutionError> {
+    let name = call.name();
+    let stairs = walking(context)?;
+    let Some(MeasuredArgument::Path(steps)) = call.argument("stair") else {
+        return Err(PropertyResolutionError::InvalidRequest);
+    };
+    let everything: Vec<&axioval_ir::Object> = context.project.objects().collect();
+    let (parts, _) = crate::support::Traversal::path(steps)
+        .and_then(|path| path.related(context, object, &everything))
+        .map_err(|(reason, why)| {
+            crate::measured_kinds::resolution_error((
+                reason,
+                format!("`{name}` of {object}: {why}"),
+            ))
+        })?;
+    let kinds = crate::measured_kinds::objects_of_kinds(context, call, "flights", object)?;
+    let mut flights = Vec::new();
+    for part in parts.iter().filter(|part| kinds.contains(*part)) {
+        let request = TreadFlightRequest::new(part.clone());
+        flights.push(
+            stairs
+                .measure_tread_flight(&request)
+                .map_err(|error| refused(name, part, &error))?,
+        );
+    }
+    let (Some(lowest), Some(highest)) = (
+        flights.iter().map(TreadFlight::base).reduce(|a, b| {
+            ElevationInterval::try_new(
+                a.lower_metres().min(b.lower_metres()),
+                a.upper_metres().min(b.upper_metres()),
+            )
+            .unwrap_or(a)
+        }),
+        flights.iter().map(TreadFlight::top).reduce(|a, b| {
+            ElevationInterval::try_new(
+                a.lower_metres().max(b.lower_metres()),
+                a.upper_metres().max(b.upper_metres()),
+            )
+            .unwrap_or(a)
+        }),
+    ) else {
+        return Err(PropertyResolutionError::Incomplete(format!(
+            "`{name}` of {object}: the path reaches no flight"
+        )));
+    };
+    let rise = MeasuredInterval::try_new(
+        (highest.lower_metres() - lowest.upper_metres()).next_down(),
+        (highest.upper_metres() - lowest.lower_metres()).next_up(),
+    )
+    .map_err(|_| PropertyResolutionError::InvalidValue)?;
+    let exact = flights.iter().all(|flight| flight.evidence().exact);
+    Ok(measured(rise, exact, format!("{name}:{object}")))
 }
 
 impl StairMeasures {
@@ -390,6 +542,15 @@ impl StairMeasures {
             .map_err(|error| refused(name, object, &error))?;
         let place = if top { "top" } else { "bottom" };
         let locator = format!("{name}:{object}:{place}");
+        if name == "landing_count" {
+            let found = f64::from(u8::from(measured_landing.landing().is_some()));
+            return Ok(Measurement::Value {
+                lower: found,
+                upper: found,
+                dimension: None,
+                locator,
+            });
+        }
         let Some(landing) = measured_landing.landing() else {
             return Ok(Measurement::Absent {
                 locator: format!("{locator}: no selected object carries a landing there"),
@@ -418,10 +579,20 @@ impl StairMeasures {
 impl MeasuredProvider for StairMeasures {
     fn names(&self) -> &'static [&'static str] {
         &[
+            "end_width",
             "flight_rise",
             "flight_width",
+            "handrail_breaks",
+            "landing_clear_width",
+            "landing_count",
             "landing_depth",
+            "landing_door_conflicts",
             "landing_width",
+            "missing_tactile_strips",
+            "obstructed_end_spaces",
+            "rails_over_surfaces",
+            "stair_rise",
+            "walking_line_turns",
         ]
     }
 
@@ -436,11 +607,49 @@ impl MeasuredProvider for StairMeasures {
         context: &RuleContext<'_>,
     ) -> Result<Measurement, PropertyResolutionError> {
         let name = call.name();
-        if name.starts_with("landing_") {
+        if name == "landing_clear_width" {
+            return landing_clear_width(call, object, context);
+        }
+        if name == "stair_rise" {
+            return stair_rise(call, object, context);
+        }
+        if super::defects::NAMES.contains(&name) {
+            return super::defects::count(call, object, context);
+        }
+        if name.starts_with("landing_") || name == "landing_count" {
             return Self::landing(call, object, context);
         }
         let flight = flight(call, object, &walking(context)?)?;
         let locator = format!("{name}:{object}");
+        if name == "end_width" {
+            // A turning flight's winders have no width: a landing at its end
+            // is compared with the tread meeting it.
+            let width = if flight.walking_line().is_turning() {
+                let tread = if call.choice("end") == Some("top") {
+                    flight.treads().last()
+                } else {
+                    flight.treads().first()
+                };
+                tread.and_then(axioval_engine::Tread::width)
+            } else {
+                flight.width()
+            };
+            let width = width.ok_or_else(|| {
+                PropertyResolutionError::Incomplete(format!(
+                    "`{name}` of {object}: the width at that end is not measured"
+                ))
+            })?;
+            return Ok(measured(width, flight.evidence().exact, locator));
+        }
+        if name == "walking_line_turns" {
+            let turns = f64::from(u8::from(flight.walking_line().is_turning()));
+            return Ok(Measurement::Value {
+                lower: turns,
+                upper: turns,
+                dimension: None,
+                locator,
+            });
+        }
         if name == "flight_rise" {
             return Ok(measured(flight.rise(), flight.evidence().exact, locator));
         }
@@ -453,41 +662,110 @@ impl MeasuredProvider for StairMeasures {
         Ok(measured(width, flight.evidence().exact, locator))
     }
 
-    fn members(
+    fn members_cited(
         &self,
         call: &MeasuredCall,
         object: &ObjectId,
         context: &RuleContext<'_>,
-    ) -> Result<Vec<MeasuredMember>, PropertyResolutionError> {
+    ) -> Result<(Vec<MeasuredMember>, Vec<Evidence>), PropertyResolutionError> {
         let stairs = walking(context)?;
         if call.name() == "handrails" {
             return handrails(call, object, context, &stairs);
         }
         if call.name() == "steps" {
-            return Ok(steps(&flight(call, object, &stairs)?, object));
+            let flight = flight(call, object, &stairs)?;
+            return Ok((steps(&flight, object), vec![flight.evidence().clone()]));
         }
         let measured = stairs
             .measure_sloped_runs(object)
             .map_err(|error| refused(call.name(), object, &error))?;
+        let candidates = if call.argument("landing").is_some() {
+            Some(crate::measured_kinds::objects_of_kinds(
+                context, call, "landing", object,
+            )?)
+        } else {
+            None
+        };
         let total = measured.runs().len();
-        Ok(measured
-            .runs()
-            .iter()
-            .enumerate()
-            .map(|(index, run)| {
-                let at = |field: &str| format!("runs:{object}#{}/{total}:{field}", index + 1);
-                let fields = BTreeMap::from([
-                    ("slope", number(Some(run.slope()), None, at("slope"))),
-                    ("length", number(Some(run.length()), LENGTH, at("length"))),
-                    ("rise", number(Some(run.rise()), LENGTH, at("rise"))),
-                    ("width", number(run.width(), LENGTH, at("width"))),
-                ]);
-                MeasuredMember {
-                    certain: true,
-                    exact: measured.evidence().exact,
-                    fields,
-                }
-            })
-            .collect())
+        let mut members = Vec::new();
+        for (index, run) in measured.runs().iter().enumerate() {
+            let at = |field: &str| format!("runs:{object}#{}/{total}:{field}", index + 1);
+            #[allow(clippy::cast_precision_loss)]
+            let numbered = (index + 1) as f64;
+            let mut fields = BTreeMap::from([
+                (
+                    "run",
+                    MemberValue::Measured(Measurement::Value {
+                        lower: numbered,
+                        upper: numbered,
+                        dimension: None,
+                        locator: at("run"),
+                    }),
+                ),
+                ("slope", number(Some(run.slope()), None, at("slope"))),
+                ("length", number(Some(run.length()), LENGTH, at("length"))),
+                ("rise", number(Some(run.rise()), LENGTH, at("rise"))),
+                ("width", number(run.width(), LENGTH, at("width"))),
+            ]);
+            let mut exact = measured.evidence().exact;
+            for (end, place) in [
+                (WalkingEnd::RunBottom(index), "bottom"),
+                (WalkingEnd::RunTop(index), "top"),
+            ] {
+                let landing = candidates.as_ref().map(|candidates| {
+                    end_landing(&stairs, object, end, candidates.iter().cloned())
+                });
+                let [present, depth, width] = match landing {
+                    None => {
+                        let none = || number(None, LENGTH, at(place));
+                        [
+                            MemberValue::Undecided {
+                                why: "the runs list states no `landing` kinds".into(),
+                            },
+                            none(),
+                            none(),
+                        ]
+                    }
+                    Some(Ok((fields, cited))) => {
+                        exact &= cited;
+                        fields
+                    }
+                    Some(Err(why)) => {
+                        let undecided = || MemberValue::Undecided { why: why.clone() };
+                        [undecided(), undecided(), undecided()]
+                    }
+                };
+                fields.insert(
+                    if place == "bottom" {
+                        "bottom_landing"
+                    } else {
+                        "top_landing"
+                    },
+                    present,
+                );
+                fields.insert(
+                    if place == "bottom" {
+                        "bottom_landing_depth"
+                    } else {
+                        "top_landing_depth"
+                    },
+                    depth,
+                );
+                fields.insert(
+                    if place == "bottom" {
+                        "bottom_landing_width"
+                    } else {
+                        "top_landing_width"
+                    },
+                    width,
+                );
+            }
+            members.push(MeasuredMember {
+                certain: true,
+                exact,
+                fields,
+            });
+        }
+        Ok((members, vec![measured.evidence().clone()]))
     }
 }

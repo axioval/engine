@@ -445,6 +445,9 @@ pub struct Evaluation {
     pub outcome: Result<Value, NotEvaluated>,
     /// The leaves read, in order, with their evidence.
     pub reads: Vec<Read>,
+    /// The value of every labelled subexpression evaluated, by label: the
+    /// first, where a label repeats.
+    pub labelled: BTreeMap<String, Value>,
 }
 
 /// Evaluates `expression`, whose path is `root` (`requirement`).
@@ -456,11 +459,13 @@ pub fn evaluate(
     let mut evaluator = Evaluator {
         context,
         reads: Vec::new(),
+        labelled: BTreeMap::new(),
     };
     let outcome = evaluator.eval(expression, root);
     Evaluation {
         outcome,
         reads: evaluator.reads,
+        labelled: evaluator.labelled,
     }
 }
 
@@ -469,6 +474,7 @@ type Outcome = Result<Value, NotEvaluated>;
 struct Evaluator<'c> {
     context: &'c mut dyn ExpressionContext,
     reads: Vec<Read>,
+    labelled: BTreeMap<String, Value>,
 }
 
 fn fail(expression: &Expression, path: &str, reason: Reason) -> NotEvaluated {
@@ -491,8 +497,18 @@ fn interval_reason(failure: IntervalFailure) -> Reason {
 type Truth = Result<bool, NotEvaluated>;
 
 impl Evaluator<'_> {
-    #[allow(clippy::too_many_lines)]
     fn eval(&mut self, expression: &Expression, path: &str) -> Outcome {
+        let outcome = self.eval_node(expression, path);
+        if let (Some(label), Ok(value)) = (expression.label(), &outcome) {
+            self.labelled
+                .entry(label.to_owned())
+                .or_insert_with(|| value.clone());
+        }
+        outcome
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn eval_node(&mut self, expression: &Expression, path: &str) -> Outcome {
         let kind = expression.kind();
         let child = |field: &str| format!("{path}.{kind}.{field}");
         let item = |index: usize| format!("{path}.{kind}[{index}]");

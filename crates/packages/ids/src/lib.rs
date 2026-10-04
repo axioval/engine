@@ -2184,7 +2184,7 @@ fn kind_of(parameter_type: ParameterType) -> ParameterKind {
         ParameterType::ObjectTypeReference => ParameterKind::ObjectTypeReference,
         ParameterType::PropertyReference => ParameterKind::PropertyReference,
         ParameterType::Selector => ParameterKind::Selector,
-        ParameterType::Expression => ParameterKind::Expression,
+        ParameterType::Expression | ParameterType::NumberExpression => ParameterKind::Expression,
         ParameterType::StringList => ParameterKind::StringList,
         ParameterType::ReferenceList => ParameterKind::ReferenceList,
         ParameterType::Table(_) => ParameterKind::Table,

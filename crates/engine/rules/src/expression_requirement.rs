@@ -1,9 +1,11 @@
 //! A requirement stated as an expression over each selected object.
 
 use axioval_engine::expression::{Evaluation, NotEvaluated, Reason, Value, evaluate};
+use std::collections::BTreeMap;
+
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, ParameterDescriptor, ParameterType, RuleCapability,
-    RuleContext,
+    CapabilityEvaluation, CompiledRule, Deviation, ParameterDescriptor, ParameterType,
+    RuleCapability, RuleContext,
 };
 use axioval_ir::NotEvaluatedReason;
 use axioval_ir::contract::{Expression, ParameterValue};
@@ -23,6 +25,10 @@ pub struct ExpressionRequirement;
 
 /// The parameter holding the requirement.
 const REQUIREMENT: &str = "requirement";
+/// The parameter computing a failing object's graded deviation.
+const DEVIATION: &str = "deviation";
+/// The parameter holding a finding's message template.
+const MESSAGE: &str = "message";
 
 impl RuleCapability for ExpressionRequirement {
     fn id(&self) -> &'static str {
@@ -30,13 +36,18 @@ impl RuleCapability for ExpressionRequirement {
     }
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
-        vec![ParameterDescriptor::required(
-            REQUIREMENT,
-            ParameterType::Expression,
-        )]
+        vec![
+            ParameterDescriptor::required(REQUIREMENT, ParameterType::Expression),
+            ParameterDescriptor::optional(DEVIATION, ParameterType::NumberExpression),
+            ParameterDescriptor::optional(MESSAGE, ParameterType::String),
+        ]
     }
 
     fn takes_authored_parameters(&self) -> bool {
+        true
+    }
+
+    fn grades_deviation(&self) -> bool {
         true
     }
 
@@ -57,16 +68,34 @@ impl RuleCapability for ExpressionRequirement {
                 Ok(Value::Boolean(true)) => {}
                 Ok(Value::Boolean(false) | Value::Null) => {
                     let failed = failing(requirement, REQUIREMENT, &mut leaves);
-                    evaluation.push_finding(finding(
-                        rule,
-                        &object.id,
-                        format!(
+                    let mut labelled = result.labelled.clone();
+                    let mut cited = evidence(&result);
+                    let deviation = match rule.parameters.get(DEVIATION) {
+                        Some(ParameterValue::Expression { value }) => {
+                            let graded = evaluate(value, DEVIATION, &mut leaves);
+                            cited.extend(evidence(&graded));
+                            for (label, value) in &graded.labelled {
+                                labelled
+                                    .entry(label.clone())
+                                    .or_insert_with(|| value.clone());
+                            }
+                            graded_deviation(&graded)
+                        }
+                        _ => None,
+                    };
+                    let message = match rule.parameters.get(MESSAGE) {
+                        Some(ParameterValue::String { value: template }) => {
+                            render(template, &labelled)
+                        }
+                        _ => format!(
                             "requirement does not hold: {failed} is false{}",
                             read_values(&result)
                         ),
-                        evidence(&result),
-                        vec![],
-                    ));
+                    };
+                    evaluation.push_finding_deviating(
+                        finding(rule, &object.id, message, cited, vec![]),
+                        deviation,
+                    );
                 }
                 Ok(other) => evaluation.push_object_not_evaluated(
                     object.id.clone(),
@@ -91,6 +120,28 @@ impl RuleCapability for ExpressionRequirement {
         }
         evaluation
     }
+}
+
+/// The deviation a `deviation` expression grades a finding by: its plain
+/// number interval, below zero read as zero. A value that is not a plain
+/// number, or not evaluated, grades nothing: the rule's severity stands.
+fn graded_deviation(evaluation: &Evaluation) -> Option<Deviation> {
+    match &evaluation.outcome {
+        Ok(Value::Number { value, unit }) if unit.is_plain() => {
+            Deviation::try_new(value.lower.max(0.0), value.upper.max(0.0))
+        }
+        _ => None,
+    }
+}
+
+/// `template` with each `{label}` replaced by the value of the labelled
+/// subexpression, with its unit and interval; an unknown label stays.
+fn render(template: &str, labelled: &BTreeMap<String, Value>) -> String {
+    let mut message = template.to_owned();
+    for (label, value) in labelled {
+        message = message.replace(&format!("{{{label}}}"), &value.to_string());
+    }
+    message
 }
 
 /// Why an outcome is not evaluated, in the report's terms.

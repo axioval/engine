@@ -232,6 +232,10 @@ pub enum ParameterType {
     /// An expression whose value must be a truth, type checked when the
     /// ruleset is compiled.
     Expression,
+    /// An expression whose value must be a plain number, which the
+    /// capability evaluates per object itself (a finding's graded
+    /// deviation); written with the package kind `expression`.
+    NumberExpression,
     StringList,
     ReferenceList,
     /// Rows of typed cells in the given columns.
@@ -254,7 +258,7 @@ impl ParameterType {
             Self::ObjectTypeReference => "objectTypeReference",
             Self::PropertyReference => "propertyReference",
             Self::Selector => "selector",
-            Self::Expression => "expression",
+            Self::Expression | Self::NumberExpression => "expression",
             Self::StringList => "stringList",
             Self::ReferenceList => "referenceList",
             Self::Table(_) => "table",
@@ -281,7 +285,10 @@ impl ParameterType {
                     schema::ParameterValue::PropertyReference { .. }
                 )
                 | (Self::Selector, schema::ParameterValue::Selector { .. })
-                | (Self::Expression, schema::ParameterValue::Expression { .. })
+                | (
+                    Self::Expression | Self::NumberExpression,
+                    schema::ParameterValue::Expression { .. }
+                )
                 | (Self::StringList, schema::ParameterValue::StringList { .. })
                 | (
                     Self::ReferenceList,

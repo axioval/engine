@@ -1088,3 +1088,52 @@ fn a_finding_count_reads_how_many_findings_another_rule_reported() {
     let report = check(&package, vec![cover_rule(), count], &session(slabs()));
     assert_eq!(subjects(&report, "count"), subjects(&report, "cover"));
 }
+
+#[test]
+fn a_slope_rule_grades_its_findings_by_how_far_the_slope_exceeds_the_limit() {
+    let registry = registry();
+    let mut package = definitions(&registry, &[EXPRESSION], &["ramp"], &["Slope"], &["Pset"]);
+    package.properties.get_mut("t.Slope").unwrap().value_kind = PropertyValueKind::Number;
+    let mut model = Model::default();
+    for (local, slope) in [("gentle", 5.0), ("slight", 6.5), ("steep", 8.0)] {
+        model = model.object(local, "ramp").value(
+            local,
+            "Pset",
+            "Slope",
+            PropertyValue::Decimal(slope),
+        );
+    }
+    let slope = json!({"kind": "property", "propertySet": "t.Pset", "property": "t.Slope", "label": "slope"});
+    let six = json!({"kind": "literal", "value": {"type": "number", "value": 6.0}});
+    let ramp = rule(
+        "ramp",
+        EXPRESSION,
+        "error",
+        entity("ramp"),
+        json!({
+            "requirement": {"type": "expression", "value":
+                {"kind": "compare", "operator": "lessThanOrEquals", "left": slope, "right": six}},
+            "deviation": {"type": "expression", "value":
+                {"kind": "subtract", "left": slope, "right": six, "label": "excess"}},
+            "message": {"type": "string", "value": "the ramp slopes {slope} %, {excess} % over 6 %"},
+        }),
+        // Up to 1 % over is minor; beyond, the rule's own (major) severity.
+        json!({"severityBands": [{"below": 1.0, "severity": "warning"}]}),
+    );
+    let report = check(&package, vec![ramp], &session(model));
+    let graded: BTreeMap<String, (axioval_ir::Severity, String)> = report
+        .findings()
+        .iter()
+        .map(|finding| {
+            (
+                common::subject(finding),
+                (finding.severity.clone(), finding.message.clone()),
+            )
+        })
+        .collect();
+    assert_eq!(graded.len(), 2, "{graded:?}");
+    assert_eq!(graded["slight"].0, axioval_ir::Severity::Warning);
+    assert_eq!(graded["steep"].0, axioval_ir::Severity::Error);
+    assert_eq!(graded["slight"].1, "the ramp slopes 6.5 %, 0.5 % over 6 %");
+    assert_eq!(graded["steep"].1, "the ramp slopes 8 %, 2 % over 6 %");
+}

@@ -1743,7 +1743,10 @@ fn computed(
     };
     match value {
         ParameterValue::Expression { .. }
-            if descriptor.parameter_type != ParameterType::Expression =>
+            if !matches!(
+                descriptor.parameter_type,
+                ParameterType::Expression | ParameterType::NumberExpression
+            ) =>
         {
             if descriptor.per_object && computable(descriptor.parameter_type) {
                 Ok(true)
@@ -1817,7 +1820,8 @@ fn well_formed_pattern(pattern: &str) -> bool {
 
 fn same_type(parameter_type: ParameterType, kind: &ParameterKind) -> bool {
     match (parameter_type, kind) {
-        (ParameterType::Table(_), ParameterKind::Table) => true,
+        (ParameterType::NumberExpression, ParameterKind::Expression)
+        | (ParameterType::Table(_), ParameterKind::Table) => true,
         (ParameterType::Table(_), _) | (_, ParameterKind::Table) => false,
         (parameter_type, kind) => parameter_type == from_kind(kind),
     }

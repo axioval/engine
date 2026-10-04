@@ -198,6 +198,7 @@ pub(crate) fn check_rule_expressions(
             (ParameterValue::Expression { value: expression }, kind) => {
                 let expected = match kind {
                     None | Some(crate::ParameterType::Expression) => Some(Type::Boolean),
+                    Some(crate::ParameterType::NumberExpression) => Some(Type::NUMBER),
                     Some(kind) => parameter_type_of(kind),
                 };
                 check(expression, name, expected)?;

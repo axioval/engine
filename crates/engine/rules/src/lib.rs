@@ -254,5 +254,6 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(QuantityTakeoff))
         .and_then(|registry| registry.register_measured(distance::DistanceMeasures))
         .and_then(|registry| registry.register_measured(measured_openings::OpeningMeasures))
+        .and_then(|registry| registry.register_measured(keyed_limit::DoorMeasures))
         .map(|registry| registry.with_refiner(Refiner))
 }

@@ -537,6 +537,7 @@ fn a_package_binds_the_limit_table() {
     parameters.insert("ramp_reach".into(), parameter("quantity", false));
     parameters.insert("member_selector".into(), parameter("selector", false));
     parameters.insert("pair_key".into(), parameter("string", false));
+    parameters.insert("measured_value".into(), parameter("string", false));
     let mut defaults = parameter("table", false);
     defaults["columns"] = json!([
         column("operation", "textPattern"),
@@ -2126,4 +2127,163 @@ fn a_computed_limit_cell_judges_as_the_literal_it_computes() {
         found.not_evaluated_outcomes().len(),
         expected.not_evaluated_outcomes().len()
     );
+}
+
+/// `parameters` with the built-in quantity replaced by the measured value
+/// `name`, the quantity's own parameters dropped.
+fn as_measured(
+    parameters: &[(&'static str, ParameterValue)],
+    name: &str,
+) -> Vec<(&'static str, ParameterValue)> {
+    let own = [
+        "quantity",
+        "quantity_property",
+        "overall_width",
+        "width_deduction",
+        "clear_width_from_leaves",
+        "overall_height",
+        "lining_thickness",
+        "threshold_thickness",
+        "floor_path",
+    ];
+    let mut measured: Vec<_> = parameters
+        .iter()
+        .filter(|(key, _)| !own.contains(key))
+        .cloned()
+        .collect();
+    measured.push(("quantity", string("measured")));
+    measured.push(("measured_value", string(name)));
+    measured
+}
+
+/// Which objects an evaluation finds and leaves open.
+fn outcome(evaluation: &CapabilityEvaluation) -> (Vec<String>, Vec<(String, NotEvaluatedReason)>) {
+    (flagged(evaluation), unevaluated(evaluation))
+}
+
+/// Every built-in door and window quantity, read instead as its registered
+/// measured value, judges every fixture alike.
+#[test]
+#[allow(clippy::too_many_lines)]
+fn the_built_in_quantities_read_from_the_registry_judge_alike() {
+    // Clear widths: stated, else the overall width less the deduction.
+    let widths = || {
+        doors(&[
+            ("d1", "SINGLE_SWING_LEFT", Some(1.0), None),
+            ("d2", "SINGLE_SWING_RIGHT", Some(0.9), None),
+            ("d3", "SINGLE_SWING_LEFT", Some(0.9), Some(length(0.95))),
+            ("d4", "DOUBLE_DOOR_SINGLE_SWING", Some(1.25), None),
+            ("d5", "SINGLE_SWING_LEFT", Some(2.0), Some(length(0.8))),
+            (
+                "d6",
+                "SINGLE_SWING_LEFT",
+                Some(1.0),
+                Some(PropertyValue::Null),
+            ),
+            ("d7", "SINGLE_SWING_LEFT", None, None),
+        ])
+    };
+    let keys = door_keys(Some(0.1));
+    let built_in = clear(widths(), keys.clone());
+    let measured = widths().evaluate_measured(
+        &KeyedLimit,
+        &rule(
+            ID,
+            kind("door"),
+            as_measured(
+                &keys,
+                "door_clear_width;stated=Pset/ClearWidth;overall=Attributes/OverallWidth;\
+                 deduction=0.1",
+            ),
+        ),
+        |_| {},
+    );
+    assert_eq!(outcome(&measured), outcome(&built_in), "clear width");
+    // Clear heights: stated, else overall less lining and threshold.
+    let heights = || {
+        tall_doors(&[
+            ("d1", 2.1, Some(0.05), Some(0.02), None),
+            ("d2", 2.2, Some(0.05), Some(0.02), None),
+            ("d3", 2.2, Some(0.05), None, None),
+            ("d4", 2.05, Some(0.05), None, None),
+            ("d5", 2.1, Some(0.05), Some(0.02), Some(2.06)),
+        ])
+    };
+    let keys = height_keys(true);
+    let built_in = heights().evaluate(&KeyedLimit, &rule(ID, kind("door"), keys.clone()));
+    let measured = heights().evaluate_measured(
+        &KeyedLimit,
+        &rule(
+            ID,
+            kind("door"),
+            as_measured(
+                &keys,
+                "door_clear_height;stated=Lining/ClearHeight;overall=Attributes/OverallHeight;\
+                 lining=Lining/LiningThickness;threshold=Lining/ThresholdThickness",
+            ),
+        ),
+        |_| {},
+    );
+    assert_eq!(outcome(&measured), outcome(&built_in), "clear height");
+    // Sill heights above every reached floor, one row for all of them.
+    let windows = || rooms(&[("w1", &["o1", "o2"]), ("w2", &["o1"]), ("w3", &["k"])]);
+    let bottoms = || {
+        floors()
+            .with("w1", 1.2, 0.0)
+            .with("w2", 0.9, 0.0)
+            .with("w3", 2.0, 0.0)
+            .with("w4", 1.0, 0.01)
+    };
+    let keys = sill_keys(sill_limits());
+    let built_in = sill(windows(), bottoms(), keys.clone());
+    let measured = windows().evaluate_measured(
+        &KeyedLimit,
+        &rule(
+            ID,
+            kind("window"),
+            as_measured(&keys, "sill_height;floor_path=adjacent"),
+        ),
+        |services| {
+            services
+                .register(VerticalExtentServiceHandle::new(Arc::new(bottoms())))
+                .unwrap();
+        },
+    );
+    assert_eq!(outcome(&measured), outcome(&built_in), "sill height");
+    // Threshold steps, stated or unknown thresholds, without ramps.
+    let thresholds = || {
+        stepped(&[("d1", &["k"]), ("d2", &["k"]), ("d3", &["k"])], &[])
+            .value("d1", "Lining", "ThresholdThickness", length(0.03))
+            .value("d2", "Lining", "ThresholdThickness", length(0.01))
+    };
+    let levels = || {
+        Bottoms::default()
+            .with("k", 0.0, 0.0)
+            .with("d1", 0.0, 0.0)
+            .with("d2", 0.0, 0.0)
+            .with("d3", 0.0, 0.0)
+    };
+    let mut keys = step_keys(false);
+    keys.push((
+        "threshold_thickness",
+        property(Some("Lining"), "ThresholdThickness"),
+    ));
+    let built_in = step(thresholds(), levels(), Ramps::default(), keys.clone());
+    let measured = thresholds().evaluate_measured(
+        &KeyedLimit,
+        &rule(
+            ID,
+            kind("door"),
+            as_measured(
+                &keys,
+                "threshold_step;floor_path=adjacent;threshold=Lining/ThresholdThickness",
+            ),
+        ),
+        |services| {
+            services
+                .register(VerticalExtentServiceHandle::new(Arc::new(levels())))
+                .unwrap();
+        },
+    );
+    assert_eq!(outcome(&measured), outcome(&built_in), "threshold step");
 }

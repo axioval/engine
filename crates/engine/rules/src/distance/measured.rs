@@ -194,7 +194,12 @@ impl MeasuredProvider for DistanceMeasures {
         }
         .ok_or(PropertyResolutionError::InvalidRequest)?;
         let rule = rule(call, object, counterparts, reach);
-        let declared = declaration(&rule).map_err(|(_, why)| unavailable(why))?;
+        let declared = declaration(&rule).map_err(|(reason, why)| {
+            crate::measured_kinds::resolution_error((
+                reason,
+                format!("`{name}` of {object}: {why}"),
+            ))
+        })?;
         let prepared = prepare(context, &rule, Some(declared.margin()), declared.projection)
             .map_err(|refused| {
                 unavailable(refused.not_evaluated_outcomes().first().map_or_else(

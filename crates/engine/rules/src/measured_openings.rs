@@ -74,15 +74,21 @@ impl MeasuredProvider for OpeningMeasures {
             selector: Selector::All,
             parameters,
         };
-        let openings = Openings::parse(&Parameters(&rule)).map_err(|(_, why)| unavailable(why))?;
+        let refused = |(reason, why): crate::support::Unavailable| {
+            crate::measured_kinds::resolution_error((
+                reason,
+                format!("`{OPENING_AREA}` of {object}: {why}"),
+            ))
+        };
+        let openings = Openings::parse(&Parameters(&rule)).map_err(refused)?;
         let host = context
             .project
             .object(object)
             .ok_or_else(|| unavailable("it is not in the project".into()))?;
         let population = Population::of(context, openings.selector);
         let mut evidence = Vec::new();
-        let voided = voided(context, &openings, &population, host, &mut evidence)
-            .map_err(|(_, why)| unavailable(why))?;
+        let voided =
+            voided(context, &openings, &population, host, &mut evidence).map_err(refused)?;
         Ok(Measurement::Value {
             lower: voided.sum,
             upper: voided.sum,

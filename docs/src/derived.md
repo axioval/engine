@@ -390,6 +390,9 @@ ignoring ASCII case):
 | `effect_covered_area`, `effect_covered_share` `;sources=<kinds>[;blockers=<kinds>][;reach=grown\|travel\|visible][;range=<m>]` | the part of the footprint the sources' effect areas cover, or its share | `PlanAreaService::measure_coverage` |
 | `boundary_covered_share`, `boundary_uncovered_area`, `boundary_overlap_area` `[;plane=<m>]` | a space's declared boundaries over its body's surface | `BoundaryCoverageService` |
 | `opening_area;path=<steps>[;length_axis=…;height_axis=…][;minimum=<m²>]` | the summed section areas of a host's openings on its middle plane | built in, over the body facts |
+| `door_clear_width[;stated=<set/name>][;from_leaves=passage\|widest-leaf][;overall=<set/name>;deduction=<m>]`, `door_clear_height[;stated=…][;overall=…][;lining=…][;threshold=…]` | a door's clear width or height, as `keyed-limit` reads it | built in, over the door's properties and leaves |
+| `sill_height;floor_path=<steps>[;measure=greatest\|least]`, `threshold_step;floor_path=<steps>[;threshold=<set/name>][;measure=…]` | above the floors a path reaches | built in, over `VerticalExtentService` |
+| `leaf_count`, `leaf_width[;measure=widest\|narrowest\|total]`, `swing_area`, `swings_into;path=<steps>` | a door's or window's leaves and swing | built in, over `ObjectFrameService::leaves` and `FreeSpaceService` |
 | `angle_to;path=<steps>[;between=axis\|face_normal]` | the angle to the objects a path reaches, an angle | `PlanSpanService::measure_rectangle` or `VerticalExtentService::measure_face_normals`, `RelationshipSelectionService` |
 | `skew;path=<steps>` | how far the long axis is from square to the reached objects', an angle | `PlanSpanService::measure_rectangle`, `RelationshipSelectionService` |
 | `bearing;axis=own_x\|own_y\|long[;reference=project_north\|true_north]` | an axis's plan bearing clockwise from north, an angle | `ObjectFrameService` or `PlanSpanService`, `CoordinateSystemService` for true north |
@@ -524,6 +527,31 @@ floor.
 `clear_width` is measured between two heights above the pitch line
 (`band_from`, default 0, and `band_to`, in metres) along a stair flight,
 or with `along=runs` along each of a ramp's runs, the least over them.
+
+### Doors and windows
+
+The door values take `keyed-limit`'s steps:
+
+- `door_clear_width` is the clear width the door states (`stated`, a
+  property written `set/name`), else the clear width from its leaves
+  (`from_leaves`), else the overall width less `deduction`. Each step is
+  taken only after an exact absence.
+- `door_clear_height` is the stated clear height, else the overall height
+  less its head lining and threshold. A thickness the door does not state
+  leaves only an upper bound.
+- `sill_height` and `threshold_step` are measured above each floor the
+  path reaches: the greatest by default, the least with `measure=least`.
+  The threshold step adds a stated threshold.
+
+`keyed-limit`'s `quantity: measured` reads any of them, and judges each
+fixture as the built-in quantity does. The door-type defaults table is a
+rule's and stays with the built-in quantities; a measured value reads what
+the door states. A glazing ratio is a stated property and is read as one.
+
+`leaf_count` and `leaf_width` read the door's leaves. `swing_area` is the
+plan area they sweep, bracketed by inscribed and circumscribed polygons.
+`swings_into` counts the spaces the path reaches that a leaf swings into,
+probed as `door-swing` probes them.
 
 ### Areas, shares and coverage
 

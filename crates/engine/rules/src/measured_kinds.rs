@@ -49,3 +49,19 @@ pub(crate) fn objects_of_kinds(
     }
     Ok(found)
 }
+
+/// A capability's refusal as a property-resolution error that maps back to
+/// the same reason, so a measured value is left open for the reason the
+/// capability would give.
+pub(crate) fn resolution_error(
+    (reason, message): crate::support::Unavailable,
+) -> PropertyResolutionError {
+    use axioval_engine::NotEvaluatedReason;
+    match reason {
+        NotEvaluatedReason::IncompleteEvidence => PropertyResolutionError::Incomplete(message),
+        NotEvaluatedReason::MissingService => PropertyResolutionError::MissingService(message),
+        NotEvaluatedReason::NotRecorded => PropertyResolutionError::NotRecorded(message),
+        NotEvaluatedReason::InvalidEvidence => PropertyResolutionError::Conflicting(message),
+        _ => PropertyResolutionError::Unavailable(message),
+    }
+}

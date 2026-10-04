@@ -132,3 +132,40 @@ fn a_rule_states_a_direction() {
         &NotEvaluatedReason::InvalidDeclaration
     );
 }
+
+/// The measured leaves and swing read what the capability judges: how many
+/// rooms each door swings into, its leaves and the area they sweep.
+#[test]
+fn the_measured_leaves_and_swing_match_the_judged_doors() {
+    let (project, mut services) = model().services();
+    services.register(doors().handle()).unwrap();
+    services
+        .register(
+            Rooms::default()
+                .room("office", [-5.0, 0.0], [5.0, 4.0])
+                .room("corridor", [-5.0, -2.0], [5.0, 0.0])
+                .handle(),
+        )
+        .unwrap();
+    let read =
+        |door: &str, name: &str| common::measured(&services, &project, &common::id(door), name);
+    // `in` and `out` swing into one room each, `both` into both, `far` none.
+    for (door, rooms) in [("in", 1.0), ("out", 1.0), ("both", 2.0), ("far", 0.0)] {
+        assert_eq!(
+            read(door, "swings_into;path=opens:forward").unwrap(),
+            Some((rooms, rooms)),
+            "{door}"
+        );
+    }
+    assert!(read("slide", "swings_into;path=opens:forward").is_err());
+    assert_eq!(read("in", "leaf_count").unwrap(), Some((1.0, 1.0)));
+    assert_eq!(read("in", "leaf_width").unwrap(), Some((0.9, 0.9)));
+    // A quarter circle of 0.9 m, bracketed by its polygons.
+    let (lower, upper) = read("in", "swing_area").unwrap().unwrap();
+    let quarter = std::f64::consts::FRAC_PI_4 * 0.81;
+    assert!(
+        lower <= quarter && quarter <= upper && upper - lower < 0.05,
+        "{lower} {upper}"
+    );
+    assert!(read("unknown", "leaf_count").is_err());
+}

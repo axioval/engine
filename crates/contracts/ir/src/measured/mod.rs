@@ -137,6 +137,8 @@ pub enum MeasuredParameterKind {
     Choice { options: &'static [&'static str] },
     /// A direction in world coordinates, written `x,y,z`, not zero.
     Vector,
+    /// A property the object states, written `set/name` or `name`.
+    Property,
 }
 
 /// How exact a measured value can be.
@@ -196,6 +198,13 @@ pub enum MeasuredArgument {
     Choice(&'static str),
     /// A direction's components, as written.
     Vector([f64; 3]),
+    /// A property, by its set (when written) and name.
+    Property {
+        /// The property set, `None` when only the name is written.
+        set: Option<String>,
+        /// The property's name.
+        name: String,
+    },
 }
 
 /// Why a name is no measured value.
@@ -343,6 +352,16 @@ fn argument(kind: MeasuredParameterKind, value: &str) -> Result<MeasuredArgument
                 .find(|option| option.eq_ignore_ascii_case(value))
                 .ok_or_else(|| format!("`{value}` is none of {}", options.join(", ")))?,
         ),
+        MeasuredParameterKind::Property => {
+            let (set, name) = match value.split_once('/') {
+                Some((set, name)) => (Some(set.trim().to_owned()), name.trim().to_owned()),
+                None => (None, value.trim().to_owned()),
+            };
+            if name.is_empty() || set.as_ref().is_some_and(String::is_empty) {
+                return Err(format!("`{value}` is no `set/name` property"));
+            }
+            MeasuredArgument::Property { set, name }
+        }
         MeasuredParameterKind::Vector => {
             let components: Vec<f64> = value
                 .split(',')

@@ -263,6 +263,43 @@ const EFFECT: [MeasuredParameter; 4] = [
     ),
 ];
 
+const fn stated(key: &'static str, help: &'static [LocalizedText]) -> MeasuredParameter {
+    MeasuredParameter {
+        key,
+        kind: MeasuredParameterKind::Property,
+        required: false,
+        default: None,
+        help,
+    }
+}
+
+const DOOR: &[&str] = &["property-resolution", "object-frame", "vertical-extent"];
+const NO_DOOR: &str = "what the door states does not give the value";
+
+const FLOOR_PATH: MeasuredParameter = MeasuredParameter {
+    key: "floor_path",
+    kind: MeasuredParameterKind::Path,
+    required: true,
+    default: None,
+    help: &en_de(
+        "The relationship steps from the object to the spaces whose floors count.",
+        "Die Beziehungsschritte vom Objekt zu den Räumen, deren Böden zählen.",
+    ),
+};
+
+const OVER_FLOORS: MeasuredParameter = MeasuredParameter {
+    key: "measure",
+    kind: MeasuredParameterKind::Choice {
+        options: &["greatest", "least"],
+    },
+    required: false,
+    default: Some("greatest"),
+    help: &en_de(
+        "Over the floors reached: the `greatest` or the `least`.",
+        "Über die erreichten Böden: der größte (`greatest`) oder kleinste (`least`).",
+    ),
+};
+
 const OWN_AXIS: MeasuredParameterKind = MeasuredParameterKind::Choice {
     options: &["own_x", "own_y", "own_z", "x", "y", "z"],
 };
@@ -830,6 +867,103 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              könnte.",
         ),
     },
+    MeasuredDescriptor {
+        name: "door_clear_height",
+        parameters: &[
+            stated(
+                "stated",
+                &en_de(
+                    "The clear height the door states.",
+                    "Die angegebene lichte Höhe der Tür.",
+                ),
+            ),
+            stated(
+                "overall",
+                &en_de(
+                    "The overall height the door states.",
+                    "Die angegebene Gesamthöhe der Tür.",
+                ),
+            ),
+            stated(
+                "lining",
+                &en_de(
+                    "The head lining thickness it states.",
+                    "Die angegebene Sturzbekleidung.",
+                ),
+            ),
+            stated(
+                "threshold",
+                &en_de(
+                    "The threshold thickness it states.",
+                    "Die angegebene Schwellenhöhe.",
+                ),
+            ),
+        ],
+        dimension: Some(QuantityDimension::Length),
+        services: DOOR,
+        exactness: MeasuredExactness::Stated,
+        not_evaluated: &[NO_DOOR],
+        label: &en_de("Door clear height", "Lichte Türhöhe"),
+        help: &en_de(
+            "A door's clear height, as `keyed-limit`'s `clear-height` reads it: stated, \
+             else the overall height less its lining and threshold.",
+            "Die lichte Höhe einer Tür, wie `keyed-limit` sie als `clear-height` liest: \
+             angegeben, sonst die Gesamthöhe weniger Sturzbekleidung und Schwelle.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "door_clear_width",
+        parameters: &[
+            stated(
+                "stated",
+                &en_de(
+                    "The clear width the door states.",
+                    "Die angegebene lichte Breite der Tür.",
+                ),
+            ),
+            MeasuredParameter {
+                key: "from_leaves",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["passage", "widest-leaf"],
+                },
+                required: false,
+                default: None,
+                help: &en_de(
+                    "Derive it from the leaves: the whole `passage`, or the `widest-leaf`.",
+                    "Aus den Flügeln ableiten: der ganze Durchgang (`passage`) oder der \
+                     breiteste Flügel (`widest-leaf`).",
+                ),
+            },
+            stated(
+                "overall",
+                &en_de(
+                    "The overall width the door states.",
+                    "Die angegebene Gesamtbreite der Tür.",
+                ),
+            ),
+            MeasuredParameter {
+                key: "deduction",
+                kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                required: false,
+                default: None,
+                help: &en_de(
+                    "The deduction from the overall width, in metres.",
+                    "Der Abzug von der Gesamtbreite, in Metern.",
+                ),
+            },
+        ],
+        dimension: Some(QuantityDimension::Length),
+        services: DOOR,
+        exactness: MeasuredExactness::Stated,
+        not_evaluated: &[NO_DOOR],
+        label: &en_de("Door clear width", "Lichte Türbreite"),
+        help: &en_de(
+            "A door's clear width, as `keyed-limit`'s `clear-width` reads it: stated, \
+             else from its leaves, else the overall width less the deduction.",
+            "Die lichte Breite einer Tür, wie `keyed-limit` sie als `clear-width` liest: \
+             angegeben, sonst aus den Flügeln, sonst die Gesamtbreite weniger dem Abzug.",
+        ),
+    },
     plain!(
         "duplicate_count",
         None,
@@ -1083,6 +1217,43 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              keine."
         )
     ),
+    plain!(
+        "leaf_count",
+        None,
+        &["object-frame"],
+        MeasuredExactness::Stated,
+        &["the door states no leaves"],
+        en_de("Leaves", "Flügel"),
+        en_de(
+            "How many leaves a door or window has.",
+            "Wie viele Flügel eine Tür oder ein Fenster hat."
+        )
+    ),
+    MeasuredDescriptor {
+        name: "leaf_width",
+        parameters: &[MeasuredParameter {
+            key: "measure",
+            kind: MeasuredParameterKind::Choice {
+                options: &["widest", "narrowest", "total"],
+            },
+            required: false,
+            default: Some("widest"),
+            help: &en_de(
+                "The `widest` leaf, the `narrowest`, or their `total`.",
+                "Der breiteste Flügel (`widest`), der schmalste (`narrowest`) oder ihre \
+                 Summe (`total`).",
+            ),
+        }],
+        dimension: Some(QuantityDimension::Length),
+        services: &["object-frame"],
+        exactness: MeasuredExactness::Stated,
+        not_evaluated: &["the door states no leaves"],
+        label: &en_de("Leaf width", "Flügelbreite"),
+        help: &en_de(
+            "A width of a door's or window's leaves.",
+            "Eine Breite der Flügel einer Tür oder eines Fensters.",
+        ),
+    },
     MeasuredDescriptor {
         name: LENGTH,
         parameters: &[MeasuredParameter {
@@ -1234,6 +1405,21 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ),
     },
     MeasuredDescriptor {
+        name: "sill_height",
+        parameters: &[FLOOR_PATH, OVER_FLOORS],
+        dimension: Some(QuantityDimension::Length),
+        services: &["vertical-extent", "relationship-selection"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_GEOMETRY, "a floor reached cannot be measured"],
+        label: &en_de("Sill height", "Brüstungshöhe"),
+        help: &en_de(
+            "The object's bottom above the floors the path reaches, as `keyed-limit`'s \
+             `sill-height` judges it per floor; none when it reaches none.",
+            "Die Unterkante des Objekts über den erreichten Böden, wie `keyed-limit` \
+             `sill-height` je Boden beurteilt; keine, wenn keiner erreicht wird.",
+        ),
+    },
+    MeasuredDescriptor {
         name: SKEW,
         parameters: &[REFERENCE_PATH],
         dimension: Some(QuantityDimension::PlaneAngle),
@@ -1319,6 +1505,43 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              können.",
         ),
     },
+    plain!(
+        "swing_area",
+        Some(QuantityDimension::Area),
+        &["object-frame"],
+        MeasuredExactness::Measured,
+        &["the door states no leaves", "a leaf does not swing in plan"],
+        en_de("Swing area", "Schwenkbereich"),
+        en_de(
+            "The plan area the leaves of a door or window sweep.",
+            "Die Grundrissfläche, die die Flügel einer Tür oder eines Fensters überstreichen."
+        )
+    ),
+    MeasuredDescriptor {
+        name: "swings_into",
+        parameters: &[MeasuredParameter {
+            key: "path",
+            kind: MeasuredParameterKind::Path,
+            required: true,
+            default: None,
+            help: &en_de(
+                "The relationship steps from the door to the spaces beside it.",
+                "Die Beziehungsschritte von der Tür zu den Räumen daneben.",
+            ),
+        }],
+        dimension: None,
+        services: &["object-frame", "free-space", "relationship-selection"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[
+            "the door has no hinged leaf",
+            "a space's side cannot be decided",
+        ],
+        label: &en_de("Swings into", "Schlägt auf in"),
+        help: &en_de(
+            "How many of the spaces the path reaches a door's leaves swing into.",
+            "In wie viele der erreichten Räume die Flügel einer Tür aufschlagen.",
+        ),
+    },
     MeasuredDescriptor {
         name: THICKNESS,
         parameters: &[
@@ -1359,6 +1582,35 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              thickness, so a tapered member spans its thinnest and thickest.",
             "Wie dick der Körper entlang einer Richtung ist: ein Intervall mit jeder \
              örtlichen Dicke, ein verjüngtes Bauteil reicht von dünnster bis dickster.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "threshold_step",
+        parameters: &[
+            FLOOR_PATH,
+            stated(
+                "threshold",
+                &en_de(
+                    "The threshold thickness the door states.",
+                    "Die angegebene Schwellenhöhe der Tür.",
+                ),
+            ),
+            OVER_FLOORS,
+        ],
+        dimension: Some(QuantityDimension::Length),
+        services: &["vertical-extent", "relationship-selection"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[
+            NO_GEOMETRY,
+            "the door states no threshold",
+            "a floor reached cannot be measured",
+        ],
+        label: &en_de("Threshold step", "Schwellenstufe"),
+        help: &en_de(
+            "The step from each floor the path reaches to the door's bottom and \
+             threshold, as `keyed-limit`'s `threshold-step` measures it without ramps.",
+            "Die Stufe von jedem erreichten Boden zur Türunterkante mit Schwelle, wie \
+             `keyed-limit` `threshold-step` ohne Rampen misst.",
         ),
     },
     plain!(

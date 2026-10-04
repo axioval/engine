@@ -2,7 +2,10 @@
 //! values read from the object or from objects related to it.
 
 mod defaults;
+mod measured;
 mod threshold;
+
+pub(crate) use measured::DoorMeasures;
 
 use axioval_engine::{
     AdjacentSide, CapabilityEvaluation, ColumnKind, CompiledRule, Deviation, DoorLeaf, DoorLeaves,
@@ -92,6 +95,9 @@ enum Quantity<'a> {
         traversal: Option<Traversal>,
     },
     Property(PropertyRef<'a>),
+    /// A registered measured value, read from the measured set: the same
+    /// value an expression reads by that name.
+    Measured(PropertyRef<'a>),
     /// The object's bottom above the bottom of each object `floor_path`
     /// reaches from it.
     SillHeight(Traversal),
@@ -898,6 +904,7 @@ impl RuleCapability for KeyedLimit {
             ParameterDescriptor::required("limits", ParameterType::Table(COLUMNS)).per_object(),
             ParameterDescriptor::required("quantity", ParameterType::String),
             ParameterDescriptor::optional("quantity_property", ParameterType::PropertyReference),
+            ParameterDescriptor::optional("measured_value", ParameterType::String),
             ParameterDescriptor::optional("floor_path", ParameterType::StringList),
             ParameterDescriptor::optional("overall_width", ParameterType::PropertyReference),
             ParameterDescriptor::optional("width_deduction", ParameterType::Quantity),
@@ -1085,6 +1092,7 @@ const APPLIES: &[(&str, &[&str])] = &[
     ("threshold_thickness", &["clear-height", "threshold-step"]),
     ("ramp_selector", &["threshold-step"]),
     ("ramp_reach", &["threshold-step"]),
+    ("measured_value", &["measured"]),
     ("member_selector", &["member-plan-area"]),
     ("relationship", &["member-plan-area"]),
     ("direction", &["member-plan-area"]),
@@ -1092,6 +1100,19 @@ const APPLIES: &[(&str, &[&str])] = &[
     ("path", &["member-plan-area"]),
     ("skip_absent_relationship_ends", &["member-plan-area"]),
 ];
+
+/// The registered measured value `measured_value` names, as a quantity.
+fn measured_quantity<'a>(parameters: &Parameters<'a>) -> Result<Quantity<'a>, Unavailable> {
+    let name = parameters
+        .string("measured_value")?
+        .ok_or_else(|| invalid("`quantity` `measured` needs `measured_value`"))?;
+    axioval_ir::measured::parse(name)
+        .map_err(|error| invalid(format!("`measured_value`: {error}")))?;
+    Ok(Quantity::Measured(PropertyRef {
+        set: Some(axioval_ir::MEASURED_SET),
+        name,
+    }))
+}
 
 /// The declared quantity, its own parameters checked against it.
 fn quantity<'a>(parameters: &Parameters<'a>) -> Result<Quantity<'a>, Unavailable> {
@@ -1106,6 +1127,7 @@ fn quantity<'a>(parameters: &Parameters<'a>) -> Result<Quantity<'a>, Unavailable
             | "clear-height"
             | "threshold-step"
             | "glazing-ratio"
+            | "measured"
     ) {
         return Err(invalid(format!("quantity `{named}` is unsupported")));
     }
@@ -1136,6 +1158,7 @@ fn quantity<'a>(parameters: &Parameters<'a>) -> Result<Quantity<'a>, Unavailable
         "property" => Quantity::Property(
             property.ok_or_else(|| invalid("`quantity` `property` needs `quantity_property`"))?,
         ),
+        "measured" => measured_quantity(parameters)?,
         "sill-height" => Quantity::SillHeight(Traversal::path(
             floor.ok_or_else(|| invalid("`quantity` `sill-height` needs `floor_path`"))?,
         )?),
@@ -1504,6 +1527,48 @@ fn measure(
                 evidence: vec![area.evidence().clone()],
             })
         }
+        Quantity::Measured(property) => {
+            let resolved = resolve(context, object, *property)?;
+            let (lower, upper, unit) = match resolved.value() {
+                Some(PropertyValue::Quantity { value, dimension }) => {
+                    (*value, *value, format!(" {}", dimension.unit_symbol()))
+                }
+                Some(PropertyValue::Measured {
+                    lower,
+                    upper,
+                    dimension,
+                }) => (
+                    *lower,
+                    *upper,
+                    dimension.map_or_else(String::new, |dimension| {
+                        format!(" {}", dimension.unit_symbol())
+                    }),
+                ),
+                Some(PropertyValue::Decimal(value)) => (*value, *value, String::new()),
+                Some(PropertyValue::Integer(value)) => {
+                    let value = exact_f64(*value).ok_or_else(|| {
+                        (
+                            NotEvaluatedReason::InvalidEvidence,
+                            format!("{property} {value} cannot be compared exactly"),
+                        )
+                    })?;
+                    (value, value, String::new())
+                }
+                other => {
+                    return Err((
+                        NotEvaluatedReason::IncompleteEvidence,
+                        format!("{property} is no number ({})", display(other)),
+                    ));
+                }
+            };
+            Ok(Measured {
+                lower,
+                upper,
+                unit,
+                what: property.name.to_owned(),
+                evidence: resolved.evidence(),
+            })
+        }
         Quantity::Property(property) => {
             let resolved = resolve(context, object, *property)?;
             let (value, unit) = match resolved.value() {
@@ -1688,7 +1753,10 @@ fn check(
     let unit = &measured.unit;
     let verdict = if matches!(
         quantity,
-        Quantity::ClearWidth(_) | Quantity::ClearHeight(_) | Quantity::GlazingRatio(_)
+        Quantity::ClearWidth(_)
+            | Quantity::ClearHeight(_)
+            | Quantity::GlazingRatio(_)
+            | Quantity::Measured(_)
     ) {
         judge_as_displayed(measured.lower, measured.upper, limit.minimum, limit.maximum)
     } else {

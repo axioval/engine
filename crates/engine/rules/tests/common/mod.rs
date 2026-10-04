@@ -214,6 +214,51 @@ impl Model {
         (project, services)
     }
 
+    /// Evaluates as [`Self::evaluate_with`] does, the measured set answered
+    /// through the registered measured values as a run answers it.
+    #[allow(dead_code)]
+    pub fn evaluate_measured(
+        self,
+        capability: &dyn RuleCapability,
+        rule: &CompiledRule,
+        extra: impl Fn(&mut ServiceRegistry),
+    ) -> CapabilityEvaluation {
+        let project = Project::new(self.objects.clone()).unwrap();
+        let shared = Arc::new(self);
+        let registry =
+            axioval_rules::register_builtins(axioval_engine::CapabilityRegistry::new()).unwrap();
+        // What the measured values read: the model and the geometry.
+        let mut inner = ServiceRegistry::new();
+        inner
+            .register(PropertyResolutionServiceHandle::new(shared.clone()))
+            .unwrap();
+        inner
+            .register(RelationshipSelectionServiceHandle::new(shared.clone()))
+            .unwrap();
+        extra(&mut inner);
+        registry.install_measured(&mut inner, &project);
+        // What the capability reads: the same, the measured set answered.
+        let mut services = ServiceRegistry::new();
+        services
+            .register(PropertyResolutionServiceHandle::new(Arc::new(Measuring {
+                model: shared.clone(),
+                services: inner,
+                project: project.clone(),
+            })))
+            .unwrap();
+        services
+            .register(RelationshipSelectionServiceHandle::new(shared))
+            .unwrap();
+        extra(&mut services);
+        capability.evaluate(
+            &RuleContext {
+                project: &project,
+                services: &services,
+            },
+            rule,
+        )
+    }
+
     pub fn evaluate_with(
         self,
         capability: &dyn RuleCapability,
@@ -610,5 +655,36 @@ pub fn at_least((lower, upper): (f64, f64), bound: f64) -> Option<bool> {
         Some(false)
     } else {
         None
+    }
+}
+
+/// The model's properties, the measured set answered as a run answers it.
+struct Measuring {
+    model: Arc<Model>,
+    services: ServiceRegistry,
+    project: Project,
+}
+
+impl PropertyResolutionService for Measuring {
+    fn resolve(
+        &self,
+        request: &PropertyRequest,
+    ) -> Result<PropertyResolution, PropertyResolutionError> {
+        if request.property_set() == Some(axioval_ir::MEASURED_SET) {
+            return axioval_engine::measured_value(
+                &self.services,
+                &self.project,
+                request.object_id(),
+                request.property(),
+            );
+        }
+        self.model.resolve(request)
+    }
+
+    fn enumerate(
+        &self,
+        request: &axioval_engine::PropertyEnumerationRequest,
+    ) -> Result<axioval_engine::PropertyEnumeration, PropertyResolutionError> {
+        self.model.enumerate(request)
     }
 }

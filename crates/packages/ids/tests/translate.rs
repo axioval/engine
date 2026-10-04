@@ -7,8 +7,8 @@ use axioval::ifc::import_ifc_session;
 use axioval::ir::Report;
 use axioval::ir::contract::{ParameterValue, RuleApplicability, Selector};
 use axioval_ids::{
-    IFC2X3_TYPE_SYSTEM, IFC4_TYPE_SYSTEM, IFC4X3_TYPE_SYSTEM, Options, OptionsError, Part, Reason,
-    Translation, translate,
+    AuditCode, AuditSeverity, IFC2X3_TYPE_SYSTEM, IFC4_TYPE_SYSTEM, IFC4X3_TYPE_SYSTEM, Options,
+    OptionsError, Part, Reason, TranslateError, Translation, translate,
 };
 
 const HEADER: &str = r#"<ids xmlns="http://standards.buildingsmart.org/IDS" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://standards.buildingsmart.org/IDS http://standards.buildingsmart.org/IDS/1.0/ids.xsd"><info><title>T</title><author>a@b.org</author></info><specifications>"#;
@@ -61,6 +61,27 @@ fn valued_with(set: &str, name: &str, attributes: &str, value: &str) -> String {
     )
 }
 
+/// The codes of the audit errors that refuse one specification's document.
+fn refused(
+    releases: &str,
+    occurs: &str,
+    applicability: &str,
+    requirements: &str,
+) -> Vec<&'static str> {
+    let text = format!(
+        "{HEADER}{}</specifications></ids>",
+        specification(releases, occurs, applicability, requirements)
+    );
+    let ids = openbim_ids::from_str(&text).unwrap_or_else(|error| panic!("{error}\n{text}"));
+    match translate(&ids, &options()) {
+        Err(TranslateError::Invalid(invalid)) => invalid
+            .errors()
+            .map(|finding| finding.code.as_str())
+            .collect(),
+        other => panic!("not refused by the audit: {other:?}"),
+    }
+}
+
 fn reasons(translation: &Translation) -> Vec<(Part, Reason)> {
     translation
         .gaps()
@@ -73,6 +94,67 @@ fn type_systems_are_the_ifc_adapters() {
     assert_eq!(IFC2X3_TYPE_SYSTEM, axioval::ifc::IFC2X3_TYPE_SYSTEM);
     assert_eq!(IFC4_TYPE_SYSTEM, axioval::ifc::IFC4_TYPE_SYSTEM);
     assert_eq!(IFC4X3_TYPE_SYSTEM, axioval::ifc::IFC4X3_TYPE_SYSTEM);
+}
+
+#[test]
+fn the_audit_refuses_an_invalid_document_and_keeps_its_warnings() {
+    // Every finding is kept, in document order, the warning beside the
+    // error; the error alone refuses.
+    let text = format!(
+        "{HEADER}{}{}</specifications></ids>",
+        specification(
+            "IFC4",
+            OPTIONAL,
+            WALL,
+            &valued(
+                "N",
+                r#"<xs:restriction base="xs:string"><xs:pattern value="\i\c*"/></xs:restriction>"#
+            )
+        ),
+        specification(
+            "IFC4",
+            OPTIONAL,
+            "<entity><name><simpleValue>IFCRABBIT</simpleValue></name></entity>",
+            &property("P", "N", "")
+        ),
+    );
+    let ids = openbim_ids::from_str(&text).unwrap();
+    let Err(TranslateError::Invalid(invalid)) = translate(&ids, &options()) else {
+        panic!("not refused");
+    };
+    let shown: Vec<(usize, &str, Option<String>)> = invalid
+        .findings
+        .iter()
+        .map(|finding| {
+            (
+                finding.specification,
+                finding.code.as_str(),
+                finding.ifc_version.map(|version| version.to_string()),
+            )
+        })
+        .collect();
+    assert_eq!(
+        shown,
+        [
+            (0, "pattern-unverified", None),
+            (1, "entity-unknown", Some("IFC4"))
+        ]
+        .map(|(index, code, version): (usize, &str, Option<&str>)| (
+            index,
+            code,
+            version.map(str::to_owned)
+        ))
+    );
+    assert_eq!(invalid.errors().count(), 1);
+    assert_eq!(axioval_ids::audit(&ids), Err(invalid));
+
+    // Warnings alone refuse nothing, and come with the translation.
+    let mut ids = ids;
+    ids.specifications.truncate(1);
+    let translation = translate(&ids, &options()).unwrap();
+    assert_eq!(translation.warnings.len(), 1);
+    assert_eq!(translation.warnings[0].code, AuditCode::PatternUnverified);
+    assert_eq!(translation.warnings[0].severity(), AuditSeverity::Warning);
 }
 
 #[test]
@@ -89,7 +171,7 @@ fn options_are_checked() {
         };
         assert_eq!(
             translate(&ids, &options).unwrap_err(),
-            OptionsError::PackageId(id.into())
+            TranslateError::Options(OptionsError::PackageId(id.into()))
         );
     }
     for version in ["1.0", "01.0.0", "1.0.x", ""] {
@@ -99,7 +181,7 @@ fn options_are_checked() {
         };
         assert_eq!(
             translate(&ids, &options).unwrap_err(),
-            OptionsError::Version(version.into())
+            TranslateError::Options(OptionsError::Version(version.into()))
         );
     }
 }
@@ -176,24 +258,32 @@ fn applicability_bounds_become_an_object_count() {
         (Some((Some(2), Some(5))), vec![], 2)
     );
     assert_eq!(count(OPTIONAL), (None, vec![], 1));
-    // A prohibited specification takes no requirements.
+    // A prohibited specification takes no requirements: the audit refuses
+    // the document.
     assert_eq!(
-        count(r#"minOccurs="0" maxOccurs="0""#),
-        (
-            Some((None, Some(0))),
-            vec![(Part::Occurrence, Reason::ProhibitedRequirements)],
-            1
-        )
+        refused(
+            "IFC4",
+            r#"minOccurs="0" maxOccurs="0""#,
+            WALL,
+            &property("P", "N", "")
+        ),
+        ["prohibited-with-requirements"]
     );
 }
 
 #[test]
 fn an_untranslatable_applicability_skips_the_whole_specification() {
-    for (applicability, reason) in [
-        (
-            "<entity><name><simpleValue>IfcWall</simpleValue></name></entity>".to_owned(),
-            Reason::EntityCase("IfcWall".into()),
+    // An entity name IDS never matches is no gap: the audit refuses it.
+    assert_eq!(
+        refused(
+            "IFC4",
+            OPTIONAL,
+            "<entity><name><simpleValue>IfcWall</simpleValue></name></entity>",
+            &property("P", "N", "")
         ),
+        ["entity-name-case"]
+    );
+    for (applicability, reason) in [
         (
             "<entity><name><xs:restriction base=\"xs:string\"><xs:minLength value=\"3\"/></xs:restriction></name></entity>".to_owned(),
             Reason::Restriction,
@@ -245,9 +335,9 @@ fn applicability_facets_beyond_the_entity_become_one_selector() {
 
 #[test]
 fn a_part_of_without_a_relation_or_through_openings_climbs_every_relation_it_names() {
-    let path = |part_of: &str| {
+    let path = |part_of: &str, whole: &str| {
         let applicability = format!(
-            "{WALL}<partOf {part_of}><entity><name><simpleValue>IFCBUILDING</simpleValue></name></entity></partOf>"
+            "{WALL}<partOf {part_of}><entity><name><simpleValue>{whole}</simpleValue></name></entity></partOf>"
         );
         let translation = one("IFC4", OPTIONAL, &applicability, &property("P", "N", ""));
         assert!(translation.is_complete(), "{:?}", reasons(&translation));
@@ -261,14 +351,28 @@ fn a_part_of_without_a_relation_or_through_openings_climbs_every_relation_it_nam
         path.clone()
     };
     assert_eq!(
-        path(""),
+        path("", "IFCBUILDING"),
         [
             "IfcRelAggregates|IfcRelAssignsToGroup|IfcRelContainedInSpatialStructure|IfcRelNests|IfcRelFillsElement|IfcRelVoidsElement:backward+"
         ]
     );
+    // Through openings the whole is an element; a building never is, and
+    // the audit refuses it.
+    let openings = "relation=\"IFCRELVOIDSELEMENT IFCRELFILLSELEMENT\"";
     assert_eq!(
-        path("relation=\"IFCRELVOIDSELEMENT IFCRELFILLSELEMENT\""),
+        path(openings, "IFCWALL"),
         ["IfcRelFillsElement|IfcRelVoidsElement:backward+"]
+    );
+    assert_eq!(
+        refused(
+            "IFC4",
+            OPTIONAL,
+            &format!(
+                "{WALL}<partOf {openings}><entity><name><simpleValue>IFCBUILDING</simpleValue></name></entity></partOf>"
+            ),
+            &property("P", "N", "")
+        ),
+        ["part-of-relation-entity"]
     );
 }
 
@@ -297,9 +401,15 @@ fn only_classes_a_model_session_checks_are_applicable() {
     assert_eq!(gap("IFC2X3 IFC4", "IFCPROJECT"), None);
     assert_eq!(gap("IFC4", "IFCMATERIAL"), None);
     assert_eq!(gap("IFC2X3 IFC4", "IFCRELCONNECTSPATHELEMENTS"), None);
+    // A class the release does not define is refused by the audit.
     assert_eq!(
-        gap("IFC4", "IFCNOSUCHTHING"),
-        Some((true, Reason::UnknownEntity("IFCNOSUCHTHING".into())))
+        refused(
+            "IFC4",
+            OPTIONAL,
+            &entity("IFCNOSUCHTHING"),
+            &property("P", "N", "")
+        ),
+        ["entity-unknown"]
     );
 }
 
@@ -401,15 +511,27 @@ fn ifc2x3_classes_the_type_mapping_table_renames_are_translated() {
     assert_eq!(typed("DIFFUSER"), ["#1"]);
     assert_eq!(typed("JET"), ["#6"]);
     assert_eq!(typed("USERDEFINED"), ["#6"]);
-    // As a requirement: every other flow terminal fails it.
+    // As a requirement: an air terminal of another predefined type fails it.
     assert_eq!(
         flagged_in(
             IFC2X3_TERMINALS,
             "IFC2X3",
+            &entity("IFCAIRTERMINAL", ""),
+            &entity("IFCAIRTERMINAL", "DIFFUSER")
+        ),
+        ["#6"]
+    );
+    // Required of every flow terminal, the mapped class is one some of them
+    // are, but the audit compares the names without the mapping table and
+    // refuses the document; failing closed until upstream maps them.
+    assert_eq!(
+        refused(
+            "IFC2X3",
+            OPTIONAL,
             &entity("IFCFLOWTERMINAL", ""),
             &entity("IFCAIRTERMINAL", "")
         ),
-        ["#3", "#5"]
+        ["entity-requirement-contradicts-applicability"]
     );
     // In an IFC4 model of a specification for both releases, the class is
     // IFC4's own; a flow terminal typed by an air terminal type is none.
@@ -459,7 +581,7 @@ fn requirement_gaps_leave_the_other_requirements_translated() {
         property("P", "Gone", "cardinality=\"prohibited\""),
         property("P", "Maybe", "cardinality=\"optional\""),
         "<attribute><name><simpleValue>Name</simpleValue></name></attribute>".to_owned(),
-        "<entity><name><simpleValue>IFCSLAB</simpleValue></name></entity>".to_owned(),
+        "<entity><name><simpleValue>IFCWALL</simpleValue></name><predefinedType><simpleValue>SOLIDWALL</simpleValue></predefinedType></entity>".to_owned(),
         // Requiring the applicability's own class always holds.
         WALL.to_owned(),
         property("P", "Present", ""),
@@ -1874,6 +1996,6 @@ fn a_prefilter_naming_a_rule_is_refused() {
     };
     assert_eq!(
         translate(&ids, &options().with_filter(filter)).unwrap_err(),
-        OptionsError::FilterRuleOutcome("spec1.facet1".into())
+        TranslateError::Options(OptionsError::FilterRuleOutcome("spec1.facet1".into()))
     );
 }

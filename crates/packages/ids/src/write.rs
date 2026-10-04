@@ -2,7 +2,8 @@
 //!
 //! Documents are written by [`openbim_ids::to_string`], which checks the
 //! whole model against `ids.xsd` 1.0 before writing and refuses what it
-//! cannot state with a [`WriteError`] naming the part of the model.
+//! cannot state with a [`WriteError`] naming the part of the model. A whole
+//! document is audited first, and one the audit refuses is never written.
 //!
 //! What remains here is what `openbim-ids` does not offer: a single
 //! `<specification>` outside a document. A folder
@@ -15,6 +16,8 @@
 
 use openbim_ids::{Ids, Info, Specification, WriteError};
 
+use crate::DocumentError;
+
 /// The IDS namespace, and the XML Schema one restrictions are written in.
 const NAMESPACES: &str =
     r#"xmlns="http://standards.buildingsmart.org/IDS" xmlns:xs="http://www.w3.org/2001/XMLSchema""#;
@@ -22,18 +25,20 @@ const NAMESPACES: &str =
 /// The title of the document a fragment is written in or read from.
 const ANNOTATION_TITLE: &str = "annotation";
 
-/// A whole IDS 1.0 document.
+/// A whole IDS 1.0 document, once the [`audit()`](crate::audit) accepted
+/// it: an invalid document is never written.
 pub(crate) fn document(
     info: &Info,
     specifications: &[&Specification],
-) -> Result<String, WriteError> {
+) -> Result<String, DocumentError> {
     let mut ids = Ids::new(info.clone());
     ids.specifications.extend(
         specifications
             .iter()
             .map(|&specification| specification.clone()),
     );
-    openbim_ids::to_string(&ids)
+    crate::audit(&ids)?;
+    Ok(openbim_ids::to_string(&ids)?)
 }
 
 /// Why one specification cannot be written, located within it.

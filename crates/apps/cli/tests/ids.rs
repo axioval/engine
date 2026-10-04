@@ -13,9 +13,17 @@ const HEADER: &str = r#"<ids xmlns="http://standards.buildingsmart.org/IDS" xmln
 /// Every wall must carry `Pset_WallCommon.FireRating`.
 const FIRE_RATING: &str = r#"<specification name="Walls are rated" ifcVersion="IFC4"><applicability minOccurs="0" maxOccurs="unbounded"><entity><name><simpleValue>IFCWALL</simpleValue></name></entity></applicability><requirements><property><propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet><baseName><simpleValue>FireRating</simpleValue></baseName></property></requirements></specification>"#;
 
-/// An entity named in mixed case, which IDS never matches: its
+/// An entity named by its length, which no selector states: its
 /// applicability cannot be translated.
+const UNTRANSLATABLE: &str = r#"<specification name="Long names" ifcVersion="IFC4"><applicability minOccurs="0" maxOccurs="unbounded"><entity><name><xs:restriction base="xs:string"><xs:minLength value="3"/></xs:restriction></name></entity></applicability><requirements><property><propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet><baseName><simpleValue>IsExternal</simpleValue></baseName></property></requirements></specification>"#;
+
+/// An entity named in mixed case, which IDS never matches: the document
+/// audit refuses it.
 const MIXED_CASE: &str = r#"<specification name="Mixed case" ifcVersion="IFC4"><applicability minOccurs="0" maxOccurs="unbounded"><entity><name><simpleValue>IfcWall</simpleValue></name></entity></applicability><requirements><property><propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet><baseName><simpleValue>IsExternal</simpleValue></baseName></property></requirements></specification>"#;
+
+/// Every wall's fire rating must match a pattern using an XML name escape,
+/// which the audit cannot evaluate (a warning) but the translation states.
+const NAME_PATTERN: &str = r#"<specification name="Rated by name" ifcVersion="IFC4"><applicability minOccurs="0" maxOccurs="unbounded"><entity><name><simpleValue>IFCWALL</simpleValue></name></entity></applicability><requirements><property><propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet><baseName><simpleValue>FireRating</simpleValue></baseName><value><xs:restriction base="xs:string"><xs:pattern value="\i\c*"/></xs:restriction></value></property></requirements></specification>"#;
 
 fn ids(specifications: &[&str]) -> String {
     format!("{HEADER}{}</specifications></ids>", specifications.concat())
@@ -144,15 +152,15 @@ fn a_met_ids_document_passes_and_an_unmet_one_names_its_specification() {
 #[test]
 fn an_untranslatable_specification_is_listed_and_the_rest_still_run() {
     let case = Case::new("gap");
-    let output = case.check(&ids(&[MIXED_CASE, FIRE_RATING]), &model(&[1, 4]), &[]);
+    let output = case.check(&ids(&[UNTRANSLATABLE, FIRE_RATING]), &model(&[1, 4]), &[]);
     assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
     let text = stderr(&output);
     assert!(
-        text.contains("rules.ids: specification 1 \"Mixed case\" is not checked:"),
+        text.contains("rules.ids: specification 1 \"Long names\" is not checked:"),
         "{text}"
     );
     assert!(
-        text.contains("applicability facet 1: entity name \"IfcWall\""),
+        text.contains("applicability facet 1: a name restriction with facets other than an enumeration and patterns"),
         "{text}"
     );
     assert!(
@@ -167,14 +175,74 @@ fn an_untranslatable_specification_is_listed_and_the_rest_still_run() {
     assert!(specifications[1].get("gaps").is_none());
 
     // Nothing found, but a specification did not run: never a pass.
-    let output = case.check(&ids(&[MIXED_CASE, FIRE_RATING]), &model(&[1, 2, 3, 4]), &[]);
+    let output = case.check(
+        &ids(&[UNTRANSLATABLE, FIRE_RATING]),
+        &model(&[1, 2, 3, 4]),
+        &[],
+    );
     assert_eq!(output.status.code(), Some(4), "{}", stderr(&output));
+}
+
+#[test]
+fn a_document_the_audit_refuses_checks_nothing_and_warnings_are_recorded() {
+    let case = Case::new("audit");
+    // One invalid specification refuses the whole document, its valid
+    // neighbour included: status 1, nothing written, every finding listed.
+    let output = case.check(&ids(&[FIRE_RATING, MIXED_CASE]), &model(&[1, 4]), &[]);
+    assert_eq!(output.status.code(), Some(1), "{}", stderr(&output));
+    assert!(output.stdout.is_empty());
+    let text = stderr(&output);
+    assert!(
+        text.contains("rules.ids: the IDS document cannot work as written, so nothing is checked:"),
+        "{text}"
+    );
+    assert!(
+        text.contains(
+            "ids:   error [entity-name-case] specification 2 at applicability/facets[0]/name:"
+        ),
+        "{text}"
+    );
+    let output = case.run(&[
+        "ids",
+        "translate",
+        "rules.ids",
+        "--definitions",
+        "definitions.json",
+        "--ruleset",
+        "ruleset.json",
+    ]);
+    assert_eq!(output.status.code(), Some(1), "{}", stderr(&output));
+    assert!(stderr(&output).contains("[entity-name-case]"));
+    assert!(!case.dir.join("definitions.json").exists());
+    assert!(!case.dir.join("ruleset.json").exists());
+
+    // A warning refuses nothing: it is listed on stderr and in the `ids`
+    // field, and both specifications run.
+    let output = case.check(&ids(&[FIRE_RATING, NAME_PATTERN]), &model(&[1, 4]), &[]);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert!(
+        stderr(&output).contains("ids: rules.ids: audit warning [pattern-unverified] specification 2 at requirements/facets[0]/value:"),
+        "{}",
+        stderr(&output)
+    );
+    let result = json(&output);
+    assert_eq!(found(&result), ["#2", "#2", "#3", "#3"]);
+    let warnings = result["ids"]["warnings"].as_array().unwrap();
+    assert_eq!(warnings.len(), 1);
+    assert_eq!(warnings[0]["specification"], 2);
+    assert_eq!(warnings[0]["code"], "pattern-unverified");
+    assert_eq!(warnings[0]["severity"], "warning");
+    assert_eq!(warnings[0]["path"], "requirements/facets[0]/value");
+    assert!(warnings[0].get("ifc_version").is_none());
+    // Without warnings the field is left out.
+    let output = case.check(&ids(&[FIRE_RATING]), &model(&[1, 4]), &[]);
+    assert!(json(&output)["ids"].get("warnings").is_none());
 }
 
 #[test]
 fn a_translated_document_runs_as_packages_as_it_does_in_memory() {
     let case = Case::new("translate");
-    case.write("rules.ids", &ids(&[MIXED_CASE, FIRE_RATING]));
+    case.write("rules.ids", &ids(&[UNTRANSLATABLE, FIRE_RATING]));
     case.write("model.ifc", &model(&[1, 4]));
     let output = case.run(&[
         "ids",
@@ -192,7 +260,7 @@ fn a_translated_document_runs_as_packages_as_it_does_in_memory() {
         "{}",
         String::from_utf8_lossy(&output.stdout)
     );
-    assert!(stderr(&output).contains("\"Mixed case\" is not checked"));
+    assert!(stderr(&output).contains("\"Long names\" is not checked"));
     let ruleset: Value =
         serde_json::from_str(&std::fs::read_to_string(case.dir.join("ruleset.json")).unwrap())
             .unwrap();

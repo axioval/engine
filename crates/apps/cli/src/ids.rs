@@ -2,7 +2,10 @@
 //! `ids export`, which writes rule packages back as IDS and is
 //! `export --profile ids` by another name.
 //!
-//! A document is translated in memory by `axioval-ids`. Only complete
+//! A document is audited, then translated in memory, by `axioval-ids`. An
+//! audit error refuses the whole document, every finding listed, and
+//! nothing runs; audit warnings are listed on stderr and in the `ids`
+//! field and refuse nothing. Only complete
 //! specifications run: one with any gap runs none of its rules, since a
 //! partial translation would report a specification as met that was never
 //! wholly checked. Every gap is reported with its specification, and the
@@ -11,10 +14,10 @@
 use std::{error::Error, fs, path::Path};
 
 use axioval::ir::{DefinitionPackage, RuleSetPackage, contract::Selector};
-use axioval_ids::{Options, translate};
+use axioval_ids::{Options, TranslateError, translate};
 use clap::{Args, Subcommand};
 
-use crate::digest::{IdsRecord, IdsSpecification};
+use crate::digest::{IdsAuditFinding, IdsRecord, IdsSpecification};
 use crate::export::ExportArgs;
 
 /// The `ids` subcommands.
@@ -89,8 +92,28 @@ pub(crate) fn load(path: &Path, filter: Option<&Path>) -> Result<Translated, Box
     if let Some(filter) = &filter {
         options = options.with_filter(filter.clone());
     }
-    let translation =
-        translate(&document, &options).map_err(|error| format!("{}: {error}", shown()))?;
+    let translation = translate(&document, &options).map_err(|error| match error {
+        // Fail closed: a document the audit refuses runs nothing, and every
+        // finding is listed.
+        TranslateError::Invalid(invalid) => {
+            let findings: Vec<String> = invalid
+                .findings
+                .iter()
+                .map(|finding| format!("\nids:   {}", IdsAuditFinding::from(finding)))
+                .collect();
+            format!(
+                "{}: the IDS document cannot work as written, so nothing is checked:{}",
+                shown(),
+                findings.concat()
+            )
+        }
+        TranslateError::Options(error) => format!("{}: {error}", shown()),
+    })?;
+    let warnings: Vec<IdsAuditFinding> = translation
+        .warnings
+        .iter()
+        .map(IdsAuditFinding::from)
+        .collect();
     let mut ruleset = translation.ruleset;
     let mut specifications = Vec::with_capacity(translation.specifications.len());
     for outcome in translation.specifications {
@@ -120,7 +143,11 @@ pub(crate) fn load(path: &Path, filter: Option<&Path>) -> Result<Translated, Box
             .map_or_else(shown, |name| name.to_string_lossy().into_owned()),
         filter,
         specifications,
+        warnings,
     };
+    for warning in &record.warnings {
+        eprintln!("ids: {}: audit {warning}", record.document);
+    }
     report_gaps(&record);
     Ok(Translated {
         definitions: translation.definitions,

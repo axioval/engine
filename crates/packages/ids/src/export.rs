@@ -37,15 +37,16 @@ use axioval_ir::contract::{
 };
 use axioval_ir::{ATTRIBUTE_SET, MATERIAL_KIND, MATERIAL_NAMES, MATERIAL_SET, TYPE_ATTRIBUTE_SET};
 use openbim_ids::{
-    Applicability, Attribute, Classification, Entity, Facet, IfcVersion, Info, Material,
+    Applicability, Attribute, Classification, Entity, Facet, Ids, IfcVersion, Info, Material,
     Occurrence, PartOf, Property, Relation, Requirement, Requirements, Restriction, Specification,
     Value, WriteError,
 };
 use regex::Regex;
+use thiserror::Error;
 
 use crate::{
-    INFO_ANNOTATION, Options, SPECIFICATION_ANNOTATION, UNWRITABLE_ANNOTATION, translate_parts,
-    write,
+    AuditFinding, INFO_ANNOTATION, Invalid, Options, SPECIFICATION_ANNOTATION,
+    UNWRITABLE_ANNOTATION, translate_parts, write,
 };
 
 /// A ruleset written as IDS: the specifications it states exactly, and the
@@ -71,16 +72,19 @@ impl Export {
     /// The IDS 1.0 document, `None` when no specification was exported: IDS
     /// requires at least one.
     ///
-    /// Every specification [`export()`] exports is one IDS 1.0 writes, so
-    /// only the `<info>` can make this fail: an author that is no e-mail
-    /// address or a date that is no `xs:date`, as a root folder's
-    /// [`INFO_ANNOTATION`] may hold them.
+    /// Every specification [`export()`] exports is one IDS 1.0 writes and
+    /// the [`audit()`](crate::audit) accepts, so only the `<info>` should
+    /// make this fail: an author that is no e-mail address or a date that
+    /// is no `xs:date`, as a root folder's [`INFO_ANNOTATION`] may hold
+    /// them. The document is audited again before it is written; an error
+    /// then is an exporter bug, and nothing is written.
     ///
     /// # Errors
     ///
-    /// The [`WriteError`] of the `openbim-ids` writer, with the location of
-    /// the part of the document it refused.
-    pub fn to_xml(&self) -> Result<Option<String>, WriteError> {
+    /// [`DocumentError::Write`], the `openbim-ids` writer's error with the
+    /// location of the part it refused, or [`DocumentError::Invalid`],
+    /// every finding of an audit that found an error.
+    pub fn to_xml(&self) -> Result<Option<String>, DocumentError> {
         if self.specifications.is_empty() {
             return Ok(None);
         }
@@ -91,6 +95,17 @@ impl Export {
             .collect();
         write::document(&self.info, &specifications).map(Some)
     }
+}
+
+/// Why [`Export::to_xml`] wrote no document.
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
+pub enum DocumentError {
+    /// The IDS 1.0 writer refused part of the document.
+    #[error(transparent)]
+    Write(#[from] WriteError),
+    /// The audit found an error: the document cannot work as written.
+    #[error(transparent)]
+    Invalid(#[from] Invalid),
 }
 
 /// One exported specification and the rules it stands for.
@@ -166,6 +181,15 @@ pub enum Refusal {
         /// What the writer refused.
         why: String,
     },
+    /// The specification the rule reads as, or was translated from, is one
+    /// the [`audit()`](crate::audit) refuses: it cannot work as written for
+    /// a release it lists.
+    Invalid {
+        /// The specification's name.
+        specification: String,
+        /// Every finding of the audit, at least one an error.
+        findings: Vec<AuditFinding>,
+    },
 }
 
 impl fmt::Display for Refusal {
@@ -225,6 +249,21 @@ impl fmt::Display for Refusal {
                 f,
                 "IDS 1.0 cannot write the specification {specification:?} it reads as, at {location}: {why}"
             ),
+            Refusal::Invalid {
+                specification,
+                findings,
+            } => {
+                let errors: Vec<String> = findings
+                    .iter()
+                    .filter(|finding| finding.severity() == crate::AuditSeverity::Error)
+                    .map(shown_finding)
+                    .collect();
+                write!(
+                    f,
+                    "the IDS specification {specification:?} it reads as cannot work as written: {}",
+                    errors.join("; ")
+                )
+            }
         }
     }
 }
@@ -311,14 +350,22 @@ impl ExportProfile for IdsProfile {
 }
 
 impl From<Export> for ExportOutcome {
-    /// The document and its losses; a document IDS 1.0 cannot write (see
-    /// [`Export::to_xml`]) is no artifact, and every rule is refused with
-    /// the location the writer names.
+    /// The document and its losses; a document IDS 1.0 cannot write or the
+    /// audit refuses (see [`Export::to_xml`]) is no artifact, and every
+    /// rule is refused with the location the writer names, or the audit's
+    /// errors.
     fn from(export: Export) -> Self {
         let artifact = match export.to_xml() {
             Ok(artifact) => artifact,
             Err(error) => {
-                let reason = format!("IDS 1.0 cannot write the document: {error}");
+                let reason = match error {
+                    DocumentError::Write(error) => {
+                        format!("IDS 1.0 cannot write the document: {error}")
+                    }
+                    DocumentError::Invalid(invalid) => {
+                        format!("the exported IDS document is refused, never written: {invalid}")
+                    }
+                };
                 return ExportOutcome {
                     artifact: None,
                     exported: Vec::new(),
@@ -353,6 +400,33 @@ impl From<Export> for ExportOutcome {
             contents: Some(format!("{} specification(s)", export.specifications.len())),
         }
     }
+}
+
+/// Whether the [`audit()`](crate::audit) accepts `specification`, alone in
+/// a document.
+fn audited(specification: &Specification) -> Result<(), Refusal> {
+    let mut ids = Ids::new(Info::new(specification.name.clone()));
+    ids.specifications.push(specification.clone());
+    crate::audit(&ids)
+        .map(drop)
+        .map_err(|invalid| Refusal::Invalid {
+            specification: specification.name.clone(),
+            findings: invalid.findings,
+        })
+}
+
+/// An audit finding of a one-specification document: its code, where in
+/// the specification, for which release, and why.
+fn shown_finding(finding: &AuditFinding) -> String {
+    let at = if finding.path.is_empty() {
+        String::new()
+    } else {
+        format!(" at {}", finding.path)
+    };
+    let release = finding
+        .ifc_version
+        .map_or_else(String::new, |version| format!(" ({version})"));
+    format!("{}{at}{release}: {}", finding.code, finding.message)
 }
 
 /// Whether the IDS 1.0 writer writes `specification`.
@@ -530,6 +604,7 @@ impl<'p> Catalog<'p> {
             refused(&name, why)
         })?;
         writable(&specification)?;
+        audited(&specification)?;
         Ok(specification)
     }
 
@@ -568,6 +643,7 @@ impl<'p> Catalog<'p> {
         };
         self.matches(&specification, &[rule])?;
         writable(&specification)?;
+        audited(&specification)?;
         Ok(specification)
     }
 

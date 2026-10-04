@@ -104,6 +104,28 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Breaking:** IDS documents are audited against the IFC schemas of their
+  listed releases on import and export (`openbim-ids` 0.2.1 with its
+  `audit-schema` feature; no template data, `cargo deny` unchanged).
+  `axioval_ids::translate` returns `TranslateError` (`Options`, or
+  `Invalid` with every audit finding) and refuses the whole document on
+  any audit error: an entity a release does not define, a mixed-case
+  entity name, an attribute the entity lacks, a value no IFC value of its
+  type could equal, requirements on a prohibited specification, and the
+  rest of the buildingSMART `invalid-` cases, all 27 of which are now
+  refused. Audit warnings refuse nothing and come in
+  `Translation::warnings`; `axioval_ids::audit` runs the audit alone.
+  `check --ids` and `ids translate` exit 1 and list every finding;
+  warnings are listed on stderr and in the `ids` field's additive
+  `warnings`. On export, a rule or folder that reads as a specification
+  the audit refuses is not exported (`Refusal::Invalid`), and
+  `Export::to_xml` returns `DocumentError` (`Write`, or `Invalid` when the
+  whole document fails the audit) and never writes an invalid IDS. A
+  rule over a class one release lacks is no longer exported on its own
+  (#216). An IFC2X3 document requiring a mapped class (`IFCAIRTERMINAL`)
+  of the applicable occurrence class (`IFCFLOWTERMINAL`) is refused until
+  the audit maps IFC2X3 names (#215).
+
 - **Breaking:** space measurements refuse only for the unmeasured objects
   that could change them, and name them (#212). One unmeasured slab or roof
   anywhere used to refuse every space measurement of the model with

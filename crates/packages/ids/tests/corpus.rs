@@ -13,7 +13,9 @@
 //! Findings about a whole source count like findings about objects: a
 //! required specification with no applicable object fails that way.
 //!
-//! `invalid-` cases judge the IDS against the IFC schema and are skipped.
+//! `invalid-` cases judge the IDS against the IFC schema: the audit
+//! [`translate`] runs first must refuse every one of them, and find nothing
+//! at all in a `pass-` or `fail-` case.
 //! The corpus is CC BY-ND 4.0 and is not vendored: point `IDS_TEST_CASES` at
 //! `Documentation/ImplementersDocumentation/TestCases` of
 //! <https://github.com/buildingSMART/IDS> and run
@@ -27,7 +29,7 @@ use std::path::{Path, PathBuf};
 use axioval::default_registry;
 use axioval::engine::{Runtime, compile};
 use axioval::ifc::import_ifc_session;
-use axioval_ids::{Options, translate};
+use axioval_ids::{Options, TranslateError, translate};
 
 fn cases() -> Vec<PathBuf> {
     let root = PathBuf::from(
@@ -82,7 +84,13 @@ fn classify(case: &Path) -> Option<(Class, String)> {
     };
     let ids = openbim_ids::from_slice(&std::fs::read(case).ok()?).expect("corpus IDS reads");
     let options = Options::new("ids:corpus", "1.0.0");
-    let translation = translate(&ids, &options).expect("valid options");
+    let translation = match translate(&ids, &options) {
+        Ok(translation) => translation,
+        Err(TranslateError::Invalid(invalid)) => {
+            return Some((Class::Mismatch, format!("refused by the audit: {invalid}")));
+        }
+        Err(error) => panic!("{error}"),
+    };
     let model = std::fs::read(case.with_extension("ifc")).ok()?;
     let session = match import_ifc_session("model.ifc", &model) {
         Ok(session) => session,
@@ -278,7 +286,7 @@ fn round_trip() {
         }
         let ids = openbim_ids::from_slice(&std::fs::read(&case).expect("readable case"))
             .expect("corpus IDS reads");
-        let translation = translate(&ids, &options).expect("valid options");
+        let translation = translate(&ids, &options).expect("an accepted document");
         if !translation.is_complete() {
             continue;
         }
@@ -325,7 +333,7 @@ fn round_trip() {
             failures.push(format!("{name}: the export differs from the document"));
             continue;
         }
-        let retranslated = translate(&again, &options).expect("valid options");
+        let retranslated = translate(&again, &options).expect("an accepted document");
         if retranslated.ruleset != translation.ruleset
             || retranslated.definitions != translation.definitions
         {
@@ -414,7 +422,7 @@ fn one_by_one(
         &openbim_ids::from_str(&xml).expect("the export reads"),
         &Options::new("ids:corpus", "1.0.0"),
     )
-    .expect("valid options");
+    .expect("an accepted document");
     // Specification n is the n-th rule read.
     let origin: BTreeMap<String, String> = back
         .specifications
@@ -482,4 +490,65 @@ fn validate(files: &[PathBuf], failures: &mut Vec<String>) {
 #[ignore = "needs a local buildingSMART IDS checkout in IDS_TEST_CASES"]
 fn corpus_round_trips_through_export() {
     round_trip();
+}
+
+/// `invalid-` cases only the standard property and quantity set template
+/// checks would catch: `openbim-ids` runs those with its `audit` feature
+/// only, whose template data (CC BY-ND 4.0) the published crates do not
+/// embed. Each stays skipped, naming the template check.
+const TEMPLATE_ONLY: &[(&str, &str)] = &[];
+
+/// The audit refuses every `invalid-` case (but those in
+/// [`TEMPLATE_ONLY`]) and finds nothing, not even a warning, in a `pass-`
+/// or `fail-` case.
+fn audit() {
+    let options = Options::new("ids:corpus", "1.0.0");
+    let (mut refused, mut clean) = (0, 0);
+    let mut failures = Vec::new();
+    for case in cases() {
+        let name = case.file_stem().unwrap().to_string_lossy().into_owned();
+        let ids = openbim_ids::from_slice(&std::fs::read(&case).expect("readable case"))
+            .expect("corpus IDS reads");
+        if name.starts_with("invalid-") {
+            if TEMPLATE_ONLY.iter().any(|(skipped, _)| *skipped == name) {
+                continue;
+            }
+            match translate(&ids, &options) {
+                Err(TranslateError::Invalid(invalid)) => {
+                    refused += 1;
+                    if std::env::var_os("IDS_CORPUS_VERBOSE").is_some() {
+                        println!("    {name}: {invalid}");
+                    }
+                }
+                Err(error) => panic!("{error}"),
+                Ok(_) => failures.push(format!("{name}: not refused by the audit")),
+            }
+        } else {
+            let findings = match axioval_ids::audit(&ids) {
+                Ok(warnings) => warnings,
+                Err(invalid) => invalid.findings,
+            };
+            if findings.is_empty() {
+                clean += 1;
+            } else {
+                let shown: Vec<String> = findings.iter().map(ToString::to_string).collect();
+                failures.push(format!("{name}: audit findings: {}", shown.join("; ")));
+            }
+        }
+    }
+    println!(
+        "audit: {refused} invalid case(s) refused, {} skipped as template-only, {clean} case(s) clean",
+        TEMPLATE_ONLY.len()
+    );
+    assert!(
+        failures.is_empty(),
+        "audit failures:\n{}",
+        failures.join("\n")
+    );
+}
+
+#[test]
+#[ignore = "needs a local buildingSMART IDS checkout in IDS_TEST_CASES"]
+fn corpus_audit_refuses_exactly_the_invalid_cases() {
+    audit();
 }

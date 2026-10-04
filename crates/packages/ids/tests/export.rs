@@ -11,8 +11,8 @@ use axioval::ir::contract::{DefinitionPackage, RuleSetPackage, Selector};
 use axioval::ir::{MATERIAL_SET, Report};
 use axioval_export::{ExportProfile, LossKind};
 use axioval_ids::{
-    Export, IFC2X3_TYPE_SYSTEM, IFC4_TYPE_SYSTEM, IFC4X3_TYPE_SYSTEM, IdsProfile, Options, Refusal,
-    SPECIFICATION_ANNOTATION, UNWRITABLE_ANNOTATION, export, translate,
+    DocumentError, Export, IFC2X3_TYPE_SYSTEM, IFC4_TYPE_SYSTEM, IFC4X3_TYPE_SYSTEM, IdsProfile,
+    Options, Refusal, SPECIFICATION_ANNOTATION, UNWRITABLE_ANNOTATION, export, translate,
 };
 use openbim_ids::{Facet, Occurrence, Value};
 use serde_json::{Value as Json, json};
@@ -742,7 +742,9 @@ fn an_info_ids_cannot_write_refuses_the_document_where_it_fails() {
         "yesterday".to_owned(),
     );
     let definitions = std::slice::from_ref(&translation.definitions);
-    let error = export(definitions, &ruleset).to_xml().unwrap_err();
+    let Err(DocumentError::Write(error)) = export(definitions, &ruleset).to_xml() else {
+        panic!("the writer refuses the date");
+    };
     assert_eq!(error.location(), "info/date");
     // The profile writes no document and refuses every rule, saying where.
     let outcome = IdsProfile.export(definitions, &ruleset);
@@ -796,4 +798,82 @@ fn a_specification_ids_cannot_write_back_is_refused_where_it_fails() {
         assert_eq!(location, "requirements/facets[1]/value/xs:restriction");
         assert!(why.contains("restriction"), "{why}");
     }
+}
+
+#[test]
+fn an_export_the_audit_refuses_is_never_written() {
+    // A specification no exporter reading produces: a class IFC4 does not
+    // define. Were an exporter bug to produce it, nothing is written.
+    let mut specification =
+        openbim_ids::Specification::new("Rabbits", [openbim_ids::IfcVersion::Ifc4]);
+    specification
+        .applicability
+        .facets
+        .push(openbim_ids::Entity::new("IFCRABBIT").into());
+    let bad = Export {
+        info: openbim_ids::Info::new("Zoo"),
+        specifications: vec![axioval_ids::ExportedSpecification {
+            specification,
+            rules: vec!["r1".to_owned()],
+        }],
+        not_exported: Vec::new(),
+    };
+    let Err(DocumentError::Invalid(invalid)) = bad.to_xml() else {
+        panic!("written");
+    };
+    let codes: Vec<&str> = invalid
+        .errors()
+        .map(|finding| finding.code.as_str())
+        .collect();
+    assert_eq!(codes, ["entity-unknown"]);
+    // The profile writes no document either, and refuses the rule with the
+    // findings.
+    let outcome = axioval_export::ExportOutcome::from(bad);
+    assert!(outcome.artifact.is_none());
+    assert!(outcome.exported.is_empty());
+    assert_eq!(outcome.losses.len(), 1);
+    assert_eq!(outcome.losses[0].kind, LossKind::Refused);
+    assert!(
+        outcome.losses[0].reason.contains("entity-unknown"),
+        "{}",
+        outcome.losses[0].reason
+    );
+}
+
+#[test]
+fn a_rule_reading_as_an_invalid_specification_is_refused() {
+    // IFCCHIMNEY is an IFC4 class. Translated for IFC4, its folder is
+    // written back as it was read; read on its own, the rule would be a
+    // specification for every release, IFC2X3 included, which does not
+    // define the class: refused, never written.
+    let text = r#"<ids xmlns="http://standards.buildingsmart.org/IDS"><info><title>T</title></info><specifications><specification name="Chimneys" ifcVersion="IFC4"><applicability minOccurs="0" maxOccurs="unbounded"><entity><name><simpleValue>IFCCHIMNEY</simpleValue></name></entity></applicability><requirements><property><propertySet><simpleValue>P</simpleValue></propertySet><baseName><simpleValue>N</simpleValue></baseName></property></requirements></specification></specifications></ids>"#;
+    let ids = openbim_ids::from_str(text).unwrap();
+    let translation = translate(&ids, &Options::new("ids:t", "1.0.0")).unwrap();
+    let definitions = std::slice::from_ref(&translation.definitions);
+    let kept = export(definitions, &translation.ruleset);
+    assert!(kept.is_complete(), "{:?}", kept.not_exported);
+    let again = openbim_ids::from_str(&kept.to_xml().unwrap().unwrap()).unwrap();
+    assert_eq!(again.specifications, ids.specifications);
+
+    let mut detached = translation.ruleset.clone();
+    detached.root.folders[0].annotations.clear();
+    let refused = export(definitions, &detached);
+    assert!(refused.specifications.is_empty());
+    let Refusal::Invalid { findings, .. } = &refused.not_exported[0].reason else {
+        panic!("{:?}", refused.not_exported);
+    };
+    assert!(
+        findings.iter().any(|finding| {
+            finding.code == axioval_ids::AuditCode::EntityUnknown
+                && finding.ifc_version == Some(openbim_ids::IfcVersion::Ifc2x3)
+        }),
+        "{findings:?}"
+    );
+    assert!(
+        refused.not_exported[0]
+            .to_string()
+            .contains("entity-unknown at applicability/facets[0]/name (IFC2X3)"),
+        "{}",
+        refused.not_exported[0]
+    );
 }

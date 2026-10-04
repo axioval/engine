@@ -6,6 +6,42 @@
 
 A facet becomes a rule only when a capability decides it exactly as IDS does. Anything else is a reported `Gap` naming the part of the specification and the reason, so a caller can refuse an incomplete translation. An untranslatable applicability facet leaves the whole specification without rules, since dropping it would widen the checked population; an untranslatable requirement leaves only itself out, since dropping it can only miss failures.
 
+## Audit
+
+Before anything is translated, `axioval_ids::audit` checks the document
+against the IFC schemas of the releases each specification lists, with
+`openbim_ids::audit`: entity names (upper case, defined by the release),
+predefined types, requirement entities an applicable object can be,
+attribute names (explicit, not derived or inverse) and values comparable
+with them, values castable to the type they are compared with, patterns on
+strings only, property `dataType`s, `partOf` wholes the relation can have,
+requirements on a prohibited specification, and contradictory bounds.
+These are the documents the buildingSMART `invalid-` test cases describe:
+valid against `ids.xsd`, but unable to work as written.
+
+- An **error** refuses the whole document: `translate` returns
+  `TranslateError::Invalid` with every finding (`Invalid::findings`, each
+  with its stable code such as `entity-unknown`, the specification's index,
+  the path within it, the release and a message), and nothing is
+  translated. A document is never partly checked because one specification
+  is meaningless.
+- A **warning** (`pattern-unverified`: a pattern using `\i`, `\c`,
+  character-class subtraction or a `\p{Is…}` block, which the audit does
+  not evaluate) refuses nothing and is kept in `Translation::warnings`.
+
+The audit runs every check except those against the standard property and
+quantity set templates (`Pset_`/`Qto_` properties and their data types),
+which need `openbim-ids`'s `audit` feature and its embedded template data
+(see [Publishing](#publishing)). A misspelt standard property is therefore
+not refused; it is a property no model holds.
+
+The audit in `openbim-ids` 0.2.1 compares a required entity with the
+applicable one without the IFC2X3 type mapping table, so an IFC2X3
+specification applying to `IFCFLOWTERMINAL` and requiring `IFCAIRTERMINAL`
+is refused although the translation checks it exactly
+(openbimrs/ids#15, #215). The refusal fails closed: such a document is not
+checked at all, never checked wrongly.
+
 ## What each facet becomes
 
 The applicability is one selector: the entity's classes (never their subclasses), its predefined type, and a selector for every other facet a selector states exactly, all of which must hold. A facet no selector states exactly is checked as a requirement by an [auxiliary rule](./gates.md#auxiliary-rules) (`spec<n>.applicability<k>`) over the rest of the applicability, and the applicable objects are those it passed: every rule of the specification selects `ruleOutcome` `passed` of it. The auxiliary rule reports nothing itself; an object it could not decide is not evaluated by every rule of the specification, never applicable and never left out. Requirements become rules over that selector.
@@ -41,7 +77,9 @@ memory and runs it; `axioval ids translate rules.ids --definitions d.json
 --ruleset r.json` writes the packages (see [Command line](./cli.md#ids-documents)).
 Both run only complete specifications: a specification with any gap runs
 none of its rules and is listed with its gaps, and a check with one never
-exits 0.
+exits 0. A document the [audit](#audit) refuses runs and writes nothing
+and exits 1, every finding listed; audit warnings are listed on stderr and
+in the result's `ids` field.
 
 ## Prefilter
 
@@ -160,10 +198,21 @@ that express nothing, an applicability without facets and a restriction
 without facets; a specification it refuses is not exported
 (`Refusal::Unwritable`, with the location in the specification, such as
 `requirements/facets[1]/value/xs:restriction`). `Export::to_xml` returns
-the writer's `WriteError` when the `<info>` a root folder keeps cannot be
-written (an author that is no e-mail address, a date that is no
-`xs:date`); the `ids` profile then writes no document and refuses every
-rule, naming the location.
+`DocumentError::Write`, the writer's `WriteError`, when the `<info>` a root
+folder keeps cannot be written (an author that is no e-mail address, a
+date that is no `xs:date`); the `ids` profile then writes no document and
+refuses every rule, naming the location.
+
+No invalid IDS is ever written. Every specification a rule or a folder
+reads as is [audited](#audit) on its own before it is exported, and one
+the audit refuses is not (`Refusal::Invalid`, with the findings): a rule
+read as one specification lists all three releases, so a rule over a
+class one of them lacks (`IFCCHIMNEY`, which IFC2X3 does not define) is
+refused rather than written as a specification that cannot work for
+IFC2X3. `Export::to_xml` audits the whole document again before writing
+it; an error then is an exporter bug, and it returns
+`DocumentError::Invalid` with the findings instead of a document, which
+the `ids` profile turns into a refused loss for every rule.
 
 The one thing `axioval-ids` still writes itself (`src/write.rs`) is the
 `ids:specification` annotation: the `<specification>` element cut out of a
@@ -191,7 +240,6 @@ package authored in MCS to carry it.
 These parts stay explicit gaps:
 
 - an attribute facet whose name is a restriction, with a value or a cardinality other than required, and one whose named attributes a selector cannot compare;
-- requirements on a prohibited specification, which IDS declares invalid;
 - an applicability without an entity facet, which in IDS covers every resource of every class;
 - a part-of whole that is neither an `IfcObject` occurrence, an `IfcContext` nor an `IfcTypeObject`, which no relationship traversal reaches.
 
@@ -199,7 +247,7 @@ An entity that is neither an `IfcObject` occurrence, an `IfcContext` nor an `Ifc
 
 A property set that holds no property is malformed IFC (`HasProperties` and `Quantities` are `SET [1:?]`), but IDS still judges it: a required property in a matching set that is empty fails. The IFC adapter lists such a set with no members (`empty_sets` of the enumeration), a property named in it is absent, and `property-value` and `property-requirements` count it among the sets that need a match, so a required facet on it is a finding, as IDS requires. Only an empty set sharing its name with a set that holds members stays refused, and a facet on such an object is not evaluated, never passed.
 
-A specification's `ifcVersion` is metadata that never changes a verdict, as the buildingSMART case "specification version is purely metadata" requires: every concept is named in the IFC adapter's type systems of all three releases IDS names, so an `IFC2X3` specification checks an `IFC4` or `IFC4X3_ADD2` model too. A class some release lacks (`IFCWALLSTANDARDCASE` in IFC4X3) matches nothing in its models, as in IDS; a class no release defines is a gap. The IFC2X3 type mapping therefore applies to every specification, in IFC2X3 sources only.
+A specification's `ifcVersion` is metadata that never changes a verdict, as the buildingSMART case "specification version is purely metadata" requires: every concept is named in the IFC adapter's type systems of all three releases IDS names, so an `IFC2X3` specification checks an `IFC4` or `IFC4X3_ADD2` model too. A class some release lacks matches nothing in its models, as in IDS; a specification naming a class one of its listed releases does not define, an entity name in mixed case, or requirements on a prohibited specification is refused by the [audit](#audit). The translation keeps a gap for each (`UnknownEntity`, `EntityCase`, `ProhibitedRequirements`) as a second line of defence, which an audited document never reaches. The IFC2X3 type mapping therefore applies to every specification, in IFC2X3 sources only.
 
 `IFC4X3_ADD2` models are checked through the IFC adapter's IFC4X3 type system. Classification facets are decided on them as on IFC4 models, read with the IFC4X3 table.
 
@@ -207,7 +255,9 @@ A specification's `ifcVersion` is metadata that never changes a verdict, as the 
 
 `IDS_TEST_CASES=<IDS>/Documentation/ImplementersDocumentation/TestCases cargo test -p axioval-ids -- --ignored corpus` runs every buildingSMART test case through the IFC adapter and the engine. It asserts that no translated rule fails a `pass-` case and that every `fail-` case either produces a finding or is explained by a reported gap. `IDS_CORPUS_VERBOSE=1` lists every case with its findings.
 
-The same run checks the [round trip](#round-trip) of every case that translates without a gap: all 307 are exported again, read back to the original specifications and info, translate to identical packages and report identical findings, and all 603 of their rules are also exported one by one without their origin, reporting on the same objects. Every exported document is validated against `Schema/ids.xsd` of the checkout, which needs `python3` with `lxml`.
+It also asserts the [audit](#audit): every one of the 27 `invalid-` cases is refused, and the 307 `pass-` and `fail-` cases audit without a single finding, warnings included. None of the `invalid-` cases needs the template checks the audit leaves out; one that did would be listed in `TEMPLATE_ONLY` with the check it needs, and skipped.
+
+The same run checks the [round trip](#round-trip) of every case that translates without a gap: all 307 are exported again, read back to the original specifications and info, translate to identical packages and report identical findings, and 565 of their 603 rules are also exported one by one without their origin, reporting on the same objects. The other 38 read as specifications for all three releases over a class or attribute IFC2X3 lacks (`IFCTASKTIME`, `IfcPerson.Identification`), which the audit refuses. Every exported document is validated against `Schema/ids.xsd` of the checkout, which needs `python3` with `lxml`.
 
 Some facets translate but cannot be decided on some models, and are reported not evaluated rather than as gaps: a property whose value is an `IfcPropertyReferenceValue` referencing an entity, which the adapter refuses (one referencing nothing is no value, and fails a required facet as IDS requires); and the value of a measure whose unit the model does not resolve. Such a measure's declared type is still exact, so its `dataType` is judged: `IFCMASSMEASURE(2.)` fails `dataType="IFCTIMEMEASURE"` whatever its value, as the buildingSMART case "measures are used to specify an IFC data type" requires, and a required facet without a value is met.
 
@@ -215,9 +265,9 @@ A complex property or quantity (`IfcComplexProperty`, `IfcPhysicalComplexQuantit
 
 ## Publishing
 
-`axioval-ids` is a workspace member under `crates/packages/ids` and is published with the other crates at the workspace version. It reads IDS with the `openbim-ids` reader (`openbim_ids::read`, `from_str`, `from_slice`) and writes it with its writer (`openbim_ids::to_string`), from 0.2 on and without its `audit` feature. `scripts/package.sh` packages and verifies it with the rest of the workspace (`EXPECTED` in `scripts/check_package_contents.py`).
+`axioval-ids` is a workspace member under `crates/packages/ids` and is published with the other crates at the workspace version. It reads IDS with the `openbim-ids` reader (`openbim_ids::read`, `from_str`, `from_slice`) and writes it with its writer (`openbim_ids::to_string`), and audits it (`openbim_ids::audit`) with the `audit-schema` feature, from 0.2.1 on. `scripts/package.sh` packages and verifies it with the rest of the workspace (`EXPECTED` in `scripts/check_package_contents.py`).
 
-That feature (`openbim_ids::audit`, which checks a document against the IFC schema and the standard property and quantity set templates of its listed releases) is not enabled. It pulls in `ifc-template-catalog`, whose licence is `AGPL-3.0-or-later AND CC-BY-ND-4.0`: its embedded template data (`data/*.bin`, compiled in through `include_bytes!`) is buildingSMART's PSD/QTO content under CC BY-ND 4.0. `cargo deny` does not allow CC-BY-ND-4.0, and whether distributing that data inside the published crates is acceptable is the maintainers' decision, not a dependency bump's. Documents are therefore not audited on import or export, and the [conformance corpus](#conformance-corpus) still skips its `invalid-` cases, which judge a document against the IFC schema.
+`audit-schema` runs every audit check against the IFC schema tables of `ifc-schema` (AGPL-3.0-or-later, as the crate already used it), and adds only `regex`. The `audit` feature is not enabled: it adds the standard property and quantity set template checks and pulls in `ifc-template-catalog`, whose licence is `AGPL-3.0-or-later AND CC-BY-ND-4.0`: its embedded template data (`data/*.bin`, compiled in through `include_bytes!`) is buildingSMART's PSD/QTO content under CC BY-ND 4.0. `cargo deny` does not allow CC-BY-ND-4.0, and whether distributing that data inside the published crates is acceptable is the maintainers' decision, not a dependency bump's. `cargo tree -i ifc-template-catalog -e normal` prints nothing.
 
 It is a package importer, not a source adapter, so the architecture gate treats it as core: it may not depend on any source adapter, format library or geometry kernel, with one narrow exemption in `scripts/architecture.py` (`PERMITTED_COUPLINGS`). The importer alone may depend on `openbim-ids`, to parse IDS, and `ifc-schema`, to ask which IDS classes are occurrences in each IFC release, and may use `openbim_ids::` and `ifc_schema::` paths; every other coupling still fails it, and both crates stay forbidden to every other core crate.
 

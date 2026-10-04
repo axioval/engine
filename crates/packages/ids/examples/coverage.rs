@@ -7,7 +7,7 @@
 
 use std::collections::BTreeMap;
 
-use axioval_ids::{Options, translate};
+use axioval_ids::{Options, TranslateError, translate};
 
 fn main() {
     let options = Options::new("ids:coverage", "0.0.0");
@@ -24,7 +24,14 @@ fn main() {
                 continue;
             }
         };
-        let translation = translate(&ids, &options).expect("valid options");
+        let translation = match translate(&ids, &options) {
+            Ok(translation) => translation,
+            Err(TranslateError::Invalid(invalid)) => {
+                println!("{path}: refused by the audit: {invalid}");
+                continue;
+            }
+            Err(error) => panic!("{error}"),
+        };
         for outcome in &translation.specifications {
             specifications += 1;
             rules += outcome.rules.len();

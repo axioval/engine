@@ -22,6 +22,16 @@
 //! - **Requirements** are independent of each other. Dropping one can only
 //!   miss failures, never invent them, so the others are still translated.
 //!
+//! # Audit first
+//!
+//! [`translate`] first [audits](audit()) the document against the IFC
+//! schemas of its listed releases. A document with any audit error cannot
+//! work as written (an entity a release does not define, an attribute the
+//! entity does not have, a value no IFC value of its type could equal) and
+//! is refused whole, with every finding ([`Invalid`]); warnings refuse
+//! nothing and come with the translation ([`Translation::warnings`]). The
+//! export never writes a document the audit refuses either.
+//!
 //! # What becomes what
 //!
 //! - The applicability is one selector: the entity's classes (never their
@@ -86,8 +96,8 @@
 //! buildingSMART test cases require: every concept is named in the type
 //! systems of all three releases IDS names (IFC2X3, IFC4, IFC4X3_ADD2),
 //! so an IFC2X3 specification checks an IFC4 model. A class some release
-//! lacks matches nothing in its models, as in IDS; one no release defines
-//! is a gap.
+//! lacks matches nothing in its models, as in IDS; one a listed release does not
+//! define is refused by the audit.
 //!
 //! # Export
 //!
@@ -122,7 +132,10 @@ use openbim_ids::{
 mod export;
 mod write;
 
-pub use export::{Export, ExportedSpecification, IdsProfile, NotExported, Refusal, export};
+pub use export::{
+    DocumentError, Export, ExportedSpecification, IdsProfile, NotExported, Refusal, export,
+};
+pub use openbim_ids::{AuditCode, AuditFinding, Severity as AuditSeverity};
 use regex::Regex;
 use thiserror::Error;
 
@@ -219,6 +232,10 @@ pub struct Translation {
     pub ruleset: RuleSetPackage,
     /// What became of each specification, in document order.
     pub specifications: Vec<SpecificationOutcome>,
+    /// The [`audit()`]'s warnings: checks it could not decide, such as a
+    /// pattern using an XML Schema construct it does not evaluate. They
+    /// refuse nothing.
+    pub warnings: Vec<AuditFinding>,
 }
 
 impl Translation {
@@ -441,16 +458,87 @@ impl fmt::Display for Reason {
     }
 }
 
-/// Translates `ids` into packages identified by `options`.
+/// Why [`translate`] refused a document.
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum TranslateError {
+    /// The options are malformed.
+    #[error(transparent)]
+    Options(#[from] OptionsError),
+    /// The document cannot work as written for its releases.
+    #[error(transparent)]
+    Invalid(#[from] Invalid),
+}
+
+/// An IDS document the [`audit()`] refuses: a specification that cannot
+/// work as written for a release it lists (an entity the release does not
+/// define, an attribute the entity does not have, a value no IFC value of
+/// its type could equal, requirements on a prohibited specification).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Invalid {
+    /// Every finding of the audit, in document order: at least one error,
+    /// and any warnings beside.
+    pub findings: Vec<AuditFinding>,
+}
+
+impl Invalid {
+    /// The findings that refuse the document.
+    pub fn errors(&self) -> impl Iterator<Item = &AuditFinding> {
+        self.findings
+            .iter()
+            .filter(|finding| finding.severity() == AuditSeverity::Error)
+    }
+}
+
+impl fmt::Display for Invalid {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let errors: Vec<String> = self.errors().map(ToString::to_string).collect();
+        write!(
+            f,
+            "the IDS document cannot work as written: {} audit error(s): {}",
+            errors.len(),
+            errors.join("; ")
+        )
+    }
+}
+
+impl std::error::Error for Invalid {}
+
+/// Audits `ids` against the IFC schemas of the releases each specification
+/// lists, with [`openbim_ids::audit()`]: every check except those against
+/// the standard property and quantity set templates.
 ///
 /// # Errors
 ///
-/// Returns an [`OptionsError`] when the package id or version is malformed.
+/// [`Invalid`], with every finding, when any finding is an
+/// [`AuditSeverity::Error`]. Otherwise the result is the warnings: checks
+/// the audit could not decide, which refuse nothing.
+pub fn audit(ids: &Ids) -> Result<Vec<AuditFinding>, Invalid> {
+    let findings = openbim_ids::audit(ids);
+    if findings
+        .iter()
+        .any(|finding| finding.severity() == AuditSeverity::Error)
+    {
+        Err(Invalid { findings })
+    } else {
+        Ok(findings)
+    }
+}
+
+/// Translates `ids` into packages identified by `options`, once the
+/// [`audit()`] accepted it.
+///
+/// # Errors
+///
+/// [`TranslateError::Options`] when the package id or version is
+/// malformed, [`TranslateError::Invalid`] when the audit finds an error.
 /// A document that cannot be translated fully is not an error; see
 /// [`Translation::specifications`].
-pub fn translate(ids: &Ids, options: &Options) -> Result<Translation, OptionsError> {
+pub fn translate(ids: &Ids, options: &Options) -> Result<Translation, TranslateError> {
+    let warnings = audit(ids)?;
     let specifications: Vec<&Specification> = ids.specifications.iter().collect();
-    translate_parts(&ids.info, &specifications, options)
+    let mut translation = translate_parts(&ids.info, &specifications, options)?;
+    translation.warnings = warnings;
+    Ok(translation)
 }
 
 /// The annotation key of the folder a specification's rules are written
@@ -585,6 +673,7 @@ fn translate_parts(
             relations: BTreeMap::new(),
         },
         specifications: outcomes,
+        warnings: Vec::new(),
     })
 }
 

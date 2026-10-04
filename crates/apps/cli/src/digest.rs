@@ -123,6 +123,60 @@ pub struct IdsRecord {
     pub filter: Option<axioval::ir::contract::Selector>,
     /// Every specification, in document order.
     pub specifications: Vec<IdsSpecification>,
+    /// The document audit's warnings: checks it could not decide. An audit
+    /// error refuses the document, so none is ever recorded here.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<IdsAuditFinding>,
+}
+
+/// One finding of the IDS document audit.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct IdsAuditFinding {
+    /// The specification's position in the document, from 1.
+    pub specification: usize,
+    /// The stable audit code, such as `pattern-unverified`.
+    pub code: String,
+    /// `error` or `warning`.
+    pub severity: String,
+    /// Where in the specification, such as `requirements/facets[1]/value`;
+    /// absent for the specification itself.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub path: String,
+    /// The IFC release it holds for; absent when it holds for every one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ifc_version: Option<String>,
+    /// Why.
+    pub message: String,
+}
+
+impl From<&axioval_ids::AuditFinding> for IdsAuditFinding {
+    fn from(finding: &axioval_ids::AuditFinding) -> Self {
+        Self {
+            specification: finding.specification + 1,
+            code: finding.code.as_str().to_owned(),
+            severity: finding.severity().to_string(),
+            path: finding.path.clone(),
+            ifc_version: finding.ifc_version.map(|version| version.to_string()),
+            message: finding.message.clone(),
+        }
+    }
+}
+
+impl std::fmt::Display for IdsAuditFinding {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} [{}] specification {}",
+            self.severity, self.code, self.specification
+        )?;
+        if !self.path.is_empty() {
+            write!(f, " at {}", self.path)?;
+        }
+        if let Some(version) = &self.ifc_version {
+            write!(f, " ({version})")?;
+        }
+        write!(f, ": {}", self.message)
+    }
 }
 
 /// One specification of an IDS document: the rules it ran as, or why it

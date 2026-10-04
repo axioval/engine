@@ -52,20 +52,38 @@ back as a document. See `docs/src/ids.md` for the mapping of every facet.
   profile and the comparator), `axioval-engine` (the
   capability descriptors, so definitions follow every new parameter or
   column), `axioval-rules` (XML Schema pattern translation only),
-  `openbim-ids` 0.2 (the reader and writer, without its `audit` feature) and `ifc-schema` (which IDS classes are
+  `openbim-ids` 0.2.1 (the reader, the writer, and the document audit
+  with its `audit-schema` feature) and `ifc-schema` (which IDS classes are
   occurrences, per release). Never a source adapter: the architecture gate
   exempts exactly `openbim-ids` and `ifc-schema` for this crate
   (`PERMITTED_COUPLINGS` in `scripts/architecture.py`). The facade is a
   path-only dev-dependency, left out of the published manifest.
-- Never enable `openbim-ids`'s `audit` feature without the maintainers'
-  decision: it pulls in `ifc-template-catalog` (`AGPL-3.0-or-later AND
-  CC-BY-ND-4.0`, buildingSMART template data embedded), which `deny.toml`
-  does not allow. Never add CC-BY-ND-4.0 to the allow list to make it pass.
+- Audit before anything else, fail closed. `translate` runs `audit()`
+  (`openbim_ids::audit`) first: any `AuditSeverity::Error` refuses the
+  whole document (`TranslateError::Invalid`, every finding kept), and
+  warnings refuse nothing and travel in `Translation::warnings`. On export
+  every specification a rule or folder reads as is audited alone
+  (`Refusal::Invalid`), and `write::document` audits the whole document
+  again before writing, so `Export::to_xml` never writes an invalid IDS
+  (`DocumentError::Invalid`). Never write a document around the audit.
+  The gaps an audited document cannot reach (`UnknownEntity`,
+  `EntityCase`, `ProhibitedRequirements`) stay as a second line of
+  defence.
+- `audit-schema` is the only `openbim-ids` audit feature allowed: every
+  check against the IFC schemas, through `ifc-schema` (AGPL, already a
+  dependency) and `regex`. Never enable `audit` without the maintainers'
+  decision: it adds the `Pset_`/`Qto_` template checks and pulls in
+  `ifc-template-catalog` (`AGPL-3.0-or-later AND CC-BY-ND-4.0`,
+  buildingSMART template data embedded), which `deny.toml` does not allow.
+  Never add CC-BY-ND-4.0 to the allow list to make it pass;
+  `cargo tree -i ifc-template-catalog -e normal` must print nothing.
 - Run `cargo test -p axioval-ids`. The conformance harness needs the
   buildingSMART corpus, which is CC BY-ND 4.0 and not vendored:
   `IDS_TEST_CASES=<IDS>/Documentation/ImplementersDocumentation/TestCases cargo test -p axioval-ids -- --ignored corpus`.
   It asserts that no translated rule fails a `pass-` case and that every
-  unflagged `fail-` case is explained by a reported gap, and that every
+  unflagged `fail-` case is explained by a reported gap, that the audit
+  refuses every `invalid-` case (but any listed in `TEMPLATE_ONLY`, none
+  today) and finds nothing in the others, and that every
   complete translation round-trips through `export` (same specifications,
   packages and findings; its rules one by one too), validating each export
   against the checkout's `Schema/ids.xsd` with `python3` and `lxml`.

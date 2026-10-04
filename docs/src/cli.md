@@ -68,14 +68,30 @@ packages. It is translated in memory by [`axioval-ids`](./ids.md), exactly as
 the translator's (`spec2.facet1`). It excludes `--definitions` and
 `--ruleset`.
 
+The document is [audited](./ids.md#audit) against the IFC schemas of its
+listed releases first. A document with any audit error cannot work as
+written and checks nothing: the check exits 1 before reading the model,
+writes nothing, and lists every finding with its specification (from 1),
+code, path and release:
+
+```text
+axioval: rules.ids: the IDS document cannot work as written, so nothing is checked:
+ids:   error [entity-name-case] specification 2 at applicability/facets[0]/name: "IfcWall" is not upper case; IFC entity names are written as "IFCWALL"
+```
+
+An audit warning (`pattern-unverified`, a pattern the audit does not
+evaluate) refuses nothing. It is listed on stderr
+(`ids: rules.ids: audit warning [pattern-unverified] specification 1 at …`)
+and in the `ids` field's `warnings`, and never changes the exit status.
+
 Only complete specifications run. A specification with any translation gap
 runs none of its rules, since part of it would report as met what was never
 wholly checked, and is listed on stderr with every gap, as the conformance
 corpus lists them:
 
 ```text
-ids: rules.ids: specification 1 "Mixed case" is not checked:
-ids:   applicability facet 1: entity name "IfcWall" is not upper case, which IDS never matches
+ids: rules.ids: specification 1 "Long names" is not checked:
+ids:   applicability facet 1: a name restriction with facets other than an enumeration and patterns is not translated
 ids: rules.ids: 1 of 2 specification(s) not checked
 ```
 
@@ -89,8 +105,11 @@ checked at all. It needs `--ids`, is recorded as the `ids` field's
 
 The other specifications run as usual. The result's additive `ids` field
 names the document and lists every specification in order with its number,
-name, the rules it ran as, and its gaps. A check with a specification that did
-not run never exits 0: with no finding it exits 4.
+name, the rules it ran as, and its gaps, and the audit's `warnings` (each
+with `specification`, `code`, `severity`, `path` and `ifc_version` when it
+holds for one release only, and `message`; left out when there are none). A
+check with a specification that did not run never exits 0: with no finding
+it exits 4.
 
 ### Relations supplied beside the model
 
@@ -447,13 +466,15 @@ inspection or to check with `--definitions` and `--ruleset`, which then gives
 the same report. The ruleset's package id is `ids:` and the file stem in lower
 case (`ids:rules`); the definitions' is that and `.definitions`. A
 specification with a gap is left out and listed on stderr, as for `check
---ids`. Both files are written, or neither.
+--ids`. A document the audit refuses is listed with its findings and
+nothing is written; audit warnings are listed and refuse nothing. Both
+files are written, or neither.
 
 | Status | Meaning |
 |---|---|
 | 0 | Every specification translated |
 | 4 | Written, without the specifications listed on stderr |
-| 1 | Nothing written: an unreadable document or an unwritable file |
+| 1 | Nothing written: an unreadable document, one the audit refuses, or an unwritable file |
 | 2 | Invalid command-line usage |
 
 ## `axioval export`
@@ -492,7 +513,9 @@ repeats for a ruleset that uses several definition packages. Only rules IDS
 states exactly are written: a folder `ids translate` wrote, as the
 specification it came from, and any other rule as one specification of its
 own. Every other rule is listed on stderr with why, and nothing is
-approximated:
+approximated. Every specification is audited before it is written, so a
+rule that reads as a specification the audit refuses (one listing every
+release over a class IFC2X3 lacks) is listed, never written:
 
 ```text
 ids: ruleset.json: rule walls-clash is not exported: capability axioval:capability.clash has no IDS facet

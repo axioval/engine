@@ -6,6 +6,12 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- A golden test pins the outside contract of every built-in capability
+  (`crates/engine/rules/tests/golden/descriptors.json`): its id, every
+  parameter's name, package kind, requirement, per-object and
+  expression-text flags and table columns, and whether it grades
+  deviations or takes authored parameters (#278). A capability rebuilt on
+  shared parts must keep it unchanged.
 - Stations, offsets and heights along alignments (#252). The new
   measured values `station`, `offset[;side=left|right]` and
   `height_above_gradient` (`;alignment=<kinds>[;path=<steps>]`) locate an

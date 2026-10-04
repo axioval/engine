@@ -803,3 +803,146 @@ fn every_per_object_numeric_parameter_takes_a_well_typed_expression_and_refuses_
         "only {checked} parameters are computed per object"
     );
 }
+
+/// Walls `w1` (10 m² side) hosting openings of 1.5 and 2.5 m², and `w2`
+/// (10 m²) hosting 3 and 2 m²; `o5`, also on `w2`, cannot be read.
+fn walls_with_openings() -> Model {
+    let area = |value: f64| PropertyValue::Quantity {
+        value,
+        dimension: QuantityDimension::Area,
+    };
+    let mut model = Model::default();
+    for (wall, side) in [("w1", 10.0), ("w2", 10.0)] {
+        model = model
+            .object(wall, "slab")
+            .value(wall, "Pset", "Cover", area(side));
+    }
+    for (opening, wall, size) in [
+        ("o1", "w1", 1.5),
+        ("o2", "w1", 2.5),
+        ("o3", "w2", 3.0),
+        ("o4", "w2", 2.0),
+    ] {
+        model = model
+            .object(opening, "pipe")
+            .value(opening, "Pset", "Cover", area(size))
+            .text(opening, "Pset", "Class", "opening")
+            .edge("Hosts", wall, opening);
+    }
+    model
+}
+
+fn openings(function: &str, value: Option<Value>) -> Value {
+    let mut aggregate = json!({"kind": "aggregate", "function": function,
+        "over": {"kind": "path", "path": ["Hosts"]},
+        "where": class_is_selector("opening")});
+    if let Some(value) = value {
+        aggregate["value"] = value;
+    }
+    aggregate
+}
+
+#[test]
+fn an_aggregate_sums_related_objects_and_compares_with_the_subject() {
+    let registry = registry();
+    let mut package = vocabulary(&registry, &[]);
+    package
+        .properties
+        .get_mut("t.Cover")
+        .unwrap()
+        .unit_dimension = Some("area".into());
+    // The openings take at most 40 % of the wall's side.
+    let share = rule(
+        "share",
+        EXPRESSION,
+        "error",
+        entity("slab"),
+        json!({"requirement": {"type": "expression", "value": {"kind": "compare",
+            "operator": "lessThanOrEquals",
+            "left": openings("sum", Some(property("Cover"))),
+            "right": {"kind": "multiply", "left": property("Cover"),
+                      "right": {"kind": "literal", "value": {"type": "number", "value": 0.4}}}}}}),
+        json!({}),
+    );
+    // Every opening is smaller than its wall, read through `of: subject`.
+    let smaller = rule(
+        "smaller",
+        EXPRESSION,
+        "error",
+        entity("slab"),
+        json!({"requirement": {"type": "expression", "value": openings("all", Some(json!(
+            {"kind": "compare", "operator": "lessThan", "left": property("Cover"),
+             "right": {"kind": "multiply", "left": {"kind": "property", "propertySet": "t.Pset",
+                       "property": "t.Cover", "of": "subject"},
+                       "right": {"kind": "literal", "value": {"type": "number", "value": 0.26}}}})))}}),
+        json!({}),
+    );
+    let report = check(
+        &package,
+        vec![share, smaller],
+        &session(walls_with_openings()),
+    );
+    assert!(
+        report.not_evaluated.is_empty(),
+        "{:?}",
+        report.not_evaluated
+    );
+    // w1: 4 m² of 4 m² allowed; w2: 5 m².
+    assert_eq!(
+        subjects(&report, "share"),
+        ["w2"],
+        "{:?}",
+        report
+            .findings()
+            .iter()
+            .map(|f| &f.message)
+            .collect::<Vec<_>>()
+    );
+    // w2's 3 m² opening is above 26 % of its 10 m².
+    assert_eq!(subjects(&report, "smaller"), ["w2"]);
+}
+
+#[test]
+fn an_undecided_member_widens_a_count_and_leaves_a_straddling_comparison_open() {
+    let registry = registry();
+    let mut package = vocabulary(&registry, &[]);
+    package
+        .properties
+        .get_mut("t.Cover")
+        .unwrap()
+        .unit_dimension = Some("area".into());
+    let model = walls_with_openings()
+        .object("o5", "pipe")
+        .edge("Hosts", "w2", "o5")
+        .unreadable("o5");
+    let at_most_two = |limit: i64| {
+        rule(
+            &format!("count{limit}"),
+            EXPRESSION,
+            "error",
+            entity("slab"),
+            json!({"requirement": {"type": "expression", "value": {"kind": "compare",
+                "operator": "lessThanOrEquals", "left": openings("count", None),
+                "right": {"kind": "literal", "value": {"type": "integer", "value": limit}}}}}),
+            json!({}),
+        )
+    };
+    let report = check(
+        &package,
+        vec![at_most_two(2), at_most_two(3)],
+        &session(model),
+    );
+    // w2 holds 2 or 3 openings: at most 2 straddles, at most 3 holds.
+    assert!(subjects(&report, "count2").is_empty());
+    let open: Vec<_> = report
+        .not_evaluated
+        .iter()
+        .map(|outcome| (outcome.rule_id.to_string(), outcome.object_id().cloned()))
+        .collect();
+    assert_eq!(open, [("count2".to_owned(), Some(id("w2")))]);
+    assert!(
+        report.not_evaluated[0].message.contains("2..3"),
+        "{}",
+        report.not_evaluated[0].message
+    );
+}

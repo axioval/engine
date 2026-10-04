@@ -96,9 +96,10 @@ impl RuleCapability for ExpressionRequirement {
 /// Why an outcome is not evaluated, in the report's terms.
 pub(crate) fn reason_of(why: &NotEvaluated) -> NotEvaluatedReason {
     match &why.reason {
-        Reason::Straddles { .. } | Reason::UndecidedCondition(_) | Reason::Unreadable(_) => {
-            NotEvaluatedReason::IncompleteEvidence
-        }
+        Reason::Straddles { .. }
+        | Reason::UndecidedCondition(_)
+        | Reason::Unreadable(_)
+        | Reason::UndecidedMembers(_) => NotEvaluatedReason::IncompleteEvidence,
         Reason::Mismatch(_) | Reason::Domain | Reason::ZeroDivisor | Reason::Overflow => {
             NotEvaluatedReason::InvalidEvidence
         }
@@ -147,6 +148,8 @@ fn read_values(evaluation: &Evaluation) -> String {
             axioval_engine::expression::Source::Lookup { table, column } => {
                 format!("{table}.{column}")
             }
+            // Its members' values are cited, not listed.
+            axioval_engine::expression::Source::Aggregate(_) => continue,
         };
         let value = match &read.leaf.value {
             Ok(value) => value.to_string(),

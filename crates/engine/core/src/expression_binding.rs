@@ -183,6 +183,7 @@ pub(crate) fn check_rule_expressions(
             expression
                 .validate()
                 .map_err(|error| invalid(path.to_owned(), error.to_string()))?;
+            filter_concepts(vocabulary.concepts, rule, expression)?;
             let found = crate::expression::check(expression, path, &environment)
                 .map_err(|error| invalid(error.path.clone(), error.to_string()))?;
             match expected {
@@ -296,6 +297,7 @@ pub(crate) fn check_values<'a>(
         expression
             .validate()
             .map_err(|error| invalid(error.to_string()))?;
+        filter_concepts(concepts, &name, expression)?;
         let environment = RuleEnvironment {
             concepts,
             properties,
@@ -350,7 +352,19 @@ pub(crate) fn expression_concepts(
         }
         pending.extend(node.children());
     }
-    Ok(())
+    filter_concepts(concepts, rule, expression)
+}
+
+/// Checks the concepts every aggregate member filter in `expression` names.
+fn filter_concepts(
+    concepts: &ConceptCatalog,
+    rule: &str,
+    expression: &Expression,
+) -> Result<(), EngineError> {
+    expression
+        .filters()
+        .into_iter()
+        .try_for_each(|filter| crate::compiler::validate_selector_concepts(concepts, rule, filter))
 }
 
 /// Checks that every expression of `selector` is a truth over what the

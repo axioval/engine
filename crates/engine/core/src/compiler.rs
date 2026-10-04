@@ -1343,7 +1343,7 @@ pub(crate) fn require_property(
     require_concept(concepts, rule, ConceptKind::Property, property)
 }
 
-fn validate_selector_concepts(
+pub(crate) fn validate_selector_concepts(
     concepts: &ConceptCatalog,
     rule: &str,
     selector: &Selector,

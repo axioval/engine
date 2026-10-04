@@ -42,6 +42,13 @@ pub(crate) fn references(expression: &Expression) -> BTreeSet<String> {
             _ => {}
         }
         pending.extend(node.children());
+        if let Expression::Aggregate {
+            filter: Some(filter),
+            ..
+        } = node
+        {
+            pending.extend(filter.expressions());
+        }
     }
     names
 }

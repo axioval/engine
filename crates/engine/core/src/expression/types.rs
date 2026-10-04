@@ -542,6 +542,44 @@ impl Checker<'_> {
                     Type::NUMBER
                 }
             }
+            Expression::Aggregate {
+                function,
+                filter,
+                value,
+                ..
+            } => {
+                use axioval_ir::contract::AggregateFunction as F;
+                if let Some(filter) = filter {
+                    for nested in filter.expressions() {
+                        self.boolean(nested, &child("where"))?;
+                    }
+                }
+                let value_path = child("value");
+                match (function, value) {
+                    (F::Count | F::DistinctCount, value) => {
+                        if let Some(value) = value {
+                            self.check(value, &value_path)?;
+                        }
+                        Type::Integer
+                    }
+                    (F::Any | F::All | F::None, Some(value)) => {
+                        self.boolean(value, &value_path)?;
+                        Type::Boolean
+                    }
+                    (F::Sum | F::Min | F::Max, Some(value)) => {
+                        match self.numeric(value, &value_path)? {
+                            Type::Null => Type::Any,
+                            found => found,
+                        }
+                    }
+                    (F::Average, Some(value)) => match self.numeric(value, &value_path)? {
+                        Type::Integer => Type::NUMBER,
+                        Type::Null => Type::Any,
+                        found => found,
+                    },
+                    (_, None) => Type::Any,
+                }
+            }
             Expression::Concat { operands, .. } => {
                 for (index, operand) in operands.iter().enumerate() {
                     self.text(operand, &item(index))?;

@@ -64,6 +64,28 @@ mix:
 | `coalesce` | skipped | not evaluated, unless a value came first |
 | a truth position (`and`, `or`, `not`, `if`) | false | not evaluated |
 
+## Aggregates
+
+An `aggregate` computes one value over the objects `over` reaches from the object in scope:
+
+- `{"kind": "path", "path": [...]}`: the objects a relationship path reaches, its steps written as a `related` selector's;
+- `{"kind": "group", "grouping": "…"}`: the members of the derived group the object is, or belongs to;
+- `{"kind": "selector", "selector": {…}}`: every object of the project the selector selects, the counterparts of a pair rule.
+
+`where` keeps the members a selector selects, and `value` is evaluated with each member in scope; inside it a property with `"of": "subject"` reads the rule's checked object instead. The functions are `count` (no `value`), `sum`, `min`, `max`, `average`, `any`, `all`, `none` (a truth `value`) and `distinctCount`. "The openings of a wall take at most 40 % of its side":
+
+```json
+{"kind": "compare", "operator": "lessThanOrEquals",
+ "left": {"kind": "aggregate", "function": "sum",
+          "over": {"kind": "path", "path": ["IfcRelVoidsElement:forward"]},
+          "value": {"kind": "property", "propertySet": "Pset_OpeningElementCommon", "property": "Area"}},
+ "right": {"kind": "multiply",
+           "left": {"kind": "property", "propertySet": "Pset_WallCommon", "property": "SideArea"},
+           "right": {"kind": "literal", "value": {"type": "number", "value": 0.4}}}}
+```
+
+A member whose membership cannot be decided (its `where` or `over` selector undecided) is never dropped. `count` becomes an integer interval (2..3 for two members and one undecided), `sum` adds its value or nothing, `min` and `max` may reach it, and `distinctCount` may count it; `any`, `all` and `none` hold or fail only when every way the undecided members may belong agrees (`all` over one undecided false member is false either way), and are otherwise not evaluated; `average` is not evaluated. A member value that is not evaluated leaves the aggregate not evaluated, and a path or group the run cannot list leaves the object in scope not evaluated. `null` member values are skipped by the numeric functions and are not true for the truth functions. `sum` over no member is 0, `min`, `max` and `average` over none are `null`, `all` over none is false (it never holds vacuously, as a `related` selector's `all`) and `none` over none true. The evaluation cites every member's evidence.
+
 ## Paths
 
 Every not-evaluated outcome and type error names its subexpression by a

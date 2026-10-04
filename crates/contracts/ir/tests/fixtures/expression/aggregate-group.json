@@ -1,0 +1,13 @@
+{
+  "kind": "aggregate",
+  "function": "distinctCount",
+  "over": {
+    "kind": "group",
+    "grouping": "flights-of-storey"
+  },
+  "value": {
+    "kind": "property",
+    "propertySet": "Pset_StairFlightCommon",
+    "property": "RiserHeight"
+  }
+}

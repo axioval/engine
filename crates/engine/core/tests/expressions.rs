@@ -555,3 +555,116 @@ fn well_typed_expressions_infer_their_types() {
         Type::Number(Unit::of(Some(QuantityDimension::Length)))
     );
 }
+
+/// Members handed to an aggregate as stated: membership and value.
+struct Members(Vec<(bool, Value)>);
+
+impl ExpressionContext for Members {
+    fn property(&mut self, _: Option<&str>, name: &str) -> Leaf {
+        Leaf::unreadable(format!("`{name}` is not read here"))
+    }
+
+    fn parameter(&mut self, name: &str) -> Leaf {
+        Leaf::unreadable(format!("`{name}` is unknown"))
+    }
+
+    fn members(
+        &mut self,
+        _: &axioval_ir::contract::AggregateSource,
+        _: Option<&axioval_ir::contract::Selector>,
+        _: Option<&Expression>,
+        _: &str,
+    ) -> Result<Vec<axioval_engine::expression::Member>, String> {
+        Ok(self
+            .0
+            .iter()
+            .map(|(certain, value)| axioval_engine::expression::Member {
+                certain: *certain,
+                value: Ok(value.clone()),
+                evidence: Vec::new(),
+            })
+            .collect())
+    }
+}
+
+fn aggregate(function: &str, members: Vec<(bool, Value)>) -> Result<Value, Reason> {
+    let mut node = json!({"kind": "aggregate", "function": function,
+        "over": {"kind": "path", "path": ["Hosts"]}});
+    if function != "count" {
+        node["value"] = json!({"kind": "null"});
+    }
+    evaluate(&expression(node), "a", &mut Members(members))
+        .outcome
+        .map_err(|why| why.reason)
+}
+
+#[test]
+fn aggregates_widen_over_undecided_members_and_follow_kleene_logic() {
+    let number = |value: f64| Value::number(value);
+    let interval = |lower: f64, upper: f64| Value::Number {
+        value: Interval::new(lower, upper).unwrap(),
+        unit: Unit::NONE,
+    };
+    let members = || {
+        vec![
+            (true, number(2.0)),
+            (true, number(5.0)),
+            (false, number(3.0)),
+        ]
+    };
+    assert_eq!(aggregate("count", members()), Ok(interval(2.0, 3.0)));
+    assert_eq!(aggregate("sum", members()), Ok(interval(7.0, 10.0)));
+    assert_eq!(aggregate("min", members()), Ok(number(2.0)));
+    assert_eq!(aggregate("max", members()), Ok(number(5.0)));
+    assert_eq!(
+        aggregate("average", members()),
+        Err(Reason::UndecidedMembers(1))
+    );
+    let lower = vec![(true, number(2.0)), (false, number(1.0))];
+    assert_eq!(aggregate("min", lower), Ok(interval(1.0, 2.0)));
+    assert_eq!(
+        aggregate("distinctCount", members()),
+        Ok(interval(2.0, 3.0))
+    );
+    assert_eq!(
+        aggregate("average", vec![(true, number(2.0)), (true, number(4.0))]),
+        Ok(number(3.0))
+    );
+    assert_eq!(aggregate("sum", Vec::new()), Ok(number(0.0)));
+    assert_eq!(aggregate("max", Vec::new()), Ok(Value::Null));
+    // Kleene logic over membership and truth.
+    let truth = Value::Boolean;
+    let cases = [
+        (
+            "any",
+            vec![(true, truth(false)), (false, truth(true))],
+            Err(Reason::UndecidedMembers(1)),
+        ),
+        (
+            "any",
+            vec![(true, truth(true)), (false, truth(false))],
+            Ok(truth(true)),
+        ),
+        (
+            "all",
+            vec![(true, truth(true)), (false, truth(false))],
+            Err(Reason::UndecidedMembers(1)),
+        ),
+        (
+            "all",
+            vec![(true, truth(true)), (false, truth(true))],
+            Ok(truth(true)),
+        ),
+        ("all", vec![(false, truth(false))], Ok(truth(false))),
+        ("all", Vec::new(), Ok(truth(false))),
+        ("none", Vec::new(), Ok(truth(true))),
+        ("none", vec![(false, truth(false))], Ok(truth(true))),
+    ];
+    for (function, members, expected) in cases {
+        assert_eq!(
+            aggregate(function, members.clone()),
+            expected,
+            "{function} {members:?}"
+        );
+    }
+}

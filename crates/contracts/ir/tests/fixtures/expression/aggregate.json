@@ -1,0 +1,21 @@
+{
+  "kind": "aggregate",
+  "function": "sum",
+  "over": {
+    "kind": "path",
+    "path": [
+      "IfcRelVoidsElement:forward"
+    ]
+  },
+  "where": {
+    "kind": "entityType",
+    "objectType": "Opening",
+    "includeSubtypes": true
+  },
+  "value": {
+    "kind": "property",
+    "propertySet": "axioval:measured",
+    "property": "area"
+  },
+  "label": "opening area"
+}

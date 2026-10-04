@@ -5,17 +5,27 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 
 use axioval_engine::RuleContext;
-use axioval_engine::expression::{ExpressionContext, Leaf, Value, derived_value};
-use axioval_ir::contract::{ParameterValue, ScalarValue, TableRow};
-use axioval_ir::{NotEvaluatedReason, Object};
+use axioval_engine::expression::{ExpressionContext, Leaf, Member, Value, derived_value, evaluate};
+use axioval_ir::contract::{
+    AggregateSource, Expression, ParameterValue, ScalarValue, Selector, TableRow,
+};
+use axioval_ir::{Evidence, NotEvaluatedReason, Object};
 
+use crate::selection::{Selection, object_by_id, selector_matches};
 use crate::support::table::{Matched, RowSelection, RowTest, TextPattern, match_rows};
-use crate::support::{PropertyRef, Resolved, resolve};
+use crate::support::{PropertyRef, Resolved, Traversal, resolve};
+
+/// A candidate member: the object, whether it surely belongs, and the
+/// evidence that reached it.
+type Candidate<'a> = (&'a Object, bool, Vec<Evidence>);
 
 /// Answers an expression's leaves for one selected object.
 pub(crate) struct ObjectLeaves<'a> {
     context: &'a RuleContext<'a>,
     object: &'a Object,
+    /// The rule's checked object: `object`, except in an aggregate's
+    /// member scope.
+    subject: &'a Object,
     /// The rule's parameters; a selector reads none.
     parameters: Option<&'a BTreeMap<String, ParameterValue>>,
     /// Why each unreadable leaf was unreadable, in reading order.
@@ -32,8 +42,94 @@ impl<'a> ObjectLeaves<'a> {
         Self {
             context,
             object,
+            subject: object,
             parameters,
             reasons: RefCell::new(Vec::new()),
+        }
+    }
+
+    /// The leaves of `member`, in an aggregate's member scope: the same
+    /// subject and parameters.
+    fn member(&self, member: &'a Object) -> Self {
+        Self {
+            context: self.context,
+            object: member,
+            subject: self.subject,
+            parameters: self.parameters,
+            reasons: RefCell::new(Vec::new()),
+        }
+    }
+
+    /// The candidate members `over` reaches from the object in scope, each
+    /// with whether it surely belongs and the evidence that reached it.
+    fn candidates(&self, over: &AggregateSource) -> Result<Vec<Candidate<'a>>, String> {
+        let context = self.context;
+        match over {
+            AggregateSource::Path { path } => {
+                let traversal = Traversal::path(path).map_err(|(_, why)| why)?;
+                let everything: Vec<&Object> = context.project.objects().collect();
+                let (reached, cited) = traversal
+                    .related(context, &self.object.id, &everything)
+                    .map_err(|(_, why)| format!("via {}: {why}", traversal.relationship))?;
+                reached
+                    .iter()
+                    .map(|id| {
+                        object_by_id(context, id)
+                            .map(|object| (object, true, cited.clone()))
+                            .ok_or_else(|| {
+                                format!("the path reached {id}, which is not in the run")
+                            })
+                    })
+                    .collect()
+            }
+            AggregateSource::Group { grouping } => {
+                let groups = context
+                    .services
+                    .get::<std::sync::Arc<axioval_engine::DerivedGroups>>()
+                    .ok_or("no derived groups are available outside a run")?;
+                let derived = groups
+                    .grouping(grouping)
+                    .ok_or_else(|| format!("the run derives no grouping `{grouping}`"))?;
+                let group = match derived.group(&self.object.id) {
+                    Some(group) => group,
+                    None => match derived.membership(&self.object.id) {
+                        Some(axioval_engine::Membership::Grouped(group, _)) => derived
+                            .group(group)
+                            .ok_or_else(|| format!("group {group} is not derived"))?,
+                        Some(axioval_engine::Membership::Undecided(_, why)) => {
+                            return Err(format!(
+                                "whether {} belongs to a group of `{grouping}` is undecided: {why}",
+                                self.object.id
+                            ));
+                        }
+                        _ => return Ok(Vec::new()),
+                    },
+                };
+                if let Some(why) = group.undecided() {
+                    return Err(format!("the members of the group are not all known: {why}"));
+                }
+                group
+                    .members()
+                    .iter()
+                    .map(|id| {
+                        object_by_id(context, id)
+                            .map(|object| (object, true, Vec::new()))
+                            .ok_or_else(|| format!("member {id} is not in the run"))
+                    })
+                    .collect()
+            }
+            AggregateSource::Selector { selector } => {
+                let mut candidates = Vec::new();
+                for object in context.project.objects() {
+                    let mut evidence = Vec::new();
+                    match selector_matches(context, selector, object, &mut evidence) {
+                        Selection::Match => candidates.push((object, true, evidence)),
+                        Selection::NoMatch => {}
+                        Selection::NotEvaluated(..) => candidates.push((object, false, evidence)),
+                    }
+                }
+                Ok(candidates)
+            }
         }
     }
 
@@ -92,6 +188,53 @@ impl ExpressionContext for ObjectLeaves<'_> {
             Some(Err(_)) => Leaf::unreadable(format!("parameter `{name}` is no single value")),
             None => Leaf::unreadable(format!("the rule has no parameter `{name}`")),
         }
+    }
+
+    fn subject_property(&mut self, set: Option<&str>, name: &str) -> Leaf {
+        let object = self.object;
+        self.object = self.subject;
+        let leaf = self.property(set, name);
+        self.object = object;
+        leaf
+    }
+
+    fn members(
+        &mut self,
+        over: &AggregateSource,
+        filter: Option<&Selector>,
+        value: Option<&Expression>,
+        path: &str,
+    ) -> Result<Vec<Member>, String> {
+        let mut members = Vec::new();
+        for (object, mut certain, mut evidence) in self.candidates(over)? {
+            if let Some(filter) = filter {
+                match selector_matches(self.context, filter, object, &mut evidence) {
+                    Selection::Match => {}
+                    Selection::NoMatch => continue,
+                    Selection::NotEvaluated(..) => certain = false,
+                }
+            }
+            let value = match value {
+                None => Ok(Value::Null),
+                Some(value) => {
+                    let mut leaves = self.member(object);
+                    let evaluation = evaluate(value, path, &mut leaves);
+                    evidence.extend(
+                        evaluation
+                            .reads
+                            .iter()
+                            .flat_map(|read| read.leaf.evidence.iter().cloned()),
+                    );
+                    evaluation.outcome
+                }
+            };
+            members.push(Member {
+                certain,
+                value,
+                evidence,
+            });
+        }
+        Ok(members)
     }
 
     fn lookup(&mut self, table: &str, keys: &BTreeMap<String, Value>, column: &str) -> Leaf {

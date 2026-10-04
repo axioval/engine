@@ -1,0 +1,27 @@
+{
+  "kind": "aggregate",
+  "function": "all",
+  "over": {
+    "kind": "selector",
+    "selector": {
+      "kind": "entityType",
+      "objectType": "Door",
+      "includeSubtypes": true
+    }
+  },
+  "value": {
+    "kind": "compare",
+    "operator": "lessThan",
+    "left": {
+      "kind": "property",
+      "propertySet": "axioval:measured",
+      "property": "z"
+    },
+    "right": {
+      "kind": "property",
+      "propertySet": "axioval:measured",
+      "property": "z",
+      "of": "subject"
+    }
+  }
+}

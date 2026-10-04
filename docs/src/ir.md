@@ -200,7 +200,7 @@ Every node may carry a `label`, which findings name in place of the node's rende
 | --- | --- | --- |
 | `literal` | `value` | a constant: a `ScalarValue` of type `boolean`, `integer`, `number`, `quantity` (with `unit`), `string`, `enum`, `date` or `dateTime`, in the wire form of the same parameter value; lists, tables, references and selectors are not literals |
 | `null` | | the source states no value |
-| `property` | `propertySet`?, `property` | a property of the object in scope; `axioval:measured` names carry their parameters (`bottom_above_level;path=…`) |
+| `property` | `propertySet`?, `property`, `of`? | a property of the object in scope, or with `of: subject` of the rule's checked object inside an aggregate; `axioval:measured` names carry their parameters (`bottom_above_level;path=…`) |
 | `parameter` | `name` | a parameter of the rule |
 | `derived` | `name` | a derived value the ruleset names |
 | `lookup` | `table`, `keys`, `column` | the `column` cell of the most specific row of the `table` parameter whose key columns match `keys` (column ID → expression), as `keyed-limit` selects a row |
@@ -221,6 +221,7 @@ Every node may carry a `label`, which findings name in place of the node's rende
 | `sin`, `cos`, `tan` | `operand` | trigonometry of a plane angle |
 | `atan2` | `y`, `x` | the plane angle of the vector `(x, y)` |
 | `convertSlope` | `operand`, `from`, `to` | a slope restated between `ratio`, `percent` and `angle` |
+| `aggregate` | `function`, `over`, `where`?, `value`? | `count`, `sum`, `min`, `max`, `average`, `any`, `all`, `none` or `distinctCount` over the objects a `path`, a derived `group` or a `selector` reaches, filtered by `where`, `value` evaluated per member; see [Aggregates](./expressions.md#aggregates) |
 | `concat` | `operands` | joined text |
 | `length`, `lower`, `upper`, `trim` | `operand` | text functions |
 

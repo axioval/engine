@@ -3,7 +3,7 @@
 //! The language is total. It has no loops, no recursion, no user-defined
 //! functions and no package-provided code, so evaluating a finite tree
 //! always terminates. The engine evaluates it; this module only states it.
-use super::ParameterValue;
+use super::{ParameterValue, Selector};
 use crate::{Date, DateTime};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -45,6 +45,10 @@ pub enum Expression {
         )]
         property_set: Option<String>,
         property: String,
+        /// Whose property: the object in scope (the default), or, inside an
+        /// aggregate's `value` or `where`, the rule's checked object.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        of: Option<PropertyScope>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         label: Option<String>,
     },
@@ -288,6 +292,20 @@ pub enum Expression {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         label: Option<String>,
     },
+    /// An aggregate over the objects `over` reaches from the object in
+    /// scope, those `filter` (`where`) selects: `value` is evaluated with
+    /// each member in scope. A member whose membership cannot be decided
+    /// widens the result or leaves it not evaluated, never dropped.
+    Aggregate {
+        function: AggregateFunction,
+        over: AggregateSource,
+        #[serde(rename = "where", default, skip_serializing_if = "Option::is_none")]
+        filter: Option<Box<Selector>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        value: Option<Box<Expression>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        label: Option<String>,
+    },
     Concat {
         operands: Vec<Expression>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -314,6 +332,53 @@ pub enum Expression {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         label: Option<String>,
     },
+}
+
+/// Whose property a [`Expression::Property`] reads.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PropertyScope {
+    /// The rule's checked object, even inside an aggregate's member scope.
+    Subject,
+}
+
+/// What an [`Expression::Aggregate`] computes over its members.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AggregateFunction {
+    /// How many members there are; takes no `value`.
+    Count,
+    /// The sum of the members' values.
+    Sum,
+    /// The least member value.
+    Min,
+    /// The greatest member value.
+    Max,
+    /// The members' mean value.
+    Average,
+    /// Whether some member's truth `value` holds.
+    Any,
+    /// Whether every member's truth `value` holds, and there is a member.
+    All,
+    /// Whether no member's truth `value` holds.
+    None,
+    /// How many distinct values the members have.
+    DistinctCount,
+}
+
+/// The objects an [`Expression::Aggregate`] ranges over.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+pub enum AggregateSource {
+    /// The objects a relationship path reaches from the object in scope,
+    /// its steps written as a `related` selector's.
+    Path { path: Vec<String> },
+    /// The members of the derived group of `grouping` the object in scope
+    /// is, or belongs to.
+    Group { grouping: String },
+    /// Every object of the project the selector selects, the object in
+    /// scope included when it is selected: the counterparts of a pair rule.
+    Selector { selector: Box<Selector> },
 }
 
 /// One `when` → `then` branch of an [`Expression::If`].
@@ -423,11 +488,13 @@ pub enum ExpressionError {
     NoKeys { table: String },
     #[error("a literal number is not finite")]
     NotFinite,
+    #[error("an aggregate `{function:?}` takes a `value` unless it counts, and a count takes none")]
+    AggregateValue { function: AggregateFunction },
 }
 
 impl Expression {
     /// Every node `kind`, in declaration order.
-    pub const KINDS: [&'static str; 41] = [
+    pub const KINDS: [&'static str; 42] = [
         "literal",
         "null",
         "property",
@@ -464,6 +531,7 @@ impl Expression {
         "tan",
         "atan2",
         "convertSlope",
+        "aggregate",
         "concat",
         "length",
         "lower",
@@ -511,6 +579,7 @@ impl Expression {
             Self::Tan { .. } => "tan",
             Self::Atan2 { .. } => "atan2",
             Self::ConvertSlope { .. } => "convertSlope",
+            Self::Aggregate { .. } => "aggregate",
             Self::Concat { .. } => "concat",
             Self::Length { .. } => "length",
             Self::Lower { .. } => "lower",
@@ -559,6 +628,7 @@ impl Expression {
             | Self::Tan { label, .. }
             | Self::Atan2 { label, .. }
             | Self::ConvertSlope { label, .. }
+            | Self::Aggregate { label, .. }
             | Self::Concat { label, .. }
             | Self::Length { label, .. }
             | Self::Lower { label, .. }
@@ -630,8 +700,28 @@ impl Expression {
                 .chain(std::iter::once(otherwise.as_ref()))
                 .collect(),
             Self::Round { operand, step, .. } => vec![operand, step],
+            Self::Aggregate { value, .. } => value.iter().map(AsRef::as_ref).collect(),
             Self::Atan2 { y, x, .. } => vec![y, x],
         }
+    }
+
+    /// Every aggregate member filter in the tree, outermost first.
+    #[must_use]
+    pub fn filters(&self) -> Vec<&Selector> {
+        let mut filters = Vec::new();
+        let mut pending = vec![self];
+        while let Some(node) = pending.pop() {
+            if let Self::Aggregate {
+                filter: Some(filter),
+                ..
+            } = node
+            {
+                filters.push(filter.as_ref());
+                pending.extend(filter.expressions());
+            }
+            pending.extend(node.children());
+        }
+        filters
     }
 
     /// Checks what serde cannot: nesting depth, non-empty operand lists
@@ -702,7 +792,45 @@ impl Expression {
             Self::If { branches, .. } if branches.is_empty() => {
                 return Err(ExpressionError::NoBranches);
             }
+            Self::Aggregate {
+                function,
+                over,
+                value,
+                ..
+            } => {
+                let takes = !matches!(function, AggregateFunction::Count);
+                if takes != value.is_some() {
+                    return Err(ExpressionError::AggregateValue {
+                        function: *function,
+                    });
+                }
+                match over {
+                    AggregateSource::Path { path } if path.is_empty() => {
+                        return Err(ExpressionError::Blank {
+                            kind,
+                            field: "path",
+                        });
+                    }
+                    AggregateSource::Path { path } => {
+                        for step in path {
+                            blank(kind, "path step", step)?;
+                        }
+                    }
+                    AggregateSource::Group { grouping } => blank(kind, "grouping", grouping)?,
+                    AggregateSource::Selector { .. } => {}
+                }
+            }
             _ => {}
+        }
+        if let Self::Aggregate {
+            filter: Some(filter),
+            ..
+        } = self
+        {
+            filter
+                .expressions()
+                .into_iter()
+                .try_for_each(|nested| nested.validate_at(depth + 1))?;
         }
         self.children()
             .into_iter()

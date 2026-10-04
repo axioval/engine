@@ -17,7 +17,10 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::fmt;
 
-use axioval_ir::contract::{Branch, Expression, ExpressionComparison, ScalarValue, SlopeForm};
+use axioval_ir::contract::{
+    AggregateFunction, AggregateSource, Branch, Expression, ExpressionComparison, PropertyScope,
+    ScalarValue, Selector, SlopeForm,
+};
 use axioval_ir::{Date, DateTime, Evidence, PropertyValue, QuantityDimension};
 
 use super::interval::{Interval, IntervalFailure};
@@ -233,6 +236,9 @@ pub enum Reason {
     Mismatch(String),
     /// A text pattern does not compile.
     InvalidPattern(String),
+    /// An aggregate's result depends on members whose membership cannot
+    /// be decided, this many.
+    UndecidedMembers(usize),
 }
 
 impl fmt::Display for Reason {
@@ -250,6 +256,10 @@ impl fmt::Display for Reason {
             Self::Domain => f.write_str("the operand lies outside the function's domain"),
             Self::Mismatch(why) => f.write_str(why),
             Self::InvalidPattern(why) => write!(f, "the pattern is invalid: {why}"),
+            Self::UndecidedMembers(count) => write!(
+                f,
+                "it depends on {count} member(s) whose membership cannot be decided"
+            ),
         }
     }
 }
@@ -288,6 +298,8 @@ pub enum Source {
     Parameter(String),
     /// A derived value of the ruleset.
     Derived(String),
+    /// The members of an aggregate.
+    Aggregate(AggregateFunction),
     /// A cell of a table parameter.
     Lookup {
         /// The table parameter.
@@ -338,11 +350,30 @@ pub struct Read {
     pub leaf: Leaf,
 }
 
+/// One member of an aggregate: whether it surely is one, and its value
+/// with that member in scope.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Member {
+    /// Whether the member surely belongs; `false` when its path or filter
+    /// could not decide it.
+    pub certain: bool,
+    /// Its value: `null` for a count, which reads none.
+    pub value: Result<Value, NotEvaluated>,
+    /// The evidence of its membership and its value.
+    pub evidence: Vec<Evidence>,
+}
+
 /// Answers an expression's leaves for one object in scope.
 pub trait ExpressionContext {
     /// A property of the object, `set` and `name` as the expression names
     /// them.
     fn property(&mut self, set: Option<&str>, name: &str) -> Leaf;
+
+    /// A property of the rule's checked object (`of: subject`): the object
+    /// in scope, except inside an aggregate's member scope.
+    fn subject_property(&mut self, set: Option<&str>, name: &str) -> Leaf {
+        self.property(set, name)
+    }
 
     /// A parameter of the rule.
     fn parameter(&mut self, name: &str) -> Leaf;
@@ -357,6 +388,24 @@ pub trait ExpressionContext {
     fn lookup(&mut self, table: &str, keys: &BTreeMap<String, Value>, column: &str) -> Leaf {
         let _ = (keys, column);
         Leaf::unreadable(format!("table `{table}` cannot be looked up here"))
+    }
+
+    /// The members `over` reaches from the object in scope that `filter`
+    /// selects, each with `value` evaluated with it in scope (none for a
+    /// count), the subexpression's path `path`.
+    ///
+    /// # Errors
+    ///
+    /// Why the members cannot be listed: a path the source cannot answer.
+    fn members(
+        &mut self,
+        over: &AggregateSource,
+        filter: Option<&Selector>,
+        value: Option<&Expression>,
+        path: &str,
+    ) -> Result<Vec<Member>, String> {
+        let _ = (over, filter, value, path);
+        Err("aggregates cannot be listed here".into())
     }
 }
 
@@ -427,9 +476,15 @@ impl Evaluator<'_> {
             Expression::Property {
                 property_set,
                 property,
+                of,
                 ..
             } => {
-                let leaf = self.context.property(property_set.as_deref(), property);
+                let leaf = match of {
+                    Some(PropertyScope::Subject) => self
+                        .context
+                        .subject_property(property_set.as_deref(), property),
+                    None => self.context.property(property_set.as_deref(), property),
+                };
                 self.read(
                     expression,
                     path,
@@ -691,6 +746,36 @@ impl Evaluator<'_> {
                 Ok(Value::Number {
                     value,
                     unit: Unit::RADIAN,
+                })
+            }
+            Expression::Aggregate {
+                function,
+                over,
+                filter,
+                value,
+                ..
+            } => {
+                let value_path = format!("{path}.aggregate.value");
+                let members =
+                    self.context
+                        .members(over, filter.as_deref(), value.as_deref(), &value_path);
+                let leaf = Leaf {
+                    value: Ok(Value::Null),
+                    evidence: members
+                        .iter()
+                        .flatten()
+                        .flat_map(|member| member.evidence.iter().cloned())
+                        .collect(),
+                };
+                self.reads.push(Read {
+                    path: path.to_owned(),
+                    source: Source::Aggregate(*function),
+                    leaf,
+                });
+                let members = members.map_err(|why| here(Reason::Unreadable(why)))?;
+                super::aggregate::aggregate(*function, &members).map_err(|why| match why {
+                    super::aggregate::Failure::Member(inner) => inner,
+                    super::aggregate::Failure::Here(reason) => here(reason),
                 })
             }
             Expression::Concat { operands, .. } => {

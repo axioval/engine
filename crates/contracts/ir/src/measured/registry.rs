@@ -118,6 +118,17 @@ const WALKING_KIND: MeasuredParameter = MeasuredParameter {
     ),
 };
 
+const WELL_MEMBERS: MeasuredParameter = MeasuredParameter {
+    key: "members",
+    kind: MeasuredParameterKind::Path,
+    required: true,
+    default: None,
+    help: &en_de(
+        "The relationship steps from the well to its stacked spaces.",
+        "Die Beziehungsschritte vom Schacht zu seinen gestapelten Räumen.",
+    ),
+};
+
 const PROXIMITY: &[&str] = &["proximity", "type-hierarchy"];
 
 const COUNTERPARTS: MeasuredParameter = MeasuredParameter {
@@ -672,6 +683,85 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              when no element of the kinds named exists.",
             "Der Anteil der Ober- oder Unterseite eines Raums, den die Bauteile bedecken, \
              von 0 bis 1; keiner, wenn kein Bauteil der genannten Arten besteht.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "centre_line_distance",
+        parameters: &[
+            kinds(
+                "walls",
+                &en_de(
+                    "The source kinds of the walls beside it, `,`-separated, subtypes included.",
+                    "Die Quellarten der Wände daneben, durch `,` getrennt, Untertypen \
+                     eingeschlossen.",
+                ),
+            ),
+            MeasuredParameter {
+                key: "centre_line",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["long", "short", "against-wall"],
+                },
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The footprint's centre line: along its long or short axis, or from the \
+                     wall it stands against to its front.",
+                    "Die Mittellinie des Grundrisses: entlang seiner langen oder kurzen Achse \
+                     oder von der Wand, vor der es steht, zu seiner Vorderseite.",
+                ),
+            },
+            MeasuredParameter {
+                key: "side",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["nearest", "farther"],
+                },
+                required: false,
+                default: Some("nearest"),
+                help: &en_de(
+                    "The nearer of the two sides' walls, or the farther: every side's wall is \
+                     within the farther's distance.",
+                    "Die nähere der Wände beider Seiten oder die fernere: jede Seite hat ihre \
+                     Wand innerhalb des Abstands der ferneren.",
+                ),
+            },
+            MeasuredParameter {
+                key: "reach",
+                kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                required: true,
+                default: None,
+                help: &en_de(
+                    "How far from the centre line a wall is searched.",
+                    "Wie weit von der Mittellinie eine Wand gesucht wird.",
+                ),
+            },
+            metres(
+                "inset",
+                "0",
+                &en_de(
+                    "How far the strip beside the footprint is narrowed at both ends.",
+                    "Um wie viel der Streifen neben dem Grundriss an beiden Enden verkürzt \
+                     wird.",
+                ),
+            ),
+        ],
+        dimension: Some(QuantityDimension::Length),
+        services: &["plan-span", "type-hierarchy"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[
+            "the footprint has no long axis",
+            "no side is surely nearer a wall than the others",
+        ],
+        label: &en_de(
+            "Distance from the centre line",
+            "Abstand von der Mittellinie",
+        ),
+        help: &en_de(
+            "How far the centre line of the footprint's least-area rectangle lies from the \
+             nearest wall beside it, square to it; just past `reach` where a wall may but \
+             need not lie, none where none may.",
+            "Wie weit die Mittellinie des kleinsten umschließenden Rechtecks des Grundrisses \
+             von der nächsten Wand daneben liegt, rechtwinklig zu ihr; knapp jenseits von \
+             `reach`, wo eine Wand liegen kann, aber nicht muss, keiner, wo keine liegen kann.",
         ),
     },
     plain!(
@@ -1599,6 +1689,18 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             "Die Länge des Grundrissrands, Löcher eingeschlossen."
         )
     ),
+    plain!(
+        "plan_diameter",
+        Some(QuantityDimension::Length),
+        &["plan-span"],
+        MeasuredExactness::Measured,
+        &["the footprint has no point"],
+        en_de("Longest plan diagonal", "Längste Diagonale im Grundriss"),
+        en_de(
+            "The longest distance between two points of the footprint.",
+            "Der größte Abstand zweier Punkte des Grundrisses."
+        )
+    ),
     MeasuredDescriptor {
         name: "plan_overlap",
         parameters: &[
@@ -2024,6 +2126,64 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             "Das vom Körper des Objekts umschlossene Volumen."
         )
     ),
+    MeasuredDescriptor {
+        name: "well_gap",
+        parameters: &[WELL_MEMBERS],
+        dimension: Some(QuantityDimension::Length),
+        services: &["vertical-extent", "relationship-selection"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &["the path reaches no space"],
+        label: &en_de("Largest gap in the well", "Größte Lücke im Schacht"),
+        help: &en_de(
+            "The largest vertical gap between consecutive stacked spaces, bottom to top.",
+            "Die größte senkrechte Lücke zwischen aufeinanderfolgenden gestapelten Räumen, \
+             von unten nach oben.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "well_height",
+        parameters: &[WELL_MEMBERS],
+        dimension: Some(QuantityDimension::Length),
+        services: &["vertical-extent", "relationship-selection"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &["the path reaches no space"],
+        label: &en_de("Well height", "Schachthöhe"),
+        help: &en_de(
+            "From the lowest bottom to the highest top of the stacked spaces.",
+            "Vom tiefsten Boden bis zur höchsten Oberkante der gestapelten Räume.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "well_section_area",
+        parameters: &[WELL_MEMBERS],
+        dimension: Some(QuantityDimension::Area),
+        services: &["plan-span", "relationship-selection"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &["the path reaches no space"],
+        label: &en_de("Well section area", "Schachtquerschnitt"),
+        help: &en_de(
+            "The area of the plan section the stacked spaces share.",
+            "Die Fläche des Grundrissquerschnitts, den die gestapelten Räume teilen.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "well_section_width",
+        parameters: &[WELL_MEMBERS],
+        dimension: Some(QuantityDimension::Length),
+        services: &["plan-span", "relationship-selection"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[
+            "the path reaches no space",
+            "the section's rectangle is tied",
+        ],
+        label: &en_de("Well section width", "Schachtbreite"),
+        help: &en_de(
+            "The short side of the shared section's least-area rectangle; none for an empty \
+             section.",
+            "Die kurze Seite des kleinsten umschließenden Rechtecks des geteilten \
+             Querschnitts; keine bei leerem Querschnitt.",
+        ),
+    },
     plain!(
         MEASURED_X,
         Some(QuantityDimension::Length),

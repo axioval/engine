@@ -53,7 +53,7 @@ pub struct ExitSeparation;
 
 /// Between which points of two exits a separation is measured.
 #[derive(Clone, Copy)]
-enum Separation {
+pub(crate) enum Separation {
     Closest,
     Span(PlanSpan),
 }
@@ -340,10 +340,10 @@ struct Checked {
 }
 
 /// A pair of exits and how its separation stands against the requirement.
-struct Pair {
-    first: ObjectId,
-    second: ObjectId,
-    measured: Result<(f64, f64, Evidence), String>,
+pub(crate) struct Pair {
+    pub(crate) first: ObjectId,
+    pub(crate) second: ObjectId,
+    pub(crate) measured: Result<(f64, f64, Evidence), String>,
 }
 
 enum Standing {
@@ -601,7 +601,7 @@ fn span_unavailable(error: &PlanSpanError) -> Unavailable {
 }
 
 /// Every pair of `exits` with its measured separation.
-fn measure_pairs(
+pub(crate) fn measure_pairs(
     context: &RuleContext<'_>,
     spans: &PlanSpanServiceHandle,
     separation: Separation,

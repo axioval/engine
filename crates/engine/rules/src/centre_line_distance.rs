@@ -36,7 +36,7 @@ pub struct CentreLineDistance;
 const ID: &str = "axioval:capability.centre-line-distance";
 
 #[derive(Clone, Copy)]
-enum Line {
+pub(crate) enum Line {
     Long,
     Short,
     AgainstWall,
@@ -206,7 +206,7 @@ fn check(
         Ok(measured) => measured,
         Err(error) => return vec![(label.to_owned(), Err(error))],
     };
-    let (axis, front, mut evidence) = match line(config, walls, &measured) {
+    let (axis, front, mut evidence) = match line(config.line, walls, &measured) {
         Ok(found) => found,
         Err(error) => return vec![(label.to_owned(), Err(error))],
     };
@@ -256,17 +256,17 @@ fn check(
 
 /// The axis a centre line runs along, the front (for `against-wall`) and
 /// the evidence deriving them.
-type CentreLine = (usize, Option<[f64; 2]>, Vec<Evidence>);
+pub(crate) type CentreLine = (usize, Option<[f64; 2]>, Vec<Evidence>);
 
 /// The axis the centre line runs along, the front (for `against-wall`)
 /// and the evidence deriving them.
-fn line(
-    config: &Config,
+pub(crate) fn line(
+    centre: Line,
     walls: &Walls,
     measured: &SideDistances,
 ) -> Result<CentreLine, Unavailable> {
     let rectangle = measured.rectangle();
-    match config.line {
+    match centre {
         Line::Long | Line::Short => {
             let long = rectangle.long_axis().map_err(|reason| {
                 (
@@ -274,7 +274,7 @@ fn line(
                     format!("the footprint has no long axis: {reason}"),
                 )
             })?;
-            let axis = if matches!(config.line, Line::Long) {
+            let axis = if matches!(centre, Line::Long) {
                 long
             } else {
                 1 - long

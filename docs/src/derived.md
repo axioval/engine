@@ -710,6 +710,27 @@ flight measured first; the steps, runs and handrails are measured members
 (below). Headroom, the clearance below and the clear width are
 [clearances](#clearances).
 
+### Plan spans
+
+`centre_line_distance` is how far the centre line of a footprint's
+least-area rectangle (`centre_line` `long`, `short` or `against-wall`) lies
+from the nearest wall of the `walls` kinds beside it, square to it, within
+`reach` and with the strip narrowed by `inset`: the nearer of the two
+sides, or with `side=farther` the farther (every side has its wall within
+it). Its interval runs from every wall that may lie there to the nearest
+sure one, just past `reach` where a wall may but need not lie, and it is
+none where none may. `plan_diameter` is the footprint's longest diagonal.
+A light well's stacked spaces (the `members` path) give
+`well_section_area` and `well_section_width` (the shared section, the
+width none for an empty one), `well_height` and `well_gap`, the largest
+gap between consecutive spaces. Recesses, corridor end walls and exit pairs
+are measured members (below). Each is measured as `centre-line-distance`,
+`exit-separation`, `recess-width`, `light-well` and
+`corridor-end-openings` measure it, and expressions over them reach those
+capabilities' verdicts on their fixtures (a recess whose depth straddles a
+row boundary but is wide enough under either row passes as an expression,
+where the capability leaves it open).
+
 ### Measured members
 
 Some measurements are many per object: a flight's steps, a ramp's runs, the
@@ -724,6 +745,9 @@ and declare their parameters and typed fields:
 | `steps` (`walking_line_offset`) | one per riser of a flight, bottom to top | `riser`, `going`, `step_length` (`2r + g`), `nosing`, `winder_angle`, `open_riser` |
 | `runs` | a ramp's sloped runs, lowest first | `slope`, `length`, `rise`, `width` |
 | `handrails` (`rails`, `reach_across`, `reach_above`, `level_over`, `from`, `of`) | each rail along a flight or each run of a ramp | `run`, `left`, `right`, `height_lowest`, `height_highest`, `extension_bottom`, `extension_top`, `bottom_rise`, `top_rise`, `first_on_side`, `last_on_side`, `gap_after` |
+| `recesses` | the pockets between a footprint's boundary and its convex hull | `width`, `depth` |
+| `end_walls` (`corridor`, `kinds`) | the walls the ends of the corridors an opening faces run into | `gap`, `facing` |
+| `exit_pairs` (`exits`, `kinds`, `between`) | every pair of a space's exits | `separation` |
 | `guard_edges` (`barrier_gap`, `platform_gap`, `landing_gap`, `landing_width`, `climb_distance`, `climb_side`, `measure_from`, `barriers`, `landings`, `climbables`) | the exposed edges of a walking surface, as the guard service samples them | `guarded_height`, `tallest_barrier`, `barrier_share`, `landing_fall`, `climbable_height` |
 
 Step `j` climbs riser `j` onto tread `j`; its `going`, `nosing` and

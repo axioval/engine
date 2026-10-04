@@ -127,6 +127,127 @@ const fn guard_kinds(key: &'static str, help: &'static [LocalizedText]) -> Measu
 pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
     MemberDescriptor {
         list: MeasuredDescriptor {
+            name: "end_walls",
+            parameters: &[
+                MeasuredParameter {
+                    key: "corridor",
+                    kind: MeasuredParameterKind::Path,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The relationship steps from the opening to its corridors.",
+                        "Die Beziehungsschritte von der Öffnung zu ihren Fluren.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "kinds",
+                    kind: MeasuredParameterKind::SourceKind,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The source kinds the corridors must be of, `,`-separated; any without \
+                         it.",
+                        "Die Quellarten, von denen die Flure sein müssen, durch `,` getrennt; \
+                         ohne Angabe jede.",
+                    ),
+                },
+            ],
+            dimension: None,
+            services: &["plan-span", "relationship-selection"],
+            exactness: MeasuredExactness::Measured,
+            not_evaluated: &["the wall an end runs into is undecided"],
+            label: &en_de("Corridor end walls", "Flurstirnwände"),
+            help: &en_de(
+                "The walls the ends of the corridors an opening faces run into, each with \
+                 the opening's gap to it and the length of it the opening faces.",
+                "Die Wände, auf die die Enden der Flure einer Öffnung stoßen, jede mit dem \
+                 Abstand der Öffnung zu ihr und der Länge, der die Öffnung gegenübersteht.",
+            ),
+        },
+        fields: &[
+            field(
+                "gap",
+                LENGTH,
+                &en_de("Gap", "Abstand"),
+                &en_de(
+                    "The plan distance from the opening to the wall segment, zero where they \
+                     meet.",
+                    "Der Grundrissabstand der Öffnung zum Wandabschnitt, null, wo sie sich \
+                     berühren.",
+                ),
+            ),
+            field(
+                "facing",
+                LENGTH,
+                &en_de("Facing", "Gegenüber"),
+                &en_de(
+                    "The length of the wall segment the opening faces.",
+                    "Die Länge des Wandabschnitts, dem die Öffnung gegenübersteht.",
+                ),
+            ),
+        ],
+    },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
+            name: "exit_pairs",
+            parameters: &[
+                MeasuredParameter {
+                    key: "exits",
+                    kind: MeasuredParameterKind::Path,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The relationship steps from the space to its exits.",
+                        "Die Beziehungsschritte vom Raum zu seinen Ausgängen.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "kinds",
+                    kind: MeasuredParameterKind::SourceKind,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The source kinds the exits must be of, `,`-separated; any without it.",
+                        "Die Quellarten, von denen die Ausgänge sein müssen, durch `,` \
+                         getrennt; ohne Angabe jede.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "between",
+                    kind: MeasuredParameterKind::Choice {
+                        options: &["closest", "centres", "farthest"],
+                    },
+                    required: false,
+                    default: Some("closest"),
+                    help: &en_de(
+                        "Between the exits' closest points, centres or farthest points in plan.",
+                        "Zwischen den nächsten Punkten, Mittelpunkten oder fernsten Punkten der \
+                         Ausgänge im Grundriss.",
+                    ),
+                },
+            ],
+            dimension: None,
+            services: &["plan-span", "proximity", "relationship-selection"],
+            exactness: MeasuredExactness::Measured,
+            not_evaluated: &["a pair's separation cannot be measured"],
+            label: &en_de("Exit pairs", "Ausgangspaare"),
+            help: &en_de(
+                "Every pair of a space's exits, with how far apart they are in plan.",
+                "Jedes Paar der Ausgänge eines Raums, mit ihrem Abstand im Grundriss.",
+            ),
+        },
+        fields: &[field(
+            "separation",
+            LENGTH,
+            &en_de("Separation", "Abstand"),
+            &en_de(
+                "How far apart the two exits are in plan.",
+                "Wie weit die beiden Ausgänge im Grundriss auseinanderliegen.",
+            ),
+        )],
+    },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
             name: "guard_edges",
             parameters: &[
                 guard_length(
@@ -501,6 +622,42 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
                      piece and over the middle.",
                     "Die Lücke im Grundriss zum nächsten Stück an seiner Seite; `null` für \
                      das letzte Stück und über der Mitte.",
+                ),
+            ),
+        ],
+    },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
+            name: "recesses",
+            parameters: &[],
+            dimension: None,
+            services: &["plan-span"],
+            exactness: MeasuredExactness::Measured,
+            not_evaluated: &["the plan-span service does not measure the recesses"],
+            label: &en_de("Recesses", "Rücksprünge"),
+            help: &en_de(
+                "The pockets between a footprint's outer boundary and its convex hull.",
+                "Die Taschen zwischen dem Außenrand eines Grundrisses und seiner konvexen \
+                 Hülle.",
+            ),
+        },
+        fields: &[
+            field(
+                "width",
+                LENGTH,
+                &en_de("Mouth width", "Öffnungsbreite"),
+                &en_de(
+                    "The width of the recess's mouth.",
+                    "Die Breite der Öffnung des Rücksprungs.",
+                ),
+            ),
+            field(
+                "depth",
+                LENGTH,
+                &en_de("Depth", "Tiefe"),
+                &en_de(
+                    "How deep the recess reaches behind its mouth.",
+                    "Wie tief der Rücksprung hinter seine Öffnung reicht.",
                 ),
             ),
         ],

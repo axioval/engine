@@ -55,6 +55,15 @@ impl Walls {
         }
     }
 
+    /// Walls surely selected: `sure`, and none undecided.
+    pub(crate) fn of(sure: BTreeSet<ObjectId>) -> Self {
+        Self {
+            sure,
+            maybe: BTreeSet::new(),
+            failed: None,
+        }
+    }
+
     fn is_sure(&self, wall: &ObjectId) -> bool {
         self.sure.contains(wall)
     }

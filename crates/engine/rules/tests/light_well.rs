@@ -248,3 +248,94 @@ fn a_well_without_members_or_with_an_unmeasured_one_is_not_evaluated() {
         vec![("well".to_owned(), NotEvaluatedReason::MissingService)]
     );
 }
+
+/// The well's judgement as an expression over its measured section, height
+/// and gaps flags and leaves open the same wells as `light-well`.
+#[test]
+#[allow(clippy::type_complexity, clippy::too_many_lines)]
+fn the_well_as_an_expression_over_its_values_reaches_the_verdicts() {
+    use serde_json::{Value, json};
+    let measured = |name: &str| {
+        json!({"kind": "property", "propertySet": "axioval:measured",
+            "property": format!("{name};members=groups:forward")})
+    };
+    let quantity = |value: f64, unit: &str| json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": unit}});
+    let compare = |operator: &str, left: Value, right: Value| json!({"kind": "compare", "operator": operator, "left": left, "right": right});
+    let row = |area: f64, width: f64| {
+        json!({"kind": "and", "operands": [
+            compare("greaterThanOrEquals", measured("well_section_area"), quantity(area, "m2")),
+            {"kind": "implies",
+             "antecedent": {"kind": "isDefined", "operand": measured("well_section_width")},
+             "consequent": compare("greaterThanOrEquals", measured("well_section_width"), quantity(width, "m"))}]})
+    };
+    let requirement = |tolerance: f64| {
+        json!({"kind": "and", "operands": [
+            compare("lessThanOrEquals", measured("well_gap"), quantity(tolerance, "m")),
+            compare("greaterThan", measured("well_section_area"), quantity(0.0, "m2")),
+            {"kind": "if", "branches": [{
+                "when": compare("lessThanOrEquals", measured("well_height"), quantity(7.0, "m")),
+                "then": row(4.0, 1.5)}],
+             "else": row(8.0, 2.5)}]})
+    };
+    let slight: &[(&str, f64, f64)] = &[("g", 0.0, 3.0), ("f1", 3.02, 6.0)];
+    let gap: &[(&str, f64, f64)] = &[("g", 0.0, 3.0), ("f2", 6.0, 9.0)];
+    let cases: Vec<(&[(&str, f64, f64)], (Span, Span), Option<f64>)> = vec![
+        (STACK, (point(9.0), point(2.8)), None),
+        (&STACK[..2], (point(5.0), point(2.0)), None),
+        (STACK, (point(5.0), point(2.0)), None),
+        (gap, (point(9.0), point(2.8)), None),
+        (slight, (point(9.0), point(2.8)), Some(0.05)),
+        (slight, (point(9.0), point(2.8)), None),
+        (STACK, (point(0.0), point(0.0)), None),
+        (STACK, ((7.0, 9.0), (2.4, 2.6)), None),
+    ];
+    for (index, (members, section, tolerance)) in cases.into_iter().enumerate() {
+        let expected = evaluate(members, section, tolerance);
+        let mut model = Model::default().object("well", "zone");
+        let mut extents = BTreeMap::new();
+        for (local, bottom, top) in members {
+            model = model.object(local, "space").edge("groups", "well", local);
+            extents.insert(id(local), ((*bottom, *bottom), (*top, *top)));
+        }
+        let service = Arc::new(Well { extents, section });
+        let rule = rule(
+            "axioval:capability.expression",
+            kind("zone"),
+            vec![(
+                "requirement",
+                ParameterValue::Expression {
+                    value: serde_json::from_value(requirement(tolerance.unwrap_or(0.0))).unwrap(),
+                },
+            )],
+        );
+        let outcome =
+            model.evaluate_measured(&axioval_rules::ExpressionRequirement, &rule, |services| {
+                services
+                    .register(VerticalExtentServiceHandle::new(service.clone()))
+                    .unwrap();
+                services
+                    .register(PlanSpanServiceHandle::new(service.clone()))
+                    .unwrap();
+            });
+        let flagged = |evaluation: &axioval_engine::CapabilityEvaluation| {
+            let mut found: Vec<String> = findings(evaluation)
+                .into_iter()
+                .map(|(object, _)| object)
+                .collect();
+            found.dedup();
+            found
+        };
+        let open = |evaluation: &axioval_engine::CapabilityEvaluation| {
+            let mut open = unevaluated(evaluation);
+            open.dedup();
+            open
+        };
+        assert_eq!(flagged(&outcome), flagged(&expected), "case {index}");
+        assert_eq!(
+            open(&outcome),
+            open(&expected),
+            "case {index}: {:?}",
+            outcome.not_evaluated_outcomes()
+        );
+    }
+}

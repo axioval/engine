@@ -232,3 +232,115 @@ fn a_row_without_a_width_or_with_an_empty_range_is_invalid() {
         );
     }
 }
+
+/// Each fixture's recesses judged by an expression over the measured
+/// recesses: no recess narrower than its row requires. It flags and leaves
+/// open what `recess-width` does.
+#[test]
+#[allow(clippy::too_many_lines, clippy::type_complexity)]
+fn the_rows_as_an_expression_over_recesses_reach_the_verdicts() {
+    use serde_json::{Value, json};
+    let field =
+        |name: &str| json!({"kind": "property", "propertySet": "axioval:member", "property": name});
+    let m = |value: f64| json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": "m"}});
+    let compare = |operator: &str, left: Value, right: Value| json!({"kind": "compare", "operator": operator, "left": left, "right": right});
+    let none = |violation: Value| {
+        json!({"kind": "aggregate", "function": "none", "over": {"kind": "measured", "name": "recesses"},
+            "value": violation})
+    };
+    // Up to 1 m deep, at least 1 m wide; deeper, at least as wide as deep.
+    let by_table = none(json!({"kind": "if", "branches": [{
+        "when": compare("lessThanOrEquals", field("depth"), m(1.0)),
+        "then": compare("lessThan", field("width"), m(1.0))}],
+        "else": compare("lessThan", field("width"), field("depth"))}));
+    let only_deep = none(json!({"kind": "and", "operands": [
+        compare("greaterThan", field("depth"), m(1.0)),
+        compare("lessThan", field("width"), m(3.0))]}));
+    let deep_table = ParameterValue::Table {
+        value: vec![row(&[
+            ("minimum_depth_metres", 1.0),
+            ("minimum_width_metres", 3.0),
+        ])],
+    };
+    let cases: Vec<(Vec<(&str, Found)>, ParameterValue, Value)> = vec![
+        (
+            vec![
+                (
+                    "a",
+                    Ok(vec![(point(1.2), point(0.8)), (point(0.9), point(0.8))]),
+                ),
+                (
+                    "b",
+                    Ok(vec![(point(2.5), point(2.0)), (point(1.5), point(2.0))]),
+                ),
+                ("c", Ok(Vec::new())),
+            ],
+            table(),
+            by_table.clone(),
+        ),
+        (
+            vec![("a", Ok(vec![(point(0.5), point(1.0))]))],
+            deep_table,
+            only_deep,
+        ),
+        (
+            vec![
+                ("a", Ok(vec![(point(5.0), (0.9, 1.1))])),
+                ("b", Ok(vec![((0.9, 1.1), point(0.5))])),
+            ],
+            table(),
+            by_table.clone(),
+        ),
+        (vec![("a", Err("tessellated".into()))], table(), by_table),
+    ];
+    for (index, (recesses, requirements, requirement)) in cases.into_iter().enumerate() {
+        let expected = evaluate(recesses.clone(), requirements);
+        let mut model = Model::default();
+        for (local, _) in &recesses {
+            model = model.object(local, "space");
+        }
+        let rule = rule(
+            "axioval:capability.expression",
+            kind("space"),
+            vec![(
+                "requirement",
+                ParameterValue::Expression {
+                    value: serde_json::from_value(requirement).unwrap(),
+                },
+            )],
+        );
+        let outcome =
+            model.evaluate_measured(&axioval_rules::ExpressionRequirement, &rule, |services| {
+                let service = Recesses(
+                    recesses
+                        .iter()
+                        .map(|(local, found)| (id(local), found.clone()))
+                        .collect(),
+                );
+                services
+                    .register(PlanSpanServiceHandle::new(Arc::new(service)))
+                    .unwrap();
+            });
+        let flagged = |evaluation: &axioval_engine::CapabilityEvaluation| {
+            let mut found: Vec<String> = findings(evaluation)
+                .into_iter()
+                .map(|(object, _)| object)
+                .collect();
+            found.dedup();
+            found
+        };
+        assert_eq!(flagged(&outcome), flagged(&expected), "case {index}");
+        let mut open = unevaluated(&expected);
+        if index == 2 {
+            // A depth either side of the row boundary leaves the row open,
+            // but 5 m is wide enough under either: the expression decides.
+            open.retain(|(object, _)| object != "a");
+        }
+        assert_eq!(
+            unevaluated(&outcome),
+            open,
+            "case {index}: {:?}",
+            outcome.not_evaluated_outcomes()
+        );
+    }
+}

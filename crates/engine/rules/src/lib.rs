@@ -51,6 +51,7 @@ mod location;
 mod manual_issue;
 mod measured_kinds;
 mod measured_openings;
+mod measured_plan;
 mod name_sequence;
 mod numbering_consistency;
 mod object_count;
@@ -258,5 +259,6 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(allowed_profile::ProfileMeasures))
         .and_then(|registry| registry.register_measured(stair_geometry::StairMeasures))
         .and_then(|registry| registry.register_measured(horizontal_guard::GuardMeasures))
+        .and_then(|registry| registry.register_measured(measured_plan::PlanMeasures))
         .map(|registry| registry.with_refiner(Refiner))
 }

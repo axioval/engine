@@ -753,3 +753,194 @@ fn invalid_declarations_refuse_the_rule() {
         );
     }
 }
+
+/// The separation requirement as an expression over the exit pairs and the
+/// longest diagonal: some pair (or, for `all`, no pair falls short) at
+/// least the fraction of the diagonal apart, the fraction a third where the
+/// storey is sprinklered. It flags and leaves open what `exit-separation`
+/// does.
+#[test]
+#[allow(clippy::too_many_lines, clippy::items_after_statements)]
+fn exit_pairs_and_the_diagonal_reach_the_verdicts() {
+    use serde_json::{Value, json};
+    let number =
+        |value: f64| json!({"kind": "literal", "value": {"type": "number", "value": value}});
+    let required = |sprinklered: bool| -> Value {
+        let fraction = if sprinklered {
+            json!({"kind": "if", "branches": [{
+                "when": {"kind": "aggregate", "function": "any",
+                    "over": {"kind": "path", "path": ["contains:backward"]},
+                    "value": {"kind": "compare", "operator": "equals",
+                        "left": {"kind": "property", "propertySet": "Fire", "property": "Sprinklered"},
+                        "right": {"kind": "literal", "value": {"type": "boolean", "value": true}}}},
+                "then": number(1.0 / 3.0)}],
+                "else": number(0.5)})
+        } else {
+            number(0.5)
+        };
+        json!({"kind": "multiply", "left": fraction,
+            "right": {"kind": "property", "propertySet": "axioval:measured", "property": "plan_diameter"}})
+    };
+    let pairs =
+        |between: &str| format!("exit_pairs;exits=bounds:backward;kinds=door;between={between}");
+    let separation =
+        json!({"kind": "property", "propertySet": "axioval:member", "property": "separation"});
+    let some = |between: &str, sprinklered: bool| {
+        json!({"kind": "or", "operands": [
+            {"kind": "compare", "operator": "lessThan",
+             "left": {"kind": "aggregate", "function": "count", "over": {"kind": "measured", "name": pairs(between)}},
+             "right": {"kind": "literal", "value": {"type": "integer", "value": 1}}},
+            {"kind": "aggregate", "function": "any", "over": {"kind": "measured", "name": pairs(between)},
+             "value": {"kind": "compare", "operator": "greaterThanOrEquals",
+                 "left": separation.clone(), "right": required(sprinklered)}}]})
+    };
+    let every = json!({"kind": "aggregate", "function": "none",
+        "over": {"kind": "measured", "name": pairs("closest")},
+        "value": {"kind": "compare", "operator": "lessThan",
+            "left": separation.clone(), "right": required(false)}});
+    let with_flag = |value: bool| {
+        model().value(
+            "level",
+            "Fire",
+            "Sprinklered",
+            PropertyValue::Boolean(value),
+        )
+    };
+    let spans = || {
+        Spans::default()
+            .diameter("hall", 10.0, 10.0)
+            .span("d1", "d2", PlanSpan::Centres, 4.0)
+            .span("d1", "d2", PlanSpan::Farthest, 6.0)
+    };
+    let none_far = || {
+        Plan::default()
+            .apart("d1", "d2", 2.0, 2.0)
+            .apart("d1", "d3", 5.0, 5.0)
+            .apart("d2", "d3", 3.0, 3.0)
+    };
+    type Case = (
+        Box<dyn Fn() -> Model>,
+        Box<dyn Fn() -> Spans>,
+        Box<dyn Fn() -> Plan>,
+        Vec<(&'static str, ParameterValue)>,
+        Value,
+    );
+    let cases: Vec<Case> = vec![
+        (
+            Box::new(model),
+            Box::new(hall),
+            Box::new(|| Plan::default().apart("d1", "d2", 2.0, 2.0)),
+            vec![],
+            some("closest", false),
+        ),
+        (
+            Box::new(model),
+            Box::new(hall),
+            Box::new(|| Plan::default().apart("d1", "d2", 12.0, 12.0)),
+            vec![],
+            some("closest", false),
+        ),
+        (
+            Box::new(move || with_flag(true)),
+            Box::new(hall),
+            Box::new(|| Plan::default().apart("d1", "d2", 9.0, 9.0)),
+            sprinklered(),
+            some("closest", true),
+        ),
+        (
+            Box::new(move || with_flag(false)),
+            Box::new(hall),
+            Box::new(|| Plan::default().apart("d1", "d2", 9.0, 9.0)),
+            sprinklered(),
+            some("closest", true),
+        ),
+        (
+            Box::new(move || with_flag(true)),
+            Box::new(hall),
+            Box::new(|| Plan::default().apart("d1", "d2", 5.0, 5.0)),
+            sprinklered(),
+            some("closest", true),
+        ),
+        (
+            Box::new(model),
+            Box::new(spans),
+            Box::new(|| Plan::default().apart("d1", "d2", 2.0, 2.0)),
+            vec![],
+            some("closest", false),
+        ),
+        (
+            Box::new(model),
+            Box::new(spans),
+            Box::new(Plan::default),
+            vec![("separation", string("centres"))],
+            some("centres", false),
+        ),
+        (
+            Box::new(model),
+            Box::new(spans),
+            Box::new(Plan::default),
+            vec![("separation", string("farthest"))],
+            some("farthest", false),
+        ),
+        (
+            Box::new(three_doors),
+            Box::new(hall),
+            Box::new(three_apart),
+            vec![],
+            some("closest", false),
+        ),
+        (
+            Box::new(three_doors),
+            Box::new(hall),
+            Box::new(three_apart),
+            vec![("pairs", string("all"))],
+            every,
+        ),
+        (
+            Box::new(three_doors),
+            Box::new(hall),
+            Box::new(none_far),
+            vec![],
+            some("closest", false),
+        ),
+    ];
+    for (index, (model, spans, plan, extra, requirement)) in cases.into_iter().enumerate() {
+        let expected = evaluate(model(), spans(), plan(), extra);
+        let rule = rule(
+            "axioval:capability.expression",
+            kind("space"),
+            vec![(
+                "requirement",
+                ParameterValue::Expression {
+                    value: serde_json::from_value(requirement).unwrap(),
+                },
+            )],
+        );
+        let outcome =
+            model().evaluate_measured(&axioval_rules::ExpressionRequirement, &rule, |services| {
+                services
+                    .register(PlanSpanServiceHandle::new(Arc::new(spans())))
+                    .unwrap();
+                services
+                    .register(ProximityServiceHandle::new(Arc::new(plan())))
+                    .unwrap();
+            });
+        let flagged = |evaluation: &CapabilityEvaluation| {
+            findings(evaluation)
+                .into_iter()
+                .map(|(object, _)| object)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            flagged(&outcome),
+            flagged(&expected),
+            "case {index}: {:?}",
+            outcome.not_evaluated_outcomes()
+        );
+        assert_eq!(
+            unevaluated(&outcome),
+            unevaluated(&expected),
+            "case {index}"
+        );
+    }
+}

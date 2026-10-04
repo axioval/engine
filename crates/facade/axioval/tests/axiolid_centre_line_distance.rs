@@ -9,8 +9,9 @@ use axiolid_core::Point3;
 use axiolid_mesh::TriMesh;
 use axioval::axiolid::{AxiolidGeometry, AxiolidPlanSpanService};
 use axioval::engine::{
-    CapabilityEvaluation, CompiledRule, PlanSpanServiceHandle, RuleCapability, RuleContext,
-    ServiceRegistry,
+    CapabilityEvaluation, CompiledRule, PlanSpanServiceHandle, PropertyRequest, PropertyResolution,
+    PropertyResolutionError, PropertyResolutionService, PropertyResolutionServiceHandle,
+    RuleCapability, RuleContext, ServiceRegistry,
 };
 use axioval::ir::contract::{ParameterValue, Selector, Severity};
 use axioval::ir::{NotEvaluatedReason, Object, ObjectId, Project, RuleId, SourceId};
@@ -274,4 +275,158 @@ fn declarations_fail_closed() {
         reasons.len() == 1 && reasons[0].1.contains("front not decided"),
         "{outcome:#?}"
     );
+}
+
+/// Answers the measured set as a run does; nothing else.
+struct Measured {
+    services: ServiceRegistry,
+    project: Project,
+}
+
+impl PropertyResolutionService for Measured {
+    fn resolve(
+        &self,
+        request: &PropertyRequest,
+    ) -> Result<PropertyResolution, PropertyResolutionError> {
+        axioval::engine::measured_value(
+            &self.services,
+            &self.project,
+            request.object_id(),
+            request.property(),
+        )
+    }
+
+    fn enumerate(
+        &self,
+        _: &axioval::engine::PropertyEnumerationRequest,
+    ) -> Result<axioval::engine::PropertyEnumeration, PropertyResolutionError> {
+        Err(PropertyResolutionError::InvalidRequest)
+    }
+}
+
+impl Scene {
+    /// `requirement` as an expression rule over the same scene, with the
+    /// built-in measured values installed.
+    fn express(self, requirement: &serde_json::Value) -> CapabilityEvaluation {
+        let rule = CompiledRule {
+            id: RuleId::new("wc-axis").unwrap(),
+            capability: "axioval:capability.expression".into(),
+            severity: Severity::Error,
+            selector: kind("wc"),
+            parameters: std::collections::BTreeMap::from([(
+                "requirement".to_owned(),
+                ParameterValue::Expression {
+                    value: serde_json::from_value(requirement.clone()).unwrap(),
+                },
+            )]),
+        };
+        let project = Project::new(self.objects).unwrap();
+        let registry =
+            axioval::rules::register_builtins(axioval::engine::CapabilityRegistry::new()).unwrap();
+        let spans = PlanSpanServiceHandle::new(Arc::new(AxiolidPlanSpanService::new(
+            self.geometry,
+            source(),
+        )));
+        let mut measuring = ServiceRegistry::new();
+        measuring.register(spans.clone()).unwrap();
+        registry.install_measured(&mut measuring, &project);
+        let mut services = ServiceRegistry::new();
+        services.register(spans).unwrap();
+        services
+            .register(PropertyResolutionServiceHandle::new(Arc::new(Measured {
+                services: measuring,
+                project: project.clone(),
+            })))
+            .unwrap();
+        axioval::rules::ExpressionRequirement.evaluate(
+            &RuleContext {
+                project: &project,
+                services: &services,
+            },
+            &rule,
+        )
+    }
+}
+
+/// The centre-line distance as a measured value reaches the capability's
+/// verdicts: the nearer side for `nearest`, and for `both` the nearer side
+/// against the minimum and the farther against the maximum.
+#[test]
+#[allow(clippy::type_complexity, clippy::too_many_lines)]
+fn the_centre_line_distance_as_a_value_reaches_the_verdicts() {
+    use serde_json::{Value, json};
+    let distance = |line: &str, side: &str, walls: &str| {
+        let name = format!(
+            "centre_line_distance;walls={walls};centre_line={line};side={side};reach=1;inset=0.01"
+        );
+        json!({"kind": "round", "operand": {"kind": "property", "propertySet": "axioval:measured",
+            "property": name}, "step": {"kind": "literal", "value": {"type": "quantity",
+            "value": 1e-6, "unit": "m"}}})
+    };
+    let m = |value: f64| json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": "m"}});
+    let within = |line: &str, both: bool, walls: &str| -> Value {
+        let near = distance(line, "nearest", walls);
+        let far = distance(line, if both { "farther" } else { "nearest" }, walls);
+        json!({"kind": "and", "operands": [
+            {"kind": "isDefined", "operand": far.clone()},
+            {"kind": "compare", "operator": "greaterThanOrEquals", "left": near, "right": m(0.405)},
+            {"kind": "compare", "operator": "lessThanOrEquals", "left": far, "right": m(0.455)}]})
+    };
+    let verdict = |outcome: &CapabilityEvaluation| {
+        (
+            outcome.findings().len().min(1),
+            outcome.not_evaluated_outcomes().len().min(1),
+        )
+    };
+    let east = || cuboid([0.86, -0.2, 0.0], [1.06, 3.2, 2.5]);
+    let cases: Vec<(Box<dyn Fn() -> Scene>, Vec<(&str, ParameterValue)>, Value)> = vec![
+        (
+            Box::new(|| Scene::wc(0.38)),
+            vec![],
+            within("against-wall", false, "wall"),
+        ),
+        (
+            Box::new(|| Scene::wc(0.43)),
+            vec![],
+            within("against-wall", false, "wall"),
+        ),
+        (
+            Box::new(|| Scene::wc(0.6)),
+            vec![],
+            within("against-wall", false, "wall"),
+        ),
+        (
+            Box::new(|| Scene::wc(0.43)),
+            vec![("centre_line", text("long"))],
+            within("long", false, "wall"),
+        ),
+        (
+            Box::new(|| Scene::wc(0.43)),
+            vec![("sides", text("both"))],
+            within("against-wall", true, "wall"),
+        ),
+        (
+            Box::new(move || Scene::wc(0.43).body("east", "wall", east())),
+            vec![("sides", text("both"))],
+            within("against-wall", true, "wall"),
+        ),
+        (
+            Box::new(|| Scene::wc(0.43)),
+            vec![
+                ("centre_line", text("long")),
+                ("wall_selector", selector(kind("partition"))),
+            ],
+            within("long", false, "partition"),
+        ),
+        (
+            Box::new(|| Scene::wc(0.2)),
+            vec![],
+            within("against-wall", false, "wall"),
+        ),
+    ];
+    for (index, (scene, parameters, requirement)) in cases.into_iter().enumerate() {
+        let expected = verdict(&scene().check(&parameters));
+        let outcome = scene().express(&requirement);
+        assert_eq!(verdict(&outcome), expected, "case {index}: {outcome:#?}");
+    }
 }

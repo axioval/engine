@@ -335,3 +335,117 @@ fn without_the_plan_span_service_nothing_is_evaluated() {
         [("hall".to_owned(), NotEvaluatedReason::MissingService)]
     );
 }
+
+/// Each window judged by an expression over the end walls of the corridors
+/// it bounds: none within the wall depth and facing more than the minimum.
+/// It flags and leaves open what `corridor-end-openings` does.
+#[test]
+#[allow(clippy::too_many_lines, clippy::type_complexity)]
+fn end_walls_as_members_reach_the_verdicts() {
+    use serde_json::json;
+    let field =
+        |name: &str| json!({"kind": "property", "propertySet": "axioval:member", "property": name});
+    let m = |value: f64| json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": "m"}});
+    let requirement = |depth: f64, facing: f64| {
+        json!({"kind": "aggregate", "function": "none",
+            "over": {"kind": "measured", "name": "end_walls;corridor=bounds:forward;kinds=corridor"},
+            "value": {"kind": "and", "operands": [
+                {"kind": "compare", "operator": "lessThanOrEquals", "left": field("gap"), "right": m(depth)},
+                {"kind": "compare", "operator": "greaterThan", "left": field("facing"), "right": m(facing)}]}})
+    };
+    let tolerances = || {
+        Ends::default().space(
+            "hall",
+            vec![
+                End::wall([20.0, 0.0], [20.0, 2.0])
+                    .window("end", (0.6, 0.6), (1.0, 1.0))
+                    .window("side", (0.0, 0.0), (0.1, 0.1)),
+            ],
+        )
+    };
+    let l_shaped = || {
+        Ends::default().space(
+            "hall",
+            vec![
+                End::wall([0.0, 0.0], [0.0, 1.5])
+                    .window("end", (7.0, 7.0), (0.0, 0.0))
+                    .window("side", (8.0, 8.0), (0.0, 0.0)),
+                End::wall([6.5, 8.0], [8.0, 8.0])
+                    .window("end", (0.0, 0.0), (1.0, 1.0))
+                    .window("side", (6.8, 6.8), (0.0, 0.0)),
+            ],
+        )
+    };
+    let straddling = || {
+        Ends::default().space(
+            "hall",
+            vec![
+                End::undecided("the path is too short to give its direction"),
+                End::wall([20.0, 0.0], [20.0, 2.0])
+                    .window("end", (0.0, 0.0), (0.05, 0.2))
+                    .window("side", (9.0, 9.0), (0.0, 0.0)),
+            ],
+        )
+    };
+    let beside_undecided = || {
+        Ends::default().space(
+            "hall",
+            vec![
+                End::undecided("the path is too short to give its direction"),
+                End::wall([20.0, 0.0], [20.0, 2.0])
+                    .window("end", (0.0, 0.0), (1.0, 1.0))
+                    .window("side", (9.0, 9.0), (0.0, 0.0)),
+            ],
+        )
+    };
+    let cases: Vec<(
+        fn() -> Ends,
+        Vec<(&'static str, ParameterValue)>,
+        (f64, f64),
+    )> = vec![
+        (straight, vec![], (0.5, 0.1)),
+        (l_shaped, vec![], (0.5, 0.1)),
+        (straddling, vec![], (0.5, 0.1)),
+        (beside_undecided, vec![], (0.5, 0.1)),
+        (tolerances, vec![], (0.5, 0.1)),
+        (
+            tolerances,
+            vec![("wall_depth", number(0.7)), ("facing", number(0.05))],
+            (0.7, 0.05),
+        ),
+    ];
+    for (index, (ends, extra, (depth, facing))) in cases.into_iter().enumerate() {
+        let expected = evaluate_with(model(), Some(ends()), extra);
+        let rule = rule(
+            "axioval:capability.expression",
+            kind("window"),
+            vec![(
+                "requirement",
+                ParameterValue::Expression {
+                    value: serde_json::from_value(requirement(depth, facing)).unwrap(),
+                },
+            )],
+        );
+        let outcome =
+            model().evaluate_measured(&axioval_rules::ExpressionRequirement, &rule, |services| {
+                services
+                    .register(PlanSpanServiceHandle::new(Arc::new(ends())))
+                    .unwrap();
+            });
+        let flagged = |evaluation: &CapabilityEvaluation| {
+            let mut found: Vec<String> = findings(evaluation)
+                .into_iter()
+                .map(|(object, _)| object)
+                .collect();
+            found.sort();
+            found
+        };
+        assert_eq!(flagged(&outcome), flagged(&expected), "case {index}");
+        assert_eq!(
+            unevaluated(&outcome),
+            unevaluated(&expected),
+            "case {index}: {:?}",
+            outcome.not_evaluated_outcomes()
+        );
+    }
+}

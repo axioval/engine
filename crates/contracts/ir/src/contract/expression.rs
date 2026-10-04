@@ -306,6 +306,30 @@ pub enum Expression {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         label: Option<String>,
     },
+    /// How the rule `rule` of the same ruleset judged the object in scope:
+    /// true when it passed it, false when it reported a finding about it,
+    /// `null` when it did not select it, and not evaluated when it left it
+    /// open or could not decide whether it selected it.
+    RuleOutcome {
+        rule: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        label: Option<String>,
+    },
+    /// How many findings the rule `rule` reported about the object in
+    /// scope: 0 when it passed or did not select it.
+    FindingCount {
+        rule: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        label: Option<String>,
+    },
+    /// The greatest graded deviation (how far a value misses its bound,
+    /// relative to it) of the rule `rule`'s findings about the object in
+    /// scope, a plain number; `null` when it reported none graded.
+    Deviation {
+        rule: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        label: Option<String>,
+    },
     Concat {
         operands: Vec<Expression>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -494,7 +518,7 @@ pub enum ExpressionError {
 
 impl Expression {
     /// Every node `kind`, in declaration order.
-    pub const KINDS: [&'static str; 42] = [
+    pub const KINDS: [&'static str; 45] = [
         "literal",
         "null",
         "property",
@@ -532,6 +556,9 @@ impl Expression {
         "atan2",
         "convertSlope",
         "aggregate",
+        "ruleOutcome",
+        "findingCount",
+        "deviation",
         "concat",
         "length",
         "lower",
@@ -580,6 +607,9 @@ impl Expression {
             Self::Atan2 { .. } => "atan2",
             Self::ConvertSlope { .. } => "convertSlope",
             Self::Aggregate { .. } => "aggregate",
+            Self::RuleOutcome { .. } => "ruleOutcome",
+            Self::FindingCount { .. } => "findingCount",
+            Self::Deviation { .. } => "deviation",
             Self::Concat { .. } => "concat",
             Self::Length { .. } => "length",
             Self::Lower { .. } => "lower",
@@ -629,6 +659,9 @@ impl Expression {
             | Self::Atan2 { label, .. }
             | Self::ConvertSlope { label, .. }
             | Self::Aggregate { label, .. }
+            | Self::RuleOutcome { label, .. }
+            | Self::FindingCount { label, .. }
+            | Self::Deviation { label, .. }
             | Self::Concat { label, .. }
             | Self::Length { label, .. }
             | Self::Lower { label, .. }
@@ -646,7 +679,10 @@ impl Expression {
             | Self::Null { .. }
             | Self::Property { .. }
             | Self::Parameter { .. }
-            | Self::Derived { .. } => Vec::new(),
+            | Self::Derived { .. }
+            | Self::RuleOutcome { .. }
+            | Self::FindingCount { .. }
+            | Self::Deviation { .. } => Vec::new(),
             Self::Lookup { keys, .. } => keys.values().collect(),
             Self::Not { operand, .. }
             | Self::IsDefined { operand, .. }
@@ -705,6 +741,132 @@ impl Expression {
         }
     }
 
+    /// Every rule whose outcomes the tree reads, in its own nodes and in
+    /// `ruleOutcome` selectors of aggregate member filters.
+    #[must_use]
+    pub fn rule_references(&self) -> Vec<&str> {
+        let mut rules = Vec::new();
+        let mut pending = vec![self];
+        while let Some(node) = pending.pop() {
+            match node {
+                Self::RuleOutcome { rule, .. }
+                | Self::FindingCount { rule, .. }
+                | Self::Deviation { rule, .. } => rules.push(rule.as_str()),
+                Self::Aggregate {
+                    filter: Some(filter),
+                    ..
+                } => {
+                    rules.extend(filter.rule_references());
+                    pending.extend(filter.expressions());
+                }
+                _ => {}
+            }
+            pending.extend(node.children());
+        }
+        rules
+    }
+
+    /// Renames every rule the tree reads, as [`Expression::rule_references`]
+    /// lists them.
+    pub fn rename_rules(&mut self, rename: &dyn Fn(&str) -> String) {
+        match self {
+            Self::RuleOutcome { rule, .. }
+            | Self::FindingCount { rule, .. }
+            | Self::Deviation { rule, .. } => *rule = rename(rule),
+            Self::Aggregate { filter, value, .. } => {
+                if let Some(filter) = filter {
+                    filter.rename_rules(rename);
+                }
+                if let Some(value) = value {
+                    value.rename_rules(rename);
+                }
+            }
+            Self::Lookup { keys, .. } => keys.values_mut().for_each(|key| key.rename_rules(rename)),
+            Self::If {
+                branches,
+                otherwise,
+                ..
+            } => {
+                for branch in branches {
+                    branch.when.rename_rules(rename);
+                    branch.then.rename_rules(rename);
+                }
+                otherwise.rename_rules(rename);
+            }
+            Self::And { operands, .. }
+            | Self::Or { operands, .. }
+            | Self::Coalesce { operands, .. }
+            | Self::Min { operands, .. }
+            | Self::Max { operands, .. }
+            | Self::Concat { operands, .. } => {
+                operands
+                    .iter_mut()
+                    .for_each(|operand| operand.rename_rules(rename));
+            }
+            Self::OneOf {
+                operand, values, ..
+            }
+            | Self::NoneOf {
+                operand, values, ..
+            } => {
+                operand.rename_rules(rename);
+                values
+                    .iter_mut()
+                    .for_each(|value| value.rename_rules(rename));
+            }
+            Self::Not { operand, .. }
+            | Self::IsDefined { operand, .. }
+            | Self::IsUndefined { operand, .. }
+            | Self::Negate { operand, .. }
+            | Self::Abs { operand, .. }
+            | Self::Floor { operand, .. }
+            | Self::Ceil { operand, .. }
+            | Self::Sqrt { operand, .. }
+            | Self::Sin { operand, .. }
+            | Self::Cos { operand, .. }
+            | Self::Tan { operand, .. }
+            | Self::ConvertSlope { operand, .. }
+            | Self::Length { operand, .. }
+            | Self::Lower { operand, .. }
+            | Self::Upper { operand, .. }
+            | Self::Trim { operand, .. } => operand.rename_rules(rename),
+            Self::Implies {
+                antecedent: left,
+                consequent: right,
+                ..
+            }
+            | Self::Xor { left, right, .. }
+            | Self::Compare { left, right, .. }
+            | Self::Add { left, right, .. }
+            | Self::Subtract { left, right, .. }
+            | Self::Multiply { left, right, .. }
+            | Self::Divide { left, right, .. }
+            | Self::Round {
+                operand: left,
+                step: right,
+                ..
+            }
+            | Self::Atan2 {
+                y: left, x: right, ..
+            } => {
+                left.rename_rules(rename);
+                right.rename_rules(rename);
+            }
+            Self::Between {
+                operand, low, high, ..
+            } => {
+                operand.rename_rules(rename);
+                low.rename_rules(rename);
+                high.rename_rules(rename);
+            }
+            Self::Literal { .. }
+            | Self::Null { .. }
+            | Self::Property { .. }
+            | Self::Parameter { .. }
+            | Self::Derived { .. } => {}
+        }
+    }
+
     /// Every aggregate member filter in the tree, outermost first.
     #[must_use]
     pub fn filters(&self) -> Vec<&Selector> {
@@ -760,6 +922,9 @@ impl Expression {
             Self::Parameter { name, .. } | Self::Derived { name, .. } => {
                 blank(kind, "name", name)?;
             }
+            Self::RuleOutcome { rule, .. }
+            | Self::FindingCount { rule, .. }
+            | Self::Deviation { rule, .. } => blank(kind, "rule", rule)?,
             Self::Lookup {
                 table,
                 keys,
@@ -797,29 +962,7 @@ impl Expression {
                 over,
                 value,
                 ..
-            } => {
-                let takes = !matches!(function, AggregateFunction::Count);
-                if takes != value.is_some() {
-                    return Err(ExpressionError::AggregateValue {
-                        function: *function,
-                    });
-                }
-                match over {
-                    AggregateSource::Path { path } if path.is_empty() => {
-                        return Err(ExpressionError::Blank {
-                            kind,
-                            field: "path",
-                        });
-                    }
-                    AggregateSource::Path { path } => {
-                        for step in path {
-                            blank(kind, "path step", step)?;
-                        }
-                    }
-                    AggregateSource::Group { grouping } => blank(kind, "grouping", grouping)?,
-                    AggregateSource::Selector { .. } => {}
-                }
-            }
+            } => validate_aggregate(*function, over, value.is_some())?,
             _ => {}
         }
         if let Self::Aggregate {
@@ -835,6 +978,30 @@ impl Expression {
         self.children()
             .into_iter()
             .try_for_each(|child| child.validate_at(depth + 1))
+    }
+}
+
+/// An aggregate takes a `value` unless it counts, and its source names a
+/// path of steps or a grouping.
+fn validate_aggregate(
+    function: AggregateFunction,
+    over: &AggregateSource,
+    has_value: bool,
+) -> Result<(), ExpressionError> {
+    let kind = "aggregate";
+    if !matches!(function, AggregateFunction::Count) != has_value {
+        return Err(ExpressionError::AggregateValue { function });
+    }
+    match over {
+        AggregateSource::Path { path } if path.is_empty() => Err(ExpressionError::Blank {
+            kind,
+            field: "path",
+        }),
+        AggregateSource::Path { path } => path
+            .iter()
+            .try_for_each(|step| blank(kind, "path step", step)),
+        AggregateSource::Group { grouping } => blank(kind, "grouping", grouping),
+        AggregateSource::Selector { .. } => Ok(()),
     }
 }
 

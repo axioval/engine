@@ -64,6 +64,9 @@ pub struct RuleRecord {
     open: bool,
     /// Subjects of findings.
     failed: BTreeSet<ObjectId>,
+    /// How many findings each subject has, and the greatest graded
+    /// deviation among them.
+    findings: BTreeMap<ObjectId, (usize, Option<(f64, f64)>)>,
     /// Objects left not evaluated, with the first reason.
     undecided: BTreeMap<ObjectId, String>,
     /// Sources reported about as a whole, with the first message.
@@ -105,11 +108,20 @@ impl RuleRecord {
             open: !evaluation.not_evaluated_outcomes().is_empty(),
             ..Self::default()
         };
-        for finding in evaluation.findings() {
+        for (index, finding) in evaluation.findings().iter().enumerate() {
             let message = format!("it reported `{}` about it", finding.message);
             match &finding.scope {
                 Scope::Object(object) => {
                     record.failed.insert(object.clone());
+                    let (count, greatest) = record.findings.entry(object.clone()).or_default();
+                    *count += 1;
+                    if let Some(deviation) = evaluation.deviation(index) {
+                        let (lower, upper) = (deviation.lower(), deviation.upper());
+                        *greatest =
+                            Some(greatest.map_or((lower, upper), |(own_lower, own_upper)| {
+                                (own_lower.max(lower), own_upper.max(upper))
+                            }));
+                    }
                 }
                 scope => record.note_whole(scope, message),
             }
@@ -192,6 +204,13 @@ impl RuleRecord {
         } else {
             RuleVerdict::Passed
         }
+    }
+
+    /// How many findings the rule reported about `object`, and the
+    /// greatest graded deviation among them, as an interval.
+    #[must_use]
+    pub fn findings_about(&self, object: &ObjectId) -> (usize, Option<(f64, f64)>) {
+        self.findings.get(object).copied().unwrap_or_default()
     }
 
     /// How the rule judged `object`.
@@ -389,37 +408,17 @@ pub(crate) fn gate_selector(rule: &str, condition: GateCondition) -> Option<Sele
     })
 }
 
-/// Every rule a `ruleOutcome` selector in `selector` names.
+/// Every rule `selector` reads the outcomes of: its `ruleOutcome`
+/// selectors and the rule reads of its expressions.
 pub(crate) fn selector_references<'a>(selector: &'a Selector, out: &mut BTreeSet<&'a str>) {
-    match selector {
-        Selector::RuleOutcome { rule, .. } => {
-            out.insert(rule);
-        }
-        Selector::AllOf { operands } | Selector::AnyOf { operands } => {
-            for operand in operands {
-                selector_references(operand, out);
-            }
-        }
-        Selector::Not { operand } => selector_references(operand, out),
-        Selector::Related { selector, .. } => selector_references(selector, out),
-        Selector::All
-        | Selector::EntityType { .. }
-        | Selector::Property { .. }
-        | Selector::PropertyPattern { .. }
-        | Selector::Classification { .. }
-        | Selector::DerivedClass { .. }
-        | Selector::DerivedGroup { .. }
-        | Selector::Discipline { .. }
-        | Selector::Source { .. }
-        | Selector::Expression { .. }
-        | Selector::Objects { .. } => {}
-    }
+    out.extend(selector.rule_references());
 }
 
-/// Every rule a selector within `value` names.
+/// Every rule a selector or an expression within `value` reads.
 pub(crate) fn value_references<'a>(value: &'a ParameterValue, out: &mut BTreeSet<&'a str>) {
     match value {
         ParameterValue::Selector { value } => selector_references(value, out),
+        ParameterValue::Expression { value } => out.extend(value.rule_references()),
         ParameterValue::Table { value: rows } => {
             for cell in rows.iter().flat_map(TableRow::values) {
                 value_references(cell, out);
@@ -429,35 +428,16 @@ pub(crate) fn value_references<'a>(value: &'a ParameterValue, out: &mut BTreeSet
     }
 }
 
-/// Renames every rule a `ruleOutcome` selector in `selector` names.
+/// Renames every rule `selector` reads.
 pub(crate) fn rename_selector(selector: &mut Selector, rename: &dyn Fn(&str) -> String) {
-    match selector {
-        Selector::RuleOutcome { rule, .. } => *rule = rename(rule),
-        Selector::AllOf { operands } | Selector::AnyOf { operands } => {
-            for operand in operands {
-                rename_selector(operand, rename);
-            }
-        }
-        Selector::Not { operand } => rename_selector(operand, rename),
-        Selector::Related { selector, .. } => rename_selector(selector, rename),
-        Selector::All
-        | Selector::EntityType { .. }
-        | Selector::Property { .. }
-        | Selector::PropertyPattern { .. }
-        | Selector::Classification { .. }
-        | Selector::DerivedClass { .. }
-        | Selector::DerivedGroup { .. }
-        | Selector::Discipline { .. }
-        | Selector::Source { .. }
-        | Selector::Expression { .. }
-        | Selector::Objects { .. } => {}
-    }
+    selector.rename_rules(rename);
 }
 
-/// Renames every rule a selector within `value` names.
+/// Renames every rule a selector or an expression within `value` reads.
 pub(crate) fn rename_value(value: &mut ParameterValue, rename: &dyn Fn(&str) -> String) {
     match value {
-        ParameterValue::Selector { value } => rename_selector(value, rename),
+        ParameterValue::Selector { value } => value.rename_rules(rename),
+        ParameterValue::Expression { value } => value.rename_rules(rename),
         ParameterValue::Table { value: rows } => {
             for cell in rows.iter_mut().flat_map(|row| row.values_mut()) {
                 rename_value(cell, rename);

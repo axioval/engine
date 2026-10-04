@@ -580,6 +580,9 @@ impl Checker<'_> {
                     (_, None) => Type::Any,
                 }
             }
+            Expression::RuleOutcome { .. } => Type::Boolean,
+            Expression::FindingCount { .. } => Type::Integer,
+            Expression::Deviation { .. } => Type::NUMBER,
             Expression::Concat { operands, .. } => {
                 for (index, operand) in operands.iter().enumerate() {
                     self.text(operand, &item(index))?;

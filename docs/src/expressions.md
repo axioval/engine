@@ -86,6 +86,18 @@ An `aggregate` computes one value over the objects `over` reaches from the objec
 
 A member whose membership cannot be decided (its `where` or `over` selector undecided) is never dropped. `count` becomes an integer interval (2..3 for two members and one undecided), `sum` adds its value or nothing, `min` and `max` may reach it, and `distinctCount` may count it; `any`, `all` and `none` hold or fail only when every way the undecided members may belong agrees (`all` over one undecided false member is false either way), and are otherwise not evaluated; `average` is not evaluated. A member value that is not evaluated leaves the aggregate not evaluated, and a path or group the run cannot list leaves the object in scope not evaluated. `null` member values are skipped by the numeric functions and are not true for the truth functions. `sum` over no member is 0, `min`, `max` and `average` over none are `null`, `all` over none is false (it never holds vacuously, as a `related` selector's `all`) and `none` over none true. The evaluation cites every member's evidence.
 
+## Other rules' outcomes
+
+Composite checks read how other rules of the same ruleset judged the object in scope:
+
+| Node | Value |
+| --- | --- |
+| `{"kind": "ruleOutcome", "rule": "fire"}` | true when the rule passed the object, false when it reported a finding about it, `null` when it did not select it |
+| `{"kind": "findingCount", "rule": "fire"}` | how many findings the rule reported about the object, 0 when it passed or did not select it |
+| `{"kind": "deviation", "rule": "slope"}` | the greatest graded deviation of its findings about the object (how far a value misses its bound, relative to it), a plain number interval; `null` when none is graded |
+
+An object the other rule left open, or whose selection it could not decide, leaves each of them not evaluated, so "fails if either the fire rule or the escape rule fails, unless the object is temporary" is `or(Temporary, and(ruleOutcome(fire), ruleOutcome(escape)))` with Kleene logic throughout. The plan runs every rule a rule's expressions read first, as for `ruleOutcome` selectors (in its requirement, its computed parameters, its expression selectors and their aggregate filters); a cycle, a rule reading itself or a rule the ruleset does not define fails compilation, and combined rulesets rename the rules read as they rename the rules. A derived value reads no rule outcome: values are derived before any rule runs.
+
 ## Paths
 
 Every not-evaluated outcome and type error names its subexpression by a

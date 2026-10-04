@@ -277,6 +277,38 @@ impl Selector {
         }
     }
 
+    /// Every rule whose outcomes this selector reads: its `ruleOutcome`
+    /// selectors and the rule reads of its expressions.
+    #[must_use]
+    pub fn rule_references(&self) -> Vec<&str> {
+        match self {
+            Self::RuleOutcome { rule, .. } => vec![rule],
+            Self::Expression { expression } => expression.rule_references(),
+            Self::AllOf { operands } | Self::AnyOf { operands } => {
+                operands.iter().flat_map(Self::rule_references).collect()
+            }
+            Self::Not { operand } => operand.rule_references(),
+            Self::Related { selector, .. } => selector.rule_references(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// Renames every rule [`Selector::rule_references`] lists.
+    pub fn rename_rules(&mut self, rename: &dyn Fn(&str) -> String) {
+        match self {
+            Self::RuleOutcome { rule, .. } => *rule = rename(rule),
+            Self::Expression { expression } => expression.rename_rules(rename),
+            Self::AllOf { operands } | Self::AnyOf { operands } => {
+                operands
+                    .iter_mut()
+                    .for_each(|operand| operand.rename_rules(rename));
+            }
+            Self::Not { operand } => operand.rename_rules(rename),
+            Self::Related { selector, .. } => selector.rename_rules(rename),
+            _ => {}
+        }
+    }
+
     /// A property selector with case-sensitive, untrimmed text comparison.
     #[must_use]
     pub fn property(

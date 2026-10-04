@@ -300,6 +300,13 @@ pub enum Source {
     Derived(String),
     /// The members of an aggregate.
     Aggregate(AggregateFunction),
+    /// Another rule's outcome about the object in scope.
+    Rule {
+        /// The rule.
+        rule: String,
+        /// What was read of it.
+        read: RuleRead,
+    },
     /// A cell of a table parameter.
     Lookup {
         /// The table parameter.
@@ -350,6 +357,19 @@ pub struct Read {
     pub leaf: Leaf,
 }
 
+/// What an expression reads of another rule's outcome about the object
+/// in scope.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RuleRead {
+    /// Whether it passed the object: true, false when it reported a
+    /// finding, `null` when it did not select it.
+    Outcome,
+    /// How many findings it reported about the object.
+    FindingCount,
+    /// The greatest graded deviation of its findings about the object.
+    Deviation,
+}
+
 /// One member of an aggregate: whether it surely is one, and its value
 /// with that member in scope.
 #[derive(Clone, Debug, PartialEq)]
@@ -388,6 +408,15 @@ pub trait ExpressionContext {
     fn lookup(&mut self, table: &str, keys: &BTreeMap<String, Value>, column: &str) -> Leaf {
         let _ = (keys, column);
         Leaf::unreadable(format!("table `{table}` cannot be looked up here"))
+    }
+
+    /// What the rule `rule` of the ruleset concluded about the object in
+    /// scope, as `read` asks.
+    fn rule(&mut self, rule: &str, read: RuleRead) -> Leaf {
+        let _ = read;
+        Leaf::unreadable(format!(
+            "the outcomes of rule `{rule}` are not available here"
+        ))
     }
 
     /// The members `over` reaches from the object in scope that `filter`
@@ -777,6 +806,25 @@ impl Evaluator<'_> {
                     super::aggregate::Failure::Member(inner) => inner,
                     super::aggregate::Failure::Here(reason) => here(reason),
                 })
+            }
+            Expression::RuleOutcome { rule, .. }
+            | Expression::FindingCount { rule, .. }
+            | Expression::Deviation { rule, .. } => {
+                let read = match expression {
+                    Expression::RuleOutcome { .. } => RuleRead::Outcome,
+                    Expression::FindingCount { .. } => RuleRead::FindingCount,
+                    _ => RuleRead::Deviation,
+                };
+                let leaf = self.context.rule(rule, read);
+                self.read(
+                    expression,
+                    path,
+                    Source::Rule {
+                        rule: rule.clone(),
+                        read,
+                    },
+                    leaf,
+                )
             }
             Expression::Concat { operands, .. } => {
                 let mut text = String::new();

@@ -150,6 +150,14 @@ fn read_values(evaluation: &Evaluation) -> String {
             }
             // Its members' values are cited, not listed.
             axioval_engine::expression::Source::Aggregate(_) => continue,
+            axioval_engine::expression::Source::Rule { rule, read } => format!(
+                "{rule}.{}",
+                match read {
+                    axioval_engine::expression::RuleRead::Outcome => "outcome",
+                    axioval_engine::expression::RuleRead::FindingCount => "findingCount",
+                    axioval_engine::expression::RuleRead::Deviation => "deviation",
+                }
+            ),
         };
         let value = match &read.leaf.value {
             Ok(value) => value.to_string(),

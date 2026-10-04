@@ -222,6 +222,7 @@ Every node may carry a `label`, which findings name in place of the node's rende
 | `atan2` | `y`, `x` | the plane angle of the vector `(x, y)` |
 | `convertSlope` | `operand`, `from`, `to` | a slope restated between `ratio`, `percent` and `angle` |
 | `aggregate` | `function`, `over`, `where`?, `value`? | `count`, `sum`, `min`, `max`, `average`, `any`, `all`, `none` or `distinctCount` over the objects a `path`, a derived `group` or a `selector` reaches, filtered by `where`, `value` evaluated per member; see [Aggregates](./expressions.md#aggregates) |
+| `ruleOutcome`, `findingCount`, `deviation` | `rule` | another rule's verdict, finding count or greatest graded deviation about the object in scope; see [Other rules' outcomes](./expressions.md#other-rules-outcomes) |
 | `concat` | `operands` | joined text |
 | `length`, `lower`, `upper`, `trim` | `operand` | text functions |
 

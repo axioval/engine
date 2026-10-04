@@ -4,8 +4,10 @@
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 
-use axioval_engine::RuleContext;
-use axioval_engine::expression::{ExpressionContext, Leaf, Member, Value, derived_value, evaluate};
+use axioval_engine::expression::{
+    ExpressionContext, Interval, Leaf, Member, RuleRead, Unit, Value, derived_value, evaluate,
+};
+use axioval_engine::{ObjectVerdict, RuleContext, RuleOutcomes};
 use axioval_ir::contract::{
     AggregateSource, Expression, ParameterValue, ScalarValue, Selector, TableRow,
 };
@@ -196,6 +198,43 @@ impl ExpressionContext for ObjectLeaves<'_> {
         let leaf = self.property(set, name);
         self.object = object;
         leaf
+    }
+
+    fn rule(&mut self, rule: &str, read: RuleRead) -> Leaf {
+        let Some(outcomes) = self.context.services.get::<RuleOutcomes>() else {
+            return Leaf::unreadable("no rule outcomes are available outside a run");
+        };
+        let Some(record) = outcomes.get(rule) else {
+            return Leaf::unreadable(format!("rule `{rule}` has not run"));
+        };
+        let verdict = record.object(self.object);
+        let (count, deviation) = record.findings_about(&self.object.id);
+        let value = match (read, verdict) {
+            (_, ObjectVerdict::Undecided(why)) => {
+                self.reasons
+                    .borrow_mut()
+                    .push(NotEvaluatedReason::IncompleteEvidence);
+                return Leaf::unreadable(format!("rule `{rule}` left it open: {why}"));
+            }
+            (RuleRead::Outcome, ObjectVerdict::Passed) => Value::Boolean(true),
+            (RuleRead::Outcome, ObjectVerdict::Failed) => Value::Boolean(false),
+            (RuleRead::Outcome, ObjectVerdict::NotSelected) => Value::Null,
+            (RuleRead::FindingCount, _) => Value::integer(i64::try_from(count).unwrap_or(i64::MAX)),
+            (RuleRead::Deviation, _) => match deviation {
+                Some((lower, upper)) => Value::Number {
+                    value: Interval { lower, upper },
+                    unit: Unit::NONE,
+                },
+                None => Value::Null,
+            },
+        };
+        Leaf {
+            value: Ok(value),
+            evidence: vec![Evidence::exact(
+                self.object.id.source.clone(),
+                format!("rule:{rule}#{}", self.object.id.local_id),
+            )],
+        }
     }
 
     fn members(

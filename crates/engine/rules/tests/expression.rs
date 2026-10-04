@@ -946,3 +946,145 @@ fn an_undecided_member_widens_a_count_and_leaves_a_straddling_comparison_open() 
         report.not_evaluated[0].message
     );
 }
+
+/// A rule passing the objects whose `t.<property>` is true, failing those
+/// where it is false, and leaving open those where it cannot be read.
+fn judged_by(id: &str, property: &str) -> Value {
+    rule(
+        id,
+        EXPRESSION,
+        "error",
+        entity("slab"),
+        json!({"requirement": {"type": "expression", "value":
+            {"kind": "property", "propertySet": "t.Pset", "property": format!("t.{property}")}}}),
+        json!({}),
+    )
+}
+
+fn outcome(rule: &str) -> Value {
+    json!({"kind": "ruleOutcome", "rule": rule})
+}
+
+#[test]
+fn a_composite_rule_reads_other_rules_outcomes_with_kleene_logic() {
+    let registry = registry();
+    let mut package = definitions(
+        &registry,
+        &[EXPRESSION],
+        &["slab"],
+        &["Fire", "Escape", "Temporary"],
+        &["Pset"],
+    );
+    for name in ["t.Fire", "t.Escape", "t.Temporary"] {
+        package.properties.get_mut(name).unwrap().value_kind = PropertyValueKind::Boolean;
+    }
+    let states = [("T", Some(true)), ("F", Some(false)), ("U", None)];
+    let mut model = Model::default();
+    let mut expected = BTreeMap::new();
+    for (fire, fire_value) in states {
+        for (escape, escape_value) in states {
+            for temporary in [true, false] {
+                let local = format!("{fire}{escape}{}", if temporary { "t" } else { "p" });
+                model = model.object(&local, "slab").value(
+                    &local,
+                    "Pset",
+                    "Temporary",
+                    PropertyValue::Boolean(temporary),
+                );
+                for (name, value) in [("Fire", fire_value), ("Escape", escape_value)] {
+                    model = match value {
+                        Some(value) => {
+                            model.value(&local, "Pset", name, PropertyValue::Boolean(value))
+                        }
+                        None => model.unreadable_value(&local, "Pset", name, "IFCBOOLEAN"),
+                    };
+                }
+                // Fails if either fails, unless the object is temporary.
+                let both = match (fire, escape) {
+                    ("F", _) | (_, "F") => "F",
+                    ("T", "T") => "T",
+                    _ => "U",
+                };
+                expected.insert(local, if temporary { "T" } else { both });
+            }
+        }
+    }
+    let composite = rule(
+        "composite",
+        EXPRESSION,
+        "error",
+        entity("slab"),
+        json!({"requirement": {"type": "expression", "value": {"kind": "or", "operands": [
+            {"kind": "property", "propertySet": "t.Pset", "property": "t.Temporary"},
+            {"kind": "and", "operands": [outcome("fire"), outcome("escape")]}]}}}),
+        json!({}),
+    );
+    let report = check(
+        &package,
+        vec![
+            judged_by("fire", "Fire"),
+            judged_by("escape", "Escape"),
+            composite,
+        ],
+        &session(model),
+    );
+    let failed = subjects(&report, "composite");
+    let open: Vec<String> = report
+        .not_evaluated
+        .iter()
+        .filter(|outcome| outcome.rule_id.to_string() == "composite")
+        .map(|outcome| outcome.object_id().unwrap().local_id.clone())
+        .collect();
+    for (local, verdict) in expected {
+        let found = if failed.contains(&local) {
+            "F"
+        } else if open.contains(&local) {
+            "U"
+        } else {
+            "T"
+        };
+        assert_eq!(found, verdict, "{local}");
+    }
+}
+
+#[test]
+fn rules_reading_each_others_outcomes_through_expressions_fail_compilation() {
+    let registry = registry();
+    let package = vocabulary(&registry, &[]);
+    let reads = |id: &str, other: &str| {
+        rule(
+            id,
+            EXPRESSION,
+            "error",
+            entity("slab"),
+            json!({"requirement": {"type": "expression", "value": outcome(other)}}),
+            json!({}),
+        )
+    };
+    let error = plan(&registry, &package, vec![reads("a", "b"), reads("b", "a")])
+        .map(drop)
+        .unwrap_err();
+    assert!(error.to_string().contains("cycle"), "{error}");
+    let undefined = plan(&registry, &package, vec![reads("a", "missing")])
+        .map(drop)
+        .unwrap_err();
+    assert!(undefined.to_string().contains("`missing`"), "{undefined}");
+}
+
+#[test]
+fn a_finding_count_reads_how_many_findings_another_rule_reported() {
+    let registry = registry();
+    let package = vocabulary(&registry, &[]);
+    let count = rule(
+        "count",
+        EXPRESSION,
+        "error",
+        entity("slab"),
+        json!({"requirement": {"type": "expression", "value": {"kind": "compare",
+            "operator": "equals", "left": {"kind": "findingCount", "rule": "cover"},
+            "right": {"kind": "literal", "value": {"type": "integer", "value": 0}}}}}),
+        json!({}),
+    );
+    let report = check(&package, vec![cover_rule(), count], &session(slabs()));
+    assert_eq!(subjects(&report, "count"), subjects(&report, "cover"));
+}

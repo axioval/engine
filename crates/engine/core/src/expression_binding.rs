@@ -298,6 +298,11 @@ pub(crate) fn check_values<'a>(
             .validate()
             .map_err(|error| invalid(error.to_string()))?;
         filter_concepts(concepts, &name, expression)?;
+        if let Some(rule) = expression.rule_references().first() {
+            return Err(invalid(format!(
+                "it reads rule `{rule}`'s outcome; a value is derived before any rule runs"
+            )));
+        }
         let environment = RuleEnvironment {
             concepts,
             properties,

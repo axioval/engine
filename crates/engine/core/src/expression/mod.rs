@@ -11,8 +11,8 @@ mod unit;
 
 pub use crate::values::derived_value;
 pub use evaluate::{
-    Evaluation, ExpressionContext, Leaf, Member, NotEvaluated, Read, Reason, Source, Value,
-    evaluate,
+    Evaluation, ExpressionContext, Leaf, Member, NotEvaluated, Read, Reason, RuleRead, Source,
+    Value, evaluate,
 };
 pub use interval::{Interval, IntervalFailure, IntervalResult};
 pub use types::{Type, TypeEnvironment, TypeError, TypeErrorKind, check, check_as, measured_type};

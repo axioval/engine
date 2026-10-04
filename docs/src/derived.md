@@ -382,6 +382,8 @@ ignoring ASCII case):
 | `clear_height` | a space's clear height | `SpaceService::measure_clear_height` |
 | `distance;to=<kinds>[;mode=nearest\|farthest][;projection=…][;direction=…][;subject_surface=…;counterpart_surface=…][;within=<m>]` | the nearest or farthest counterpart's distance, as `distance` measures it | built in, over `ProximityService` |
 | `count_within;to=<kinds>;radius=<m>[;from=<m>][;projection=…][;direction=…]` | how many counterparts lie within a radius, a plain number | built in, over `ProximityService` |
+| `duplicate_count`, `boundary_gap[;at_least=<m>][;measure=total\|longest][;elements=<kinds>]`, `intersection_count[;tolerance=<m>][;elements=<kinds>]`, `cap_coverage;cap=top\|bottom[;elements=<kinds>]`, `support_count[;of=slabs\|roofs]` | a space's `space-validation` aspects | `SpaceService` |
+| `largest_unallocated_region`, `unallocated_share` | a storey's floor no space covers | `SpaceService::measure_unallocated_regions` |
 | `angle_to;path=<steps>[;between=axis\|face_normal]` | the angle to the objects a path reaches, an angle | `PlanSpanService::measure_rectangle` or `VerticalExtentService::measure_face_normals`, `RelationshipSelectionService` |
 | `skew;path=<steps>` | how far the long axis is from square to the reached objects', an angle | `PlanSpanService::measure_rectangle`, `RelationshipSelectionService` |
 | `bearing;axis=own_x\|own_y\|long[;reference=project_north\|true_north]` | an axis's plan bearing clockwise from north, an angle | `ObjectFrameService` or `PlanSpanService`, `CoordinateSystemService` for true north |
@@ -516,6 +518,27 @@ floor.
 `clear_width` is measured between two heights above the pitch line
 (`band_from`, default 0, and `band_to`, in metres) along a stair flight,
 or with `along=runs` along each of a ramp's runs, the least over them.
+
+### Space aspects
+
+Each aspect `space-validation` judges is a value from the same space
+service request, so a comparison reproduces its verdict:
+
+| Aspect | Measured value and comparison |
+|---|---|
+| duplicate bodies | `duplicate_count = 0` |
+| clear height | `clear_height >= required` |
+| uncovered boundary | `boundary_gap;at_least=<segment> = 0` (the total of gaps at least the segment long; `measure=longest` for the longest) |
+| containment and intersection | `intersection_count = 0`: bodies containing or contained by the space, or partly overlapping it by area and higher than `tolerance` (default 5 mm) |
+| cap coverage | `cap_coverage;cap=top >= 0.98`, a share from 0 to 1 |
+| unallocated region | `largest_unallocated_region <= allowance`, on the storey |
+| unallocated share | `unallocated_share <= maximum`, on the storey |
+
+`elements` names the element kinds a request counts, as the capability's
+element selectors do; without it the service's default applies.
+`cap_coverage` with `elements` naming no existing object is an exact
+absence, as the capability skips that cap. `support_count` counts the
+model's slabs or roofs.
 
 ### Distances
 

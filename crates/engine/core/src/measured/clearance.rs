@@ -22,7 +22,7 @@ impl Measures {
     /// The objects of the kinds `key` names, subtypes included where the
     /// source declares a type hierarchy; a source without one has no
     /// subtypes, so its kinds match exactly.
-    fn of_kinds(
+    pub(super) fn of_kinds(
         &self,
         call: &MeasuredCall,
         key: &str,

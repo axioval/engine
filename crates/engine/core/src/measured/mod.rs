@@ -24,6 +24,7 @@ use axioval_ir::{
 mod angles;
 mod clearance;
 pub(crate) mod provider;
+mod space;
 mod surface;
 
 use axioval_ir::measured::{
@@ -69,6 +70,8 @@ pub(crate) enum MeasuredName {
     Angle(MeasuredCall, Vec<PathSegment>),
     /// A clearance: headroom, clearance below, clear width or height.
     Clearance(MeasuredCall),
+    /// A space-validation aspect of a space or storey.
+    Space(MeasuredCall),
     /// A dimension of the body: an extent, length, thickness or perimeter.
     Dimension(MeasuredCall),
     /// A value a registered provider measures.
@@ -111,6 +114,7 @@ pub(crate) fn measured_by_core(name: &str) -> bool {
         ]
         .contains(&name)
         || clearance::NAMES.contains(&name)
+        || space::NAMES.contains(&name)
 }
 
 /// Parses a name in the measured set through the registry
@@ -160,6 +164,7 @@ pub(crate) fn parse(name: &str) -> Result<MeasuredName, String> {
         }
         LENGTH | PERIMETER => MeasuredName::Dimension(call),
         name if clearance::NAMES.contains(&name) => MeasuredName::Clearance(call),
+        name if space::NAMES.contains(&name) => MeasuredName::Space(call),
         ANGLE_TO | BEARING | SKEW => {
             let steps = match call.argument("path") {
                 Some(MeasuredArgument::Path(steps)) => steps
@@ -351,6 +356,7 @@ impl Measures {
             MeasuredName::Angle(call, steps) => self.angle(call, steps, object),
             MeasuredName::Dimension(call) => self.dimension(call, object),
             MeasuredName::Clearance(call) => self.clearance(call, object),
+            MeasuredName::Space(call) => self.space(call, object),
             MeasuredName::Provided(call) => self.provided(call, object),
         }
     }

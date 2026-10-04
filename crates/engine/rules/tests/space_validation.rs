@@ -988,3 +988,174 @@ fn the_measured_clear_height_is_the_one_judged() {
         }
     );
 }
+
+/// The measured value `name` of `object` over `stub`, as a plain number.
+fn measured(stub: Stub, object: &str, name: &str) -> f64 {
+    use axioval_engine::{PropertyResolution, measured_value};
+    use axioval_ir::PropertyValue;
+    let project = Project::new(vec![
+        Object::new(oid("space-1"), "space"),
+        Object::new(oid("storey"), "storey"),
+    ])
+    .unwrap();
+    let mut services = ServiceRegistry::new();
+    services
+        .register(SpaceServiceHandle::new(Arc::new(stub)))
+        .unwrap();
+    match measured_value(&services, &project, &oid(object), name).unwrap() {
+        PropertyResolution::Present(resolved) => match resolved.property().value() {
+            PropertyValue::Quantity { value, .. } | PropertyValue::Decimal(value) => *value,
+            #[allow(clippy::cast_precision_loss)]
+            PropertyValue::Integer(value) => *value as f64,
+            other => panic!("{name}: {other:?}"),
+        },
+        PropertyResolution::Absent(_) => panic!("{name} of {object} is absent"),
+    }
+}
+
+/// Each aspect of `space-validation` is a measured value and a comparison:
+/// the capability finds exactly where the comparison fails.
+#[test]
+#[allow(clippy::too_many_lines)]
+fn every_aspect_is_a_measured_value_and_a_comparison() {
+    type Case = (
+        &'static str,
+        fn() -> Stub,
+        Vec<(&'static str, ParameterValue)>,
+        &'static str,
+        &'static str,
+        fn(f64) -> bool,
+    );
+    let cases: Vec<Case> = vec![
+        (
+            "no duplicate",
+            Stub::default,
+            vec![],
+            "space-1",
+            "duplicate_count",
+            |n| n == 0.0,
+        ),
+        (
+            "a duplicate",
+            || Stub {
+                duplicates: Some(Ok(vec![oid("space-2")])),
+                ..Stub::default()
+            },
+            vec![],
+            "space-1",
+            "duplicate_count",
+            |n| n == 0.0,
+        ),
+        (
+            "a short gap",
+            || Stub {
+                gaps: Some(Ok(vec![(0.5, vec![])])),
+                ..Stub::default()
+            },
+            vec![],
+            "space-1",
+            "boundary_gap;at_least=1",
+            |gap| gap == 0.0,
+        ),
+        (
+            "a long gap",
+            || Stub {
+                gaps: Some(Ok(vec![(0.5, vec![]), (1.5, vec![oid("wall")])])),
+                ..Stub::default()
+            },
+            vec![],
+            "space-1",
+            "boundary_gap;at_least=1",
+            |gap| gap == 0.0,
+        ),
+        (
+            "a flat overlap",
+            || Stub {
+                overlaps: Some(Ok(vec![(true, 2.0, 0.001, Containment::Partial)])),
+                ..Stub::default()
+            },
+            vec![],
+            "space-1",
+            "intersection_count",
+            |n| n == 0.0,
+        ),
+        (
+            "an intersecting space",
+            || Stub {
+                overlaps: Some(Ok(vec![(true, 2.0, 1.0, Containment::Partial)])),
+                ..Stub::default()
+            },
+            vec![],
+            "space-1",
+            "intersection_count",
+            |n| n == 0.0,
+        ),
+        (
+            "a contained space",
+            || Stub {
+                overlaps: Some(Ok(vec![(true, 2.0, 0.0, Containment::SubjectInsideOther)])),
+                ..Stub::default()
+            },
+            vec![],
+            "space-1",
+            "intersection_count",
+            |n| n == 0.0,
+        ),
+        (
+            "a half-covered top",
+            || Stub {
+                cap: Some(Ok((10.0, 5.0))),
+                ..Stub::default()
+            },
+            vec![("check_top_cap", ParameterValue::Boolean { value: true })],
+            "space-1",
+            "cap_coverage;cap=top",
+            |share| share >= 0.98,
+        ),
+        (
+            "a covered top",
+            Stub::default,
+            vec![("check_top_cap", ParameterValue::Boolean { value: true })],
+            "space-1",
+            "cap_coverage;cap=top",
+            |share| share >= 0.98,
+        ),
+        (
+            "a large unallocated region",
+            || Stub {
+                residuals: Some(Ok(vec![(oid("storey"), 3.0, vec![])])),
+                ..Stub::default()
+            },
+            vec![(
+                "check_unallocated_area",
+                ParameterValue::Boolean { value: true },
+            )],
+            "storey",
+            "largest_unallocated_region",
+            |area| area <= 1.0,
+        ),
+        (
+            "a small unallocated region",
+            || Stub {
+                residuals: Some(Ok(vec![(oid("storey"), 0.5, vec![])])),
+                ..Stub::default()
+            },
+            vec![(
+                "check_unallocated_area",
+                ParameterValue::Boolean { value: true },
+            )],
+            "storey",
+            "largest_unallocated_region",
+            |area| area <= 1.0,
+        ),
+    ];
+    for (case, stub, overrides, object, name, holds) in cases {
+        let outcome = evaluate(stub(), &rule_with(&overrides));
+        let found = outcome
+            .findings()
+            .iter()
+            .any(|finding| finding.object_id() == Some(&oid(object)));
+        let value = measured(stub(), object, name);
+        assert_eq!(!holds(value), found, "{case}: `{name}` is {value}");
+    }
+}

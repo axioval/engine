@@ -119,6 +119,22 @@ const VERTICAL_DIRECTION: MeasuredParameter = MeasuredParameter {
 
 const NO_DISTANCE: &str = "a counterpart's distance could not be read or straddles";
 
+const SPACE: &[&str] = &["space"];
+const SPACE_UNMEASURED: &str = "the space service cannot measure this aspect of the space";
+
+const ELEMENTS: MeasuredParameter = MeasuredParameter {
+    key: "elements",
+    kind: MeasuredParameterKind::SourceKind,
+    required: false,
+    default: None,
+    help: &en_de(
+        "The source kinds of the elements counted, `,`-separated; without it, the \
+         service's own default.",
+        "Die Quellarten der berücksichtigten Bauteile, durch `,` getrennt; ohne sie die \
+         Vorgabe des Dienstes.",
+    ),
+};
+
 const OWN_AXIS: MeasuredParameterKind = MeasuredParameterKind::Choice {
     options: &["own_x", "own_y", "own_z", "x", "y", "z"],
 };
@@ -134,7 +150,7 @@ macro_rules! plain {
         MeasuredDescriptor {
             name: $name,
             parameters: &[],
-            dimension: Some($dimension),
+            dimension: $dimension,
             services: $services,
             exactness: $exactness,
             not_evaluated: $not,
@@ -177,7 +193,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
     },
     plain!(
         MEASURED_AREA,
-        QuantityDimension::Area,
+        Some(QuantityDimension::Area),
         &["plan-area"],
         MeasuredExactness::Measured,
         &[NO_GEOMETRY],
@@ -236,7 +252,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
     },
     plain!(
         MEASURED_BOTTOM,
-        QuantityDimension::Length,
+        Some(QuantityDimension::Length),
         VERTICAL,
         MeasuredExactness::Measured,
         &[NO_GEOMETRY],
@@ -313,9 +329,77 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             "Die summierte Raumbegrenzungsfläche eines Raums gegen Bauteile einer Art.",
         ),
     },
+    MeasuredDescriptor {
+        name: "boundary_gap",
+        parameters: &[
+            ELEMENTS,
+            MeasuredParameter {
+                key: "at_least",
+                kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                required: false,
+                default: Some("0"),
+                help: &en_de(
+                    "Only gaps at least this long count, in metres.",
+                    "Nur Lücken mindestens dieser Länge zählen, in Metern.",
+                ),
+            },
+            MeasuredParameter {
+                key: "measure",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["total", "longest"],
+                },
+                required: false,
+                default: Some("total"),
+                help: &en_de(
+                    "Their `total` length, or the `longest`.",
+                    "Ihre Gesamtlänge (`total`) oder die längste (`longest`).",
+                ),
+            },
+        ],
+        dimension: Some(QuantityDimension::Length),
+        services: SPACE,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[SPACE_UNMEASURED],
+        label: &en_de("Uncovered boundary", "Unbedeckter Raumrand"),
+        help: &en_de(
+            "How much of a space's boundary no element covers, as `space-validation` \
+             counts it.",
+            "Wie viel vom Rand eines Raums kein Bauteil bedeckt, wie \
+             `space-validation` es zählt.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "cap_coverage",
+        parameters: &[
+            MeasuredParameter {
+                key: "cap",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["top", "bottom"],
+                },
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The `top` or `bottom` cap.",
+                    "Die obere oder untere Abdeckung.",
+                ),
+            },
+            ELEMENTS,
+        ],
+        dimension: None,
+        services: SPACE,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[SPACE_UNMEASURED],
+        label: &en_de("Cap coverage", "Deckenabdeckung"),
+        help: &en_de(
+            "The share of a space's top or bottom the elements cover, from 0 to 1; none \
+             when no element of the kinds named exists.",
+            "Der Anteil der Ober- oder Unterseite eines Raums, den die Bauteile bedecken, \
+             von 0 bis 1; keiner, wenn kein Bauteil der genannten Arten besteht.",
+        ),
+    },
     plain!(
         CLEAR_HEIGHT,
-        QuantityDimension::Length,
+        Some(QuantityDimension::Length),
         &["space"],
         MeasuredExactness::Measured,
         &[NO_GEOMETRY, "the space's floor or ceiling cannot be found"],
@@ -550,6 +634,18 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              könnte.",
         ),
     },
+    plain!(
+        "duplicate_count",
+        None,
+        SPACE,
+        MeasuredExactness::Measured,
+        &[SPACE_UNMEASURED],
+        en_de("Duplicates", "Duplikate"),
+        en_de(
+            "How many other spaces' bodies coincide with the space's.",
+            "Wie viele andere Räume denselben Körper wie der Raum haben."
+        )
+    ),
     MeasuredDescriptor {
         name: EXTENT,
         parameters: &[
@@ -590,7 +686,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
     },
     plain!(
         MEASURED_EXTENT_X,
-        QuantityDimension::Length,
+        Some(QuantityDimension::Length),
         VERTICAL,
         MeasuredExactness::Measured,
         &[NO_GEOMETRY],
@@ -602,7 +698,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
     ),
     plain!(
         MEASURED_EXTENT_Y,
-        QuantityDimension::Length,
+        Some(QuantityDimension::Length),
         VERTICAL,
         MeasuredExactness::Measured,
         &[NO_GEOMETRY],
@@ -614,7 +710,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
     ),
     plain!(
         MEASURED_EXTENT_Z,
-        QuantityDimension::Length,
+        Some(QuantityDimension::Length),
         VERTICAL,
         MeasuredExactness::Measured,
         &[NO_GEOMETRY],
@@ -698,6 +794,48 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ),
     },
     MeasuredDescriptor {
+        name: "intersection_count",
+        parameters: &[
+            ELEMENTS,
+            MeasuredParameter {
+                key: "tolerance",
+                kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                required: false,
+                default: Some("0.005"),
+                help: &en_de(
+                    "A partial overlap no higher than this is no intersection, in metres.",
+                    "Eine Teilüberlappung, die nicht höher ist, ist keine Durchdringung, \
+                     in Metern.",
+                ),
+            },
+        ],
+        dimension: None,
+        services: SPACE,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[SPACE_UNMEASURED],
+        label: &en_de("Intersections", "Durchdringungen"),
+        help: &en_de(
+            "How many bodies contain, are contained by or substantially intersect the \
+             space, as `space-validation` counts them.",
+            "Wie viele Körper den Raum enthalten, in ihm liegen oder ihn wesentlich \
+             durchdringen, wie `space-validation` sie zählt.",
+        ),
+    },
+    plain!(
+        "largest_unallocated_region",
+        Some(QuantityDimension::Area),
+        SPACE,
+        MeasuredExactness::Measured,
+        &[SPACE_UNMEASURED],
+        en_de("Largest unallocated region", "Größte unzugeordnete Fläche"),
+        en_de(
+            "The largest connected region of a storey's floor no space covers; zero when \
+             none is.",
+            "Die größte zusammenhängende Geschossfläche, die kein Raum bedeckt; null, wenn \
+             keine."
+        )
+    ),
+    MeasuredDescriptor {
         name: LENGTH,
         parameters: &[MeasuredParameter {
             key: "axis",
@@ -726,7 +864,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
     },
     plain!(
         MEASURED_LEVEL_HEIGHT,
-        QuantityDimension::Length,
+        Some(QuantityDimension::Length),
         &["property-resolution"],
         MeasuredExactness::Stated,
         &["the source does not state storey elevations"],
@@ -740,7 +878,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
     ),
     plain!(
         PERIMETER,
-        QuantityDimension::Length,
+        Some(QuantityDimension::Length),
         &["plan-area"],
         MeasuredExactness::Measured,
         &[NO_GEOMETRY],
@@ -812,6 +950,31 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ),
     },
     MeasuredDescriptor {
+        name: "support_count",
+        parameters: &[MeasuredParameter {
+            key: "of",
+            kind: MeasuredParameterKind::Choice {
+                options: &["slabs", "roofs"],
+            },
+            required: false,
+            default: Some("slabs"),
+            help: &en_de(
+                "Count the `slabs` or the `roofs`.",
+                "Die Decken (`slabs`) oder die Dächer (`roofs`) zählen.",
+            ),
+        }],
+        dimension: None,
+        services: SPACE,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[SPACE_UNMEASURED],
+        label: &en_de("Supporting elements", "Tragende Bauteile"),
+        help: &en_de(
+            "How many slabs or roofs the model has that can form a space's caps.",
+            "Wie viele Decken oder Dächer das Modell hat, die Raumabdeckungen bilden \
+             können.",
+        ),
+    },
+    MeasuredDescriptor {
         name: THICKNESS,
         parameters: &[
             MeasuredParameter {
@@ -855,7 +1018,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
     },
     plain!(
         MEASURED_TOP,
-        QuantityDimension::Length,
+        Some(QuantityDimension::Length),
         VERTICAL,
         MeasuredExactness::Measured,
         &[NO_GEOMETRY],
@@ -866,8 +1029,23 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         )
     ),
     plain!(
+        "unallocated_share",
+        None,
+        SPACE,
+        MeasuredExactness::Measured,
+        &[
+            SPACE_UNMEASURED,
+            "the storey's gross floor area is not measured"
+        ],
+        en_de("Unallocated share", "Unzugeordneter Anteil"),
+        en_de(
+            "The share of a storey's gross floor area no space covers, from 0 to 1.",
+            "Der Anteil der Brutto-Geschossfläche, den kein Raum bedeckt, von 0 bis 1."
+        )
+    ),
+    plain!(
         MEASURED_VOLUME,
-        QuantityDimension::Volume,
+        Some(QuantityDimension::Volume),
         &["proximity"],
         MeasuredExactness::Measured,
         &[NO_GEOMETRY, "the body is not closed"],
@@ -879,7 +1057,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
     ),
     plain!(
         MEASURED_X,
-        QuantityDimension::Length,
+        Some(QuantityDimension::Length),
         &["object-frame"],
         MeasuredExactness::Stated,
         &["the placement is not stated exactly"],
@@ -891,7 +1069,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
     ),
     plain!(
         MEASURED_Y,
-        QuantityDimension::Length,
+        Some(QuantityDimension::Length),
         &["object-frame"],
         MeasuredExactness::Stated,
         &["the placement is not stated exactly"],
@@ -903,7 +1081,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
     ),
     plain!(
         MEASURED_Z,
-        QuantityDimension::Length,
+        Some(QuantityDimension::Length),
         &["object-frame"],
         MeasuredExactness::Stated,
         &["the placement is not stated exactly"],

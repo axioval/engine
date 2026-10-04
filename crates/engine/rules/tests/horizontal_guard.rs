@@ -740,3 +740,225 @@ fn a_role_selector_of_the_wrong_type_is_refused() {
         &NotEvaluatedReason::InvalidDeclaration
     );
 }
+
+/// `horizontal-guard`'s decision as an expression over the measured edges:
+/// an edge is guarded when its barriers reach the height along all of it and
+/// nothing beside them defeats them, or, reached by barriers along at most
+/// half of it, when the landings cover it within the fall allowed. The
+/// barrier height, the fall and the climbable height are the expression's;
+/// the searches and gaps the list's. On every fixture it flags and leaves
+/// open what the capability does.
+#[test]
+#[allow(clippy::too_many_lines)]
+fn the_guard_decision_as_an_expression_over_edges_reaches_the_verdicts() {
+    use axioval_rules::ExpressionRequirement;
+    use serde_json::{Value, json};
+    let field =
+        |name: &str| json!({"kind": "property", "propertySet": "axioval:member", "property": name});
+    let m = |value: f64| json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": "m"}});
+    let compare = |operator: &str, left: Value, right: Value| json!({"kind": "compare", "operator": operator, "left": left, "right": right});
+    let rounded = |name: &str| json!({"kind": "round", "operand": field(name), "step": m(1e-6)});
+    let requirement = |curb: bool| {
+        let covered = compare("greaterThanOrEquals", rounded("guarded_height"), m(1.0));
+        let climbed = compare("lessThanOrEquals", rounded("climbable_height"), m(0.6));
+        let present = compare(
+            "greaterThan",
+            field("barrier_share"),
+            json!({"kind": "literal", "value": {"type": "number", "value": 0.5}}),
+        );
+        let landed = compare("lessThanOrEquals", rounded("landing_fall"), m(0.5));
+        let list = format!(
+            "guard_edges;barrier_gap=0.1;platform_gap=0.1;landing_gap=0.3;landing_width=1;\
+             climb_distance=0.3;climb_side=0.1;measure_from={}",
+            if curb { "curb" } else { "floor" }
+        );
+        json!({"kind": "aggregate", "function": "all", "over": {"kind": "measured", "name": list},
+            "value": {"kind": "if",
+                "branches": [{"when": covered, "then": {"kind": "not", "operand": climbed}}],
+                "else": {"kind": "and", "operands": [{"kind": "not", "operand": present}, landed]}}})
+    };
+    let verdict = |evaluation: &axioval_engine::CapabilityEvaluation| {
+        (
+            !evaluation.findings().is_empty(),
+            !evaluation.not_evaluated_outcomes().is_empty(),
+        )
+    };
+    let fixtures: Vec<(Vec<GuardEdge>, bool)> = vec![
+        (
+            vec![edge(
+                vec![barrier(0.0, 1.2, [0.0, 1.0], None)],
+                vec![],
+                vec![],
+            )],
+            false,
+        ),
+        (
+            vec![edge(
+                vec![barrier(0.0, 0.6, [0.0, 1.0], None)],
+                vec![],
+                vec![],
+            )],
+            false,
+        ),
+        (
+            vec![edge(
+                vec![barrier(0.9, 1.2, [0.0, 1.0], None)],
+                vec![],
+                vec![],
+            )],
+            false,
+        ),
+        (
+            vec![edge(
+                vec![barrier(0.0, 1.2, [0.0, 0.6], None)],
+                vec![],
+                vec![],
+            )],
+            false,
+        ),
+        (
+            vec![edge(
+                vec![
+                    barrier(0.0, 1.2, [0.0, 0.5], None),
+                    barrier(0.0, 1.2, [0.25, 0.5], None),
+                ],
+                vec![],
+                vec![],
+            )],
+            false,
+        ),
+        (
+            vec![edge(vec![], vec![landing(0.0, -0.4, 1.5)], vec![])],
+            false,
+        ),
+        (
+            vec![edge(vec![], vec![landing(0.0, -3.0, 1.5)], vec![])],
+            false,
+        ),
+        (
+            vec![edge(vec![], vec![landing(0.0, -0.4, 0.2)], vec![])],
+            false,
+        ),
+        (
+            vec![edge(vec![], vec![landing(5.0, -0.2, 2.0)], vec![])],
+            false,
+        ),
+        (
+            vec![edge(
+                vec![barrier(0.0, 1.2, [0.0, 1.0], None)],
+                vec![],
+                vec![climbable(0.2, 0.5, 0.4)],
+            )],
+            false,
+        ),
+        (
+            vec![edge(
+                vec![barrier(0.0, 1.2, [0.0, 1.0], None)],
+                vec![],
+                vec![climbable(2.0, 0.5, 0.4)],
+            )],
+            false,
+        ),
+        (
+            vec![edge(
+                vec![barrier(0.0, 1.2, [0.0, 1.0], None)],
+                vec![],
+                vec![climbable(0.2, 5.0, 0.4)],
+            )],
+            false,
+        ),
+        (
+            vec![edge(
+                vec![barrier(0.0, 1.2, [0.0, 1.0], None)],
+                vec![],
+                vec![climbable(0.2, 0.5, 0.01)],
+            )],
+            false,
+        ),
+        (
+            vec![edge(
+                vec![barrier(0.0, 1.2, [0.0, 1.0], Some(0.5))],
+                vec![],
+                vec![],
+            )],
+            true,
+        ),
+        (
+            vec![edge(
+                vec![barrier(0.0, 1.2, [0.0, 1.0], Some(0.5))],
+                vec![],
+                vec![],
+            )],
+            false,
+        ),
+        (vec![edge(vec![], vec![], vec![])], false),
+        // A short stub beside a long open edge falls through to its landing.
+        (
+            vec![edge(
+                vec![barrier(0.05, 0.4, [0.0, 0.3], None)],
+                vec![landing(0.0, -0.4, 1.5)],
+                vec![],
+            )],
+            false,
+        ),
+        // Reached along most of it by a low rail, the landing does not help.
+        (
+            vec![edge(
+                vec![barrier(0.05, 0.4, [0.0, 1.0], None)],
+                vec![landing(0.0, -0.4, 1.5)],
+                vec![],
+            )],
+            false,
+        ),
+        (
+            vec![
+                edge(vec![barrier(0.05, 1.2, [0.0, 0.7], None)], vec![], vec![]),
+                edge(vec![barrier(0.0, 1.2, [0.0, 1.0], None)], vec![], vec![]),
+            ],
+            false,
+        ),
+    ];
+    let project = Project::new(vec![Object::new(oid("slab-1"), "slab")]).unwrap();
+    let registry =
+        axioval_rules::register_builtins(axioval_engine::CapabilityRegistry::new()).unwrap();
+    for (index, (edges, curb)) in fixtures.into_iter().enumerate() {
+        let curb_rule = rule_with(&[(
+            "measure_barrier_from_curb",
+            ParameterValue::Boolean { value: curb },
+        )]);
+        let mut services = ServiceRegistry::new();
+        services
+            .register(GuardServiceHandle::new(Arc::new(MultiEdge(edges))))
+            .unwrap();
+        let context = RuleContext {
+            project: &project,
+            services: &services,
+        };
+        let expected = verdict(&HorizontalGuard.evaluate(&context, &curb_rule));
+        registry.install_measured(&mut services, &project);
+        let expression = CompiledRule {
+            capability: "axioval:capability.expression".into(),
+            parameters: BTreeMap::from([(
+                "requirement".to_owned(),
+                ParameterValue::Expression {
+                    value: serde_json::from_value(requirement(curb)).unwrap(),
+                },
+            )]),
+            ..curb_rule
+        };
+        let evaluation = ExpressionRequirement.evaluate(
+            &RuleContext {
+                project: &project,
+                services: &services,
+            },
+            &expression,
+        );
+        assert_eq!(
+            verdict(&evaluation),
+            expected,
+            "fixture {index}: {:?} {:?}",
+            evaluation.findings(),
+            evaluation.not_evaluated_outcomes()
+        );
+    }
+}

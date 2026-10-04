@@ -257,5 +257,6 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(keyed_limit::DoorMeasures))
         .and_then(|registry| registry.register_measured(allowed_profile::ProfileMeasures))
         .and_then(|registry| registry.register_measured(stair_geometry::StairMeasures))
+        .and_then(|registry| registry.register_measured(horizontal_guard::GuardMeasures))
         .map(|registry| registry.with_refiner(Refiner))
 }

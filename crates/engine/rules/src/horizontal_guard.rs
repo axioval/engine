@@ -15,6 +15,10 @@
 //! the [`GuardSearch`], so a cupboard is not taken for a railing. An absent
 //! selector leaves its role open to any nearby body.
 
+mod measured;
+
+pub(crate) use measured::GuardMeasures;
+
 use axioval_engine::{
     CapabilityEvaluation, ClimbableCandidate, CompiledRule, GuardCandidate, GuardEdge, GuardError,
     GuardSearch, GuardServiceHandle, NotEvaluatedReason, ParameterDescriptor, ParameterType,

@@ -109,8 +109,191 @@ const fn field(
 
 const TRUTH: MemberFieldKind = MemberFieldKind::Truth;
 
+const fn guard_length(key: &'static str, help: &'static [LocalizedText]) -> MeasuredParameter {
+    required_length(key, help)
+}
+
+const fn guard_kinds(key: &'static str, help: &'static [LocalizedText]) -> MeasuredParameter {
+    MeasuredParameter {
+        key,
+        kind: MeasuredParameterKind::SourceKind,
+        required: false,
+        default: None,
+        help,
+    }
+}
+
 /// Every list of measured members, sorted by name.
 pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
+    MemberDescriptor {
+        list: MeasuredDescriptor {
+            name: "guard_edges",
+            parameters: &[
+                guard_length(
+                    "barrier_gap",
+                    &en_de(
+                        "The widest gap between barriers that still guards the edge.",
+                        "Die größte Lücke zwischen Absturzsicherungen, die die Kante noch \
+                         sichert.",
+                    ),
+                ),
+                guard_length(
+                    "platform_gap",
+                    &en_de(
+                        "How far from the edge a barrier may stand.",
+                        "Wie weit von der Kante eine Absturzsicherung stehen darf.",
+                    ),
+                ),
+                guard_length(
+                    "landing_gap",
+                    &en_de(
+                        "How far from the edge a landing below may lie.",
+                        "Wie weit von der Kante eine tiefere Auftrittsfläche liegen darf.",
+                    ),
+                ),
+                guard_length(
+                    "landing_width",
+                    &en_de(
+                        "How wide a landing below must be to stand on.",
+                        "Wie breit eine tiefere Auftrittsfläche sein muss, um darauf zu \
+                         stehen.",
+                    ),
+                ),
+                guard_length(
+                    "climb_distance",
+                    &en_de(
+                        "How close to a barrier an object may be climbed.",
+                        "Wie nah an einer Absturzsicherung ein Objekt beklettert werden kann.",
+                    ),
+                ),
+                guard_length(
+                    "climb_side",
+                    &en_de(
+                        "How long an object's shortest side must be to stand on.",
+                        "Wie lang die kürzeste Seite eines Objekts sein muss, um darauf zu \
+                         stehen.",
+                    ),
+                ),
+                MeasuredParameter {
+                    key: "measure_from",
+                    kind: MeasuredParameterKind::Choice {
+                        options: &["floor", "curb"],
+                    },
+                    required: false,
+                    default: Some("floor"),
+                    help: &en_de(
+                        "Whether a barrier on a curb is measured from the floor or from the \
+                         curb.",
+                        "Ob eine Absturzsicherung auf einer Aufkantung vom Boden oder von \
+                         der Aufkantung gemessen wird.",
+                    ),
+                },
+                guard_kinds(
+                    "barriers",
+                    &en_de(
+                        "The source kinds that may be barriers; any nearby body without it.",
+                        "Die Quellarten, die Absturzsicherungen sein können; ohne Angabe \
+                         jeder nahe Körper.",
+                    ),
+                ),
+                guard_kinds(
+                    "landings",
+                    &en_de(
+                        "The source kinds that may be landings below; any without it.",
+                        "Die Quellarten, die tiefere Auftrittsflächen sein können; ohne \
+                         Angabe jede.",
+                    ),
+                ),
+                guard_kinds(
+                    "climbables",
+                    &en_de(
+                        "The source kinds that may be climbed; any without it.",
+                        "Die Quellarten, die beklettert werden können; ohne Angabe jede.",
+                    ),
+                ),
+            ],
+            dimension: None,
+            services: &["guard", "type-hierarchy"],
+            exactness: MeasuredExactness::Stated,
+            not_evaluated: &[
+                "the guard service cannot measure the surface's exposed edges",
+                "no edge of the surface is measured",
+            ],
+            label: &en_de("Exposed edges", "Absturzkanten"),
+            help: &en_de(
+                "The exposed edges of a walking surface, as the guard service samples them, \
+                 each with what guards it: the height its barriers reach along all of it, \
+                 the share they reach along at all, the fall onto landings covering it, and \
+                 the lowest object beside a barrier to climb.",
+                "Die Absturzkanten einer Lauffläche, wie der Absturzdienst sie abtastet, \
+                 jede mit dem, was sie sichert: die Höhe, die ihre Absturzsicherungen \
+                 entlang der ganzen Kante erreichen, der Anteil, den sie überhaupt \
+                 erreichen, die Fallhöhe auf deckende Auftrittsflächen und das niedrigste \
+                 bekletterbare Objekt neben einer Absturzsicherung.",
+            ),
+        },
+        fields: &[
+            field(
+                "guarded_height",
+                LENGTH,
+                &en_de("Guarded height", "Gesicherte Höhe"),
+                &en_de(
+                    "The greatest height such that barriers at least that tall cover the whole \
+                     edge; `null` when barriers never do.",
+                    "Die größte Höhe, bei der mindestens so hohe Absturzsicherungen die ganze \
+                     Kante decken; `null`, wenn sie es nie tun.",
+                ),
+            ),
+            field(
+                "tallest_barrier",
+                LENGTH,
+                &en_de("Tallest barrier", "Höchste Absturzsicherung"),
+                &en_de(
+                    "The height of the tallest barrier within `platform_gap`; `null` with none.",
+                    "Die Höhe der höchsten Absturzsicherung innerhalb von `platform_gap`; \
+                     `null` ohne.",
+                ),
+            ),
+            field(
+                "barrier_share",
+                RATIO,
+                &en_de("Barrier share", "Anteil mit Absturzsicherung"),
+                &en_de(
+                    "The share of the edge barriers within `platform_gap` run along, whatever \
+                     their height.",
+                    "Der Anteil der Kante, an dem Absturzsicherungen innerhalb von \
+                     `platform_gap` verlaufen, gleich welcher Höhe.",
+                ),
+            ),
+            field(
+                "landing_fall",
+                LENGTH,
+                &en_de("Fall onto landings", "Fallhöhe auf Auftrittsflächen"),
+                &en_de(
+                    "The least fall such that landings no deeper, wide enough and close \
+                     enough cover the whole edge; `null` when they never do.",
+                    "Die kleinste Fallhöhe, bei der nicht tiefere, ausreichend breite und \
+                     nahe Auftrittsflächen die ganze Kante decken; `null`, wenn sie es nie \
+                     tun.",
+                ),
+            ),
+            field(
+                "climbable_height",
+                LENGTH,
+                &en_de(
+                    "Lowest climbable object",
+                    "Niedrigstes bekletterbares Objekt",
+                ),
+                &en_de(
+                    "The height of the lowest object within `climb_distance` of a barrier \
+                     with a side of at least `climb_side`; `null` with none.",
+                    "Die Höhe des niedrigsten Objekts innerhalb von `climb_distance` einer \
+                     Absturzsicherung mit einer Seite von mindestens `climb_side`; `null` \
+                     ohne.",
+                ),
+            ),
+        ],
+    },
     MemberDescriptor {
         list: MeasuredDescriptor {
             name: "handrails",

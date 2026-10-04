@@ -724,6 +724,7 @@ and declare their parameters and typed fields:
 | `steps` (`walking_line_offset`) | one per riser of a flight, bottom to top | `riser`, `going`, `step_length` (`2r + g`), `nosing`, `winder_angle`, `open_riser` |
 | `runs` | a ramp's sloped runs, lowest first | `slope`, `length`, `rise`, `width` |
 | `handrails` (`rails`, `reach_across`, `reach_above`, `level_over`, `from`, `of`) | each rail along a flight or each run of a ramp | `run`, `left`, `right`, `height_lowest`, `height_highest`, `extension_bottom`, `extension_top`, `bottom_rise`, `top_rise`, `first_on_side`, `last_on_side`, `gap_after` |
+| `guard_edges` (`barrier_gap`, `platform_gap`, `landing_gap`, `landing_width`, `climb_distance`, `climb_side`, `measure_from`, `barriers`, `landings`, `climbables`) | the exposed edges of a walking surface, as the guard service samples them | `guarded_height`, `tallest_barrier`, `barrier_share`, `landing_fall`, `climbable_height` |
 
 Step `j` climbs riser `j` onto tread `j`; its `going`, `nosing` and
 `winder_angle` are measured from the tread below, so the first step and a
@@ -750,6 +751,17 @@ Built-in code registered beside the capabilities measures each list
                "value": {"kind": "property", "propertySet": "axioval:member", "property": "riser"}}},
    "right": {"kind": "literal", "value": {"type": "quantity", "value": 0.005, "unit": "m"}}}]}
 ```
+
+An exposed edge's fields leave out the thresholds a standard varies by
+use: `guarded_height` is the greatest height such that barriers at least
+that tall (within the gaps) cover the whole edge, and `landing_fall` the
+least fall such that landings no deeper (wide and close enough) cover it.
+`horizontal-guard` finds an edge guarded exactly when `guarded_height`
+reaches the barrier height and no `climbable_height` is low enough to
+defeat it, or else, with barriers reaching at most half of it
+(`barrier_share`), when `landing_fall` is within the fall allowed; an
+expression over the edges states that per use class and reaches the
+capability's verdicts on its fixtures.
 
 Expressions over these values reach `stair-geometry`'s and
 `ramp-geometry`'s verdicts on their fixtures, check by check: risers,

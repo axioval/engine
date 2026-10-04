@@ -17,6 +17,9 @@ use thiserror::Error;
 
 mod session;
 
+/// Expressions: units, intervals, evaluation and type checking.
+pub mod expression;
+
 /// Errors while compiling untrusted declarations into a trusted execution plan.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum EngineError {

@@ -475,3 +475,56 @@ fn the_measured_opening_area_reaches_the_verdicts() {
         assert_eq!(agrees, !found, "net {net}: openings {area:?}");
     }
 }
+
+/// The wall-opening share as an expression: the sum, over the openings
+/// the wall's path reaches, of each one's section area, against its gross
+/// less net side area. It reproduces `opening-area`'s verdicts.
+#[test]
+fn the_opening_sum_as_an_aggregate_expression_reaches_the_verdicts() {
+    use axioval_rules::ExpressionRequirement;
+    use serde_json::json;
+    let side = |name: &str| json!({"kind": "property", "propertySet": QTO, "property": name});
+    let summed = json!({"kind": "aggregate", "function": "sum",
+        "over": {"kind": "path", "path": ["voids:forward"]},
+        "value": {"kind": "property", "propertySet": "axioval:measured",
+            "property": "opening_section_area;host_path=voids:backward;length_axis=profile-x;height_axis=extrusion"}});
+    let requirement = json!({"kind": "compare", "operator": "lessThanOrEquals",
+        "left": {"kind": "abs", "operand": {"kind": "subtract", "left": summed,
+            "right": {"kind": "subtract", "left": side("GrossSideArea"), "right": side("NetSideArea")}}},
+        "right": {"kind": "literal", "value": {"type": "quantity", "value": 0.01, "unit": "m2"}}});
+    let rule = rule(
+        "axioval:capability.expression",
+        kind("wall"),
+        vec![(
+            "requirement",
+            ParameterValue::Expression {
+                value: serde_json::from_value(requirement).unwrap(),
+            },
+        )],
+    );
+    let fixtures: [fn() -> Model; 3] = [
+        || window(window(wall(Some(12.6)), "o1", 1.0), "o2", 3.0),
+        || window(window(wall(Some(13.0)), "o1", 1.0), "o2", 3.0),
+        || {
+            opening(
+                wall(Some(15.0 - std::f64::consts::FRAC_PI_4)),
+                "round",
+                2.5,
+                1.5,
+                0.2,
+                "circle",
+                &[("Radius", 0.5)],
+            )
+        },
+    ];
+    for (index, model) in fixtures.into_iter().enumerate() {
+        let found = !findings(&check(model())).is_empty();
+        let evaluation = model().evaluate_measured(&ExpressionRequirement, &rule, |_| {});
+        assert!(
+            unevaluated(&evaluation).is_empty(),
+            "{index}: {:?}",
+            evaluation.not_evaluated_outcomes()
+        );
+        assert_eq!(!findings(&evaluation).is_empty(), found, "fixture {index}");
+    }
+}

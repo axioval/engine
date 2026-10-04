@@ -390,6 +390,7 @@ ignoring ASCII case):
 | `effect_covered_area`, `effect_covered_share` `;sources=<kinds>[;blockers=<kinds>][;reach=grown\|travel\|visible][;range=<m>]` | the part of the footprint the sources' effect areas cover, or its share | `PlanAreaService::measure_coverage` |
 | `boundary_covered_share`, `boundary_uncovered_area`, `boundary_overlap_area` `[;plane=<m>]` | a space's declared boundaries over its body's surface | `BoundaryCoverageService` |
 | `opening_area;path=<steps>[;length_axis=…;height_axis=…][;minimum=<m²>]` | the summed section areas of a host's openings on its middle plane | built in, over the body facts |
+| `opening_section_area;host_path=<steps>[;length_axis=…;height_axis=…]` | one opening's section area on its host's middle plane | built in, over the body facts |
 | `door_clear_width[;stated=<set/name>][;from_leaves=passage\|widest-leaf][;overall=<set/name>;deduction=<m>]`, `door_clear_height[;stated=…][;overall=…][;lining=…][;threshold=…]` | a door's clear width or height, as `keyed-limit` reads it | built in, over the door's properties and leaves |
 | `sill_height;floor_path=<steps>[;measure=greatest\|least]`, `threshold_step;floor_path=<steps>[;threshold=<set/name>][;measure=…]` | above the floors a path reaches | built in, over `VerticalExtentService` |
 | `leaf_count`, `leaf_width[;measure=widest\|narrowest\|total]`, `swing_area`, `swings_into;path=<steps>` | a door's or window's leaves and swing | built in, over `ObjectFrameService::leaves` and `FreeSpaceService` |
@@ -564,7 +565,7 @@ the same request, so its verdict is an expression ratio:
 | `area-ratio` | the `divide` of two such sums, each filtered by its selector |
 | light area | `area-ratio`'s light-area numerator is an expression over the stated sizes: a `lookup` of the light area table, or `W × H − 2(W + H) × frame` |
 | `plan-coverage` | `plan_overlap;with=<kinds>` over `area` |
-| `opening-area` | `opening_area;path=…` against the stated gross less net area |
+| `opening-area` | `opening_area;path=…` against the stated gross less net area, or an `aggregate` `sum` of each opening's `opening_section_area` over the path |
 | `slab-contact` | `contact_share;with=<kinds>;side=…` against the minimum ratio |
 | `counterpart-coverage` (plan) | `uncovered_area;by=<kinds>;growth=<tolerance>` over `area`, graded by the bands |
 | `effective-coverage` | `effect_covered_share;sources=<kinds>;reach=…;range=…` against the minimum |

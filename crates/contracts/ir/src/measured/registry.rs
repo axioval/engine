@@ -1358,6 +1358,59 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              Mittelebene, wie `opening-area` sie mit `gross_area − net_area` vergleicht.",
         ),
     },
+    MeasuredDescriptor {
+        name: "opening_section_area",
+        parameters: &[
+            MeasuredParameter {
+                key: "host_path",
+                kind: MeasuredParameterKind::Path,
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The relationship steps from the opening to its one host.",
+                    "Die Beziehungsschritte von der Öffnung zu ihrem einen Wirt.",
+                ),
+            },
+            MeasuredParameter {
+                key: "length_axis",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["extrusion", "profile-x", "profile-y"],
+                },
+                required: false,
+                default: Some("extrusion"),
+                help: &en_de(
+                    "The host's axis along its length.",
+                    "Die Achse des Wirts entlang seiner Länge.",
+                ),
+            },
+            MeasuredParameter {
+                key: "height_axis",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["extrusion", "profile-x", "profile-y"],
+                },
+                required: false,
+                default: Some("profile-y"),
+                help: &en_de(
+                    "The host's axis along its height.",
+                    "Die Achse des Wirts entlang seiner Höhe.",
+                ),
+            },
+        ],
+        dimension: Some(QuantityDimension::Area),
+        services: &["relationship-selection", "body-facts"],
+        exactness: MeasuredExactness::Stated,
+        not_evaluated: &[
+            "the opening cannot be placed on its host's middle plane",
+            "the opening voids several hosts",
+        ],
+        label: &en_de("Opening section area", "Öffnungsschnittfläche"),
+        help: &en_de(
+            "The area one opening takes from its host's middle plane: zero for a recess \
+             stopping short of it; none when it voids no host.",
+            "Die Fläche, die eine Öffnung der Mittelebene ihres Wirts nimmt: null für eine \
+             Nische, die davor endet; keine, wenn sie keinen Wirt durchbricht.",
+        ),
+    },
     plain!(
         PERIMETER,
         Some(QuantityDimension::Length),

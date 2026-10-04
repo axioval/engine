@@ -67,6 +67,11 @@ impl<'a> Openings<'a> {
         })
     }
 
+    /// The path from a host to its openings.
+    pub(crate) fn path(&self) -> &Traversal {
+        &self.path
+    }
+
     pub(crate) fn parameters() -> Vec<ParameterDescriptor> {
         vec![
             ParameterDescriptor::required("opening_path", ParameterType::StringList),
@@ -319,7 +324,7 @@ fn check(
 /// The area an opening takes from its host's middle plane, and its extents
 /// in the face; `None` for an opening below the minimum area, which is left
 /// out.
-fn opening_area(
+pub(crate) fn opening_area(
     context: &RuleContext<'_>,
     openings: &Openings<'_>,
     host: &Host,

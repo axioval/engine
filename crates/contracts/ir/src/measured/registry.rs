@@ -853,8 +853,130 @@ pub(super) const OPENINGS_MINIMUM: MeasuredParameter = MeasuredParameter {
 const HOST_OPENINGS: &[MeasuredParameter] =
     &[OPENINGS_PATH, FACE_AXES[0], FACE_AXES[1], OPENINGS_MINIMUM];
 
+const ALIGNMENT: MeasuredParameter = MeasuredParameter {
+    key: "alignment",
+    kind: MeasuredParameterKind::SourceKind,
+    required: true,
+    default: None,
+    help: &en_de(
+        "The source kinds of the alignment, `,`-separated; subtypes match. The one \
+         object of these kinds the path reaches, or without a path the one in the \
+         object's source.",
+        "Die Quellarten der Achse, durch `,` getrennt; Untertypen zählen mit. Das eine \
+         Objekt dieser Arten, das der Pfad erreicht, oder ohne Pfad das eine in der \
+         Quelle des Objekts.",
+    ),
+};
+
+const ALIGNMENT_PATH: MeasuredParameter = MeasuredParameter {
+    key: "path",
+    kind: MeasuredParameterKind::Path,
+    required: false,
+    default: None,
+    help: &en_de(
+        "The relationship steps from the object to its alignment; without it, every \
+         object of the alignment's kinds in the object's source is a candidate.",
+        "Die Beziehungsschritte vom Objekt zu seiner Achse; ohne sie ist jedes Objekt \
+         der Arten der Achse in der Quelle des Objekts ein Kandidat.",
+    ),
+};
+
+const ALIGNMENT_SERVICES: &[&str] = &["alignment", "type-hierarchy", "relationship-selection"];
+const OFF_RANGE: &str = "the reference point's nearest foot lies before the alignment's start \
+     or beyond its end";
+const AMBIGUOUS_FOOT: &str = "two feet on the alignment are equally near within the \
+     measurement's bounds, or none can be decided";
+const ALIGNMENT_UNREAD: &str = "the alignment cannot be read as a centreline, the object's \
+     reference point cannot be resolved, or not exactly one alignment is selected";
+const PARAMETER_UNBOUNDED: &str = "a segment of the alignment follows a law the service cannot \
+     bound, such as a transition spiral of an unsupported family";
+
+/// The three positions along an alignment take the same parameters.
+const ALONG: &[MeasuredParameter] = &[ALIGNMENT, ALIGNMENT_PATH];
+
 /// Every measured value, sorted by name.
 pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
+    MeasuredDescriptor {
+        name: "alignment_cant",
+        parameters: ALONG,
+        dimension: Some(QuantityDimension::Length),
+        services: ALIGNMENT_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[
+            ALIGNMENT_UNREAD,
+            OFF_RANGE,
+            AMBIGUOUS_FOOT,
+            PARAMETER_UNBOUNDED,
+        ],
+        label: &en_de("Cant", "Überhöhung"),
+        help: &en_de(
+            "How far one rail head stands above the other at the object's station, \
+             unsigned; none when the alignment states no cant.",
+            "Wie weit ein Schienenkopf über dem anderen steht, an der Station des Objekts, \
+             ohne Vorzeichen; keine, wenn die Achse keine Überhöhung angibt.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "alignment_curvature",
+        parameters: ALONG,
+        dimension: None,
+        services: ALIGNMENT_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[
+            ALIGNMENT_UNREAD,
+            OFF_RANGE,
+            AMBIGUOUS_FOOT,
+            PARAMETER_UNBOUNDED,
+        ],
+        label: &en_de("Horizontal curvature", "Krümmung im Lageplan"),
+        help: &en_de(
+            "The plan curvature of the alignment at the object's station, per metre: positive \
+             turning left, zero on a straight.",
+            "Die Krümmung der Achse im Lageplan an der Station des Objekts, je Meter: positiv \
+             nach links, null auf einer Geraden.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "alignment_gradient",
+        parameters: ALONG,
+        dimension: None,
+        services: ALIGNMENT_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[
+            ALIGNMENT_UNREAD,
+            OFF_RANGE,
+            AMBIGUOUS_FOOT,
+            PARAMETER_UNBOUNDED,
+        ],
+        label: &en_de("Gradient", "Längsneigung"),
+        help: &en_de(
+            "The gradient line's rise over plan run at the object's station, positive rising \
+             in the direction of travel.",
+            "Steigung der Gradiente über der Lagelänge an der Station des Objekts, positiv \
+             steigend in Stationierungsrichtung.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "alignment_radius",
+        parameters: ALONG,
+        dimension: Some(QuantityDimension::Length),
+        services: ALIGNMENT_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[
+            ALIGNMENT_UNREAD,
+            OFF_RANGE,
+            AMBIGUOUS_FOOT,
+            PARAMETER_UNBOUNDED,
+            "the alignment may run straight there, so its radius is unbounded",
+        ],
+        label: &en_de("Horizontal radius", "Radius im Lageplan"),
+        help: &en_de(
+            "The plan radius of the alignment at the object's station, unsigned; not evaluated \
+             where the alignment may run straight there.",
+            "Der Radius der Achse im Lageplan an der Station des Objekts, ohne Vorzeichen; nicht \
+             ausgewertet, wo die Achse dort gerade verlaufen kann.",
+        ),
+    },
     MeasuredDescriptor {
         name: ANGLE_TO,
         parameters: &[
@@ -2165,6 +2287,19 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ),
     },
     MeasuredDescriptor {
+        name: "height_above_gradient",
+        parameters: ALONG,
+        dimension: Some(QuantityDimension::Length),
+        services: ALIGNMENT_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[ALIGNMENT_UNREAD, OFF_RANGE, AMBIGUOUS_FOOT],
+        label: &en_de("Height above gradient", "Höhe über Gradiente"),
+        help: &en_de(
+            "The reference point's elevation above the alignment's gradient line at its foot.",
+            "Die Höhe des Bezugspunkts über der Gradiente der Achse an seinem Lotfußpunkt.",
+        ),
+    },
+    MeasuredDescriptor {
         name: "height_above_ground",
         parameters: &[LEVEL_PATH, DATUM],
         dimension: Some(QuantityDimension::Length),
@@ -2774,6 +2909,36 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             "Wie viele Enden oder Seiten des flächenkleinsten Rechtecks Hindernisse in \
              Reichweite versperren oder wie viele darin stehen, wie `parking-bay` sie \
              zählt: eine Zahl, ein Intervall, wenn ein Hindernis nur versperren kann.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "offset",
+        parameters: &[
+            ALIGNMENT,
+            ALIGNMENT_PATH,
+            MeasuredParameter {
+                key: "side",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["left", "right"],
+                },
+                required: false,
+                default: Some("left"),
+                help: &en_de(
+                    "The side counted positive, looking in the direction of travel.",
+                    "Die positiv gezählte Seite, in Stationierungsrichtung gesehen.",
+                ),
+            },
+        ],
+        dimension: Some(QuantityDimension::Length),
+        services: ALIGNMENT_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[ALIGNMENT_UNREAD, OFF_RANGE, AMBIGUOUS_FOOT],
+        label: &en_de("Offset", "Achsabstand"),
+        help: &en_de(
+            "The signed plan distance of the reference point from the alignment, \
+             perpendicular to it at its foot.",
+            "Der vorzeichenbehaftete Abstand des Bezugspunkts von der Achse im Lageplan, \
+             senkrecht zu ihr an seinem Lotfußpunkt.",
         ),
     },
     MeasuredDescriptor {
@@ -3433,6 +3598,21 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              flight's top.",
             "Wie hoch eine ganze Treppe steigt, vom Fuß ihres untersten Laufs bis zum Kopf \
              ihres obersten.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "station",
+        parameters: ALONG,
+        dimension: Some(QuantityDimension::Length),
+        services: ALIGNMENT_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[ALIGNMENT_UNREAD, OFF_RANGE, AMBIGUOUS_FOOT],
+        label: &en_de("Station", "Station"),
+        help: &en_de(
+            "The station of the reference point's foot on the alignment: its plan distance from \
+             the start, labelled through the station equations the alignment states.",
+            "Die Station des Lotfußpunkts des Bezugspunkts auf der Achse: sein Abstand vom Anfang \
+             im Lageplan, bezeichnet über die Stationsgleichungen der Achse.",
         ),
     },
     MeasuredDescriptor {

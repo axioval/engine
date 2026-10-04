@@ -112,16 +112,16 @@ use axioval::axiolid::{
     ExactBoundary,
 };
 use axioval::engine::{
-    BoundaryCoverageServiceHandle, ContactServiceHandle, CoordinateSystemServiceHandle,
-    DerivedRelationshipServiceHandle, EnvelopeMembershipServiceHandle, EvidenceSession,
-    FacadeAreaServiceHandle, FreeSpaceServiceHandle, GuardServiceHandle,
-    LinearQuantityServiceHandle, MetricRoutingServiceHandle, PlanAreaServiceHandle,
-    PlanSpanServiceHandle, PropertyRequest, PropertyResolution, PropertyResolutionServiceHandle,
-    ProximityServiceHandle, RelationshipEdgesRequest, RelationshipQuery,
-    RelationshipSelectionRequest, RelationshipSelectionServiceHandle, SemanticRelationship,
-    SightServiceHandle, SourceSnapshot, SpaceServiceHandle, TraversalDirection,
-    TriangleCountServiceHandle, TypeHierarchyServiceHandle, VerticalExtentServiceHandle,
-    WalkabilityServiceHandle, WalkingSurfaceServiceHandle,
+    AlignmentServiceHandle, BoundaryCoverageServiceHandle, ContactServiceHandle,
+    CoordinateSystemServiceHandle, DerivedRelationshipServiceHandle,
+    EnvelopeMembershipServiceHandle, EvidenceSession, FacadeAreaServiceHandle,
+    FreeSpaceServiceHandle, GuardServiceHandle, LinearQuantityServiceHandle,
+    MetricRoutingServiceHandle, PlanAreaServiceHandle, PlanSpanServiceHandle, PropertyRequest,
+    PropertyResolution, PropertyResolutionServiceHandle, ProximityServiceHandle,
+    RelationshipEdgesRequest, RelationshipQuery, RelationshipSelectionRequest,
+    RelationshipSelectionServiceHandle, SemanticRelationship, SightServiceHandle, SourceSnapshot,
+    SpaceServiceHandle, TraversalDirection, TriangleCountServiceHandle, TypeHierarchyServiceHandle,
+    VerticalExtentServiceHandle, WalkabilityServiceHandle, WalkingSurfaceServiceHandle,
 };
 use axioval::ir::{ObjectId, PropertyValue, Report, SourceId};
 use axioval::rules::{CoordinateTolerance, compare_coordinate_systems};
@@ -136,6 +136,8 @@ use ifc_model::{EntityId, Model};
 use ifc_spatial::relation::boundary::{ConnectionGeometryAnomaly, SpaceBoundary};
 use ifc_spatial::{SpatialAnomaly, SpatialKind, SpatialTree};
 use std::sync::Arc;
+
+mod alignment;
 
 /// Linear tolerance handed to the mesh compiler: with no explicit chord
 /// budget, its chord budget. Each tessellated mesh is declared with the
@@ -336,6 +338,13 @@ impl Linear {
             })
             .collect();
         Self { refused }
+    }
+
+    /// Why `product`'s own placement is refused, `None` when it is not.
+    fn own_refusal(&self, model: &Model, product: EntityId) -> Option<String> {
+        let placement =
+            ifc_geometry::Slots::new(product, model.get(product)?).opt_ref(OBJECT_PLACEMENT)?;
+        self.refused.get(&placement).cloned()
     }
 
     /// Why `product` cannot be placed: its own placement, or that of an
@@ -831,11 +840,19 @@ pub fn attach(
     );
     let routes = route_services(&geometry, &source, &kinds, &is_a, &voids);
     let derived = derived_service(&geometry, &parsed, &kinds, &is_a, voids);
+    let alignments =
+        alignment::alignment_service(&parsed, &kinds.keys().cloned().collect::<Vec<_>>());
     let facade = facade_service(&geometry, &kinds, &is_a);
     let session = register(session, &snapshots, geometry, space, envelope, routes)?
         .with_host_service(FacadeAreaServiceHandle::new(Arc::new(facade)), &snapshots)?
         .with_derived_relationships(
             DerivedRelationshipServiceHandle::new(Arc::new(derived)),
+            &snapshots,
+        )?
+        // Stations, offsets and heights of reference points along the
+        // sources' alignments.
+        .with_host_service(
+            AlignmentServiceHandle::new(Arc::new(alignments)),
             &snapshots,
         )?;
     Ok((session, report))

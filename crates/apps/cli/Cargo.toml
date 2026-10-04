@@ -39,6 +39,9 @@ ifc-geometry = { workspace = true, features = ["compile-reference-backend"] }
 # Derives each `IfcLinearPlacement` from its basis curve, as
 # `LoweringSession::with_curve_evaluator` asks of the caller (engine#224).
 axiolid-evaluate.workspace = true
+# Each `IfcAlignment`'s centreline, station equations and cant, which the
+# alignment service locates products along (engine#252).
+ifc-alignment.workspace = true
 ifc-model.workspace = true
 ifc-spatial.workspace = true
 # `check --ids` and `ids translate`: IDS documents read and translated

@@ -20598,6 +20598,301 @@
   ],
   "measuredValues": [
     {
+      "name": "alignment_cant",
+      "parameters": [
+        {
+          "key": "alignment",
+          "kind": {
+            "type": "sourceKind"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The source kinds of the alignment, `,`-separated; subtypes match. The one object of these kinds the path reaches, or without a path the one in the object's source."
+            },
+            {
+              "language": "de",
+              "text": "Die Quellarten der Achse, durch `,` getrennt; Untertypen zählen mit. Das eine Objekt dieser Arten, das der Pfad erreicht, oder ohne Pfad das eine in der Quelle des Objekts."
+            }
+          ]
+        },
+        {
+          "key": "path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from the object to its alignment; without it, every object of the alignment's kinds in the object's source is a candidate."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte vom Objekt zu seiner Achse; ohne sie ist jedes Objekt der Arten der Achse in der Quelle des Objekts ein Kandidat."
+            }
+          ]
+        }
+      ],
+      "dimension": "length",
+      "services": [
+        "alignment",
+        "type-hierarchy",
+        "relationship-selection"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the alignment cannot be read as a centreline, the object's reference point cannot be resolved, or not exactly one alignment is selected",
+        "the reference point's nearest foot lies before the alignment's start or beyond its end",
+        "two feet on the alignment are equally near within the measurement's bounds, or none can be decided",
+        "a segment of the alignment follows a law the service cannot bound, such as a transition spiral of an unsupported family"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Cant"
+        },
+        {
+          "language": "de",
+          "text": "Überhöhung"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "How far one rail head stands above the other at the object's station, unsigned; none when the alignment states no cant."
+        },
+        {
+          "language": "de",
+          "text": "Wie weit ein Schienenkopf über dem anderen steht, an der Station des Objekts, ohne Vorzeichen; keine, wenn die Achse keine Überhöhung angibt."
+        }
+      ],
+      "unit": "m",
+      "available": true
+    },
+    {
+      "name": "alignment_curvature",
+      "parameters": [
+        {
+          "key": "alignment",
+          "kind": {
+            "type": "sourceKind"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The source kinds of the alignment, `,`-separated; subtypes match. The one object of these kinds the path reaches, or without a path the one in the object's source."
+            },
+            {
+              "language": "de",
+              "text": "Die Quellarten der Achse, durch `,` getrennt; Untertypen zählen mit. Das eine Objekt dieser Arten, das der Pfad erreicht, oder ohne Pfad das eine in der Quelle des Objekts."
+            }
+          ]
+        },
+        {
+          "key": "path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from the object to its alignment; without it, every object of the alignment's kinds in the object's source is a candidate."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte vom Objekt zu seiner Achse; ohne sie ist jedes Objekt der Arten der Achse in der Quelle des Objekts ein Kandidat."
+            }
+          ]
+        }
+      ],
+      "services": [
+        "alignment",
+        "type-hierarchy",
+        "relationship-selection"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the alignment cannot be read as a centreline, the object's reference point cannot be resolved, or not exactly one alignment is selected",
+        "the reference point's nearest foot lies before the alignment's start or beyond its end",
+        "two feet on the alignment are equally near within the measurement's bounds, or none can be decided",
+        "a segment of the alignment follows a law the service cannot bound, such as a transition spiral of an unsupported family"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Horizontal curvature"
+        },
+        {
+          "language": "de",
+          "text": "Krümmung im Lageplan"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The plan curvature of the alignment at the object's station, per metre: positive turning left, zero on a straight."
+        },
+        {
+          "language": "de",
+          "text": "Die Krümmung der Achse im Lageplan an der Station des Objekts, je Meter: positiv nach links, null auf einer Geraden."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
+      "name": "alignment_gradient",
+      "parameters": [
+        {
+          "key": "alignment",
+          "kind": {
+            "type": "sourceKind"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The source kinds of the alignment, `,`-separated; subtypes match. The one object of these kinds the path reaches, or without a path the one in the object's source."
+            },
+            {
+              "language": "de",
+              "text": "Die Quellarten der Achse, durch `,` getrennt; Untertypen zählen mit. Das eine Objekt dieser Arten, das der Pfad erreicht, oder ohne Pfad das eine in der Quelle des Objekts."
+            }
+          ]
+        },
+        {
+          "key": "path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from the object to its alignment; without it, every object of the alignment's kinds in the object's source is a candidate."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte vom Objekt zu seiner Achse; ohne sie ist jedes Objekt der Arten der Achse in der Quelle des Objekts ein Kandidat."
+            }
+          ]
+        }
+      ],
+      "services": [
+        "alignment",
+        "type-hierarchy",
+        "relationship-selection"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the alignment cannot be read as a centreline, the object's reference point cannot be resolved, or not exactly one alignment is selected",
+        "the reference point's nearest foot lies before the alignment's start or beyond its end",
+        "two feet on the alignment are equally near within the measurement's bounds, or none can be decided",
+        "a segment of the alignment follows a law the service cannot bound, such as a transition spiral of an unsupported family"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Gradient"
+        },
+        {
+          "language": "de",
+          "text": "Längsneigung"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The gradient line's rise over plan run at the object's station, positive rising in the direction of travel."
+        },
+        {
+          "language": "de",
+          "text": "Steigung der Gradiente über der Lagelänge an der Station des Objekts, positiv steigend in Stationierungsrichtung."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
+      "name": "alignment_radius",
+      "parameters": [
+        {
+          "key": "alignment",
+          "kind": {
+            "type": "sourceKind"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The source kinds of the alignment, `,`-separated; subtypes match. The one object of these kinds the path reaches, or without a path the one in the object's source."
+            },
+            {
+              "language": "de",
+              "text": "Die Quellarten der Achse, durch `,` getrennt; Untertypen zählen mit. Das eine Objekt dieser Arten, das der Pfad erreicht, oder ohne Pfad das eine in der Quelle des Objekts."
+            }
+          ]
+        },
+        {
+          "key": "path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from the object to its alignment; without it, every object of the alignment's kinds in the object's source is a candidate."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte vom Objekt zu seiner Achse; ohne sie ist jedes Objekt der Arten der Achse in der Quelle des Objekts ein Kandidat."
+            }
+          ]
+        }
+      ],
+      "dimension": "length",
+      "services": [
+        "alignment",
+        "type-hierarchy",
+        "relationship-selection"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the alignment cannot be read as a centreline, the object's reference point cannot be resolved, or not exactly one alignment is selected",
+        "the reference point's nearest foot lies before the alignment's start or beyond its end",
+        "two feet on the alignment are equally near within the measurement's bounds, or none can be decided",
+        "a segment of the alignment follows a law the service cannot bound, such as a transition spiral of an unsupported family",
+        "the alignment may run straight there, so its radius is unbounded"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Horizontal radius"
+        },
+        {
+          "language": "de",
+          "text": "Radius im Lageplan"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The plan radius of the alignment at the object's station, unsigned; not evaluated where the alignment may run straight there."
+        },
+        {
+          "language": "de",
+          "text": "Der Radius der Achse im Lageplan an der Station des Objekts, ohne Vorzeichen; nicht ausgewertet, wo die Achse dort gerade verlaufen kann."
+        }
+      ],
+      "unit": "m",
+      "available": true
+    },
+    {
       "name": "angle_to",
       "parameters": [
         {
@@ -24186,6 +24481,79 @@
       "available": true
     },
     {
+      "name": "height_above_gradient",
+      "parameters": [
+        {
+          "key": "alignment",
+          "kind": {
+            "type": "sourceKind"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The source kinds of the alignment, `,`-separated; subtypes match. The one object of these kinds the path reaches, or without a path the one in the object's source."
+            },
+            {
+              "language": "de",
+              "text": "Die Quellarten der Achse, durch `,` getrennt; Untertypen zählen mit. Das eine Objekt dieser Arten, das der Pfad erreicht, oder ohne Pfad das eine in der Quelle des Objekts."
+            }
+          ]
+        },
+        {
+          "key": "path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from the object to its alignment; without it, every object of the alignment's kinds in the object's source is a candidate."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte vom Objekt zu seiner Achse; ohne sie ist jedes Objekt der Arten der Achse in der Quelle des Objekts ein Kandidat."
+            }
+          ]
+        }
+      ],
+      "dimension": "length",
+      "services": [
+        "alignment",
+        "type-hierarchy",
+        "relationship-selection"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the alignment cannot be read as a centreline, the object's reference point cannot be resolved, or not exactly one alignment is selected",
+        "the reference point's nearest foot lies before the alignment's start or beyond its end",
+        "two feet on the alignment are equally near within the measurement's bounds, or none can be decided"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Height above gradient"
+        },
+        {
+          "language": "de",
+          "text": "Höhe über Gradiente"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The reference point's elevation above the alignment's gradient line at its foot."
+        },
+        {
+          "language": "de",
+          "text": "Die Höhe des Bezugspunkts über der Gradiente der Achse an seinem Lotfußpunkt."
+        }
+      ],
+      "unit": "m",
+      "available": true
+    },
+    {
       "name": "height_above_ground",
       "parameters": [
         {
@@ -26275,6 +26643,101 @@
       "available": true
     },
     {
+      "name": "offset",
+      "parameters": [
+        {
+          "key": "alignment",
+          "kind": {
+            "type": "sourceKind"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The source kinds of the alignment, `,`-separated; subtypes match. The one object of these kinds the path reaches, or without a path the one in the object's source."
+            },
+            {
+              "language": "de",
+              "text": "Die Quellarten der Achse, durch `,` getrennt; Untertypen zählen mit. Das eine Objekt dieser Arten, das der Pfad erreicht, oder ohne Pfad das eine in der Quelle des Objekts."
+            }
+          ]
+        },
+        {
+          "key": "path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from the object to its alignment; without it, every object of the alignment's kinds in the object's source is a candidate."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte vom Objekt zu seiner Achse; ohne sie ist jedes Objekt der Arten der Achse in der Quelle des Objekts ein Kandidat."
+            }
+          ]
+        },
+        {
+          "key": "side",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "left",
+              "right"
+            ]
+          },
+          "required": false,
+          "default": "left",
+          "help": [
+            {
+              "language": "en",
+              "text": "The side counted positive, looking in the direction of travel."
+            },
+            {
+              "language": "de",
+              "text": "Die positiv gezählte Seite, in Stationierungsrichtung gesehen."
+            }
+          ]
+        }
+      ],
+      "dimension": "length",
+      "services": [
+        "alignment",
+        "type-hierarchy",
+        "relationship-selection"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the alignment cannot be read as a centreline, the object's reference point cannot be resolved, or not exactly one alignment is selected",
+        "the reference point's nearest foot lies before the alignment's start or beyond its end",
+        "two feet on the alignment are equally near within the measurement's bounds, or none can be decided"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Offset"
+        },
+        {
+          "language": "de",
+          "text": "Achsabstand"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The signed plan distance of the reference point from the alignment, perpendicular to it at its foot."
+        },
+        {
+          "language": "de",
+          "text": "Der vorzeichenbehaftete Abstand des Bezugspunkts von der Achse im Lageplan, senkrecht zu ihr an seinem Lotfußpunkt."
+        }
+      ],
+      "unit": "m",
+      "available": true
+    },
+    {
       "name": "opening_area",
       "parameters": [
         {
@@ -28361,6 +28824,79 @@
         {
           "language": "de",
           "text": "Wie hoch eine ganze Treppe steigt, vom Fuß ihres untersten Laufs bis zum Kopf ihres obersten."
+        }
+      ],
+      "unit": "m",
+      "available": true
+    },
+    {
+      "name": "station",
+      "parameters": [
+        {
+          "key": "alignment",
+          "kind": {
+            "type": "sourceKind"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The source kinds of the alignment, `,`-separated; subtypes match. The one object of these kinds the path reaches, or without a path the one in the object's source."
+            },
+            {
+              "language": "de",
+              "text": "Die Quellarten der Achse, durch `,` getrennt; Untertypen zählen mit. Das eine Objekt dieser Arten, das der Pfad erreicht, oder ohne Pfad das eine in der Quelle des Objekts."
+            }
+          ]
+        },
+        {
+          "key": "path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from the object to its alignment; without it, every object of the alignment's kinds in the object's source is a candidate."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte vom Objekt zu seiner Achse; ohne sie ist jedes Objekt der Arten der Achse in der Quelle des Objekts ein Kandidat."
+            }
+          ]
+        }
+      ],
+      "dimension": "length",
+      "services": [
+        "alignment",
+        "type-hierarchy",
+        "relationship-selection"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the alignment cannot be read as a centreline, the object's reference point cannot be resolved, or not exactly one alignment is selected",
+        "the reference point's nearest foot lies before the alignment's start or beyond its end",
+        "two feet on the alignment are equally near within the measurement's bounds, or none can be decided"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Station"
+        },
+        {
+          "language": "de",
+          "text": "Station"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The station of the reference point's foot on the alignment: its plan distance from the start, labelled through the station equations the alignment states."
+        },
+        {
+          "language": "de",
+          "text": "Die Station des Lotfußpunkts des Bezugspunkts auf der Achse: sein Abstand vom Anfang im Lageplan, bezeichnet über die Stationsgleichungen der Achse."
         }
       ],
       "unit": "m",

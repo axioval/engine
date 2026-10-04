@@ -8,7 +8,7 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-use axioval::ifc::IFC4_TYPE_SYSTEM;
+use axioval::ifc::{IFC4_TYPE_SYSTEM, IFC4X3_TYPE_SYSTEM};
 use serde_json::{Value, json};
 
 const FIXTURES: &str = concat!(
@@ -2108,6 +2108,113 @@ fn with_geometry_a_linear_placement_off_an_unplaced_frame_is_never_placed() {
         "{refused:#?}"
     );
     assert_eq!(result["geometry"]["exact"], 3, "{result:#}");
+}
+
+/// The linearly placed cubes along the gradient curve (#79), now the
+/// `Axis` of alignment #175 at the origin, with the cube by length (#143)
+/// 2 m to the left of the curve, and cubes placed at `(3, -1, 10)` (#183)
+/// and beyond the curve's 15 m end at `(20, 0, 10)` (#203).
+fn cubes_along_an_alignment() -> String {
+    linearly_placed_cubes()
+        .replace(
+            "#140=IFCPOINTBYDISTANCEEXPRESSION(IFCLENGTHMEASURE(5.),$,$,$,#79);",
+            "#140=IFCPOINTBYDISTANCEEXPRESSION(IFCLENGTHMEASURE(5.),2.,$,$,#79);",
+        )
+        .replace(
+            "ENDSEC;\nEND-ISO",
+            "#173=IFCSHAPEREPRESENTATION(#5,'Axis','Curve3D',(#79));\n\
+             #174=IFCPRODUCTDEFINITIONSHAPE($,$,(#173));\n\
+             #175=IFCALIGNMENT('0000000000000000000175',$,$,$,$,#3,#174,$);\n\
+             #180=IFCCARTESIANPOINT((3.,-1.,10.));\n\
+             #181=IFCAXIS2PLACEMENT3D(#180,$,$);\n\
+             #182=IFCLOCALPLACEMENT($,#181);\n\
+             #183=IFCBUILDINGELEMENTPROXY('0000000000000000000183',$,$,$,$,#182,#124,$,$);\n\
+             #200=IFCCARTESIANPOINT((20.,0.,10.));\n\
+             #201=IFCAXIS2PLACEMENT3D(#200,$,$);\n\
+             #202=IFCLOCALPLACEMENT($,#201);\n\
+             #203=IFCBUILDINGELEMENTPROXY('0000000000000000000203',$,$,$,$,#202,#124,$,$);\n\
+             ENDSEC;\nEND-ISO",
+        )
+}
+
+/// engine#252 end to end: an `expression` rule on `station` and one on
+/// `offset` along the alignment judge each cube where its placement puts
+/// it. The cube 5 m along the curve by its linear placement is at station
+/// 5 and 2 m to the left (its `OffsetLateral`), the one whose cache agrees
+/// on the curve itself, the one placed by coordinates at station 3, 1 m
+/// to the right, and the bodiless proxy (#30) at the curve's start. The
+/// cube beyond the end, and those whose placement is refused, are not
+/// evaluated with the reason.
+#[test]
+fn with_geometry_products_are_judged_by_their_station_and_offset_along_an_alignment() {
+    let case = Case::new("geometry-alignment-station");
+    let model = cubes_along_an_alignment();
+    let along = |name: &str, operator: &str, metres: f64| {
+        case.geometry_rule(
+            &model,
+            &[("proxy", "IfcBuildingElementProxy")],
+            "axioval:capability.expression",
+            &registry_signature("axioval:capability.expression"),
+            entity("proxy"),
+            json!({"requirement": {"type": "expression", "value": {
+                "kind": "compare", "operator": operator, "label": "value",
+                "left": {"kind": "property", "propertySet": "axioval:measured", "property": name},
+                "right": {"kind": "literal",
+                          "value": {"type": "quantity", "value": metres, "unit": "m"}}}}}),
+        )
+    };
+    let judged = |result: &Value| {
+        let objects = |key: &str| -> Vec<String> {
+            let mut objects: Vec<String> = result["report"][key]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter_map(|entry| entry["object_id"]["local_id"].as_str())
+                .map(str::to_owned)
+                .collect();
+            objects.sort();
+            objects
+        };
+        (objects("findings"), objects("not_evaluated"))
+    };
+    let reason = |result: &Value, local: &str| {
+        result["report"]["not_evaluated"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["object_id"]["local_id"] == local)
+            .map_or_else(
+                || panic!("{local} must be not evaluated: {result:#}"),
+                ToString::to_string,
+            )
+    };
+
+    let (output, result) = along("station;alignment=IfcAlignment", "lessThanOrEquals", 4.0);
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let (findings, open) = judged(&result);
+    assert_eq!(findings, ["#143", "#163"], "{result:#}");
+    assert_eq!(open, ["#133", "#153", "#203"], "{result:#}");
+    let beyond = reason(&result, "#203");
+    assert!(
+        beyond.contains("beyond the alignment's end") && beyond.contains("#175"),
+        "{beyond}"
+    );
+    assert!(
+        reason(&result, "#133").contains("IfcParameterValue"),
+        "{result:#}"
+    );
+    let message = result["report"]["findings"][0]["message"].to_string();
+    assert!(message.contains('5'), "{message}");
+
+    let (output, result) = along(
+        "offset;alignment=IfcAlignment;side=left",
+        "greaterThanOrEquals",
+        1.0,
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    let (findings, open) = judged(&result);
+    assert_eq!(findings, ["#163", "#183", "#30"], "{result:#}");
+    assert_eq!(open, ["#133", "#153", "#203"], "{result:#}");
 }
 
 /// The crossing walls with an `IfcOpeningElement` (#208) voiding the first
@@ -4626,7 +4733,8 @@ impl Case {
             definitions["objectTypes"][format!("axioval:example.ifc.{id}")] = json!({
                 "id": format!("axioval:example.ifc.{id}"),
                 "name": {"default": name, "translations": {}},
-                "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": name}],
+                "externalNames": [{"typeSystem": IFC4_TYPE_SYSTEM, "name": name},
+                                  {"typeSystem": IFC4X3_TYPE_SYSTEM, "name": name}],
                 "citations": [],
             });
         }

@@ -6,6 +6,30 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- Stations, offsets and heights along alignments (#252). The new
+  measured values `station`, `offset[;side=left|right]` and
+  `height_above_gradient` (`;alignment=<kinds>[;path=<steps>]`) locate an
+  object's reference point along an alignment: the plan distance to its
+  foot labelled through the alignment's station equations, its signed
+  plan offset (left positive, IFC4.3's tangent, left, up) and its height
+  above the gradient line, each an interval sure to hold the exact value.
+  `alignment_curvature`, `alignment_radius`, `alignment_gradient` and
+  `alignment_cant` read the alignment at that station for station-dependent
+  limits; an alignment stating no cant has none. They are answered through
+  the new source-neutral `AlignmentService` (`AlignmentServiceHandle`,
+  `AlignmentRequest`, `AlignmentPosition`, `AlignmentParameterRequest`,
+  `AlignmentParameterValue`), whose parameter method refuses by default.
+  A point whose nearest foot lies before the start or beyond the end is
+  not evaluated as off the alignment's range with the reason, never
+  clamped; two feet that cannot be told apart are ambiguous; several
+  alignments selected are refused; none is an exact absence; without the
+  service the values are a missing service. With `--geometry` the CLI
+  registers an IFC implementation over each `IfcAlignment`'s centreline
+  (its `Axis` curve, or the gradient curve `ifc-alignment` 0.6 composes
+  from its layouts), certifying the foot of the plan perpendicular with
+  `axiolid-evaluate`'s derivative bounds, and reading stationing from
+  `Pset_Stationing` referents and cant from `IfcAlignmentCant`.
+
 - Products along alignments are placed by their linear placement (#224).
   With `--geometry`, an `IfcLinearPlacement` is derived from its basis
   curve through `ifc-geometry` 0.10's evaluator-taking lowering

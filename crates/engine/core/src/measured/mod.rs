@@ -24,6 +24,7 @@ use axioval_ir::{
     PropertyValue, QuantityDimension,
 };
 
+mod alignment;
 mod angles;
 mod areas;
 mod clearance;
@@ -83,6 +84,8 @@ pub(crate) enum MeasuredName {
     Area(MeasuredCall),
     /// A dimension of the body: an extent, length, thickness or perimeter.
     Dimension(MeasuredCall),
+    /// A position along an alignment, or a parameter of it there.
+    Alignment(MeasuredCall),
     /// A value a registered provider measures.
     Provided(MeasuredCall),
 }
@@ -126,6 +129,7 @@ pub(crate) fn measured_by_core(name: &str) -> bool {
         || space::NAMES.contains(&name)
         || levels::NAMES.contains(&name)
         || areas::NAMES.contains(&name)
+        || alignment::NAMES.contains(&name)
 }
 
 /// Parses a name in the measured set through the registry
@@ -178,6 +182,7 @@ pub(crate) fn parse(name: &str) -> Result<MeasuredName, String> {
         name if space::NAMES.contains(&name) => MeasuredName::Space(call),
         name if levels::NAMES.contains(&name) => MeasuredName::Level(call),
         name if areas::NAMES.contains(&name) => MeasuredName::Area(call),
+        name if alignment::NAMES.contains(&name) => MeasuredName::Alignment(call),
         ANGLE_TO | BEARING | SKEW => {
             let steps = match call.argument("path") {
                 Some(MeasuredArgument::Path(steps)) => steps
@@ -255,6 +260,7 @@ pub(crate) struct Measures {
     contacts: Option<crate::contact::ContactServiceHandle>,
     spaces: Option<SpaceServiceHandle>,
     coordinates: Option<CoordinateSystemServiceHandle>,
+    alignments: Option<crate::alignment::AlignmentServiceHandle>,
     host: Option<PropertyResolutionServiceHandle>,
     providers: Option<(provider::Providers, ServiceRegistry)>,
     kinds: Arc<BTreeMap<ObjectId, String>>,
@@ -286,6 +292,9 @@ impl Measures {
                 .cloned(),
             spaces: services.get::<SpaceServiceHandle>().cloned(),
             coordinates: services.get::<CoordinateSystemServiceHandle>().cloned(),
+            alignments: services
+                .get::<crate::alignment::AlignmentServiceHandle>()
+                .cloned(),
             host: host.cloned(),
             providers: services
                 .get::<provider::Providers>()
@@ -403,6 +412,7 @@ impl Measures {
             MeasuredName::Space(call) => self.space(call, object),
             MeasuredName::Level(call) => self.level_measure(call, object),
             MeasuredName::Area(call) => self.area_measure(call, object),
+            MeasuredName::Alignment(call) => self.along_alignment(call, object),
             MeasuredName::Provided(call) => self.provided(call, object),
         }
     }

@@ -415,6 +415,8 @@ ignoring ASCII case):
 | `body_extent;axis=right\|forward\|up` | the body's depth along one of its own placement axes, as `body-extent` measures it | built in, over `ObjectFrameService`, `VerticalExtentService` |
 | `triangle_count` | how many triangles the host's mesh of the body holds | built in, over `TriangleCountService` |
 | `coordinate_shift;of=world\|site\|map`, `coordinate_turn;of=world\|site\|north\|map`, `map_scale_change`, `map_target_change`, `map_conversion[;of=own\|reference]` `[;reference=<discipline>]` | how the object's source's coordinate system departs from the reference source's | built in, over `CoordinateSystemService` |
+| `station`, `offset[;side=left\|right]`, `height_above_gradient` `;alignment=<kinds>[;path=<steps>]` | the reference point's station along an alignment, its signed plan offset from it and its height above the gradient line, each a length | `AlignmentService::measure_alignment_position`, `TypeHierarchyService`, `RelationshipSelectionService` for a path |
+| `alignment_curvature`, `alignment_radius`, `alignment_gradient`, `alignment_cant` `;alignment=<kinds>[;path=<steps>]` | the alignment's plan curvature (per metre) and radius, gradient and cant at the reference point's station | `AlignmentService::measure_alignment_parameter` |
 
 ### Names with parameters
 
@@ -1109,6 +1111,66 @@ recorded only when nothing else is unknown), and with a required map
 conversion `map_conversion` 1 and the map comparisons only where the
 reference states one, reach the capability's verdicts on its fixtures; the
 capability judges a source, the rewrite each object of it.
+
+### Alignments
+
+Infrastructure limits are stated against an alignment: a pier within a
+station range, a mast far enough from the track axis, a soffit high enough
+above the gradient line. `station`, `offset` and `height_above_gradient`
+locate an object's reference point, its placement origin, along an
+alignment through `AlignmentServiceHandle::measure_alignment_position`
+(`AlignmentRequest`: the object and the alignment, never the same object).
+The alignment is a 3D centreline: a plan measured by its own length from
+its start and a gradient line giving the height along it. The point's
+**foot** is where the plan perpendicular from it meets the plan curve, the
+nearest one where there are several:
+
+- `station` is the label of the plan distance from the start to the foot,
+  through the station equations the alignment states (the distance itself
+  where it states none);
+- `offset` is the plan distance from the foot to the point, positive to
+  the left of the direction of travel (the lateral axis of the section
+  frame: tangent, left, up); `side=right` counts the right positive;
+- `height_above_gradient` is the point's elevation above the gradient line
+  at the foot.
+
+`alignment` names the alignment's source kinds (`IfcAlignment`; subtypes
+match). The alignment is the one object of those kinds that `path` reaches
+from the object or, without a path, the one in the object's source. None
+selected is an exact absence; several are refused, never picked from.
+
+The parameters read the alignment at the stretch of plan distances the
+foot may lie in (`AlignmentParameterRequest`,
+`AlignmentServiceHandle::measure_alignment_parameter`): `alignment_curvature`
+is the plan's signed curvature per metre (positive turning left, zero on a
+straight), `alignment_radius` its unsigned inverse (a length, refused
+where the alignment may run straight there, since the radius is then
+unbounded), `alignment_gradient` the gradient line's rise over plan run
+(positive rising in the direction of travel), and `alignment_cant` how far
+one rail head stands above the other, unsigned. An alignment stating no
+cant has none: an exact absence, never a zero. The trait's
+`measure_alignment_parameter` refuses by default, so a service that reads
+no parameters never answers with a straight, level, uncanted line.
+
+Every value is an interval sure to hold the exact one (`AlignmentInterval`),
+and its evidence is exact exactly when every interval is a point; locating
+a point on a curve is a numerical search, so a position practically never
+is. The handle refuses an answer about another request. A position is not
+evaluated with the service's reason when:
+
+- the point's nearest foot lies before the alignment's start or beyond its
+  end (`AlignmentError::OffRange`): it is off the range, never clamped to
+  an end;
+- two feet are equally near within the measurement's bounds, or the
+  nearest cannot be decided (`Ambiguous`), such as a point at the centre
+  of an arc;
+- the object has no reference point the service holds (`UnknownObject`),
+  the object named is no alignment (`NotAlignment`), or the alignment, its
+  stationing or the point's placement cannot be read (`Unavailable`).
+
+Without an alignment service the values are a missing service, reported
+once per rule and source. The CLI's IFC implementation is described under
+[Geometry](./cli.md#geometry).
 
 ### Stated rather than measured
 

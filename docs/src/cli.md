@@ -1162,6 +1162,48 @@ is not the identity, or the curve is held by no representation while an
 alignment of the model is placed off the identity, the product is
 unmeasured with that reason, never placed where the curve alone would put
 it.
+
+With `--geometry` the bridge also registers an alignment service, so the
+measured values `station`, `offset`, `height_above_gradient` and
+`alignment_*` (see [Alignments](./derived.md#alignments)) are answered
+along each `IfcAlignment`. Its centreline is the 3D curve its `Axis`
+representation holds (a gradient curve; a banked curve is read by its
+gradient line), lowered as a linear placement's basis curve is, else
+the gradient curve `ifc-alignment` composes from its horizontal and
+vertical layouts. The alignment's placement and its context must be the
+identity: one placed off it is refused by name, because placements along
+it do not yet compose that placement (openbimrs/ifc#357), so its stations
+would not match where its linearly placed products lie. An object's reference point is its placement
+origin, a linear placement derived from its basis curve as above, and a
+refused placement leaves its values not evaluated with that reason.
+
+There is no point-to-curve projection in the geometry stack, so the foot is
+found here and certified. In plan, a foot at distance `d` is a root of
+`g(d) = (P - c(d)) . c'(d)`, and `|g'|` is at most `B1^2 + R B2` over a
+stretch, where `B1` and `B2` are the certified derivative bounds
+`axiolid-evaluate` gives for the elevated curve there and `R` bounds the
+point's distance from it. The length is bisected, split first where the
+curve may not be `C^2`; a stretch whose midpoint value exceeds that
+Lipschitz bound times its half-width holds no foot and is dropped, so what
+remains are brackets every foot lies in. A bracket where `g` falls from
+positive to negative holds a nearest point; the ends are candidates too.
+The nearest candidate wins only when its distance interval lies wholly
+below every other's: two that overlap are ambiguous, an undecided one
+nearest is too, and an end nearest leaves the point off the range (before
+the start or beyond the end, with the distance). Station, offset and height
+are evaluated at the winning bracket's ends and widened by the same bounds
+over it, with the reference evaluator's accuracy and rounding allowed on
+every evaluation, so each is an interval holding the exact value.
+
+Stations are labelled through the station equations the alignment's
+referents state (`Pset_Stationing`); without any, the station is the plan
+distance. The parameters follow their laws over the foot's stretch: the
+plan's curvature from its curvature law (lines, arcs, clothoids and other
+polynomial curvature, piecewise and chained), the gradient from the
+elevation law (polynomials and circular arcs), and the cant from the
+`IfcAlignmentCant` segments, whose transition shapes are all monotone
+along a segment. A sinusoidal spiral, a cubic parabola given as a
+parametric plan piece and another elevation law are refused by name.
 The bridge reads
 the bytes with the session's own STEP reader (`read_ifc_step`), so a REAL
 written without its decimal point is measured too and reported once, as an

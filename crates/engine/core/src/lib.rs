@@ -871,6 +871,7 @@ impl ExecutionPlan {
     }
 }
 
+mod alignment;
 mod boundary_coverage;
 pub mod catalogue;
 mod circulation;
@@ -923,6 +924,11 @@ mod values;
 mod vertical_extent;
 mod walkability;
 mod walking_surface;
+pub use alignment::{
+    AlignmentError, AlignmentInterval, AlignmentParameter, AlignmentParameterRequest,
+    AlignmentParameterValue, AlignmentPosition, AlignmentRequest, AlignmentService,
+    AlignmentServiceHandle,
+};
 pub use boundary_coverage::{
     BoundaryCoverage, BoundaryCoverageError, BoundaryCoverageRequest, BoundaryCoverageService,
     BoundaryCoverageServiceHandle, BoundaryOverlap, BoundaryPlacement, CoverageAreas,

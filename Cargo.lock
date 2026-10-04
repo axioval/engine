@@ -679,6 +679,7 @@ dependencies = [
  "axioval-export",
  "axioval-ids",
  "clap",
+ "ifc-alignment",
  "ifc-geometry",
  "ifc-model",
  "ifc-schema",

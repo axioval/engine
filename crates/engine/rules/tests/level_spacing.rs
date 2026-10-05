@@ -326,7 +326,7 @@ mod as_expressions {
                 let found = check(model(&storeys), parameters);
                 let rewritten = rewrite(model(&storeys), &bounded(&options, minimum, maximum));
                 let objects: Vec<_> = storeys.iter().map(|(local, _)| common::id(local)).collect();
-                // The rise of every level the check judges (divergence D16:
+                // The rise of every level the check judges (divergence D17:
                 // the table reports a level left out as unmeasured, where
                 // the measured value leaving it out states it absent).
                 let judged = |scope: &axioval_ir::Scope| {

@@ -203,3 +203,31 @@ fn the_contract_compares_messages_word_for_word() {
     assert_eq!(contract.differences.len(), 2, "{}", contract.diff());
     assert!(contract.diff().contains("messages"), "{}", contract.diff());
 }
+
+#[test]
+fn rule_summaries_compare_how_many_objects_each_rule_checked() {
+    let summarized = |rules: Vec<Value>| {
+        let registry = registry();
+        let package = vocabulary(&registry);
+        let plan = plan(&registry, &package, rules).unwrap();
+        run(
+            registry,
+            plan,
+            &session(slabs()),
+            Runtime::with_rule_summaries,
+        )
+        .unwrap()
+    };
+    let report = summarized(vec![capability(), rewrite_of("wall", 30.0)]);
+    let evidence = compare(&report, "cover-capability", "cover-expression");
+    assert!(
+        evidence
+            .diff()
+            .contains("project: capability reported nothing, expression reported nothing; rule 3 checked, Failed against 1 checked, Failed"),
+        "{}",
+        evidence.diff()
+    );
+    let report = summarized(vec![capability(), rewrite(30.0)]);
+    let evidence = compare(&report, "cover-capability", "cover-expression");
+    assert!(evidence.holds(), "{}", evidence.diff());
+}

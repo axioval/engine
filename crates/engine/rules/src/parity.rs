@@ -28,7 +28,7 @@ use std::fmt;
 use axioval_engine::{CapabilityEvaluation, ObjectVerdict, RuleOutcomes};
 use axioval_ir::{
     ColumnExactness, Finding, NotEvaluatedReason, ObjectId, PropertyValue, Report, ReportTable,
-    ReportValue, Scope, Severity,
+    ReportValue, RuleStatus, Scope, Severity,
 };
 use serde::{Serialize, Serializer};
 
@@ -329,16 +329,47 @@ pub struct Observations {
     /// The objects the rule selected without reporting about them, when
     /// its selection is known: every other object was not selected.
     selection: Option<BTreeMap<ObjectId, Selected>>,
+    /// The rule's summary, when the report carries one.
+    summary: Option<RuleFacts>,
+}
+
+/// How a rule fared as a whole, as its report summary states it: how many
+/// objects it checked, and its status.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuleFacts {
+    /// How many objects its selection decided it checks.
+    pub checked: usize,
+    /// How it fared.
+    pub status: RuleStatus,
+}
+
+impl fmt::Display for RuleFacts {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} checked, {:?}", self.checked, self.status)
+    }
 }
 
 impl Observations {
     /// What the rule `rule` of `report` reported: its findings, its
-    /// not-evaluated outcomes and its tables, at every scope. Its
+    /// not-evaluated outcomes and its tables, at every scope, and its rule
+    /// summary when the run made one (`Runtime::with_rule_summaries`). Its
     /// selection is not known, so an object it reported nothing about
-    /// passed or was not selected, which the comparison reads as one.
+    /// passed or was not selected, which the comparison reads as one; the
+    /// summaries still tell how many objects each rule checked.
     #[must_use]
     pub fn of_report(report: &Report, rule: &str) -> Self {
-        let mut observations = Self::default();
+        let mut observations = Self {
+            summary: report
+                .rules()
+                .iter()
+                .find(|summary| summary.rule_id.to_string() == rule)
+                .map(|summary| RuleFacts {
+                    checked: summary.checked,
+                    status: summary.status,
+                }),
+            ..Self::default()
+        };
         for finding in report
             .findings()
             .iter()
@@ -464,9 +495,11 @@ impl Observations {
     /// Both sides' observations as one: a capability rewritten as several
     /// rules (one per check or severity band) is compared with their
     /// observations merged. An object either selected without reporting
-    /// passed; the selection is known when either knows it.
+    /// passed; the selection is known when either knows it. Several rules
+    /// have no one summary, so the merge carries none.
     #[must_use]
     pub fn merge(mut self, other: Self) -> Self {
+        self.summary = None;
         for (scope, observed) in other.scopes {
             let own = self.at(&scope);
             own.findings.extend(observed.findings);
@@ -487,25 +520,23 @@ impl Observations {
         self
     }
 
-    /// How the rule judged `scope`: what it reported, else, where its
-    /// selection is known, whether it passed, was not selected or is
-    /// undecided. `None` when it reported nothing and its selection is not
-    /// known.
+    /// How the rule judged `scope`: what it reported, else, for an object
+    /// where its selection is known, whether it passed, was not selected or
+    /// is undecided. `None` when it reported nothing and its selection is
+    /// not known, and for a source or the project it reported nothing
+    /// about.
     #[must_use]
     pub fn outcome(&self, scope: &Scope) -> Option<Outcome> {
         if let Some(outcome) = self.scopes.get(scope).and_then(Observed::reported) {
             return Some(outcome);
         }
-        let selection = self.selection.as_ref()?;
-        Some(match scope {
-            Scope::Object(object) => match selection.get(object) {
-                Some(Selected::Passed) => Outcome::Passed,
-                Some(Selected::Undecided) => Outcome::Undecided,
-                None => Outcome::NotSelected,
-            },
-            // A rule selects objects; it passed a source or the project
-            // it reported nothing about as a whole.
-            Scope::Source(_) | Scope::Project => Outcome::Passed,
+        // A rule selects objects, never a source or the project: about
+        // those it either reported or did not.
+        let object = scope.object()?;
+        Some(match self.selection.as_ref()?.get(object) {
+            Some(Selected::Passed) => Outcome::Passed,
+            Some(Selected::Undecided) => Outcome::Undecided,
+            None => Outcome::NotSelected,
         })
     }
 
@@ -635,7 +666,19 @@ impl Parity {
         (capability, left): (&str, &Observations),
         (expression, right): (&str, &Observations),
     ) -> ParityEvidence {
-        let scopes: BTreeSet<Scope> = left.scopes().chain(right.scopes()).collect();
+        let mut scopes: BTreeSet<Scope> = left.scopes().chain(right.scopes()).collect();
+        // Rules that checked a different number of objects, or fared
+        // differently as a whole, differ about the project.
+        let rule = match (left.summary, right.summary) {
+            (Some(own), Some(theirs)) if own != theirs => Some(Detail::Rule {
+                capability: own,
+                expression: theirs,
+            }),
+            _ => None,
+        };
+        if rule.is_some() {
+            scopes.insert(Scope::Project);
+        }
         let mut differences = Vec::new();
         let (mut found, mut open, mut values) = (0, 0, 0);
         let empty = Observed::default();
@@ -656,6 +699,9 @@ impl Parity {
             } else {
                 Vec::new()
             };
+            if *scope == Scope::Project {
+                details.extend(rule.clone());
+            }
             for (name, step) in &self.values {
                 let pair = (observed.0.values.get(name), observed.1.values.get(name));
                 if pair == (None, None) {
@@ -868,6 +914,13 @@ pub enum Detail {
         /// The rounding they had to agree within.
         step: f64,
     },
+    /// The rule as a whole: how many objects it checked, and its status.
+    Rule {
+        /// The capability rule's.
+        capability: RuleFacts,
+        /// The re-expression's.
+        expression: RuleFacts,
+    },
     /// A measured value.
     Value {
         /// Its name.
@@ -915,6 +968,10 @@ impl fmt::Display for Detail {
                 measure(capability),
                 measure(expression)
             ),
+            Self::Rule {
+                capability,
+                expression,
+            } => write!(f, "rule {capability} against {expression}"),
             Self::Value {
                 name,
                 capability,

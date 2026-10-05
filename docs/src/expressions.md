@@ -169,9 +169,21 @@ A comparison of numbers is decided only when every pair of values the
 operands allow gives the same answer: `extent_z < 50 mm` holds for a pipe
 measured at 39–41 mm, fails for one at 60 mm, and is not evaluated for one
 at 45–55 mm. A straddling value is never a pass. Dates compare
-chronologically and date-times as instants; a date never compares with a
+chronologically, as XML Schema orders them, and date-times as instants:
+`2026-09-28+12:00` equals `2026-09-27-12:00`, while a date stating a time
+zone and one stating none within 14 hours of it are unequal and in no
+order (an order of them is not evaluated). A date never compares with a
 date-time. Text compares as written, or folded when `caseSensitive` is
-`false`.
+`false`; `like` and `matches` match the whole value, case folded by the
+pattern, never by lowercasing the pattern itself.
+
+Every comparison here is the one every rule decides with
+(`axioval_engine::comparison`): property selectors, the generic judges
+(`property-predicate`, `property-comparison`, `property-value`) and the
+templates' range judge decide through the same module, so a value
+compares alike wherever a rule reads it. Only what a comparison with
+nothing means differs by where it stands: `null` in an expression, no
+match in a selector, a failed predicate.
 
 ## `null` is not "not evaluated"
 

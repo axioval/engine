@@ -77,7 +77,7 @@ fn each_compares_every_candidate_with_a_constant() {
 }
 
 /// Numbers compare through the one comparison every rule uses: a signed
-/// zero is zero, as for selectors and expressions (divergence D19 of the
+/// zero is zero, as for selectors and expressions (divergence D20 of the
 /// parity chapter: the capability once ordered `-0` below `0`).
 #[test]
 fn a_signed_zero_equals_zero() {

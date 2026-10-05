@@ -207,6 +207,26 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- One comparison for every rule (#287): `axioval_engine::comparison`
+  decides numbers (intervals, exact or under a declared `Tolerance`),
+  integers, truths, text (folded and trimmed as declared), whole-value
+  `like` and `matches` patterns and dates for the expression evaluator,
+  the property selectors, `property-predicate`, `property-comparison`,
+  `property-value` and the templates' range judge (`plan_area::judge`).
+  `property-predicate` runs as a template: its stated property read by
+  the expression evaluator and judged by the new generic comparison judge
+  (`Decision::Compare`), its outside contract held to the replaced
+  implementation on every fixture, on generated predicates and on the
+  public models. Three outcomes change with the one implementation:
+  - **Behaviour:** expression comparisons of dates follow XML Schema's
+    timeline, as property comparisons always did: `2026-09-28+12:00`
+    equals `2026-09-27-12:00`, and a zoned and an unzoned date within 14
+    hours differ while their order is not evaluated.
+  - **Behaviour:** an expression's case-insensitive `like` or `matches`
+    folds case in the pattern instead of lowercasing it, so `\D` stays a
+    non-digit.
+  - **Behaviour:** `property-comparison` compares a stated `-0` equal to
+    `0`, as every other rule does (it ordered it below).
 - **Behaviour:** a `sum` over no member is 0 in the unit the type checker
   types its members' value in (#277), instead of a plain 0 that a quantity
   bound refused as a unit mismatch and left not evaluated: `sum(…) ≤ 3 m²`

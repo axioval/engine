@@ -185,7 +185,8 @@ implementation is replaced, and review the recordings like any other
 change. A divergence of a recorded rule names it as `"recorded"` in place
 of `"capability"`. The compile test checks that every recorded rule exists
 and that a recording exists for every model the case names. The
-`body-extent` and `triangle-count` rules of `elements` and `unmeshed` are recorded so (see
+`body-extent` and `triangle-count` rules of `elements` and `unmeshed` are recorded so, and
+the `property-predicate` rules `wall-width` and `slab-depth` of `elements` (see
 [Capability templates](./templates.md)). The case `storeys` holds only
 recorded rules: `plan-area` (own footprints and facades, and storeys
 summing their members), `area-ratio`, `plan-coverage`, `level-spacing`,
@@ -225,6 +226,7 @@ reproduce it unless that rebuild issue changes the contract on purpose.
 | D17 | `level-spacing` | the generated buildings in `level_spacing.rs` | a table height against the measured rise | The `levels` table reports a level the check leaves out (the lowest with `ignore_lowest`, the highest) as unmeasured, where `level_rise` leaving it out states it absent. | Accepted: the table is informative only. Heights are compared on the levels the check judges; the template (#282) keeps the table as it is. |
 | D18 | `body-extent` on a public model without walls | case `unmeshed` | the rule open against nothing selected | With nothing selected the capability still leaves the rule open for its missing services; the rewrite selects nothing and passes vacuously. | Accepted for the rewrite. The template (#278) reproduces the rule-scoped outcome, which never reads as a vacuous pass, held to the recorded outcomes of case `unmeshed`. |
 | D19 | `plan-area` with `member_selector` | the generated storeys in `plan_area.rs` | the `areas` value and the graded deviation within a unit in the last place of the sum | The template sums the members with the evaluator's exact interval arithmetic: where a binary sum rounds, its interval holds the capability's rounded sum and is one unit in the last place wider. | Accepted: the interval is sound and holds the capability's value; fixtures compare the table within 1e-9 m² and deviations within 1e-12. A sum within a unit in the last place of a bound would be left open where the capability decided on its rounded sum; none of the generated inputs reaches one. |
+| D20 | `property-comparison` | `a_signed_zero_equals_zero` | passed against finding | The capability ordered exact numbers by their bit pattern (`total_cmp`), so a stated `-0` was less than `0`; every other rule, the selectors and expressions compared them by value. | Changed on purpose by #287: the one comparison (`axioval_engine::comparison`) decides `-0` equal to `0` for every rule. Only signed zeros differ; no public model states one. |
 
 The comparison grew stricter with this chapter: it now counts findings
 (D1), compares source- and project-scoped outcomes (D4 now shows the

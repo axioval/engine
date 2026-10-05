@@ -17,7 +17,9 @@ like an expression.
 
 `body-extent` is the first capability that runs as a template
 ([#278](https://github.com/axioval/engine/issues/278)); `triangle-count`
-and `plan-area` follow ([#282](https://github.com/axioval/engine/issues/282)).
+and `plan-area` follow ([#282](https://github.com/axioval/engine/issues/282)),
+and `property-predicate` is the first of the generic judges
+([#287](https://github.com/axioval/engine/issues/287)).
 
 ## The outside contract
 
@@ -85,10 +87,42 @@ and a maximum, each a left-to-right sum of values and parameters
 (`Term`), widened by `ROUNDING_ULPS` (four units in the last place) of the
 largest `rounding` magnitude, an end of a value's or a parameter's
 interval (`Magnitude`); without a magnitude (a count) the bounds are not
-widened, and the expression form compares with them as they are. It
-decides in plain binary arithmetic, as the
-capabilities judged: a verdict needs the whole interval on one side of a
-bound, a straddling one is undecided naming the bound.
+widened, and the expression form compares with them as they are. A
+verdict needs the whole interval on one side of a bound, a straddling one
+is undecided naming the bound. Each bound is decided by the one comparison
+every rule uses (`axioval_engine::comparison::numbers`, through
+`plan_area::judge`); only the bounds' arithmetic, a sum widened by the
+allowance, stays plain binary, as the capabilities computed it, rather
+than the evaluator's sound interval arithmetic, which rounds a widened
+bound outward by an ulp and would leave open a value the capability
+decided (see [Expand and fork](#expand-and-fork)).
+
+`Decision::Compare` is the generic comparison judge: the stated value of
+`value` against the target a rule names by an operator word
+(`Comparison`): the operator parameter, the words testing presence, and
+the target parameters in the order a statement is checked, each with its
+kind (`TargetKind`) and the operator words it admits (`Operation`: an
+order, `contains`, `matches`, `oneOf`, `noneOf`), and the parameters
+folding case, stating a date precision and declaring a tolerance. Binding
+refuses a statement in the order the capabilities refused it: exactly one
+target (none for a presence word), an operator the target's kind admits,
+`precision` for a date target only, a `matches` pattern that compiles, a
+tolerance for a numeric target only. Per object it judges what the source
+states, through the one comparison: an absence, `null` and a value of
+another kind fail every operator but a presence test (which reads blank
+text as undefined), a quantity against a unit-less target (or the
+reverse) is not evaluated.
+
+### `property-predicate`
+
+| Form | When | Values | Decision |
+| --- | --- | --- | --- |
+| one | always | `actual` = the stated property `{property_set}`.`{property}` | `actual` compared by `Compare`: `operator` against one of `value` (integer), `number`, `quantity`, `date`, `date_time`, `boolean` (equality), `texts` (`one_of`, `none_of`) or `text` (`equal`, `not_equal`, `contains`, `matches`); `is_defined`/`is_undefined` take none; `case_sensitive`, `precision` and the tolerance parameters as declared |
+
+Its finding reads `property {property_set}.{property} does not satisfy
+{operator}{target}{tolerance:suffix}; actual value is {actual:stated}`. A
+target computed per object (`per_object`) is evaluated to a literal per
+object first (`object_parameters::per_object`), as before.
 
 ### `body-extent`
 
@@ -172,8 +206,12 @@ format (`{extent:length}`: `0.3 m`, or `between 0.48 m and 0.52 m`;
 capabilities showed areas; `{target:stated}`: the value as the source
 states it), `{bound}` (the bound a `Within` failed or straddled, a length:
 `at least 0.26 m`), `{bound:plain}` (the bound as declared: `at least 6`),
-`{why}`, and an anchor's `{undecided}` and `{relation}`. Lengths are
-shown rounded to the micrometre, as the capabilities showed them.
+`{why}`, and an anchor's `{undecided}` and `{relation}`; a `Compare`
+form also reads `{target}` (the stated target as the rule declares it,
+after a space: ` 250 mm`, `` `F30` ``, ` [F30, F90]`) and
+`{tolerance:suffix}` (` (within tolerance 0.01)`, nothing when exact).
+Lengths are shown rounded to the micrometre, as the capabilities showed
+them.
 
 ## Expand and fork
 
@@ -207,12 +245,23 @@ an undecided member as possibly there, where the template leaves the
 anchor open unless it already exceeds its maximum (D7): the fork's
 verdict is sound but may decide an anchor the template leaves open.
 
+A `Compare` form expands into an `if` over the operator words, each
+branch the test its word names with the target read as a `parameter`. A
+rule forked from it states only its own test (`compare`, `oneOf`,
+`noneOf`, `isDefined`, `isUndefined`) with its target a literal. The fork
+reaches the template's verdicts wherever the value is of the target's kind
+or absent (an absence is a missing-information finding, a finding as the
+template's); a value of another kind, which the template fails, leaves the
+fork open, and blank text is defined to it. A declared tolerance or date
+precision has no expression form, so such a rule is not forked
+(`ForkError::Inexpressible`).
+
 ## Export
 
 A rule bound to a template is still a rule of that capability with its
 parameters, so every export profile writes it, or refuses it, exactly as
-before the rebuild: IDS refuses `body-extent` as a capability it has no
-facet for. A forked rule is an `expression` rule: a profile exports it only
+before the rebuild: IDS refuses `body-extent` and `property-predicate` as
+capabilities it has no facet for. A forked rule is an `expression` rule: a profile exports it only
 where its `expression_kinds` state every node, and otherwise refuses it
 naming the first node it cannot state (IDS: the subtraction of the
 rounding allowance). `crates/packages/ids/tests/export.rs` pins both.
@@ -256,6 +305,18 @@ slack, membership and bounds likewise; the `plan-area` rules of the case
 `storeys`, recorded before the switch, with their tables; and the fork,
 on every fixture whose members are decided.
 
+`property-predicate` is held to its replaced implementation
+(`property_predicate/reference.rs`,
+`axioval_rules::reference::PropertyPredicate`) the same way: every fixture
+of the rules crate that runs it (its own tests and those of dates,
+tolerances, quantities, complex and unreadable values) goes through
+`common::predicate`, which runs both under `Parity::contract()`;
+generated predicates (every operator word, target kind, text option,
+tolerance and precision against values of every kind, absent, `null`,
+lists, measured intervals and complex properties included) do too; the
+`elements` case records `wall-width` and `slab-depth` on every public
+model; and its fork reaches its verdicts on values of the target's kind.
+
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the
 public models. A rebuild retires its reference once its family's
@@ -271,8 +332,10 @@ addition data the runner interprets, never code per capability:
 - **Decisions.** `Decision` is an enum: add a variant for a judge a
   family shares (a truth `Requirement` expression over the values, worded
   by which labelled operand failed; counts; consistency), with its
-  expression form for expand and fork. Keep one implementation of each
-  comparison (#287).
+  expression form for expand and fork. Decide every comparison through
+  `axioval_engine::comparison`, the one implementation the evaluator, the
+  selectors, the judges and `Within` share (#287); `Compare` is the
+  comparison judge the property judges build on.
 - **Grading** (built, `Template::grades`). A decision reports the
   deviation from the declared bound, never the widened one; severity bands
   stay the runtime's.

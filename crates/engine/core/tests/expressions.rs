@@ -402,6 +402,59 @@ fn a_straddling_comparison_is_not_evaluated_and_named() {
     assert_eq!(decided.outcome, Ok(Value::Boolean(true)));
 }
 
+/// Comparisons decide through the one comparison every rule uses
+/// (`axioval_engine::comparison`): dates on XML Schema's timeline, not by
+/// how they are written, and a pattern compiled as written, its case
+/// folded by the pattern itself.
+#[test]
+fn comparisons_decide_as_every_rule_decides() {
+    let date = |text: &str| Value::Date(text.parse().unwrap());
+    let compare = |operator: &str, left: Value, right: Value, case_sensitive: bool| {
+        let mut context = Context::default();
+        context.parameters.insert("left".into(), left);
+        context.parameters.insert("right".into(), right);
+        let rule = expression(json!({"kind": "compare", "operator": operator,
+            "left": parameter("left"), "right": parameter("right"),
+            "caseSensitive": case_sensitive}));
+        evaluate(&rule, "requirement", &mut context).outcome
+    };
+    // The same instant written in two time zones.
+    assert_eq!(
+        compare(
+            "equals",
+            date("2026-09-28+12:00"),
+            date("2026-09-27-12:00"),
+            true
+        ),
+        Ok(Value::Boolean(true))
+    );
+    // A zoned and an unzoned date within 14 hours differ, and neither
+    // precedes the other.
+    assert_eq!(
+        compare("equals", date("2026-09-28Z"), date("2026-09-28"), true),
+        Ok(Value::Boolean(false))
+    );
+    let undecided = compare("lessThan", date("2026-09-28Z"), date("2026-09-28"), true);
+    assert!(
+        matches!(undecided, Err(ref why) if matches!(why.reason, Reason::Straddles { .. })),
+        "{undecided:?}"
+    );
+    // `\D` is any non-digit, whatever the case.
+    let text = |value: &str| Value::Text(value.into());
+    assert_eq!(
+        compare("matches", text("AB"), text("\\D+"), false),
+        Ok(Value::Boolean(true))
+    );
+    assert_eq!(
+        compare("matches", text("12"), text("\\D+"), false),
+        Ok(Value::Boolean(false))
+    );
+    assert_eq!(
+        compare("like", text("Fire-F90"), text("fire-*"), false),
+        Ok(Value::Boolean(true))
+    );
+}
+
 #[test]
 fn an_undecided_if_is_not_evaluated_naming_its_condition() {
     let cover = |mm: f64| json!({"kind": "literal", "value": {"type": "quantity", "value": mm, "unit": "mm"}});

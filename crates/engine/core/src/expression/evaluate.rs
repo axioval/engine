@@ -15,7 +15,6 @@
 //!   false and never a pass.
 //! - A comparison of intervals is decided only when every value they allow
 //!   gives the same answer; a straddling one is not evaluated.
-use std::cmp::Ordering as Order;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -1326,23 +1325,22 @@ fn compare(
     decided(operator, left, right, case_sensitive).map(Some)
 }
 
-/// `left operator right` over two values that are not `null`.
+/// `left operator right` over two values that are not `null`, decided by
+/// the one comparison every rule uses ([`crate::comparison`]): numbers as
+/// intervals compared exactly, text and enumeration values as text, dates
+/// as XML Schema orders them and date-times as instants, truths for
+/// equality only.
 fn decided(
     operator: ExpressionComparison,
     left: &Value,
     right: &Value,
     case_sensitive: bool,
 ) -> Result<bool, Reason> {
+    use crate::comparison::{self as shared, Pattern, TextOptions, Tolerance, Undecided};
     use ExpressionComparison as C;
-    let fold = |text: &str| {
-        if case_sensitive {
-            text.to_owned()
-        } else {
-            text.to_lowercase()
-        }
-    };
+    let options = TextOptions::case(case_sensitive);
     let text = |value: &Value| match value {
-        Value::Text(text) | Value::Enum(text) => Some(fold(text)),
+        Value::Text(text) | Value::Enum(text) => Some(text.clone()),
         _ => None,
     };
     let mismatch = || {
@@ -1353,97 +1351,88 @@ fn decided(
             right.kind()
         ))
     };
-    match operator {
-        C::Like | C::Matches | C::Contains => {
-            let (Some(subject), Some(pattern)) = (text(left), text(right)) else {
-                return Err(mismatch());
-            };
-            if operator == C::Contains {
-                return Ok(subject.contains(&pattern));
+    let Some(order) = shared::Order::of(operator) else {
+        let (Some(subject), Some(pattern)) = (text(left), text(right)) else {
+            return Err(mismatch());
+        };
+        return match operator {
+            C::Contains => Ok(shared::contains(&subject, &options.fold(&pattern), options)),
+            C::Like | C::Matches => {
+                let kind = if operator == C::Like {
+                    Pattern::Like
+                } else {
+                    Pattern::Matches
+                };
+                let regex = shared::pattern(kind, &pattern, case_sensitive)
+                    .map_err(|error| Reason::InvalidPattern(error.to_string()))?;
+                Ok(regex.is_match(&subject))
             }
-            let source = if operator == C::Like {
-                crate::wildcard_regex(&pattern).map_err(Reason::InvalidPattern)?
-            } else {
-                format!("^(?:{pattern})$")
-            };
-            let regex = regex::RegexBuilder::new(&source)
-                .case_insensitive(!case_sensitive)
-                .build()
-                .map_err(|error| Reason::InvalidPattern(error.to_string()))?;
-            Ok(regex.is_match(&subject))
-        }
-        ordered => {
-            let order = match (left, right) {
-                (
-                    Value::Number {
-                        value: left_value,
-                        unit: left_unit,
-                    },
-                    Value::Number {
-                        value: right_value,
-                        unit: right_unit,
-                    },
-                ) => {
-                    if left_unit != right_unit {
-                        return Err(Reason::Mismatch(format!(
-                            "`{}` compares {left_unit} with {right_unit}, which differ",
-                            operator_name(operator)
-                        )));
-                    }
-                    return decide(ordered, *left_value, *right_value).ok_or_else(|| {
-                        Reason::Straddles {
-                            left: Box::new(left.clone()),
-                            right: Box::new(right.clone()),
-                        }
-                    });
-                }
-                (Value::Boolean(left), Value::Boolean(right))
-                    if matches!(ordered, C::Equals | C::NotEquals) =>
-                {
-                    left.cmp(right)
-                }
-                (Value::Date(left), Value::Date(right)) => left.cmp(right),
-                (Value::DateTime(left), Value::DateTime(right)) => left.cmp_instant(*right),
-                _ => match (text(left), text(right)) {
-                    (Some(left), Some(right)) => left.cmp(&right),
-                    _ => return Err(mismatch()),
+            _ => unreachable!("every other operator is an order"),
+        };
+    };
+    let temporal = |value: &Value| match value {
+        Value::Date(date) => Some(PropertyValue::Date(*date)),
+        Value::DateTime(instant) => Some(PropertyValue::DateTime(*instant)),
+        _ => None,
+    };
+    match (left, right) {
+        (
+            Value::Number {
+                value: left_value,
+                unit: left_unit,
+            },
+            Value::Number {
+                value: right_value,
+                unit: right_unit,
+            },
+        ) => {
+            if left_unit != right_unit {
+                return Err(Reason::Mismatch(format!(
+                    "`{}` compares {left_unit} with {right_unit}, which differ",
+                    operator_name(operator)
+                )));
+            }
+            shared::numbers(
+                order,
+                (left_value.lower, left_value.upper),
+                (right_value.lower, right_value.upper),
+                &Tolerance::EXACT,
+            )
+            .map_err(|undecided| match undecided {
+                Undecided::Straddles => Reason::Straddles {
+                    left: Box::new(left.clone()),
+                    right: Box::new(right.clone()),
                 },
-            };
-            Ok(holds(ordered, order))
+                Undecided::NotFinite => Reason::Overflow,
+            })
         }
-    }
-}
-
-fn holds(operator: ExpressionComparison, order: Order) -> bool {
-    use ExpressionComparison as C;
-    match operator {
-        C::Equals => order == Order::Equal,
-        C::NotEquals => order != Order::Equal,
-        C::LessThan => order == Order::Less,
-        C::LessThanOrEquals => order != Order::Greater,
-        C::GreaterThan => order == Order::Greater,
-        C::GreaterThanOrEquals => order != Order::Less,
-        C::Like | C::Matches | C::Contains => unreachable!("not an ordering"),
-    }
-}
-
-/// An ordered comparison of two intervals, when every pair of values they
-/// allow answers it alike.
-fn decide(operator: ExpressionComparison, left: Interval, right: Interval) -> Option<bool> {
-    use ExpressionComparison as C;
-    let below = left.upper < right.lower;
-    let above = left.lower > right.upper;
-    let equal = left.is_point() && right.is_point() && left == right;
-    let at_most = left.upper <= right.lower;
-    let at_least = left.lower >= right.upper;
-    match operator {
-        C::Equals => (equal || below || above).then_some(equal),
-        C::NotEquals => (equal || below || above).then_some(!equal),
-        C::LessThan => (below || at_least).then_some(below),
-        C::LessThanOrEquals => (at_most || above).then_some(at_most),
-        C::GreaterThan => (above || at_most).then_some(above),
-        C::GreaterThanOrEquals => (at_least || below).then_some(at_least),
-        C::Like | C::Matches | C::Contains => None,
+        (Value::Boolean(left), Value::Boolean(right)) => {
+            shared::booleans(order, *left, *right).ok_or_else(mismatch)
+        }
+        (Value::Date(_) | Value::DateTime(_), Value::Date(_) | Value::DateTime(_)) => {
+            let (Some(left_value), Some(right_value)) = (temporal(left), temporal(right)) else {
+                unreachable!("both are dates or date-times");
+            };
+            match shared::temporal(order, &left_value, &right_value, None) {
+                Some(Ok(holds)) => Ok(holds),
+                // A date against a date-time, which compare only by day.
+                Some(Err(_)) if std::mem::discriminant(left) != std::mem::discriminant(right) => {
+                    Err(mismatch())
+                }
+                // An order XML Schema leaves indeterminate: the unzoned
+                // date may lie on either side of the zoned one.
+                _ => Err(Reason::Straddles {
+                    left: Box::new(left.clone()),
+                    right: Box::new(right.clone()),
+                }),
+            }
+        }
+        _ => match (text(left), text(right)) {
+            (Some(left), Some(right)) => {
+                Ok(shared::texts(order, &left, &options.fold(&right), options))
+            }
+            _ => Err(mismatch()),
+        },
     }
 }
 

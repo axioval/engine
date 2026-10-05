@@ -7,7 +7,8 @@
 //! fields and results, the comparison operators by value type, aggregate
 //! functions and sources, selector kinds, stated and derived
 //! relationships, the unit symbols and dimensions, and the concept
-//! vocabulary of the definition packages given. Every entry carries labels
+//! vocabulary of the definition packages given. A capability built as a
+//! template carries its composition. Every entry carries labels
 //! and help in English and German. The contract tables live in
 //! [`axioval_ir::catalogue`]; the capabilities' texts come from the host,
 //! which must supply them for every capability it registered.
@@ -15,6 +16,7 @@
 use std::collections::BTreeMap;
 
 use axioval_ir::DefinitionPackage;
+use axioval_ir::blocks::{Block, to_blocks};
 use axioval_ir::catalogue::{
     AGGREGATE_FUNCTIONS, AGGREGATE_SOURCES, AggregateFunctionEntry, CATALOGUE_SCHEMA_VERSION,
     Category, EXPRESSION_COMPARISONS, EXPRESSION_KINDS, NODE_CATEGORIES, NodeKind, Operator,
@@ -22,8 +24,8 @@ use axioval_ir::catalogue::{
     SourceKind, VALUE_TYPES, ValueTypeEntry,
 };
 use axioval_ir::contract::{
-    LocalizedText as PackageText, ObjectTypeDefinition, PropertyDefinition, PropertySetDefinition,
-    RuleDefinition,
+    Expression, LocalizedText as PackageText, ObjectTypeDefinition, PropertyDefinition,
+    PropertySetDefinition, RuleDefinition,
 };
 use axioval_ir::measured::{
     LocalizedText, MEASURED_MEMBERS, MEASURED_VALUES, MeasuredDescriptor, MemberDescriptor, en_de,
@@ -33,6 +35,7 @@ use serde::Serialize;
 use crate::derived_relationships::{DERIVATIONS, DerivationEntry};
 use crate::expression::{UNIT_SYMBOLS, UnitSymbol};
 use crate::relationships::RelationshipKind;
+use crate::template::Template;
 use crate::{CapabilityRegistry, ColumnKind, ParameterType};
 
 /// The texts a host supplies for one capability it registered.
@@ -71,6 +74,9 @@ pub enum CatalogueError {
     /// A locale the catalogue is not written in.
     #[error("locale `{0}` is not supported; the catalogue is written in {LANGUAGES:?}")]
     UnsupportedLocale(String),
+    /// A template's composition does not map onto a block tree.
+    #[error("the composition of capability `{capability}` has no block tree: {problem}")]
+    UnmappedTemplate { capability: String, problem: String },
 }
 
 /// The languages every catalogue text is stated in, English first: the
@@ -270,6 +276,64 @@ pub struct CapabilityEntry {
     /// `parameters`, which its expressions read.
     pub takes_authored_parameters: bool,
     pub parameters: Vec<ParameterEntry>,
+    /// The composition a built-in template is made of, for an editor to
+    /// expand; absent for a capability implemented in code.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub template: Option<TemplateEntry>,
+}
+
+/// The composition of a capability built as a [`Template`]: its
+/// declaration checks, values, decisions and messages, and each form as
+/// the one expression a rule forked from it starts from, with its block
+/// tree. The expressions still hold the template's slots (`{axis}`) and
+/// `parameter` reads, bound to a rule's parameters when forked.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TemplateEntry {
+    #[serde(flatten)]
+    pub template: Template,
+    /// Each form's [`crate::template::Form::requirement`], in form order.
+    pub requirements: Vec<RequirementEntry>,
+}
+
+/// One form of a template as an expression.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequirementEntry {
+    /// The parameters whose statement selects the form.
+    pub when: &'static [&'static str],
+    pub expression: Expression,
+    pub blocks: Block,
+}
+
+/// The catalogue entry of `template`, the capability `id`'s composition.
+///
+/// # Errors
+///
+/// [`CatalogueError::UnmappedTemplate`] when a form's expression does not
+/// map onto a block tree.
+pub fn template_entry(id: &str, template: &Template) -> Result<TemplateEntry, CatalogueError> {
+    let requirements = template
+        .forms
+        .iter()
+        .map(|form| {
+            let expression = form.requirement();
+            let blocks =
+                to_blocks(&expression).map_err(|problem| CatalogueError::UnmappedTemplate {
+                    capability: id.to_owned(),
+                    problem: problem.to_string(),
+                })?;
+            Ok(RequirementEntry {
+                when: form.when,
+                expression,
+                blocks,
+            })
+        })
+        .collect::<Result<_, CatalogueError>>()?;
+    Ok(TemplateEntry {
+        template: template.clone(),
+        requirements,
+    })
 }
 
 /// One parameter of a capability.
@@ -581,6 +645,10 @@ fn capability_entries(
             grades_deviation: capability.grades_deviation(),
             takes_authored_parameters: capability.takes_authored_parameters(),
             parameters,
+            template: capability
+                .template()
+                .map(|template| template_entry(id, template))
+                .transpose()?,
         });
     }
     Ok(capabilities)

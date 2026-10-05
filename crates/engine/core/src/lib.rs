@@ -636,6 +636,12 @@ pub trait RuleCapability: Send + Sync {
     }
     /// Evaluates an already-validated rule request.
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation;
+    /// The composition the capability is built as, when it is a
+    /// [`template::Template`]: what the catalogue shows and a rule bound to
+    /// it may be forked from. `None` for a capability implemented in code.
+    fn template(&self) -> Option<&template::Template> {
+        None
+    }
 }
 
 /// Host-controlled registry of trusted capabilities.
@@ -931,6 +937,7 @@ mod sight;
 mod source_metadata;
 mod space;
 mod table_files;
+pub mod template;
 mod topology;
 mod triangle_count;
 mod values;

@@ -131,14 +131,31 @@ fn run(
     rule: &CompiledRule,
 ) -> CapabilityEvaluation {
     let areas = Arc::new(areas);
-    model.evaluate_with(capability, rule, |services| {
+    let register = |services: &mut axioval_engine::ServiceRegistry| {
         services
             .register(FacadeAreaServiceHandle::new(areas.clone()))
             .unwrap();
         services
-            .register(PlanAreaServiceHandle::new(areas))
+            .register(PlanAreaServiceHandle::new(areas.clone()))
             .unwrap();
-    })
+    };
+    // `plan-area` runs as its template, held to the implementation it
+    // replaced under the whole contract, its `areas` table included.
+    if capability.id() == "axioval:capability.plan-area" {
+        return model.holding_contract(
+            capability,
+            &axioval_rules::reference::PlanAreaRange,
+            rule,
+            register,
+            &[("areas.plan_area", 1e-9), ("areas.facade_area", 1e-9)],
+            // A sum of members is the evaluator's exact interval sum, which
+            // may differ from the capability's rounded sum by a unit in its
+            // last place, and the deviation by that much over the bound
+            // (D19).
+            1e-12,
+        );
+    }
+    model.evaluate_with(capability, rule, register)
 }
 
 fn window_to_wall(maximum: f64) -> Vec<(&'static str, ParameterValue)> {

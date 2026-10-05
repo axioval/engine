@@ -62,17 +62,37 @@ impl PlanAreaService for Rectangles {
     }
 }
 
+/// The capability's evaluation as a run evaluates it. `plan-area` runs as
+/// its template, and every fixture also holds it to the implementation it
+/// replaced under the whole outside contract, each area of its `areas`
+/// table included.
 fn run(
     model: Model,
     rectangles: Rectangles,
     capability: &dyn axioval_engine::RuleCapability,
     rule: &axioval_engine::CompiledRule,
 ) -> axioval_engine::CapabilityEvaluation {
-    model.evaluate_with(capability, rule, |services| {
+    let rectangles = Arc::new(rectangles);
+    let register = |services: &mut axioval_engine::ServiceRegistry| {
         services
-            .register(PlanAreaServiceHandle::new(Arc::new(rectangles)))
+            .register(PlanAreaServiceHandle::new(rectangles.clone()))
             .unwrap();
-    })
+    };
+    if capability.id() == "axioval:capability.plan-area" {
+        return model.holding_contract(
+            capability,
+            &axioval_rules::reference::PlanAreaRange,
+            rule,
+            register,
+            &[("areas.plan_area", 1e-9), ("areas.facade_area", 1e-9)],
+            // A sum of members is the evaluator's exact interval sum, which
+            // may differ from the capability's rounded sum by a unit in its
+            // last place, and the deviation by that much over the bound
+            // (D19).
+            1e-12,
+        );
+    }
+    model.evaluate_with(capability, rule, register)
 }
 
 /// An area measured on a tessellated footprint is never exact, whether
@@ -1052,6 +1072,138 @@ mod plan_area_range {
             unevaluated(&evaluation),
             [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
         );
+        assert_eq!(
+            evaluation.not_evaluated_outcomes()[0].message(),
+            "plan-area: a relationship reaches members only with `member_selector`"
+        );
+    }
+
+    /// Declarations the template refuses, each worded and ordered as the
+    /// capability refused it.
+    #[test]
+    fn declarations_that_cannot_be_judged_are_refused() {
+        let (model, rectangles) = storeys();
+        for (parameters, message) in [
+            (vec![], "minimum or maximum is required"),
+            (vec![("minimum", number(-1.0))], "an area bound is negative"),
+            (
+                vec![("minimum", number(5.0)), ("maximum", number(4.0))],
+                "minimum exceeds maximum",
+            ),
+            (
+                vec![("maximum", number(4.0)), ("measure", string("volume"))],
+                "measure `volume` is unsupported; use `footprint` or `facade`",
+            ),
+            (
+                vec![
+                    ("maximum", number(4.0)),
+                    ("member_selector", selector(kind("space"))),
+                    ("relationship", string("contains")),
+                    ("path", common::strings(&["contains"])),
+                ],
+                "declare either `relationship` or `path`, not both",
+            ),
+        ] {
+            let evaluation = run(
+                model.clone(),
+                Rectangles(rectangles.0.clone()),
+                &PlanAreaRange,
+                &rule(ID, kind("storey"), parameters),
+            );
+            assert_eq!(
+                evaluation.not_evaluated_outcomes()[0].message(),
+                format!("plan-area: {message}")
+            );
+        }
+    }
+
+    /// A fixture, the kind of object judged and the rule's parameters.
+    type Case = (
+        fn() -> (Model, Rectangles),
+        &'static str,
+        Vec<(&'static str, ParameterValue)>,
+    );
+
+    /// The rule forked from the template, an `expression` rule evaluated by
+    /// the expression capability, reaches the template's verdicts on every
+    /// fixture whose members are all decided. Members the selector cannot
+    /// decide are a sum the aggregate widens (D7), and members everywhere
+    /// in an anchor's source have no aggregate path: such a rule is not
+    /// forked.
+    #[test]
+    fn the_forked_rule_reaches_the_templates_verdicts() {
+        use axioval_rules::templates::{Fork, ForkError, fork};
+        let spaces = || {
+            let model = Model::default()
+                .object("large", "space")
+                .object("small", "space")
+                .object("tiny", "space")
+                .object("bodiless", "space");
+            let rectangles = Rectangles::default()
+                .with("large", [0.0, 0.0, 4.0, 5.0], 0.0)
+                .with("small", [0.0, 0.0, 3.0, 2.0], 0.0)
+                .with("tiny", [0.0, 0.0, 2.0, 2.0], 0.0)
+                .with("bodiless", [0.0, 0.0, 0.0, 0.0], 0.0)
+                .with("straddling", [0.0, 0.0, 5.0, 4.0], 1.0);
+            (model.object("straddling", "space"), rectangles)
+        };
+        let cases: Vec<Case> = vec![
+            (
+                spaces,
+                "space",
+                vec![("minimum", number(6.0)), ("maximum", number(20.0))],
+            ),
+            (spaces, "space", vec![("maximum", number(20.0))]),
+            (spaces, "space", vec![("minimum", number(4.0))]),
+            (storeys, "storey", members(kind("space"), 26.0)),
+            (storeys, "storey", members(kind("space"), 20.0)),
+            (
+                storeys,
+                "storey",
+                vec![
+                    ("member_selector", selector(kind("space"))),
+                    ("minimum", number(25.0)),
+                    ("path", common::strings(&["contains:forward"])),
+                ],
+            ),
+        ];
+        for (fixture, subjects, parameters) in cases {
+            let bound = rule(ID, kind(subjects), parameters.clone());
+            let forked = fork(&PlanAreaRange, &bound).unwrap();
+            let mut expression_rule = bound.clone();
+            expression_rule.capability = Fork::CAPABILITY.into();
+            expression_rule.parameters = forked.parameters();
+            let (model, rectangles) = fixture();
+            let template = run(model, rectangles, &PlanAreaRange, &bound);
+            let (model, _) = fixture();
+            let forked = model.evaluate_measured(
+                &axioval_rules::ExpressionRequirement,
+                &expression_rule,
+                |services| {
+                    services
+                        .register(PlanAreaServiceHandle::new(Arc::new(fixture().1)))
+                        .unwrap();
+                },
+            );
+            let parity = axioval_rules::parity::compare_evaluations(
+                ("template", &template),
+                ("fork", &forked),
+            );
+            assert!(parity.holds(), "{parameters:?}\n{}", parity.diff());
+        }
+        // Members everywhere in the anchor's source are no aggregate's.
+        let everywhere = rule(
+            ID,
+            kind("storey"),
+            vec![
+                ("member_selector", selector(kind("space"))),
+                ("maximum", number(26.0)),
+            ],
+        );
+        assert!(matches!(
+            fork(&PlanAreaRange, &everywhere),
+            Err(ForkError::Inexpressible(_))
+        ));
     }
 }
 
@@ -1694,6 +1846,111 @@ mod parity {
                 &between(measured("plan_area"), m2(6.0), m2(20.0)),
             );
             assert_parity(ID, &found, &rewritten);
+        }
+    }
+}
+
+/// Generated storeys and spaces: footprints of random size, measured
+/// exactly or within a slack, some bodiless or unmeasured, spaces in a
+/// storey or not and picked surely, undecidedly or not at all, judged
+/// against random bounds, as own areas and as storeys summing their
+/// spaces. The template holds the replaced implementation's whole
+/// contract, its `areas` table included, on every one.
+mod generated {
+    use super::*;
+    use axioval_ir::contract::{ComparisonOperator, Selector};
+    use axioval_rules::PlanAreaRange;
+    use proptest::collection::vec;
+    use proptest::prelude::*;
+
+    const ID: &str = "axioval:capability.plan-area";
+
+    /// One space: its width and depth in dm (0 is bodiless), its slack in
+    /// m², whether it is measured, its storey (0 to 2, 3 none) and whether
+    /// it is picked (0 surely, 1 undecided, 2 not).
+    type Space = (u32, u32, u32, bool, u32, u32);
+
+    fn space() -> impl Strategy<Value = Space> {
+        (0u32..80, 0u32..80, 0u32..3, any::<bool>(), 0u32..4, 0u32..3)
+    }
+
+    fn fixture(spaces: &[Space]) -> (Model, Rectangles) {
+        let mut model = Model::default()
+            .object("s0", "storey")
+            .object("s1", "storey")
+            .object("s2", "storey");
+        let mut rectangles = Rectangles::default();
+        for (index, (width, depth, slack, measured, storey, picked)) in spaces.iter().enumerate() {
+            let local = format!("r{index}");
+            model = model.object(&local, "space");
+            if *storey < 3 {
+                model = model.edge("contains", &format!("s{storey}"), &local);
+            }
+            match picked {
+                0 => model = model.text(&local, "Pset", "IsRoom", "yes"),
+                1 => model = model.unreadable(&local),
+                _ => {}
+            }
+            if *measured {
+                rectangles = rectangles.with(
+                    &local,
+                    [0.0, 0.0, f64::from(*width) / 10.0, f64::from(*depth) / 10.0],
+                    f64::from(*slack),
+                );
+            }
+        }
+        (model, rectangles)
+    }
+
+    fn bounds(minimum: Option<u32>, maximum: Option<u32>) -> Vec<(&'static str, ParameterValue)> {
+        let mut parameters = Vec::new();
+        if let Some(minimum) = minimum {
+            parameters.push(("minimum", number(f64::from(minimum))));
+        }
+        if let Some(maximum) = maximum {
+            parameters.push(("maximum", number(f64::from(minimum.unwrap_or(0) + maximum))));
+        }
+        if parameters.is_empty() {
+            parameters.push(("maximum", number(30.0)));
+        }
+        parameters
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(48))]
+
+        #[test]
+        fn generated_own_areas_hold_parity(
+            spaces in vec(space(), 1..6),
+            minimum in proptest::option::of(0u32..40),
+            maximum in proptest::option::of(0u32..40),
+        ) {
+            let (model, rectangles) = fixture(&spaces);
+            run(model, rectangles, &PlanAreaRange, &rule(ID, kind("space"), bounds(minimum, maximum)));
+        }
+
+        #[test]
+        fn generated_storeys_summing_their_spaces_hold_parity(
+            spaces in vec(space(), 1..8),
+            minimum in proptest::option::of(0u32..80),
+            maximum in proptest::option::of(0u32..80),
+            path in any::<bool>(),
+        ) {
+            let room = Selector::property(
+                Some("Pset".into()),
+                "IsRoom",
+                ComparisonOperator::Exists,
+                None,
+            );
+            let mut parameters = bounds(minimum, maximum);
+            parameters.push(("member_selector", selector(room)));
+            parameters.push(if path {
+                ("path", common::strings(&["contains:forward"]))
+            } else {
+                ("relationship", string("contains"))
+            });
+            let (model, rectangles) = fixture(&spaces);
+            run(model, rectangles, &PlanAreaRange, &rule(ID, kind("storey"), parameters));
         }
     }
 }

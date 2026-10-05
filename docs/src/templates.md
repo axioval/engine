@@ -17,7 +17,7 @@ like an expression.
 
 `body-extent` is the first capability that runs as a template
 ([#278](https://github.com/axioval/engine/issues/278)); `triangle-count`
-follows ([#282](https://github.com/axioval/engine/issues/282)).
+and `plan-area` follow ([#282](https://github.com/axioval/engine/issues/282)).
 
 ## The outside contract
 
@@ -42,11 +42,12 @@ rules crate (`body_extent/template.rs`):
 | Field | What it states |
 | --- | --- |
 | `id`, `parameters` | The capability's id and descriptor, unchanged. |
+| `grades` | Whether findings are graded (the descriptor's `grades_deviation`): each states how far its value misses the bound it fails, measured from the declared bound, never the widened one, for the runtime's severity bands. |
 | `name` | How rule-scoped messages name the capability (`body-extent: …`). |
 | `defaults` | Values optional parameters take when unstated (`tolerance` 0 m). |
-| `declaration` | `Check`s over the rule's parameters, in order: `choice` (a string among options), `length` (a non-negative length), `count` (an integer of at least zero, stated where the descriptor requires it), `exclusive`, `anyOf`, `requires`, `ordered`. The first failing check leaves the rule not evaluated as an invalid declaration, worded as the capability worded it. |
+| `declaration` | `Check`s over the rule's parameters, in order: `choice` (a string among options), `length` (a non-negative length), `count` (an integer of at least zero, stated where the descriptor requires it), `kind` (a parameter of its descriptor's kind, placed where the capability read it so refusals keep their order), `nonNegative` (numbers of at least zero), `traversal` (a valid `relationship` or `path`, declared only with one of the named parameters), `exclusive`, `anyOf`, `requires`, `ordered` (numbers, integers or quantities, as the descriptor types them). The first failing check leaves the rule not evaluated as an invalid declaration, worded as the capability worded it. |
 | `services` | The host services the values need (`Service`: `object-frame`, `vertical-extent`, `triangle-count`), and the message leaving the whole rule open without them, before anything is selected. |
-| `texts` | Named message parts, optionally conditional: `Condition::Positive` (a parameter above zero), `Condition::Inexact` (a value read from evidence that is not exact, such as a count of a tessellation). |
+| `texts` | Named message parts, optionally conditional: `Condition::Positive` (a parameter above zero), `Condition::Inexact` (a value read from evidence that is not exact, such as a count of a tessellation), `Condition::Equals` (a string parameter or its default is a value). Several texts may share a name, each under its own condition: the first that holds is rendered (`plan area` or `facade area` by `measure`). |
 | `forms` | The compositions. The first form whose `when` parameters are all stated applies. |
 
 A `Form` holds:
@@ -56,14 +57,36 @@ A `Form` holds:
   a stated absence (`absent`) and a value of the wrong kind (`mismatch`);
 - `decision`: how the values decide;
 - `fail` and `undecided`: the finding's message, and the message of an
-  object the values cannot decide.
+  object the values cannot decide;
+- `members`: where the form judges anchors through members (`Members`):
+  the selector parameter picking them and what undecided members leave;
+- `table`: the report table it fills (`Table`: a name and columns, each a
+  value under an id that may name a text), one row per selected object
+  whose values were read, passing or not.
+
+**Members.** A value reads an anchor's members as an aggregate over
+`Members::source(selector)`, the objects the selector parameter picks: in
+the catalogue it reads as written. Run, each anchor's members are its
+reach (`counts::tally`, the one reader `related-count` and `keyed-limit`
+share): the objects the selector picks that the rule's `relationship` or
+`path` reaches from the anchor or, without one, every such object of the
+anchor's own source but the anchor. The aggregate is narrowed to the
+members surely picked, findings relate them, and their traversal evidence
+is cited. Members the selector cannot decide leave the anchor as
+`UndecidedMembers` says: `onlyExcess` (they can only add, as areas do)
+keeps only a value surely above its maximum and leaves the anchor
+otherwise not evaluated with its message (`{undecided}` the count,
+`{relation}` how they are reached), and the anchor has no row: its value
+is known only from below. A member's value that cannot be read leaves the
+anchor open worded as the member's measured value refused it.
 
 `Decision::Within` is the generic range judge: a value between a minimum
 and a maximum, each a left-to-right sum of values and parameters
 (`Term`), widened by `ROUNDING_ULPS` (four units in the last place) of the
 largest `rounding` magnitude, an end of a value's or a parameter's
 interval (`Magnitude`); without a magnitude (a count) the bounds are not
-widened, and the expression form compares with them as they are. It decides in plain binary arithmetic, as the
+widened, and the expression form compares with them as they are. It
+decides in plain binary arithmetic, as the
 capabilities judged: a verdict needs the whole interval on one side of a
 bound, a straddling one is undecided naming the bound.
 
@@ -93,6 +116,27 @@ count's evidence is not exact (`Condition::Inexact`), as the capability
 said so on a tessellation of curved faces. The finding cites the measured
 `triangle_count`, whose evidence carries the host's count locator and its
 exactness.
+
+### `plan-area`
+
+| Form | When | Values | Decision |
+| --- | --- | --- | --- |
+| members | `member_selector` | `area` = the sum over the members of `plan_area;measure={measure}`, in m² | `area` within `minimum` and `maximum`, no rounding |
+| own | always | `area` = `plan_area;measure={measure}`, in m² | the same |
+
+`measure` defaults to `footprint`; the texts `noun` (`plan area` or
+`facade area`) and `column` (`plan_area` or `facade_area`) follow it. The
+declaration checks the bounds' kinds, that one is stated
+(`minimum or maximum is required`), that none is negative, their order,
+the member selector's kind, the traversal (only with `member_selector`)
+and `measure`, in the capability's order. The template grades, fills the
+table `areas` with the area in the column `{column}`, and judges anchors
+through their members with `onlyExcess`. An area is read as a plain number
+of square metres (the measured area divided by 1 m²), as the bounds are
+stated, so the forked rule compares like with like. The sum of members is
+the evaluator's exact interval sum: where the binary sum rounds, its
+interval holds the capability's rounded sum and is a unit in the last
+place wider (D19).
 
 ## Binding and running a rule
 
@@ -124,8 +168,11 @@ The rules crate's `templates` module runs a template
 A message is a template of placeholders: a text's name, a parameter's
 name (as stated; a property reference as `set.name`), a value with a
 format (`{extent:length}`: `0.3 m`, or `between 0.48 m and 0.52 m`;
-`{target:stated}`: the value as the source states it), `{bound}` (the bound
-a `Within` failed or straddled, `at least 0.26 m`) and `{why}`. Lengths are
+`{area:area}`: `26` or `between 24 and 26`, rounded to 1e-4 as the area
+capabilities showed areas; `{target:stated}`: the value as the source
+states it), `{bound}` (the bound a `Within` failed or straddled, a length:
+`at least 0.26 m`), `{bound:plain}` (the bound as declared: `at least 6`),
+`{why}`, and an anchor's `{undecided}` and `{relation}`. Lengths are
 shown rounded to the micrometre, as the capabilities showed them.
 
 ## Expand and fork
@@ -150,6 +197,15 @@ that are its own: its findings are worded as an `expression` rule's, and
 its bounds are decided by the evaluator's sound interval arithmetic, which
 may leave open a value within a unit in the last place of a bound's
 rounding allowance that the judge decides.
+
+A form judging members forks into aggregates along the rule's traversal:
+the `path`, or the `relationship` in its `direction`, filtered by the
+member selector. Members everywhere in an anchor's source, a followed
+chain and skipped absent ends have no aggregate path, and such a rule is
+not forked (`ForkError::Inexpressible`, naming why). An aggregate counts
+an undecided member as possibly there, where the template leaves the
+anchor open unless it already exceeds its maximum (D7): the fork's
+verdict is sound but may decide an anchor the template leaves open.
 
 ## Export
 
@@ -191,6 +247,15 @@ each object's count compared exactly; the `element-triangles` rules of
 the cases `elements` and `unmeshed` recorded before the switch (the
 rule-scoped outcome without the service, D4); and the fork.
 
+`plan-area` is held so too: every fixture of `plan_area.rs` and
+`storey_metrics.rs` runs the template and
+`axioval_rules::reference::PlanAreaRange` under `Parity::contract()`
+(`Model::holding_contract`, the tests' shared helper), the `areas` table's
+values included; generated spaces and storeys of random footprints,
+slack, membership and bounds likewise; the `plan-area` rules of the case
+`storeys`, recorded before the switch, with their tables; and the fork,
+on every fixture whose members are decided.
+
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the
 public models. A rebuild retires its reference once its family's
@@ -208,14 +273,14 @@ addition data the runner interprets, never code per capability:
   by which labelled operand failed; counts; consistency), with its
   expression form for expand and fork. Keep one implementation of each
   comparison (#287).
-- **Grading.** A template that grades states it in `Template` (the
-  descriptor's `grades_deviation`) and a decision reports the deviation
-  from the declared bound, never the widened one; severity bands stay the
-  runtime's.
-- **Scopes and related objects.** Findings are per selected object today.
-  A family judging an anchor through members (a storey's levels, a space's
-  doors) adds a form scope and names related objects from a value (an
-  aggregate's members, a measured member list).
+- **Grading** (built, `Template::grades`). A decision reports the
+  deviation from the declared bound, never the widened one; severity bands
+  stay the runtime's.
+- **Scopes and related objects** (members built, `Form::members`). An
+  anchor judged through the members a selector parameter picks, read as an
+  aggregate over them, findings relating the decided members; further
+  `UndecidedMembers` policies, and members read one by one (a storey's
+  levels, a space's doors), are still to come.
 - **Several findings per object.** A capability reporting one finding per
   failed check needs one decision per check in a form, each with its
   messages, so counts match (divergence D1).
@@ -230,8 +295,9 @@ addition data the runner interprets, never code per capability:
   another way (areas, angles, counts), in `templates.rs`.
 - **Services.** Add a `Service` variant for each host service a template
   needs before selection.
-- **Report tables.** A template whose capability reports a table states
-  its columns as values to tabulate, so the table stays a report contract.
+- **Report tables** (built, `Form::table`). A template whose capability
+  reports a table states its columns as values to tabulate, so the table
+  stays a report contract; a column id may name a text.
 
 ## Performance
 

@@ -263,6 +263,40 @@ impl Model {
         )
     }
 
+    /// Evaluates `template` as a run does (the measured set answered) and
+    /// `reference`, the implementation it replaced, on the same model and
+    /// services; asserts the template keeps the reference's whole outside
+    /// contract (`Parity::contract()`), each report-table value of
+    /// `values` within its step and graded deviations within `deviation`
+    /// (0 allows a few units in the last place); and returns the
+    /// template's evaluation.
+    #[allow(dead_code)]
+    pub fn holding_contract(
+        self,
+        template: &dyn RuleCapability,
+        reference: &dyn RuleCapability,
+        rule: &CompiledRule,
+        extra: impl Fn(&mut ServiceRegistry),
+        values: &[(&str, f64)],
+        deviation: f64,
+    ) -> CapabilityEvaluation {
+        use axioval_rules::parity::{Observations, Parity};
+        let evaluated = self.clone().evaluate_measured(template, rule, &extra);
+        let replaced = self.evaluate_with(reference, rule, &extra);
+        let mut parity = values
+            .iter()
+            .fold(Parity::contract(), |parity, (name, step)| {
+                parity.value(*name, *step)
+            });
+        parity.deviations = Some(deviation);
+        let parity = parity.compare(
+            (reference.id(), &Observations::of_evaluation(&replaced)),
+            ("template", &Observations::of_evaluation(&evaluated)),
+        );
+        assert!(parity.holds(), "{}", parity.diff());
+        evaluated
+    }
+
     /// The measured value `name` of each of `objects` as a run reads it,
     /// with `extra`'s geometry: what a rewrite or template compares, for
     /// the parity harness's value comparison. Stated absent is `null`, a

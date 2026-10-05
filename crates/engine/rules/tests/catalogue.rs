@@ -135,6 +135,7 @@ fn a_template_s_composition_expands_into_blocks_and_forks() {
         .collect();
     for id in [
         "axioval:capability.body-extent",
+        "axioval:capability.plan-area",
         "axioval:capability.triangle-count",
     ] {
         assert!(
@@ -205,4 +206,39 @@ fn a_template_s_composition_expands_into_blocks_and_forks() {
     // `measured.` block with the axis as a field.
     let blocks = serde_json::to_string(&blocks).unwrap();
     assert!(blocks.contains("\"measured.body_extent\""), "{blocks}");
+}
+
+/// Every template's forms, as the catalogue shows them, map to blocks and
+/// back.
+#[test]
+fn every_template_s_forms_map_to_blocks_and_back() {
+    use axioval_ir::blocks::from_blocks;
+    use axioval_ir::contract::Expression;
+
+    let value: serde_json::Value = serde_json::from_str(&rendered(&[])).unwrap();
+    let capabilities = value["capabilities"].as_array().unwrap();
+    for capability in capabilities
+        .iter()
+        .filter(|capability| capability.get("template").is_some())
+    {
+        let template = &capability["template"];
+        let requirements = template["requirements"].as_array().unwrap();
+        assert_eq!(
+            requirements.len(),
+            template["forms"].as_array().unwrap().len(),
+            "{}",
+            capability["id"]
+        );
+        for requirement in requirements {
+            let expression: Expression =
+                serde_json::from_value(requirement["expression"].clone()).unwrap();
+            let blocks = serde_json::from_value(requirement["blocks"].clone()).unwrap();
+            assert_eq!(
+                from_blocks(&blocks).unwrap(),
+                expression,
+                "{}",
+                capability["id"]
+            );
+        }
+    }
 }

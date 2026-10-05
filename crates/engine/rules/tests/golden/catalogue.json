@@ -13345,7 +13345,662 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "grades": true,
+        "name": "plan-area",
+        "defaults": [
+          {
+            "parameter": "measure",
+            "value": {
+              "type": "string",
+              "value": "footprint"
+            }
+          }
+        ],
+        "declaration": [
+          {
+            "kind": "kind",
+            "parameter": "minimum"
+          },
+          {
+            "kind": "kind",
+            "parameter": "maximum"
+          },
+          {
+            "kind": "anyOf",
+            "parameters": [
+              "minimum",
+              "maximum"
+            ],
+            "message": "minimum or maximum is required"
+          },
+          {
+            "kind": "nonNegative",
+            "parameters": [
+              "minimum",
+              "maximum"
+            ],
+            "message": "an area bound is negative"
+          },
+          {
+            "kind": "ordered",
+            "low": "minimum",
+            "high": "maximum",
+            "message": "minimum exceeds maximum"
+          },
+          {
+            "kind": "kind",
+            "parameter": "member_selector"
+          },
+          {
+            "kind": "traversal",
+            "with": [
+              "member_selector"
+            ],
+            "message": "a relationship reaches members only with `member_selector`"
+          },
+          {
+            "kind": "choice",
+            "parameter": "measure",
+            "options": [
+              "footprint",
+              "facade"
+            ]
+          }
+        ],
+        "texts": [
+          {
+            "name": "noun",
+            "when": {
+              "kind": "equals",
+              "parameter": "measure",
+              "value": "facade"
+            },
+            "text": "facade area"
+          },
+          {
+            "name": "noun",
+            "text": "plan area"
+          },
+          {
+            "name": "column",
+            "when": {
+              "kind": "equals",
+              "parameter": "measure",
+              "value": "facade"
+            },
+            "text": "facade_area"
+          },
+          {
+            "name": "column",
+            "text": "plan_area"
+          }
+        ],
+        "forms": [
+          {
+            "when": [
+              "member_selector"
+            ],
+            "values": [
+              {
+                "name": "area",
+                "expression": {
+                  "kind": "divide",
+                  "left": {
+                    "kind": "aggregate",
+                    "function": "sum",
+                    "over": {
+                      "kind": "selector",
+                      "selector": {
+                        "kind": "expression",
+                        "expression": {
+                          "kind": "parameter",
+                          "name": "member_selector"
+                        }
+                      }
+                    },
+                    "value": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "plan_area;measure={measure}"
+                    }
+                  },
+                  "right": {
+                    "kind": "literal",
+                    "value": {
+                      "type": "quantity",
+                      "value": 1.0,
+                      "unit": "m2"
+                    }
+                  },
+                  "label": "in square metres"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "area",
+              "minimum": [
+                {
+                  "sign": "plus",
+                  "operand": {
+                    "kind": "parameter",
+                    "name": "minimum"
+                  }
+                }
+              ],
+              "maximum": [
+                {
+                  "sign": "plus",
+                  "operand": {
+                    "kind": "parameter",
+                    "name": "maximum"
+                  }
+                }
+              ],
+              "rounding": []
+            },
+            "fail": "summed {noun} of the members is {area:area} m²; required {bound:plain} m²",
+            "undecided": "summed {noun} of the members is {area:area} m², which straddles the bound {bound:plain} m²",
+            "members": {
+              "selector": "member_selector",
+              "undecided": {
+                "kind": "onlyExcess",
+                "message": "{undecided} member(s) {relation} cannot be assigned"
+              }
+            },
+            "table": {
+              "name": "areas",
+              "columns": [
+                {
+                  "id": "{column}",
+                  "value": "area",
+                  "dimension": "area"
+                }
+              ]
+            }
+          },
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "area",
+                "expression": {
+                  "kind": "divide",
+                  "left": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "plan_area;measure={measure}"
+                  },
+                  "right": {
+                    "kind": "literal",
+                    "value": {
+                      "type": "quantity",
+                      "value": 1.0,
+                      "unit": "m2"
+                    }
+                  },
+                  "label": "in square metres"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "area",
+              "minimum": [
+                {
+                  "sign": "plus",
+                  "operand": {
+                    "kind": "parameter",
+                    "name": "minimum"
+                  }
+                }
+              ],
+              "maximum": [
+                {
+                  "sign": "plus",
+                  "operand": {
+                    "kind": "parameter",
+                    "name": "maximum"
+                  }
+                }
+              ],
+              "rounding": []
+            },
+            "fail": "{noun} is {area:area} m²; required {bound:plain} m²",
+            "undecided": "{noun} is {area:area} m², which straddles the bound {bound:plain} m²",
+            "table": {
+              "name": "areas",
+              "columns": [
+                {
+                  "id": "{column}",
+                  "value": "area",
+                  "dimension": "area"
+                }
+              ]
+            }
+          }
+        ],
+        "requirements": [
+          {
+            "when": [
+              "member_selector"
+            ],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "compare",
+                  "operator": "greaterThanOrEquals",
+                  "left": {
+                    "kind": "divide",
+                    "left": {
+                      "kind": "aggregate",
+                      "function": "sum",
+                      "over": {
+                        "kind": "selector",
+                        "selector": {
+                          "kind": "expression",
+                          "expression": {
+                            "kind": "parameter",
+                            "name": "member_selector"
+                          }
+                        }
+                      },
+                      "value": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "plan_area;measure={measure}"
+                      }
+                    },
+                    "right": {
+                      "kind": "literal",
+                      "value": {
+                        "type": "quantity",
+                        "value": 1.0,
+                        "unit": "m2"
+                      }
+                    },
+                    "label": "in square metres"
+                  },
+                  "right": {
+                    "kind": "parameter",
+                    "name": "minimum"
+                  },
+                  "label": "at least the lower bound"
+                },
+                {
+                  "kind": "compare",
+                  "operator": "lessThanOrEquals",
+                  "left": {
+                    "kind": "divide",
+                    "left": {
+                      "kind": "aggregate",
+                      "function": "sum",
+                      "over": {
+                        "kind": "selector",
+                        "selector": {
+                          "kind": "expression",
+                          "expression": {
+                            "kind": "parameter",
+                            "name": "member_selector"
+                          }
+                        }
+                      },
+                      "value": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "plan_area;measure={measure}"
+                      }
+                    },
+                    "right": {
+                      "kind": "literal",
+                      "value": {
+                        "type": "quantity",
+                        "value": 1.0,
+                        "unit": "m2"
+                      }
+                    },
+                    "label": "in square metres"
+                  },
+                  "right": {
+                    "kind": "parameter",
+                    "name": "maximum"
+                  },
+                  "label": "at most the upper bound"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.compare",
+                      "label": "at least the lower bound",
+                      "fields": {
+                        "operator": "greaterThanOrEquals"
+                      },
+                      "inputs": {
+                        "left": {
+                          "block": {
+                            "type": "expression.divide",
+                            "label": "in square metres",
+                            "inputs": {
+                              "left": {
+                                "block": {
+                                  "type": "expression.aggregate",
+                                  "fields": {
+                                    "function": "sum"
+                                  },
+                                  "inputs": {
+                                    "over": {
+                                      "block": {
+                                        "type": "source.selector",
+                                        "inputs": {
+                                          "selector": {
+                                            "block": {
+                                              "type": "selector.expression",
+                                              "inputs": {
+                                                "expression": {
+                                                  "block": {
+                                                    "type": "expression.parameter",
+                                                    "fields": {
+                                                      "name": "member_selector"
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "value": {
+                                      "block": {
+                                        "type": "expression.property",
+                                        "fields": {
+                                          "property": "plan_area;measure={measure}",
+                                          "propertySet": "axioval:measured"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              "right": {
+                                "block": {
+                                  "type": "expression.literal",
+                                  "fields": {
+                                    "value": {
+                                      "type": "quantity",
+                                      "unit": "m2",
+                                      "value": 1.0
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "right": {
+                          "block": {
+                            "type": "expression.parameter",
+                            "fields": {
+                              "name": "minimum"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.compare",
+                      "label": "at most the upper bound",
+                      "fields": {
+                        "operator": "lessThanOrEquals"
+                      },
+                      "inputs": {
+                        "left": {
+                          "block": {
+                            "type": "expression.divide",
+                            "label": "in square metres",
+                            "inputs": {
+                              "left": {
+                                "block": {
+                                  "type": "expression.aggregate",
+                                  "fields": {
+                                    "function": "sum"
+                                  },
+                                  "inputs": {
+                                    "over": {
+                                      "block": {
+                                        "type": "source.selector",
+                                        "inputs": {
+                                          "selector": {
+                                            "block": {
+                                              "type": "selector.expression",
+                                              "inputs": {
+                                                "expression": {
+                                                  "block": {
+                                                    "type": "expression.parameter",
+                                                    "fields": {
+                                                      "name": "member_selector"
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "value": {
+                                      "block": {
+                                        "type": "expression.property",
+                                        "fields": {
+                                          "property": "plan_area;measure={measure}",
+                                          "propertySet": "axioval:measured"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              "right": {
+                                "block": {
+                                  "type": "expression.literal",
+                                  "fields": {
+                                    "value": {
+                                      "type": "quantity",
+                                      "unit": "m2",
+                                      "value": 1.0
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "right": {
+                          "block": {
+                            "type": "expression.parameter",
+                            "fields": {
+                              "name": "maximum"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "compare",
+                  "operator": "greaterThanOrEquals",
+                  "left": {
+                    "kind": "divide",
+                    "left": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "plan_area;measure={measure}"
+                    },
+                    "right": {
+                      "kind": "literal",
+                      "value": {
+                        "type": "quantity",
+                        "value": 1.0,
+                        "unit": "m2"
+                      }
+                    },
+                    "label": "in square metres"
+                  },
+                  "right": {
+                    "kind": "parameter",
+                    "name": "minimum"
+                  },
+                  "label": "at least the lower bound"
+                },
+                {
+                  "kind": "compare",
+                  "operator": "lessThanOrEquals",
+                  "left": {
+                    "kind": "divide",
+                    "left": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "plan_area;measure={measure}"
+                    },
+                    "right": {
+                      "kind": "literal",
+                      "value": {
+                        "type": "quantity",
+                        "value": 1.0,
+                        "unit": "m2"
+                      }
+                    },
+                    "label": "in square metres"
+                  },
+                  "right": {
+                    "kind": "parameter",
+                    "name": "maximum"
+                  },
+                  "label": "at most the upper bound"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.compare",
+                      "label": "at least the lower bound",
+                      "fields": {
+                        "operator": "greaterThanOrEquals"
+                      },
+                      "inputs": {
+                        "left": {
+                          "block": {
+                            "type": "expression.divide",
+                            "label": "in square metres",
+                            "inputs": {
+                              "left": {
+                                "block": {
+                                  "type": "expression.property",
+                                  "fields": {
+                                    "property": "plan_area;measure={measure}",
+                                    "propertySet": "axioval:measured"
+                                  }
+                                }
+                              },
+                              "right": {
+                                "block": {
+                                  "type": "expression.literal",
+                                  "fields": {
+                                    "value": {
+                                      "type": "quantity",
+                                      "unit": "m2",
+                                      "value": 1.0
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "right": {
+                          "block": {
+                            "type": "expression.parameter",
+                            "fields": {
+                              "name": "minimum"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.compare",
+                      "label": "at most the upper bound",
+                      "fields": {
+                        "operator": "lessThanOrEquals"
+                      },
+                      "inputs": {
+                        "left": {
+                          "block": {
+                            "type": "expression.divide",
+                            "label": "in square metres",
+                            "inputs": {
+                              "left": {
+                                "block": {
+                                  "type": "expression.property",
+                                  "fields": {
+                                    "property": "plan_area;measure={measure}",
+                                    "propertySet": "axioval:measured"
+                                  }
+                                }
+                              },
+                              "right": {
+                                "block": {
+                                  "type": "expression.literal",
+                                  "fields": {
+                                    "value": {
+                                      "type": "quantity",
+                                      "unit": "m2",
+                                      "value": 1.0
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "right": {
+                          "block": {
+                            "type": "expression.parameter",
+                            "fields": {
+                              "name": "maximum"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.plan-coverage",

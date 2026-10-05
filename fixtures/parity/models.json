@@ -1,0 +1,74 @@
+{
+  "models": [
+    {
+      "name": "bs-ifc4-building-architecture.ifc",
+      "url": "https://raw.githubusercontent.com/buildingSMART/Sample-Test-Files/80d976a9b193a26a8e928c3e79bff67af1de68a8/IFC%204.0.2.1%20%28IFC%204%20ADD2%20TC1%29/Simple-Scene/Building-Architecture.ifc",
+      "sha256": "8790a1e193e82b8e7e7f337ec2633cd40f2120590317a1443503a25b079e2e80",
+      "licence": "CC-BY-4.0",
+      "attribution": "buildingSMART International Ltd., Sample-Test-Files, IFC 4.0.2.1 (IFC 4 ADD2 TC1)/Simple-Scene/Building-Architecture.ifc"
+    },
+    {
+      "name": "bs-ifc4-building-structural.ifc",
+      "url": "https://raw.githubusercontent.com/buildingSMART/Sample-Test-Files/80d976a9b193a26a8e928c3e79bff67af1de68a8/IFC%204.0.2.1%20%28IFC%204%20ADD2%20TC1%29/Simple-Scene/Building-Structural.ifc",
+      "sha256": "903b5a005901397aa2b235daf6a60f46c099eae286cb01c815abf0a341707432",
+      "licence": "CC-BY-4.0",
+      "attribution": "buildingSMART International Ltd., Sample-Test-Files, IFC 4.0.2.1 (IFC 4 ADD2 TC1)/Simple-Scene/Building-Structural.ifc"
+    },
+    {
+      "name": "bs-ifc4-building-hvac.ifc",
+      "url": "https://raw.githubusercontent.com/buildingSMART/Sample-Test-Files/80d976a9b193a26a8e928c3e79bff67af1de68a8/IFC%204.0.2.1%20%28IFC%204%20ADD2%20TC1%29/Simple-Scene/Building-Hvac.ifc",
+      "sha256": "2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344",
+      "licence": "CC-BY-4.0",
+      "attribution": "buildingSMART International Ltd., Sample-Test-Files, IFC 4.0.2.1 (IFC 4 ADD2 TC1)/Simple-Scene/Building-Hvac.ifc"
+    },
+    {
+      "name": "bs-ifc4-infra-road.ifc",
+      "url": "https://raw.githubusercontent.com/buildingSMART/Sample-Test-Files/80d976a9b193a26a8e928c3e79bff67af1de68a8/IFC%204.0.2.1%20%28IFC%204%20ADD2%20TC1%29/Simple-Scene/Infra-Road.ifc",
+      "sha256": "ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8",
+      "licence": "CC-BY-4.0",
+      "attribution": "buildingSMART International Ltd., Sample-Test-Files, IFC 4.0.2.1 (IFC 4 ADD2 TC1)/Simple-Scene/Infra-Road.ifc"
+    },
+    {
+      "name": "bs-ifc2x3-building-architecture.ifc",
+      "url": "https://raw.githubusercontent.com/buildingSMART/Sample-Test-Files/80d976a9b193a26a8e928c3e79bff67af1de68a8/IFC%202.3.0.1%20%28IFC%202x3%20TC1%29/Simple-Scene/Building-Architecture.ifc",
+      "sha256": "c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885",
+      "licence": "CC-BY-4.0",
+      "attribution": "buildingSMART International Ltd., Sample-Test-Files, IFC 2.3.0.1 (IFC 2x3 TC1)/Simple-Scene/Building-Architecture.ifc"
+    },
+    {
+      "name": "bs-ifc2x3-building-structural.ifc",
+      "url": "https://raw.githubusercontent.com/buildingSMART/Sample-Test-Files/80d976a9b193a26a8e928c3e79bff67af1de68a8/IFC%202.3.0.1%20%28IFC%202x3%20TC1%29/Simple-Scene/Building-Structural.ifc",
+      "sha256": "25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b",
+      "licence": "CC-BY-4.0",
+      "attribution": "buildingSMART International Ltd., Sample-Test-Files, IFC 2.3.0.1 (IFC 2x3 TC1)/Simple-Scene/Building-Structural.ifc"
+    },
+    {
+      "name": "bs-ifc4x3-building-architecture.ifc",
+      "url": "https://raw.githubusercontent.com/buildingSMART/Sample-Test-Files/80d976a9b193a26a8e928c3e79bff67af1de68a8/IFC%204.3.2.0%20%28IFC%204.3%20ADD2%29/Simple-Scene/Building-Architecture.ifc",
+      "sha256": "96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d",
+      "licence": "CC-BY-4.0",
+      "attribution": "buildingSMART International Ltd., Sample-Test-Files, IFC 4.3.2.0 (IFC 4.3 ADD2)/Simple-Scene/Building-Architecture.ifc"
+    },
+    {
+      "name": "bs-ifc4x3-building-structural.ifc",
+      "url": "https://raw.githubusercontent.com/buildingSMART/Sample-Test-Files/80d976a9b193a26a8e928c3e79bff67af1de68a8/IFC%204.3.2.0%20%28IFC%204.3%20ADD2%29/Simple-Scene/Building-Structural.ifc",
+      "sha256": "db64895488aad4eab082c8292f5632145b0fc864c0642d4fe667404882bacf27",
+      "licence": "CC-BY-4.0",
+      "attribution": "buildingSMART International Ltd., Sample-Test-Files, IFC 4.3.2.0 (IFC 4.3 ADD2)/Simple-Scene/Building-Structural.ifc"
+    },
+    {
+      "name": "bs-ifc4-wall-with-opening-and-window.ifc",
+      "url": "https://raw.githubusercontent.com/buildingSMART/Sample-Test-Files/80d976a9b193a26a8e928c3e79bff67af1de68a8/IFC%204.0.2.1%20%28IFC%204%20ADD2%20TC1%29/ISO%20Spec%20-%20ReferenceView_V1.2/wall-with-opening-and-window.ifc",
+      "sha256": "73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832",
+      "licence": "CC-BY-4.0",
+      "attribution": "buildingSMART International Ltd., Sample-Test-Files, IFC 4.0.2.1 (IFC 4 ADD2 TC1)/ISO Spec - ReferenceView_V1.2/wall-with-opening-and-window.ifc"
+    },
+    {
+      "name": "bs-ifc4-column-straight-rectangle-tessellation.ifc",
+      "url": "https://raw.githubusercontent.com/buildingSMART/Sample-Test-Files/80d976a9b193a26a8e928c3e79bff67af1de68a8/IFC%204.0.2.1%20%28IFC%204%20ADD2%20TC1%29/ISO%20Spec%20-%20ReferenceView_V1.2/column-straight-rectangle-tessellation.ifc",
+      "sha256": "58bb9b2cae96edf2c368de95f526650f3f282e4e7fc37c0065c501bdbeed00a1",
+      "licence": "CC-BY-4.0",
+      "attribution": "buildingSMART International Ltd., Sample-Test-Files, IFC 4.0.2.1 (IFC 4 ADD2 TC1)/ISO Spec - ReferenceView_V1.2/column-straight-rectangle-tessellation.ifc"
+    }
+  ]
+}

@@ -1,0 +1,356 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:parity.public.ruleset",
+    "name": {
+      "default": "Public parity ruleset",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "Built-in capabilities beside their expression rewrites.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "definitionPackages": [
+    "axioval:parity.public.definitions"
+  ],
+  "root": {
+    "id": "root",
+    "name": {
+      "default": "Parity",
+      "translations": {}
+    },
+    "rules": [
+      {
+        "id": "wall-width",
+        "definitionId": "axioval:parity.public.property-predicate",
+        "name": {
+          "default": "wall-width",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "property_set": {
+            "type": "string",
+            "value": "axioval:parity.public.wall-quantities"
+          },
+          "property": {
+            "type": "string",
+            "value": "axioval:parity.public.width"
+          },
+          "operator": {
+            "type": "string",
+            "value": "greater_or_equal"
+          },
+          "quantity": {
+            "type": "quantity",
+            "value": 250.0,
+            "unit": "mm"
+          }
+        }
+      },
+      {
+        "id": "wall-width-expression",
+        "definitionId": "axioval:parity.public.expression",
+        "name": {
+          "default": "wall-width-expression",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "requirement": {
+            "type": "expression",
+            "value": {
+              "kind": "compare",
+              "operator": "greaterThanOrEquals",
+              "left": {
+                "kind": "property",
+                "propertySet": "axioval:parity.public.wall-quantities",
+                "property": "axioval:parity.public.width"
+              },
+              "right": {
+                "kind": "literal",
+                "value": {
+                  "type": "quantity",
+                  "value": 250.0,
+                  "unit": "mm"
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "slab-depth",
+        "definitionId": "axioval:parity.public.property-predicate",
+        "name": {
+          "default": "slab-depth",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.slab",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "property_set": {
+            "type": "string",
+            "value": "axioval:parity.public.slab-quantities"
+          },
+          "property": {
+            "type": "string",
+            "value": "axioval:parity.public.depth"
+          },
+          "operator": {
+            "type": "string",
+            "value": "less_or_equal"
+          },
+          "quantity": {
+            "type": "quantity",
+            "value": 0.25,
+            "unit": "m"
+          }
+        }
+      },
+      {
+        "id": "slab-depth-expression",
+        "definitionId": "axioval:parity.public.expression",
+        "name": {
+          "default": "slab-depth-expression",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.slab",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "requirement": {
+            "type": "expression",
+            "value": {
+              "kind": "compare",
+              "operator": "lessThanOrEquals",
+              "left": {
+                "kind": "property",
+                "propertySet": "axioval:parity.public.slab-quantities",
+                "property": "axioval:parity.public.depth"
+              },
+              "right": {
+                "kind": "literal",
+                "value": {
+                  "type": "quantity",
+                  "value": 0.25,
+                  "unit": "m"
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "wall-thickness",
+        "definitionId": "axioval:parity.public.body-extent",
+        "name": {
+          "default": "wall-thickness",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "axis": {
+            "type": "string",
+            "value": "forward"
+          },
+          "minimum": {
+            "type": "quantity",
+            "value": 150.0,
+            "unit": "mm"
+          },
+          "maximum": {
+            "type": "quantity",
+            "value": 0.25,
+            "unit": "m"
+          }
+        }
+      },
+      {
+        "id": "wall-thickness-expression",
+        "definitionId": "axioval:parity.public.expression",
+        "name": {
+          "default": "wall-thickness-expression",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "requirement": {
+            "type": "expression",
+            "value": {
+              "kind": "between",
+              "operand": {
+                "kind": "round",
+                "operand": {
+                  "kind": "property",
+                  "propertySet": "axioval:measured",
+                  "property": "body_extent;axis=forward"
+                },
+                "step": {
+                  "kind": "literal",
+                  "value": {
+                    "type": "quantity",
+                    "value": 1e-06,
+                    "unit": "m"
+                  }
+                }
+              },
+              "low": {
+                "kind": "literal",
+                "value": {
+                  "type": "quantity",
+                  "value": 150.0,
+                  "unit": "mm"
+                }
+              },
+              "high": {
+                "kind": "literal",
+                "value": {
+                  "type": "quantity",
+                  "value": 0.25,
+                  "unit": "m"
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "element-triangles",
+        "definitionId": "axioval:parity.public.triangle-count",
+        "name": {
+          "default": "element-triangles",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "anyOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.wall",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.slab",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.beam",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.proxy",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.column",
+              "includeSubtypes": true
+            }
+          ]
+        },
+        "parameters": {
+          "maximum": {
+            "type": "integer",
+            "value": 100
+          }
+        }
+      },
+      {
+        "id": "element-triangles-expression",
+        "definitionId": "axioval:parity.public.expression",
+        "name": {
+          "default": "element-triangles-expression",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "anyOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.wall",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.slab",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.beam",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.proxy",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.column",
+              "includeSubtypes": true
+            }
+          ]
+        },
+        "parameters": {
+          "requirement": {
+            "type": "expression",
+            "value": {
+              "kind": "compare",
+              "operator": "lessThanOrEquals",
+              "left": {
+                "kind": "property",
+                "propertySet": "axioval:measured",
+                "property": "triangle_count"
+              },
+              "right": {
+                "kind": "literal",
+                "value": {
+                  "type": "integer",
+                  "value": 100
+                }
+              }
+            }
+          }
+        }
+      }
+    ],
+    "folders": []
+  }
+}

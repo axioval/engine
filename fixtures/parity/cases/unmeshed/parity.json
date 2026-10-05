@@ -1,0 +1,60 @@
+{
+  "description": "The geometric pairs of `elements`, checked without meshing: both sides fail closed for want of the geometry services, at different scopes.",
+  "models": ["bs-ifc4-building-architecture.ifc", "bs-ifc4-column-straight-rectangle-tessellation.ifc"],
+  "geometry": false,
+  "pairs": [
+    {"capability": "wall-thickness", "expression": "wall-thickness-expression"},
+    {"capability": "element-triangles", "expression": "element-triangles-expression"}
+  ],
+  "divergences": [
+    {
+      "model": "bs-ifc4-building-architecture.ifc",
+      "capability": "wall-thickness",
+      "difference": "project: capability not evaluated (MissingService), expression reported nothing",
+      "reason": "D4: body-extent asks for its geometry services once and leaves the whole rule open; the rewrite reads body_extent per wall, and the runtime collapses those missing-service outcomes per source.",
+      "decision": "Accepted for the rewrite: both fail closed for the same reason. The template (#282) must reproduce the rule-scoped outcome."
+    },
+    {
+      "model": "bs-ifc4-building-architecture.ifc",
+      "capability": "wall-thickness",
+      "difference": "source ifc-step:bs-ifc4-building-architecture.ifc: capability reported nothing, expression not evaluated (MissingService)",
+      "reason": "D4, the source-scoped half of the same difference.",
+      "decision": "As above."
+    },
+    {
+      "model": "bs-ifc4-building-architecture.ifc",
+      "capability": "element-triangles",
+      "difference": "project: capability not evaluated (MissingService), expression reported nothing",
+      "reason": "D4: triangle-count asks for the triangle-count service once and leaves the whole rule open; the rewrite reads triangle_count per element, collapsed per source.",
+      "decision": "Accepted for the rewrite: both fail closed for the same reason. The template (#282) must reproduce the rule-scoped outcome."
+    },
+    {
+      "model": "bs-ifc4-building-architecture.ifc",
+      "capability": "element-triangles",
+      "difference": "source ifc-step:bs-ifc4-building-architecture.ifc: capability reported nothing, expression not evaluated (MissingService)",
+      "reason": "D4, the source-scoped half of the same difference.",
+      "decision": "As above."
+    },
+    {
+      "model": "bs-ifc4-column-straight-rectangle-tessellation.ifc",
+      "capability": "element-triangles",
+      "difference": "project: capability not evaluated (MissingService), expression reported nothing",
+      "reason": "D4, as on the architectural model.",
+      "decision": "As above."
+    },
+    {
+      "model": "bs-ifc4-column-straight-rectangle-tessellation.ifc",
+      "capability": "element-triangles",
+      "difference": "source ifc-step:bs-ifc4-column-straight-rectangle-tessellation.ifc: capability reported nothing, expression not evaluated (MissingService)",
+      "reason": "D4, the source-scoped half of the same difference.",
+      "decision": "As above."
+    },
+    {
+      "model": "bs-ifc4-column-straight-rectangle-tessellation.ifc",
+      "capability": "wall-thickness",
+      "difference": "project: capability not evaluated (MissingService), expression reported nothing; rule 0 checked, NotEvaluated against 0 checked, NothingSelected",
+      "reason": "D18: the model has no wall. body-extent still leaves the rule open for the missing services; the rewrite selects nothing and passes vacuously.",
+      "decision": "Accepted for the rewrite: nothing is judged either way. The template (#282) must reproduce the capability's rule-scoped outcome, since a nothing-selected status would read as a vacuous pass where the capability fails closed."
+    }
+  ]
+}

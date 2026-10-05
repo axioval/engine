@@ -35,6 +35,7 @@ CLI output and exit codes are public automation contracts. Parse packages fail c
   `bcf::export_with_snapshots` with `bcf_snapshot::Renderer`. Without
   `--geometry` it fails before writing anything; without the flag meshes
   are not kept and the archive is byte-identical.
+- `tests/parity.rs` holds built-in capabilities to parity with their re-expressions on the pinned public models (`fixtures/parity`), through `check --geometry --rule-status`; it is ignored unless `AXIOVAL_PARITY_MODELS` names the fetched models, and then fails on any difference a case's `parity.json` does not record and on any recorded one no longer shown. Its non-ignored test compiles every case against the registry. Record a divergence with its reason and decision; never widen a comparison to make one disappear.
 - `tests/check.rs` runs the real binary; keep a case for every exit status. Update `docs/src/cli.md` with any change to arguments, output or status.
 - `check --locate` builds the IFC `LocationPolicy` (`IfcBuildingStorey`, `IfcSpace`, containment and aggregation, `Name`); `none` must leave the result byte-identical. `report --location` keeps outcomes whose location is unresolved.
 - `check` identifies every finding with `Report::identify_findings` over

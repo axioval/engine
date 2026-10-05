@@ -1,0 +1,11 @@
+{
+  "description": "Built-in property, body-extent and triangle-count checks beside their expression rewrites, over every public model, meshed.",
+  "models": "*",
+  "pairs": [
+    {"capability": "wall-width", "expression": "wall-width-expression"},
+    {"capability": "slab-depth", "expression": "slab-depth-expression"},
+    {"capability": "wall-thickness", "expression": "wall-thickness-expression"},
+    {"capability": "element-triangles", "expression": "element-triangles-expression"}
+  ],
+  "divergences": []
+}

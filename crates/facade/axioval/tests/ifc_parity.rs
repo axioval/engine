@@ -8,8 +8,12 @@
 //! directory holding `definitions.json` (a definition package),
 //! `ruleset.json` (a ruleset), `parity.json`
 //! (`{"pairs": [{"capability": "<rule id>", "expression": "<rule id>"}]}`)
-//! and one or more `.ifc` models. Each pair's parity evidence is printed as
-//! one JSON line, which is what a migration ledger records as proof.
+//! and one or more `.ifc` models. A pair takes the public cases' options
+//! (`"comparison": "contract"`, `"uncounted": true`, `"values"`; see the
+//! CLI's `parity` test). Every rule's selection is recorded, so an object
+//! one rule passed and the other never selected differs. Each pair's
+//! parity evidence is printed as one JSON line, which is what a migration
+//! ledger records as proof.
 #![cfg(feature = "ifc")]
 #![allow(missing_docs)]
 
@@ -18,7 +22,7 @@ use std::path::{Path, PathBuf};
 use axioval::engine::{CapabilityRegistry, Runtime, compile};
 use axioval::ifc::import_ifc_session;
 use axioval::ir::{DefinitionPackage, RuleSetPackage};
-use axioval::rules::parity::compare;
+use axioval::rules::parity::{Observations, Parity};
 use axioval::rules::register_builtins;
 use serde_json::Value;
 
@@ -36,6 +40,24 @@ fn entries(dir: &Path) -> Vec<PathBuf> {
         .collect();
     entries.sort();
     entries
+}
+
+/// The comparison a pair asks for.
+fn comparison(pair: &Value) -> Parity {
+    let mut parity = match pair["comparison"].as_str() {
+        None | Some("outcomes") => Parity::outcomes(),
+        Some("contract") => Parity::contract(),
+        Some(other) => panic!("unknown comparison `{other}`"),
+    };
+    if pair["uncounted"].as_bool() == Some(true) {
+        parity = parity.uncounted();
+    }
+    if let Some(values) = pair["values"].as_object() {
+        for (name, step) in values {
+            parity = parity.value(name, step.as_f64().expect("a rounding step"));
+        }
+    }
+    parity
 }
 
 /// Every pair of one case over each of its models; the differences found.
@@ -64,13 +86,23 @@ fn run_case(case: &Path) -> Vec<String> {
         let bytes = std::fs::read(&model).expect("readable model");
         let name = model.file_name().unwrap().to_string_lossy().into_owned();
         let session = import_ifc_session(&name, &bytes).expect("model imports");
-        let report = Runtime::new(registry)
-            .run_session(&session, plan)
+        let (report, outcomes) = Runtime::new(registry)
+            .with_rule_summaries()
+            .run_session_recorded(&session, plan)
             .expect("ruleset runs");
         for pair in pairs {
             let capability = pair["capability"].as_str().expect("`capability` rule id");
             let expression = pair["expression"].as_str().expect("`expression` rule id");
-            let evidence = compare(&report, capability, expression);
+            let evidence = comparison(pair).compare(
+                (
+                    capability,
+                    &Observations::of_recorded(&report, &outcomes, capability),
+                ),
+                (
+                    expression,
+                    &Observations::of_recorded(&report, &outcomes, expression),
+                ),
+            );
             println!("{}", serde_json::to_string(&evidence).unwrap());
             if !evidence.holds() {
                 failures.push(format!(

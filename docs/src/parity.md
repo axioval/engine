@@ -1,0 +1,210 @@
+# Parity harness
+
+A built-in capability moves onto shared parts (measured values, expressions,
+generic judges) only once its re-expression judges every model as the
+capability does. The differential parity harness, `axioval_rules::parity`,
+proves that. It runs the capability and its re-expression over the same
+model and lines their outcomes up scope by scope: every object, every
+source and the project. Two kinds of re-expression are compared:
+
+- an **expression rewrite**, one or more `expression` rules that reach the
+  capability's verdicts but word their own findings;
+- a **template**, a capability rebuilt as a preconfigured composition
+  ([#278](https://github.com/axioval/engine/issues/278)), which must keep
+  the capability's whole outside contract: the same findings, wording,
+  related objects and grades.
+
+## Reading a side
+
+`Observations` is everything one side reported:
+
+- `Observations::of_report(report, rule)` reads one rule of a report: its
+  findings and not-evaluated outcomes at every scope, its report tables,
+  and its rule summary when the run made one
+  (`Runtime::with_rule_summaries`).
+- `Observations::of_recorded(report, outcomes, rule)` reads the same and
+  the rule's selection, from a run that recorded every rule's selection
+  (`Runtime::run_session_recorded`, or `run_recorded` over a bare
+  project). An object the rule selected and reported nothing about
+  *passed*; one it neither selected nor reported about was *not selected*;
+  one whose selection was undecided is *undecided*.
+- `Observations::of_evaluation(evaluation)` reads a capability evaluation,
+  as fixture tests run capabilities directly, with each graded finding's
+  deviation. `.selecting(objects)` states its selection where the test
+  knows it.
+- `.merge(other)` joins the sides of a capability rewritten as several
+  rules (one per check, or one per severity band).
+- `.with_value(scope, name, measure)` adds a value the caller measured,
+  such as the measured value a template reads, beside a measurement the
+  capability makes; `.retain_values(keep)` keeps only the values both
+  sides measure by contract.
+
+A report table's cells become values named `<table>.<column>` (a grouped
+row's `<table>[<group>].<column>`). A `Measure` is a number interval in a
+unit with its exactness where known, a text, `null` (stated absent) or not
+evaluated; `null` and not evaluated never agree.
+
+## What must agree
+
+Every scope's verdict always must: finding (with the most severe
+severity, and whether every finding's evidence is exact), not evaluated
+(with its reason), passed, not selected or undecided. Passed and not
+selected are told apart wherever both sides know their selection, and read
+as one ("reported nothing") where either does not. A source or the
+project is never selected: about those a rule reports or it does not.
+
+A `Parity` adds what else must agree where two scopes' outcomes do:
+
+| | `Parity::outcomes()` | `Parity::contract()` |
+|---|---|---|
+| for | an expression rewrite | a template |
+| finding count per scope | yes | yes |
+| categories | yes | yes |
+| messages, word for word | no | yes |
+| related objects | no | yes |
+| graded deviation | no | yes, to a few units in the last place |
+
+`.uncounted()` drops the count, for a rewrite that reports one finding
+where the capability reports one per failed check (divergence D1);
+`.value(name, step)` compares the measured value `name` of every scope
+within its declared rounding: both interval bounds may differ by at most
+`step`, in the value's unit, and a value one side has and the other lacks
+differs. Values are compared whatever the outcomes. Two rules whose
+summaries differ (how many objects each checked, or its status) differ
+about the project.
+
+`parity.compare((capability, &left), (expression, &right))` returns
+`ParityEvidence`: the number of scopes compared, how many the capability
+found and left open, how many values were compared, and every
+`Difference`, which names the scope, both outcomes and what else differs
+(`Detail`: count, categories, messages, related objects, deviation, the
+rule as a whole, a value). `holds()` is true when there is none; `diff()`
+prints one line per scope. The free functions `compare`,
+`compare_recorded` and `compare_evaluations` compare under
+`Parity::outcomes()`.
+
+## Registering a comparison
+
+A rebuild issue registers its comparison in three places.
+
+**Fixtures.** Beside the capability's fixture tests, run the capability
+and its template on the same model and compare under the contract,
+measured values included:
+
+```rust,ignore
+use axioval_rules::parity::{Observations, Parity};
+
+let capability = model().evaluate_with(&StairGeometry, &rule, register);
+let template = model().evaluate_measured(&template_capability, &rule, register);
+// Each flight's rise as the template reads it, and as the capability
+// measured it (from its own measurement, here a helper of the test).
+let rises = model().measure("flight_rise", &flights, register);
+let template = rises.into_iter().fold(
+    Observations::of_evaluation(&template),
+    |side, (flight, rise)| side.with_value(flight, "rise", rise),
+);
+let capability = capability_rises().into_iter().fold(
+    Observations::of_evaluation(&capability),
+    |side, (flight, rise)| side.with_value(flight, "rise", rise),
+);
+let parity = Parity::contract()
+    .value("rise", 1e-6)
+    .compare(("stair-geometry", &capability), ("template", &template));
+assert!(parity.holds(), "{}", parity.diff());
+```
+
+`Model::measure` (in the rules crate's test support) reads a measured
+value of each object as a run reads it. The capability's side gets its
+values from its report tables, or from `with_value` where the test reads
+the capability's own measurement.
+
+**Generated inputs.** `proptest` (a test-only dependency) generates inputs
+for the simple geometric capabilities: `body_extent.rs` generates walls of
+random size, heading, measuring slack and stated thickness, and
+`level_spacing.rs` buildings of random storey elevations, and each holds
+the rewrite to parity, level heights compared with the `levels` table.
+Add a `generated` module beside a rebuilt capability's rewrite tests the
+same way.
+
+**Public models.** A case directory under `fixtures/parity/cases` holds
+`definitions.json`, `ruleset.json` (the capability's rule and its
+re-expression's, side by side) and `parity.json`:
+
+```json
+{
+  "models": "*",
+  "pairs": [
+    {"capability": "stair", "expression": "stair-template",
+     "comparison": "contract", "values": {"levels.height": 1e-6}}
+  ],
+  "divergences": []
+}
+```
+
+`models` is `"*"` or a list of pinned model names, `geometry: false` checks
+without meshing, and a pair may set `comparison` (`outcomes` or
+`contract`), `uncounted` and `values`. Every difference a pair shows on a
+model must be recorded in `divergences` with the line the harness prints, a
+reason and a decision; a recorded one no longer shown fails as well.
+
+## Where it runs
+
+- **Fixtures, in every gate.** The rules crate's tests, the parity
+  module's own tests and the generated inputs.
+- **Public models, in CI.** `fixtures/parity/models.json` pins openly
+  licensed IFC models (the buildingSMART sample files, CC BY 4.0) by a URL
+  fixed to a commit and their SHA-256; they are not vendored.
+  `scripts/parity_models.py fetch` downloads them into
+  `~/.cache/axioval/parity-models` (or `AXIOVAL_PARITY_MODELS`) and keeps a
+  file only at its pinned digest. With `AXIOVAL_PARITY_MODELS` set,
+  `./scripts/check.sh test` runs the CLI's `parity` test, which checks each
+  case through `axioval check --geometry --rule-status` over each model.
+  CI runs it in its own `parity` job, the models cached by the manifest's
+  hash, and the `check` job requires it. Without the models a test still
+  compiles every case against the registry.
+- **Private models, locally.** Set `AXIOVAL_PARITY_CASES` to a directory of
+  cases, each holding its own `.ifc` models beside `definitions.json`,
+  `ruleset.json` and `parity.json`; `./scripts/check.sh test` then runs the
+  facade's ignored `ifc_parity` test, in process, every selection
+  recorded. Once the variable is set, a missing, empty or unreadable case
+  fails rather than skips, and any difference fails.
+
+Each pair's evidence prints as one JSON line. That line is what the
+migration ledger records as a proof item, tagged `"kind": "parity"`; the
+ledger check (`scripts/migration.py`) rejects a parity proof that does not
+name both rules, covers no scope, or records any difference.
+
+## Recorded divergences
+
+Every difference a test accepts is asserted exactly where it shows, and
+classified here. A decision names what the rebuild of the capability must
+do: the capability's outcome is the outside contract, so a template must
+reproduce it unless that rebuild issue changes the contract on purpose.
+
+| | Capability | Where | Difference | Reason | Decision |
+|---|---|---|---|---|---|
+| D1 | `counterpart-coverage`, `light-well`, `opening-zone`, `shelf-capacity`, `space-validation`, `stair-geometry`, `ramp-geometry` | their rewrites' parity helpers, compared `uncounted` | finding counts per object | The capability reports one finding per failed check (bound, margin, door, aspect, side, strip), or one graded finding where one rule per band finds every band a share exceeds; a rewrite reports one per rule. | Accepted for rewrites. A template is held to the contract, which counts: it reports the capability's findings one for one. |
+| D2 | `level-spacing` | `an_unordered_building_leaves_its_storeys_open` | the building open against each storey open | A storey without an elevation leaves the capability unable to order the building's storeys; the rewrite judges storeys and leaves each open. | Accepted for the rewrite (both fail closed). The template (#282) reports on the building, the anchor the capability judges. |
+| D3 | `recess-width` | `the_rows_as_an_expression_over_recesses_reach_the_verdicts` | open against passed | A depth on both sides of a row boundary leaves the capability's row open; the rewrite sees the width suffice under either row. | The rewrite's verdict is sound, every possible row agreeing. The template (#283) keeps the capability's outcome; deciding it is a contract change that issue must make explicitly. |
+| D4 | `horizontal-guard`; `body-extent`, `triangle-count` on public models without meshing | `the_guard_decision_as_an_expression_over_edges_reaches_the_verdicts`; case `unmeshed` | the project open against each object or source open | The capability asks for its service once and leaves the whole rule open; the rewrite reads a measured value per object, which the runtime collapses per source. | Accepted for rewrites: the same fail-closed reason at another scope. Templates (#282, #284) reproduce the rule-scoped outcome. |
+| D5 | `counterpart-coverage` | `a_share_straddling_a_higher_band_is_graded_milder` | warning against info | A share straddling a higher band: the capability grades by the most severe band it may reach, the band rules find only the band surely exceeded. | The template (#282) grades one finding with a `deviation` and the runtime's severity bands, which take the most severe reachable band, instead of one rule per band. |
+| D6 | `area-ratio` | `a_window_stating_no_area_is_found_where_the_capability_leaves_it_open` | open against finding | A member stating no area leaves the capability unable to sum; an aggregate over it is `null`, so the rewrite requires every member to state one and finds the anchor. | The template (#282) leaves the anchor open, from a measured sum that is not evaluated on a member without an area. |
+| D7 | `plan-area` | `undecided_members_are_measured_by_the_rewrite` | open against passed | The capability leaves an anchor with undecided members open unless its sum already exceeds the maximum; the aggregate measures them too, and a sum within the bounds either way passes. | Sound, as D3; the template (#282) keeps the capability's outcome unless that issue changes the contract. |
+| D8 | `slab-contact` | `an_undecided_counterpart_is_a_candidate_of_the_rewrite` | open against finding | Counterparts named by more than a kind cannot be a measured value's candidates: an undecided one leaves the capability's shortfall open, the rewrite finds it. | The template (#282) needs a contact share over a selection of candidates, undecided ones possible. |
+| D9 | `distance` | `distance_expressions_hold_to_the_parity_harness_in_every_mode` | the counterpart open against nothing | The capability reports an unmeasurable counterpart itself as not evaluated; the rewrite judges its subjects only. | The template (#283) reports unmeasured counterparts as the capability does. |
+| D10 | `exit-separation` | `intervals_counts_and_unknown_flags_reach_the_verdicts` | open against finding | An unknown sprinkler flag widens the capability's requirement to both fractions; the rewrite reads an unstated flag as unsprinklered. | The rewrite's default is not allowed in a template: #283 needs an operand that keeps both fractions possible where the flag is unknown. |
+| D11 | `centre-line-distance` | `the_centre_line_distance_as_a_value_reaches_the_verdicts` | inexact against exact evidence | With no wall within reach the capability cites its inexact side measurements, the rewrite the exact absence of a distance within reach. | The template (#283) cites the side measurements, so its evidence is as exact as the capability's. |
+| D12 | `opening-area` | `the_measured_opening_area_judges_every_wall_alike` | open against finding | A wall stating only one side area is left open by the capability; the rewrite reads the missing side as `null`, a missing-information finding. | The template (#281) reads the area difference as a value that is not evaluated when one side is unstated. |
+| D13 | `opening-area` | `the_summed_section_areas_judge_walls_of_separate_openings_alike` (fixture 6) | finding against passed | Summed one by one, section areas never check overlapping openings; the capability does. | The template (#281) uses `opening_area`, which holds parity but for D12, never the summed sections. |
+| D14 | `opening-area` | the same test (fixture 13) | passed against finding | A section area knows no minimum, so a small hole the capability leaves out is counted. | As D13. |
+| D15 | `keyed-limit` (`sill-height`) | `sill_heights_reach_the_verdicts_but_where_keys_disagree_or_a_floor_is_unknown` | finding against open | A floor that cannot be measured beside a failing one: any failing floor is the capability's finding, while the rewrite leaves the door open. | The template (#281) takes `any` over the floors, so a sure failure stands beside an unknown floor. |
+| D16 | `keyed-limit` (path keys) | the same test | open against finding | A key reached along a path that cannot be read as one value (the objects disagree, or there are none) leaves the capability open; the rewrite finds the door without a row. | The template (#281) reads such a key as unknown, never as no row. |
+| D17 | `level-spacing` | the generated buildings in `level_spacing.rs` | a table height against the measured rise | The `levels` table reports a level the check leaves out (the lowest with `ignore_lowest`, the highest) as unmeasured, where `level_rise` leaving it out states it absent. | Accepted: the table is informative only. Heights are compared on the levels the check judges; the template (#282) keeps the table as it is. |
+| D18 | `body-extent` on a public model without walls | case `unmeshed` | the rule open against nothing selected | With nothing selected the capability still leaves the rule open for its missing services; the rewrite selects nothing and passes vacuously. | Accepted for the rewrite. The template (#282) reproduces the rule-scoped outcome, which never reads as a vacuous pass. |
+
+The comparison grew stricter with this chapter: it now counts findings
+(D1), compares source- and project-scoped outcomes (D4 now shows the
+project as well) and rule summaries (D18), and compares measured values
+(D17). Every divergence recorded before kept its verdict-level form, the
+wording of a silent side changing from "passed" to "reported nothing"
+where the selection is unknown.

@@ -82,41 +82,16 @@ retirement notice (`attic/axioval-spec-notice`).
 ## Expression parity
 
 Before a capability's decision moves to an [expression](expressions.md)
-rule, the rewrite must judge every object exactly as the capability does.
-The differential parity harness, `axioval_rules::parity`, checks that:
-
-- `outcomes(report, rule)` reads how one rule of a report judged each
-  object. It is a finding (its most severe severity, and whether every
-  finding's evidence is exact) or not evaluated (with its reason). An object
-  the rule reported nothing about passed or was not selected, and parity
-  counts those two as the same.
-- `compare(report, capability, expression)` lines the two rules up object
-  by object. The `ParityEvidence` it returns counts the objects compared and
-  lists every `Difference` in verdict, severity (the graded measure's band)
-  or exactness. `holds()` is true when there are none, and `diff()` prints
-  one line per object for a failing test.
-
-Both rules go in one ruleset and run over the same model, so the outcomes
-compared come from the same evidence. A capability run directly, as its
-fixture tests run it, is compared with its rewrite by
-`compare_evaluations((capability, evaluation), (expression, rewritten))`,
-which reads each `CapabilityEvaluation` as `outcomes` reads a rule
-(`evaluation_outcomes`) and lists the same differences. A capability
-rewritten as several rules (one per severity band, or one for each kind of
-object it judges) is compared with their evaluations merged, and one judging
-a source with its outcome read for each object of the source. The harness runs in two places:
-
-- **Fixtures, in CI.** `crates/engine/rules/tests/parity.rs` runs the
-  `property-predicate` capability against its expression rewrite over a
-  fixture model, and shows that a wrong rewrite fails with a diff naming
-  the object.
-- **Private models, locally.** Set `AXIOVAL_PARITY_CASES` to a directory of
-  cases and `./scripts/check.sh test` runs the ignored `ifc_parity` test of
-  the `axioval` facade. Each case is a directory holding
-  `definitions.json`, `ruleset.json`, `parity.json`
-  (`{"pairs": [{"capability": "<rule id>", "expression": "<rule id>"}]}`)
-  and one or more `.ifc` models. When the variable is set, a missing,
-  empty or unreadable case fails rather than skips.
+rule or a template, the re-expression must judge every object, source and
+project exactly as the capability does. The differential
+[parity harness](parity.md) checks that, on fixtures, on generated inputs,
+on pinned public IFC models in CI and on private models where a maintainer
+sets `AXIOVAL_PARITY_CASES`. It compares verdicts, severities, evidence
+exactness, finding counts, categories, rule summaries and measured values
+(within a declared rounding), tells an object a rule passed from one it
+never selected, and, for a template, also messages, related objects and
+graded deviations. Every accepted divergence is recorded there with its
+reason and decision.
 
 Each pair's evidence prints as one JSON line, and that line is what the
 migration ledger records as a proof item, tagged `"kind": "parity"`. The

@@ -175,6 +175,7 @@ pub(crate) fn template() -> Template {
             undecided: "",
             members: None,
             table: None,
+            scope: None,
         }],
     }
 }

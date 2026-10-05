@@ -36,7 +36,7 @@ pub(crate) struct Stated(pub(crate) Option<axioval_ir::PropertyValue>);
 
 /// A candidate member: the object, whether it surely belongs, and the
 /// evidence that reached it.
-type Candidate<'a> = (&'a Object, bool, Vec<Evidence>);
+pub(crate) type Candidate<'a> = (&'a Object, bool, Vec<Evidence>);
 
 /// A measured value of the object in scope read ahead of its read, by set
 /// and name: what [`resolve`] would answer for it, read for many objects
@@ -71,6 +71,10 @@ pub(crate) struct ObjectLeaves<'a> {
     listed: Vec<Evidence>,
     /// Properties of the object resolved ahead in a batch, each read once.
     prefetched: Prefetch,
+    /// Members the caller states for one aggregate source in place of
+    /// reaching them: a template's members of an anchor, or the objects
+    /// selected in a scope.
+    supplied: Option<(AggregateSource, Vec<Candidate<'a>>)>,
 }
 
 impl<'a> ObjectLeaves<'a> {
@@ -90,7 +94,16 @@ impl<'a> ObjectLeaves<'a> {
             fields: None,
             listed: Vec::new(),
             prefetched: Prefetch::new(),
+            supplied: None,
         }
+    }
+
+    /// The same leaves, an aggregate over `over` reading `members` (each
+    /// with whether it surely belongs and the evidence that reached it)
+    /// instead of the objects `over` reaches.
+    pub(crate) fn supplying(mut self, over: AggregateSource, members: Vec<Candidate<'a>>) -> Self {
+        self.supplied = Some((over, members));
+        self
     }
 
     /// The leaves of `member`, in an aggregate's member scope: the same
@@ -106,6 +119,7 @@ impl<'a> ObjectLeaves<'a> {
             fields: None,
             listed: Vec::new(),
             prefetched: Prefetch::new(),
+            supplied: None,
         }
     }
 
@@ -122,6 +136,7 @@ impl<'a> ObjectLeaves<'a> {
             fields: Some(member),
             listed: Vec::new(),
             prefetched: Prefetch::new(),
+            supplied: None,
         }
     }
 
@@ -270,6 +285,11 @@ impl<'a> ObjectLeaves<'a> {
     /// The candidate members `over` reaches from the object in scope, each
     /// with whether it surely belongs and the evidence that reached it.
     fn candidates(&self, over: &AggregateSource) -> Result<Vec<Candidate<'a>>, String> {
+        if let Some((supplied, members)) = &self.supplied
+            && supplied == over
+        {
+            return Ok(members.clone());
+        }
         let context = self.context;
         match over {
             AggregateSource::Path { path } => {

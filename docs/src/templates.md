@@ -47,9 +47,9 @@ rules crate (`body_extent/template.rs`):
 | `grades` | Whether findings are graded (the descriptor's `grades_deviation`): each states how far its value misses the bound it fails, measured from the declared bound, never the widened one, for the runtime's severity bands. |
 | `name` | How rule-scoped messages name the capability (`body-extent: …`). |
 | `defaults` | Values optional parameters take when unstated (`tolerance` 0 m). |
-| `declaration` | `Check`s over the rule's parameters, in order: `choice` (a string among options), `length` (a non-negative length), `count` (an integer of at least zero, stated where the descriptor requires it), `kind` (a parameter of its descriptor's kind, placed where the capability read it so refusals keep their order), `nonNegative` (numbers of at least zero), `traversal` (a valid `relationship` or `path`, declared only with one of the named parameters), `exclusive`, `anyOf`, `requires`, `ordered` (numbers, integers or quantities, as the descriptor types them). The first failing check leaves the rule not evaluated as an invalid declaration, worded as the capability worded it. |
+| `declaration` | `Check`s over the rule's parameters, in order: `choice` (a string among options), `length` (a non-negative length), `count` (an integer of at least zero, stated where the descriptor requires it), `kind` (a parameter of its descriptor's kind, placed where the capability read it so refusals keep their order), `nonNegative` (numbers of at least zero), `traversal` (a valid `relationship` or `path`, declared only with one of the named parameters, or anywhere where it names none), `exclusive`, `anyOf`, `requires`, `ordered` (numbers, integers or quantities, as the descriptor types them), `disciplines` (a non-empty list of valid disciplines). The first failing check leaves the rule not evaluated as an invalid declaration, worded as the capability worded it. |
 | `services` | The host services the values need (`Service`: `object-frame`, `vertical-extent`, `triangle-count`), and the message leaving the whole rule open without them, before anything is selected. |
-| `texts` | Named message parts, optionally conditional: `Condition::Positive` (a parameter above zero), `Condition::Inexact` (a value read from evidence that is not exact, such as a count of a tessellation), `Condition::Equals` (a string parameter or its default is a value). Several texts may share a name, each under its own condition: the first that holds is rendered (`plan area` or `facade area` by `measure`). |
+| `texts` | Named message parts, optionally conditional: `Condition::Positive` (a parameter above zero), `Condition::Inexact` (a value read from evidence that is not exact, such as a count of a tessellation), `Condition::Equals` (a string parameter or its default is a value), `Condition::Zero` (a value's lower end is zero: nothing surely counted). Several texts may share a name, each under its own condition: the first that holds is rendered (`plan area` or `facade area` by `measure`). |
 | `forms` | The compositions. The first form whose `when` parameters are all stated applies. |
 
 A `Form` holds:
@@ -64,7 +64,33 @@ A `Form` holds:
   the selector parameter picking them and what undecided members leave;
 - `table`: the report table it fills (`Table`: a name and columns, each a
   value under an id that may name a text), one row per selected object
-  whose values were read, passing or not.
+  whose values were read, passing or not;
+- `scope`: where the form decides when not for each selected object
+  (`Scopes`): each source, or the whole project.
+
+**Scopes.** A form with `scope` decides once per source of the session
+(an empty source included, `support::sources`), or once for the whole
+project where the boolean parameter `Scopes::across` is true, over the
+objects the rule selects there: the check an object rule cannot make,
+since an object rule over an empty selection reports nothing. A value
+reads the scope's objects as an aggregate over `Scopes::source()` (in the
+catalogue, `selection`, the rule's own selection): the objects surely
+selected are its members, those whose selection is undecided possible
+members, so a `count` is an interval from the sure to the possible. The
+`Within` judge decides it; a finding is scoped to the source or the
+project, relates the objects surely selected and cites what selected
+them, and a scope the possible objects leave undecided is not evaluated,
+each of those objects too, for its own reason. With
+`Scopes::disciplines` (a string-list parameter, checked by
+`Check::Disciplines`), only sources playing a listed discipline count
+(`SourceDisciplines`): a source declaring none is not evaluated per
+source and its selected objects are possible members across sources.
+`ScopeMessages` words the scope (`{place}`: ``in source `{source}` `` or
+`in the project`), a project without a source to judge, a source whose
+resource objects cannot be listed (`{why}`) and the discipline outcomes
+(`{disciplines}`: `` `mep` or `hvac` ``). A form's `when` picks bounds
+as for any form; an existence check is a form whose minimum is a value
+`one`, a literal 1.
 
 **Members.** A value reads an anchor's members as an aggregate over
 `Members::source(selector)`, the objects the selector parameter picks: in
@@ -220,6 +246,10 @@ states it), `{bound}` (the bound a `Within` failed or straddled, a length:
 form also reads `{target}` (the stated target as the rule declares it,
 after a space: ` 250 mm`, `` `F30` ``, ` [F30, F90]`) and
 `{tolerance:suffix}` (` (within tolerance 0.01)`, nothing when exact).
+A `Within` form also reads `{required}` (the declared range as a
+requirement reads it: `between 1 and 3`, `at least 1`, `at most 3`) and
+`{required:exactly}` (the same, `exactly 2` for equal bounds), and any
+form `{count:least}` (a value's lower end, what surely counts: `2`).
 Lengths are shown rounded to the micrometre, as the capabilities showed
 them.
 
@@ -254,6 +284,11 @@ not forked (`ForkError::Inexpressible`, naming why). An aggregate counts
 an undecided member as possibly there, where the template leaves the
 anchor open unless it already exceeds its maximum (D7): the fork's
 verdict is sound but may decide an anchor the template leaves open.
+
+A form with a `scope` expands into its decision over the aggregate of the
+rule's `selection`, as the catalogue shows it, but is never forked
+(`ForkError::Inexpressible`): an `expression` rule judges objects, never
+a source or the project as a whole.
 
 A `Compare` form expands into an `if` over the operator words, each
 branch the test its word names with the target read as a `parameter`. A
@@ -349,11 +384,11 @@ addition data the runner interprets, never code per capability:
 - **Grading** (built, `Template::grades`). A decision reports the
   deviation from the declared bound, never the widened one; severity bands
   stay the runtime's.
-- **Scopes and related objects** (members built, `Form::members`). An
-  anchor judged through the members a selector parameter picks, read as an
-  aggregate over them, findings relating the decided members; further
-  `UndecidedMembers` policies, and members read one by one (a storey's
-  levels, a space's doors), are still to come.
+- **Scopes and related objects** (members built, `Form::members`; scopes
+  built, `Form::scope`). An anchor judged through the members a selector
+  parameter picks, read as an aggregate over them, findings relating the
+  decided members; a source or the project judged over the objects the
+  rule selects there.
 - **Several findings per object.** A capability reporting one finding per
   failed check needs one decision per check in a form, each with its
   messages, so counts match (divergence D1).

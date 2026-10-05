@@ -149,6 +149,10 @@ pub enum Check {
         high: &'static str,
         message: &'static str,
     },
+    /// A string-list parameter, where stated, lists at least one valid
+    /// discipline: otherwise `` `<parameter>` is empty `` or the
+    /// discipline's refusal.
+    Disciplines { parameter: &'static str },
 }
 
 /// The host services a template's values need, and the message leaving
@@ -213,6 +217,8 @@ pub enum Condition {
         parameter: &'static str,
         value: &'static str,
     },
+    /// The value's lower end is zero: nothing surely counted.
+    Zero { value: &'static str },
 }
 
 /// One composition of a template.
@@ -236,7 +242,88 @@ pub struct Form {
     /// The report table the form fills with what it read, passing or not.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub table: Option<Table>,
+    /// Where the form decides, when not for each selected object: each
+    /// source, or the project as a whole, over the objects the rule
+    /// selects there.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope: Option<Scopes>,
 }
+
+/// A form deciding once per source of the session (an empty source
+/// included), or once for the whole project, over the objects the rule
+/// selects in it: an existence or cardinality check an object rule cannot
+/// make, since an object rule over an empty selection reports nothing.
+///
+/// A value reads the scope's objects as an aggregate over
+/// [`Scopes::source`]: the objects surely selected are its members, those
+/// whose selection is undecided possible members (a count widens over
+/// them). A finding is scoped to the source or the project, relating the
+/// objects surely selected and citing what selected them; a scope the
+/// possible members leave undecided is not evaluated, each of them too,
+/// for its own reason. Messages name the scope as `{place}` and the
+/// possible members' count as `{undecided}`.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Scopes {
+    /// The boolean parameter that, true, makes the project one scope;
+    /// each source is one otherwise.
+    pub across: &'static str,
+    /// The string-list parameter naming the disciplines whose sources
+    /// count, where the template takes one. A source of another
+    /// discipline is left out; one declaring none is not evaluated per
+    /// source (`undeclared`) and its selected objects are possible members
+    /// of the project (`undeclared_member`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disciplines: Option<&'static str>,
+    /// The scope's messages.
+    pub messages: ScopeMessages,
+}
+
+/// The messages of a [`Scopes`] form. `{source}` names a source,
+/// `{disciplines}` the declared disciplines (`` `mep` or `hvac` ``),
+/// `{why}` a refusal.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScopeMessages {
+    /// `{place}` for a source scope (``in source `{source}` ``).
+    pub source: &'static str,
+    /// `{place}` for the project.
+    pub project: &'static str,
+    /// The rule left open where there is no source to judge.
+    pub no_source: &'static str,
+    /// The rule left open where no source plays a declared discipline.
+    pub no_discipline: &'static str,
+    /// A source declaring no discipline, judged per source.
+    pub undeclared: &'static str,
+    /// A selected object of a source declaring no discipline, judged
+    /// across sources.
+    pub undeclared_member: &'static str,
+    /// A source whose resource objects cannot be listed.
+    pub unlisted: &'static str,
+    /// The rule left open where disciplines are declared and the run
+    /// states none.
+    pub no_disciplines: &'static str,
+}
+
+impl Scopes {
+    /// The aggregate source a value reads a scope's objects through, as a
+    /// block editor shows it: the objects the rule selects there.
+    #[must_use]
+    pub fn source() -> axioval_ir::contract::AggregateSource {
+        axioval_ir::contract::AggregateSource::Selector {
+            selector: Box::new(axioval_ir::contract::Selector::Expression {
+                expression: Box::new(Expression::Parameter {
+                    name: SELECTION.to_owned(),
+                    label: Some("the objects the rule selects in the scope".to_owned()),
+                }),
+            }),
+        }
+    }
+}
+
+/// The name a template reads the rule's own selection under: no parameter
+/// of any capability, only a block editor's name for it.
+pub const SELECTION: &str = "selection";
 
 /// The members of an anchor: the objects a selector parameter picks that
 /// the rule's traversal (`relationship` or `path`) reaches from the

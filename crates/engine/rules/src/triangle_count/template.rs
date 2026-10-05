@@ -61,6 +61,7 @@ pub(crate) fn template() -> Template {
             undecided: "mesh has {count} triangles, which straddles at most {maximum}{tessellated}",
             members: None,
             table: None,
+            scope: None,
         }],
     }
 }

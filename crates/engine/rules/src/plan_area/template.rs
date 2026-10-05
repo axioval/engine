@@ -96,6 +96,7 @@ fn members_form() -> Form {
             },
         }),
         table: Some(areas()),
+        scope: None,
     }
 }
 
@@ -109,6 +110,7 @@ fn own_form() -> Form {
         undecided: "{noun} is {area:area} m², which straddles the bound {bound:plain} m²",
         members: None,
         table: Some(areas()),
+        scope: None,
     }
 }
 

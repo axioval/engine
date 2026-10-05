@@ -105,6 +105,7 @@ fn stated_form() -> Form {
         undecided: "{measured}, which straddles the stated length{stated}",
         members: None,
         table: None,
+        scope: None,
     }
 }
 
@@ -130,6 +131,7 @@ fn range_form() -> Form {
         undecided: "{measured}, which straddles {bound}",
         members: None,
         table: None,
+        scope: None,
     }
 }
 

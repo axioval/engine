@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 mod compare;
+mod scopes;
 
 use axioval_engine::expression::{
     Evaluation, ExpressionContext, NotEvaluated, Reason, Value, evaluate_untraced,
@@ -33,7 +34,7 @@ use serde_json::Value as Json;
 
 use crate::body_extent::rounding_slack;
 use crate::counts::{Population, relation_text, tally};
-use crate::expression_leaves::{ObjectLeaves, Prefetch};
+use crate::expression_leaves::{Candidate, ObjectLeaves, Prefetch};
 use crate::expression_requirement::reason_of;
 use crate::level_spacing::{metres, shown};
 use crate::plan_area::{Verdict, deviation, judge};
@@ -354,13 +355,37 @@ fn check(check: &Check, rule: &CompiledRule, template: &Template) -> Result<(), 
             Ok(())
         }
         Check::Traversal { with, message } => {
-            if Parameters(rule).traversal()?.is_some() && !any(with) {
+            if Parameters(rule).traversal()?.is_some() && !with.is_empty() && !any(with) {
                 Err(invalid(*message))
             } else {
                 Ok(())
             }
         }
+        Check::Disciplines { parameter } => match Parameters(rule).strings(parameter)? {
+            Some([]) => Err(invalid(format!("`{parameter}` is empty"))),
+            Some(names) => names
+                .iter()
+                .try_for_each(|name| axioval_ir::Discipline::new(name.as_str()).map(|_| ()))
+                .map_err(|error| invalid(error.to_string())),
+            None => Ok(()),
+        },
     }
+}
+
+/// The bounds a range states, as a requirement reads them: `between 1 and
+/// 3`, `at least 1`, `at most 3`, and, `exactly` asked, `exactly 2` for
+/// equal ones.
+fn requirement(minimum: Option<f64>, maximum: Option<f64>, exactly: bool) -> Option<String> {
+    Some(match (minimum, maximum) {
+        #[allow(clippy::float_cmp)]
+        (Some(minimum), Some(maximum)) if exactly && minimum == maximum => {
+            format!("exactly {minimum}")
+        }
+        (Some(minimum), Some(maximum)) => format!("between {minimum} and {maximum}"),
+        (Some(minimum), None) => format!("at least {minimum}"),
+        (None, Some(maximum)) => format!("at most {maximum}"),
+        (None, None) => return None,
+    })
 }
 
 /// A numeric parameter as its descriptor types it: a number, an integer,
@@ -680,6 +705,8 @@ struct Read {
     /// Further placeholders the runner states: an anchor's `{undecided}`
     /// members and how they are reached (`{relation}`).
     named: Named<String>,
+    /// The declared minimum and maximum a range judge read (`{required}`).
+    bounds: Option<(Option<f64>, Option<f64>)>,
 }
 
 /// The few values of one object a form names, in reading order: a list
@@ -940,6 +967,15 @@ fn placeholder(plan: &Plan<'_>, read: &Read, key: &str) -> Option<String> {
     match format {
         // The bound as the judge words it, its number as declared.
         "plain" if name == "bound" => read.bound.clone(),
+        // The declared range as a requirement reads it.
+        "" | "exactly" if name == "required" => read
+            .bounds
+            .and_then(|(minimum, maximum)| requirement(minimum, maximum, format == "exactly")),
+        // What surely counts: the value's lower end.
+        "least" => match read.values.get(name) {
+            Some(Value::Number { value, .. }) => Some(value.lower.to_string()),
+            _ => None,
+        },
         // An area as the area capabilities show it, rounded to 1e-4 m².
         "area" => match read.values.get(name) {
             Some(Value::Number { value, .. }) => {
@@ -987,6 +1023,10 @@ fn holds(plan: &Plan<'_>, read: &Read, condition: Option<Condition>) -> bool {
         Some(Condition::Equals { parameter, value }) => matches!(
             plan.constants.get(parameter),
             Some(Constant::Text(stated)) if stated == value
+        ),
+        Some(Condition::Zero { value }) => matches!(
+            read.values.get(value),
+            Some(Value::Number { value, .. }) if value.lower == 0.0
         ),
     }
 }
@@ -1097,21 +1137,6 @@ fn over_members(expression: &Expression, selector: &str, retarget: Retarget<'_>)
     }
 }
 
-/// `expression`, its aggregates over the form's members narrowed to an
-/// anchor's `members`.
-fn narrowed(expression: &Expression, selector: &str, members: &[ObjectId]) -> Expression {
-    over_members(expression, selector, &|filter| {
-        (
-            AggregateSource::Selector {
-                selector: Box::new(Selector::Objects {
-                    objects: members.iter().cloned().collect(),
-                }),
-            },
-            filter.cloned().map(Box::new),
-        )
-    })
-}
-
 /// What one object's values come to, and the table row they fill.
 struct Judgement {
     outcome: Outcome,
@@ -1124,8 +1149,125 @@ impl From<Outcome> for Judgement {
     }
 }
 
+/// The candidates an aggregate over a form's members reads: `sure` and
+/// `possible` objects, in the project's order, as a scan of the project
+/// would list them.
+fn candidates<'a>(
+    context: &RuleContext<'a>,
+    sure: &[ObjectId],
+    possible: &[ObjectId],
+) -> Vec<Candidate<'a>> {
+    let mut candidates: Vec<Candidate<'a>> = sure
+        .iter()
+        .map(|id| (id, true))
+        .chain(possible.iter().map(|id| (id, false)))
+        .filter_map(|(id, certain)| {
+            crate::selection::object_by_id(context, id).map(|object| (object, certain, Vec::new()))
+        })
+        .collect();
+    candidates.sort_by(|left, right| left.0.id.cmp(&right.0.id));
+    candidates
+}
+
+/// Reads the plan's values for `object` with `leaves`, in order, into
+/// `read`: the outcome where one leaves the object decided or open
+/// before the decision.
+fn read_values(
+    plan: &Plan<'_>,
+    decision: &Decision,
+    context: &RuleContext<'_>,
+    object: &Object,
+    leaves: &mut ObjectLeaves<'_>,
+    read: &mut Read,
+) -> Option<Outcome> {
+    for (step, expression) in plan.values() {
+        let (outcome, evidence) = read_step(expression, step.name, leaves);
+        let before = read.evidence.len();
+        read.evidence.extend(evidence);
+        if read.evidence[before..]
+            .iter()
+            .any(|evidence| !evidence.exact)
+        {
+            read.inexact.insert(step.name, ());
+        }
+        let stated = property_read(expression)
+            .and_then(|(set, name)| leaves.stated(set, name))
+            .map(|stated| stated.0);
+        if let Some(value) = &stated {
+            read.stated.insert(step.name, value.clone());
+        }
+        // The value a comparison judges is judged as the source states it:
+        // an absence, `null` and a value of any kind reach the comparison.
+        if judges_stated(decision, step.name) {
+            if stated.is_some() {
+                continue;
+            }
+            // A reserved set the evaluator reads apart (`axioval:value`):
+            // judge what the property resolution states for it.
+            if let Some((set, name)) = property_read(expression) {
+                match crate::support::resolve(
+                    context,
+                    object,
+                    crate::support::PropertyRef { set, name },
+                ) {
+                    Ok(resolved) => {
+                        read.evidence.truncate(before);
+                        read.evidence.extend(resolved.evidence());
+                        read.stated.insert(step.name, resolved.value().cloned());
+                        continue;
+                    }
+                    Err((reason, message)) => return Some(Outcome::Open(reason, message)),
+                }
+            }
+        }
+        match outcome {
+            Ok(Value::Null) => {
+                let message = step.absent.map_or_else(
+                    || format!("`{}` is stated absent", step.name),
+                    |absent| render(plan, read, absent),
+                );
+                return Some(Outcome::finding(
+                    message,
+                    std::mem::take(&mut read.evidence),
+                ));
+            }
+            Ok(value) => {
+                let mismatched = step
+                    .expect
+                    .is_some_and(|expect| !expected(expect, &value, stated.as_ref()));
+                read.values.insert(step.name, value);
+                if mismatched {
+                    return Some(mismatch(plan, read, step));
+                }
+            }
+            // Stated, but no single value of any kind: not the kind the
+            // step needs, worded as the source states it.
+            Err(_) if step.expect.is_some() && matches!(stated, Some(Some(_))) => {
+                return Some(mismatch(plan, read, step));
+            }
+            Err(why) => {
+                let reason = leaves
+                    .first_reason()
+                    .filter(|_| matches!(why.reason, Reason::Unreadable(_)))
+                    .unwrap_or_else(|| reason_of(&why));
+                read.why = Some(match &why.reason {
+                    Reason::Unreadable(message) => refusal(message, expression, object),
+                    other => other.to_string(),
+                });
+                return Some(Outcome::Open(reason, read.why.clone().unwrap_or_default()));
+            }
+        }
+    }
+    None
+}
+
+/// Whether `decision` judges the value `name` as the source states it,
+/// rather than as the evaluator reads it.
+fn judges_stated(decision: &Decision, name: &str) -> bool {
+    matches!(decision, Decision::Compare { value, .. } if *value == name)
+}
+
 /// Reads the plan's values for `object` and decides.
-#[allow(clippy::too_many_lines)]
 fn judge_object(
     (plan, decision, scope): (&Plan<'_>, &Decision, Option<&Scope<'_>>),
     context: &RuleContext<'_>,
@@ -1143,93 +1285,17 @@ fn judge_object(
                 read.named.insert("undecided", tally.undecided.to_string());
                 read.named
                     .insert("relation", relation_text(scope.traversal.as_ref()));
+                leaves = leaves.supplying(
+                    Members::source(scope.members.selector),
+                    candidates(context, &tally.decided, &[]),
+                );
                 members = Some(tally);
             }
             Err((reason, message)) => return Outcome::Open(reason, message).into(),
         }
     }
-    for (step, expression) in plan.values() {
-        let expression = match (scope, &members) {
-            (Some(scope), Some(members)) => std::borrow::Cow::Owned(narrowed(
-                expression,
-                scope.members.selector,
-                &members.decided,
-            )),
-            _ => std::borrow::Cow::Borrowed(expression),
-        };
-        let (outcome, evidence) = read_step(&expression, step.name, &mut leaves);
-        let before = read.evidence.len();
-        read.evidence.extend(evidence);
-        if read.evidence[before..]
-            .iter()
-            .any(|evidence| !evidence.exact)
-        {
-            read.inexact.insert(step.name, ());
-        }
-        let stated = property_read(&expression)
-            .and_then(|(set, name)| leaves.stated(set, name))
-            .map(|stated| stated.0);
-        if let Some(value) = &stated {
-            read.stated.insert(step.name, value.clone());
-        }
-        // The value a comparison judges is judged as the source states it:
-        // an absence, `null` and a value of any kind reach the comparison.
-        if matches!(decision, Decision::Compare { value, .. } if *value == step.name) {
-            if stated.is_some() {
-                continue;
-            }
-            // A reserved set the evaluator reads apart (`axioval:value`):
-            // judge what the property resolution states for it.
-            if let Some((set, name)) = property_read(&expression) {
-                match crate::support::resolve(
-                    context,
-                    object,
-                    crate::support::PropertyRef { set, name },
-                ) {
-                    Ok(resolved) => {
-                        read.evidence.truncate(before);
-                        read.evidence.extend(resolved.evidence());
-                        read.stated.insert(step.name, resolved.value().cloned());
-                        continue;
-                    }
-                    Err((reason, message)) => return Outcome::Open(reason, message).into(),
-                }
-            }
-        }
-        match outcome {
-            Ok(Value::Null) => {
-                let message = step.absent.map_or_else(
-                    || format!("`{}` is stated absent", step.name),
-                    |absent| render(plan, &read, absent),
-                );
-                return Outcome::finding(message, read.evidence).into();
-            }
-            Ok(value) => {
-                let mismatched = step
-                    .expect
-                    .is_some_and(|expect| !expected(expect, &value, stated.as_ref()));
-                read.values.insert(step.name, value);
-                if mismatched {
-                    return mismatch(plan, &read, step).into();
-                }
-            }
-            // Stated, but no single value of any kind: not the kind the
-            // step needs, worded as the source states it.
-            Err(_) if step.expect.is_some() && matches!(stated, Some(Some(_))) => {
-                return mismatch(plan, &read, step).into();
-            }
-            Err(why) => {
-                let reason = leaves
-                    .first_reason()
-                    .filter(|_| matches!(why.reason, Reason::Unreadable(_)))
-                    .unwrap_or_else(|| reason_of(&why));
-                read.why = Some(match &why.reason {
-                    Reason::Unreadable(message) => refusal(message, &expression, object),
-                    other => other.to_string(),
-                });
-                return Outcome::Open(reason, read.why.clone().unwrap_or_default()).into();
-            }
-        }
+    if let Some(outcome) = read_values(plan, decision, context, object, &mut leaves, &mut read) {
+        return outcome.into();
     }
     let undecided = members.as_ref().map_or(0, |members| members.undecided);
     let related = members
@@ -1278,6 +1344,7 @@ fn judge_object(
             row,
         };
     };
+    read.bounds = Some((judged.minimum, judged.maximum));
     if undecided > 0
         && let Some(scope) = scope
     {
@@ -1293,10 +1360,18 @@ fn judge_object(
             };
         }
     }
-    let outcome = match judged.verdict {
+    let outcome = ranged(plan, read, &judged, related);
+    Judgement { outcome, row }
+}
+
+/// What a range judge's verdict comes to, worded with the form's
+/// messages: a finding relating `related` (graded where the template
+/// grades), or the object open naming the bound it straddles.
+fn ranged(plan: &Plan<'_>, mut read: Read, judged: &Judged, related: Vec<ObjectId>) -> Outcome {
+    match &judged.verdict {
         Verdict::Pass => Outcome::Passed,
         Verdict::Fail(bound) => {
-            read.bound = Some(bound);
+            read.bound = Some(bound.clone());
             Outcome::Finding {
                 message: render(plan, &read, plan.form.fail),
                 evidence: read.evidence,
@@ -1309,14 +1384,13 @@ fn judge_object(
             }
         }
         Verdict::Undecided(bound) => {
-            read.bound = Some(bound);
+            read.bound = Some(bound.clone());
             Outcome::Open(
                 NotEvaluatedReason::IncompleteEvidence,
                 render(plan, &read, plan.form.undecided),
             )
         }
-    };
-    Judgement { outcome, row }
+    }
 }
 
 /// The report table a form fills, its column ids rendered.
@@ -1357,6 +1431,9 @@ pub(crate) fn run(
             NotEvaluatedReason::MissingService,
             services.message,
         );
+    }
+    if let Some(scopes) = &plan.form.scope {
+        return scopes::run(&plan, &effective(&plan), scopes, context, rule);
     }
     let scope = match Scope::of(&plan, context, rule) {
         Ok(scope) => scope,
@@ -1623,6 +1700,11 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
         form: &template.forms[binding.form],
         bound: Arc::new(binding),
     };
+    if plan.form.scope.is_some() {
+        return Err(ForkError::Inexpressible(
+            "an expression rule judges objects, not a source or the project as a whole".to_owned(),
+        ));
+    }
     if let (Decision::Compare { value: subject, .. }, Some(comparison)) =
         (&plan.form.decision, &plan.comparison)
     {

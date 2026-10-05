@@ -1,0 +1,26 @@
+{
+  "expression": {
+    "kind": "inUnit",
+    "operand": {
+      "kind": "property",
+      "propertySet": "axioval:measured",
+      "property": "extent_z"
+    },
+    "unit": "mm",
+    "label": "height in millimetres"
+  },
+  "blocks": {
+    "type": "expression.inUnit",
+    "label": "height in millimetres",
+    "fields": {
+      "unit": "mm"
+    },
+    "inputs": {
+      "operand": {
+        "block": {
+          "type": "measured.extent_z"
+        }
+      }
+    }
+  }
+}

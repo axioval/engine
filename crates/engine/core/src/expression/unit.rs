@@ -394,6 +394,13 @@ pub const UNIT_SYMBOLS: &[UnitSymbol] = &[
         exponents: e(2, 1, -3, 0, 0, 0),
         label: &axioval_ir::measured::en_de("kilowatt", "Kilowatt"),
     },
+    UnitSymbol {
+        symbol: "%",
+        aliases: &[],
+        scale: 1e-2,
+        exponents: e(0, 0, 0, 0, 0, 0),
+        label: &axioval_ir::measured::en_de("percent", "Prozent"),
+    },
 ];
 
 /// A unit symbol's scale to the coherent unit and its exponents.
@@ -452,7 +459,7 @@ pub fn parse_unit(text: &str) -> Result<(f64, Unit), String> {
 fn factor_unit(factor: &str) -> Result<(f64, Unit), String> {
     let split = factor
         .char_indices()
-        .find(|(_, character)| !(character.is_ascii_alphabetic() || *character == '°'))
+        .find(|(_, character)| !(character.is_ascii_alphabetic() || matches!(character, '°' | '%')))
         .map_or(factor.len(), |(index, _)| index);
     let (name, exponent) = factor.split_at(split);
     if name.is_empty() {

@@ -6,6 +6,16 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Added
 
+- `inUnit` restates a value in a written unit (#277): `{"kind": "inUnit",
+  "operand": …, "unit": "mm"}` keeps the value, in coherent units, and
+  shows it in that unit in explanations and in a message's `{label}`
+  (`0.3 m` shows `300 mm`). The type checker refuses a unit of another
+  dimension (`UnitMismatch`, "it restates …") or one that does not parse;
+  an operand known only when read is checked when evaluated. `%` is a unit
+  symbol (scale 0.01, a plain number). The node is catalogued (the new
+  field reference `unit` and result rule `namedUnit`), mapped to blocks, in
+  the JSON Schema and has a golden fixture.
+
 - A golden test pins the outside contract of every built-in capability
   (`crates/engine/rules/tests/golden/descriptors.json`): its id, every
   parameter's name, package kind, requirement, per-object and
@@ -196,6 +206,16 @@ All notable changes are documented here. This project follows Semantic Versionin
   stated)`).
 
 ### Changed
+
+- **Behaviour:** a `sum` over no member is 0 in the unit the type checker
+  types its members' value in (#277), instead of a plain 0 that a quantity
+  bound refused as a unit mismatch and left not evaluated: `sum(…) ≤ 3 m²`
+  holds with 0 m² for a wall without openings. The compiled plan carries
+  the ruleset's declared property and derived-value types
+  (`expression::DeclaredTypes`), which the runtime installs for every run,
+  so a declared property's dimension types the empty sum as at compile
+  time. Only a value no declaration types sums to a plain 0; `inUnit`
+  states its unit.
 
 - **Behaviour:** a stated-absent value never passes an expression
   silently (#269). Truth is Kleene's three-valued logic over true, false

@@ -854,6 +854,30 @@
             "text": "Kilowatt"
           }
         ]
+      },
+      {
+        "symbol": "%",
+        "scale": 0.01,
+        "exponents": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "label": [
+          {
+            "language": "en",
+            "text": "percent"
+          },
+          {
+            "language": "de",
+            "text": "Prozent"
+          }
+        ]
       }
     ],
     "dimensions": [
@@ -34887,6 +34911,56 @@
         {
           "language": "de",
           "text": "Eine Neigung umgerechnet: 1:12 als Verhältnis sind 8,33 Prozent und etwa 4,76° als Winkel."
+        }
+      ]
+    },
+    {
+      "kind": "inUnit",
+      "category": "arithmetic",
+      "fields": [
+        {
+          "name": "operand",
+          "kind": {
+            "type": "expression",
+            "accepts": [
+              "integer",
+              "number",
+              "angle"
+            ]
+          },
+          "required": true
+        },
+        {
+          "name": "unit",
+          "kind": {
+            "type": "name",
+            "refers": "unit"
+          },
+          "required": true
+        }
+      ],
+      "result": {
+        "type": "namedUnit",
+        "field": "unit"
+      },
+      "label": [
+        {
+          "language": "en",
+          "text": "In a unit"
+        },
+        {
+          "language": "de",
+          "text": "In einer Einheit"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The value restated in a unit of its dimension, such as mm, cm or %: the same value, shown in that unit."
+        },
+        {
+          "language": "de",
+          "text": "Der Wert in einer Einheit seiner Dimension ausgedrückt, etwa mm, cm oder %: derselbe Wert, in dieser Einheit angezeigt."
         }
       ]
     },

@@ -229,6 +229,7 @@ Every node may carry a `label`, which findings name in place of the node's rende
 | `sin`, `cos`, `tan` | `operand` | trigonometry of a plane angle |
 | `atan2` | `y`, `x` | the plane angle of the vector `(x, y)` |
 | `convertSlope` | `operand`, `from`, `to` | a slope restated between `ratio`, `percent` and `angle` |
+| `inUnit` | `operand`, `unit` | the operand restated in a written unit of its dimension (`mm`, `cm`, `%`): the same value, shown in that unit |
 | `aggregate` | `function`, `over`, `where`?, `value`? | `count`, `sum`, `min`, `max`, `average`, `any`, `all`, `none` or `distinctCount` over the objects a `path`, a derived `group` or a `selector` reaches, filtered by `where`, `value` evaluated per member; see [Aggregates](./expressions.md#aggregates) |
 | `ruleOutcome`, `selected`, `findingCount`, `deviation` | `rule` | another rule's verdict, whether it selected the object in scope, its finding count or its greatest graded deviation about the object; see [Other rules' outcomes](./expressions.md#other-rules-outcomes) |
 | `concat` | `operands` | joined text |

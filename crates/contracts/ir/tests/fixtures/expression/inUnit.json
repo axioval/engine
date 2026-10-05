@@ -1,0 +1,10 @@
+{
+  "kind": "inUnit",
+  "operand": {
+    "kind": "property",
+    "propertySet": "axioval:measured",
+    "property": "extent_z"
+  },
+  "unit": "mm",
+  "label": "height in millimetres"
+}

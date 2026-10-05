@@ -117,6 +117,7 @@ pub(crate) struct DerivedValues {
     definitions: Arc<BTreeMap<String, Expression>>,
     bindings: Option<ConceptBindings>,
     budget: Option<Arc<crate::expression::EvaluationBudget>>,
+    types: Option<Arc<crate::expression::DeclaredTypes>>,
     cache: Mutex<BTreeMap<(ObjectId, String), Computed>>,
 }
 
@@ -125,17 +126,19 @@ pub(crate) struct DerivedValues {
 pub(crate) struct ValueExpressions(pub(crate) Arc<BTreeMap<String, Expression>>);
 
 impl DerivedValues {
-    /// Values of `definitions`, binding concepts through `bindings`, with
-    /// an empty cache.
+    /// Values of `definitions`, binding concepts through `bindings` and
+    /// typed as `types` declares, with an empty cache.
     pub(crate) fn new(
         definitions: Arc<BTreeMap<String, Expression>>,
         bindings: Option<ConceptBindings>,
         budget: Option<Arc<crate::expression::EvaluationBudget>>,
+        types: Option<Arc<crate::expression::DeclaredTypes>>,
     ) -> Self {
         Self {
             definitions,
             bindings,
             budget,
+            types,
             cache: Mutex::new(BTreeMap::new()),
         }
     }
@@ -297,6 +300,10 @@ impl ExpressionContext for ObjectReads<'_> {
 
     fn parameter(&mut self, name: &str) -> Leaf {
         Leaf::unreadable(format!("a value reads no rule parameter, not `{name}`"))
+    }
+
+    fn declared_types(&self) -> Option<&crate::expression::DeclaredTypes> {
+        self.values.types.as_deref()
     }
 
     fn derived(&mut self, name: &str) -> Leaf {

@@ -476,6 +476,13 @@ impl ExpressionContext for ObjectLeaves<'_> {
         Ok(members)
     }
 
+    fn declared_types(&self) -> Option<&axioval_engine::expression::DeclaredTypes> {
+        self.context
+            .services
+            .get::<std::sync::Arc<axioval_engine::expression::DeclaredTypes>>()
+            .map(AsRef::as_ref)
+    }
+
     fn listing_evidence(&mut self) -> Vec<Evidence> {
         std::mem::take(&mut self.listed)
     }

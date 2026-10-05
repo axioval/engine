@@ -474,6 +474,9 @@ pub(crate) fn install(
         services
             .get::<Arc<crate::expression::EvaluationBudget>>()
             .cloned(),
+        services
+            .get::<Arc<crate::expression::DeclaredTypes>>()
+            .cloned(),
     ));
     services.replace(PropertyResolutionServiceHandle::new(Arc::new(
         DerivedProperties {

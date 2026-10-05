@@ -109,8 +109,14 @@ fn quantified(all: bool, members: &[Member]) -> Result<Value, Failure> {
     }
 }
 
-/// The aggregate `function` over `members`.
-pub(super) fn aggregate(function: AggregateFunction, members: &[Member]) -> Result<Value, Failure> {
+/// The aggregate `function` over `members`; `typed` is the unit the
+/// members' value is typed in, if the expression tells, which a sum over no
+/// member takes.
+pub(super) fn aggregate(
+    function: AggregateFunction,
+    members: &[Member],
+    typed: &dyn Fn() -> Option<Unit>,
+) -> Result<Value, Failure> {
     use AggregateFunction as F;
     match function {
         F::Count => {
@@ -123,7 +129,7 @@ pub(super) fn aggregate(function: AggregateFunction, members: &[Member]) -> Resu
             other => Ok(other),
         },
         F::All => quantified(true, members),
-        F::Sum | F::Min | F::Max | F::Average => numeric(function, members),
+        F::Sum | F::Min | F::Max | F::Average => numeric(function, members, typed),
         F::DistinctCount => distinct(members),
     }
 }
@@ -189,7 +195,11 @@ fn numbers(members: &[Member]) -> Result<Numbers, Failure> {
     Ok((certain, possible, unit))
 }
 
-fn numeric(function: AggregateFunction, members: &[Member]) -> Result<Value, Failure> {
+fn numeric(
+    function: AggregateFunction,
+    members: &[Member],
+    typed: &dyn Fn() -> Option<Unit>,
+) -> Result<Value, Failure> {
     use AggregateFunction as F;
     // A certain member stating no value decides, whatever the others are.
     if stated_absent(members) == Some(true) {
@@ -204,9 +214,11 @@ fn numeric(function: AggregateFunction, members: &[Member]) -> Result<Value, Fai
         return if members.iter().any(|member| !member.certain) && function != F::Sum {
             Err(undecided(members))
         } else if function == F::Sum {
+            // Zero of the members' typed unit, so it compares with a bound
+            // in that unit; a plain zero where only a read could tell.
             Ok(Value::Number {
                 value: Interval::point(0.0),
-                unit: Unit::NONE,
+                unit: typed().unwrap_or(Unit::NONE),
             })
         } else {
             Ok(Value::Null)

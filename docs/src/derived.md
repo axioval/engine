@@ -681,8 +681,8 @@ anchor reaching no numerator object (a `count` of at least one), the
 largest overlap's share of the footprint, the graded shortfall and absence
 of contact, and the top or bottom storey left out. Ratios are rounded to
 `1e-9` before they are compared, as the capability compares the quotient
-the literal bound names. A sum of areas divided by `1 m²` is a plain
-number, so a sum over no member is a plain 0. These differ:
+the literal bound names. A sum over no member is 0 in its members' unit,
+so a sum of areas divided by `1 m²` is a plain 0. These differ:
 
 - an `area-ratio` member stating no area leaves its anchor open; in an
   aggregate it makes the sum `null`, so the rewrite requires every member

@@ -25,6 +25,7 @@ use crate::{
 pub const SUPPORTED_SCHEMA_VERSION: &str = "0.1.0";
 
 /// Compiles a ruleset against its definition packages and host-controlled capabilities.
+#[allow(clippy::too_many_lines)] // One pass over the ruleset, in compilation order.
 pub fn compile(
     registry: &CapabilityRegistry,
     definitions: &[DefinitionPackage],
@@ -121,6 +122,7 @@ pub fn compile(
     Ok(ExecutionPlan {
         rules,
         deferred,
+        types: Arc::new(vocabulary.declared_types()),
         concepts: Arc::new(concepts),
         refinements,
         gates,
@@ -840,6 +842,7 @@ pub fn compile_rulesets(
     let mut auxiliary = BTreeSet::new();
     let mut derived: Derived = (Vec::new(), Vec::new(), Vec::new());
     let mut values: BTreeMap<String, axioval_ir::contract::Expression> = BTreeMap::new();
+    let mut types = crate::expression::DeclaredTypes::default();
     for ruleset in rulesets {
         let package = &ruleset.package.id;
         if !packages_seen.insert(package.as_str()) {
@@ -890,6 +893,7 @@ pub fn compile_rulesets(
             (plan.classifications, plan.groupings, plan.relations),
         )?;
         merge_values(&mut values, &plan.values)?;
+        types.extend(&plan.types);
         for mut rule in plan.deferred {
             rule.id = qualify(&rule.id)?;
             deferred.push(rule);
@@ -922,6 +926,7 @@ pub fn compile_rulesets(
         relations,
         supplied: BTreeMap::new(),
         values: Arc::new(values),
+        types: Arc::new(types),
     })
 }
 

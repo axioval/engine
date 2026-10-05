@@ -180,16 +180,20 @@ impl Value {
 /// states, as a source states its values. A decimal prefix (`mm`, `cm`)
 /// divides by an exact power of ten, which rounds correctly, so `30 mm` is
 /// the same double as `0.030 m`.
-#[allow(clippy::float_cmp)]
 fn coherent(value: f64, scale: f64) -> f64 {
-    if scale < 1.0 {
-        let inverse = (1.0 / scale).round();
-        let power_of_ten = (0..=15).any(|exponent| inverse == 10f64.powi(exponent));
-        if power_of_ten && (1.0 / inverse - scale).abs() <= f64::EPSILON * scale {
-            return value / inverse;
-        }
+    decimal_inverse(scale).map_or(value * scale, |inverse| value / inverse)
+}
+
+/// The exact power of ten a decimal prefix's `scale` is the inverse of
+/// (`1000` for `mm`), if it is one.
+#[allow(clippy::float_cmp)]
+fn decimal_inverse(scale: f64) -> Option<f64> {
+    if scale >= 1.0 {
+        return None;
     }
-    value * scale
+    let inverse = (1.0 / scale).round();
+    let power_of_ten = (0..=15).any(|exponent| inverse == 10f64.powi(exponent));
+    (power_of_ten && (1.0 / inverse - scale).abs() <= f64::EPSILON * scale).then_some(inverse)
 }
 
 impl fmt::Display for Value {
@@ -491,6 +495,12 @@ pub trait ExpressionContext {
         Err("aggregates cannot be listed here".into())
     }
 
+    /// The types the compiled ruleset declares, which type a sum over no
+    /// member as the compiler did; none outside a run.
+    fn declared_types(&self) -> Option<&super::DeclaredTypes> {
+        None
+    }
+
     /// The evidence of the listing [`Self::members`] last answered beyond
     /// its members' own: the measurement a measured member list comes
     /// from, cited even when it lists none.
@@ -619,9 +629,13 @@ impl Evaluator<'_> {
                 .entry(label.to_owned())
                 .or_insert_with(|| value.clone());
         }
-        let (value, not_evaluated) = match &outcome {
-            Ok(value) => (Some(value.to_string()), None),
-            Err(why) => (None, Some(why.reason.to_string())),
+        let (value, not_evaluated) = match (&outcome, expression) {
+            // A value restated in a unit is shown in it.
+            (Ok(Value::Number { value, .. }), Expression::InUnit { unit, .. }) => {
+                (Some(restated(*value, unit)), None)
+            }
+            (Ok(value), _) => (Some(value.to_string()), None),
+            (Err(why), _) => (None, Some(why.reason.to_string())),
         };
         self.trace.push(ExplanationEntry {
             path: path.to_owned(),
@@ -904,6 +918,20 @@ impl Evaluator<'_> {
                 let (value, unit) = number(&value).map_err(here)?;
                 unary(expression, value, &unit).map_err(here)
             }
+            Expression::InUnit { operand, unit, .. } => {
+                let value = self.eval(operand, &child("operand"))?;
+                if value == Value::Null {
+                    return Ok(Value::Null);
+                }
+                let (value, own) = number(&value).map_err(here)?;
+                let (_, target) = parse_unit(unit).map_err(|why| here(Reason::Mismatch(why)))?;
+                if own != target {
+                    return Err(here(Reason::Mismatch(format!(
+                        "`inUnit` restates {own} in `{unit}`, which is {target}"
+                    ))));
+                }
+                Ok(Value::Number { value, unit: own })
+            }
             Expression::Atan2 { y, x, .. } => {
                 let y = self.eval(y, &child("y"));
                 let x = self.eval(x, &child("x"));
@@ -953,7 +981,14 @@ impl Evaluator<'_> {
                     leaf,
                 });
                 let members = members.map_err(|why| here(Reason::Unreadable(why)))?;
-                super::aggregate::aggregate(*function, &members).map_err(|why| match why {
+                // A sum over no member is zero of the unit its value is typed in.
+                let declared = self.context.declared_types().cloned();
+                let typed = || {
+                    value.as_deref().and_then(|value| {
+                        super::types::member_value_unit(over, value, declared.as_ref())
+                    })
+                };
+                super::aggregate::aggregate(*function, &members, &typed).map_err(|why| match why {
                     super::aggregate::Failure::Member(inner) => inner,
                     super::aggregate::Failure::Here(reason) => here(reason),
                 })
@@ -1249,6 +1284,23 @@ fn unary(expression: &Expression, value: Interval, unit: &Unit) -> Result<Value,
         }
         _ => unreachable!("only unary numeric kinds reach here"),
     })
+}
+
+/// `value`, in coherent units, as written in `unit`: `0.3 m` in `mm` is
+/// `300 mm`. A decimal prefix multiplies by an exact power of ten, so a
+/// value stated in the unit shows as stated.
+fn restated(value: Interval, unit: &str) -> String {
+    let Ok((scale, _)) = parse_unit(unit) else {
+        return format!("{}..{}", value.lower, value.upper);
+    };
+    let decimal = decimal_inverse(scale);
+    let shown = |coherent: f64| decimal.map_or(coherent / scale, |inverse| coherent * inverse);
+    let unit = unit.trim();
+    if value.is_point() {
+        format!("{} {unit}", shown(value.lower))
+    } else {
+        format!("{}..{} {unit}", shown(value.lower), shown(value.upper))
+    }
 }
 
 fn slope_name(form: SlopeForm) -> &'static str {

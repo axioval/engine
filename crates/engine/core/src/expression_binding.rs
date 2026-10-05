@@ -277,6 +277,23 @@ fn column_kind_type(kind: ColumnKind) -> Option<Type> {
     })
 }
 
+impl Vocabulary<'_> {
+    /// The types the vocabulary declares, as a run installs them.
+    pub(crate) fn declared_types(&self) -> crate::expression::DeclaredTypes {
+        let properties = self
+            .properties
+            .iter()
+            .map(|(id, property)| {
+                (
+                    (*id).to_owned(),
+                    property_type(&property.value_kind, property.unit_dimension.as_deref()),
+                )
+            })
+            .collect();
+        crate::expression::DeclaredTypes::new(properties, self.values.clone())
+    }
+}
+
 /// What a ruleset's expressions may read: its concepts, the vocabulary's
 /// property definitions and the types of its derived values.
 pub(crate) struct Vocabulary<'a> {

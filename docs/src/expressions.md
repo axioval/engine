@@ -68,6 +68,17 @@ evaluated, each with its own reason.
 | `sin`, `cos`, `tan` | a plane angle in, a plain number out |
 | `atan2` | two operands of one unit, a plane angle out |
 | `convertSlope` | `ratio` and `percent` are plain numbers, `angle` a plane angle |
+| `inUnit` | the operand's unit, checked against the written unit's dimension |
+
+`inUnit(value, unit)` restates a value in a written unit of its dimension
+(`mm`, `cm`, `m2`, `%`, `deg`): the value stays the same, in coherent
+units, and is shown in that unit, in explanations and in a finding's
+`{label}` (`0.3 m` in `mm` shows `300 mm`, `0.05` in `%` shows `5 %`).
+The type checker refuses a unit of another dimension where the operand's
+unit is known (`UnitMismatch`, "it restates …") and a unit that does not
+parse (`InvalidUnit`); one known only when read is checked when evaluated.
+An editor uses it to show a value in a display unit, and to state the unit
+of a value only a read could tell, such as an aggregate's members' value.
 
 ## Truth
 
@@ -210,7 +221,7 @@ A member value that is `null` is never skipped and never false. `any` is `or` ov
 
 | Members | `any` | `all` | `none` | `sum` | `min`, `max`, `average` | `count` |
 | --- | --- | --- | --- | --- | --- | --- |
-| none | F | F | T | 0 | N | 0 |
+| none | F | F | T | 0 in the members' unit | N | 0 |
 | T | T | T | F | | | 1 |
 | F | F | F | T | | | 1 |
 | N | N | N | N | N | N | 1 |
@@ -222,6 +233,14 @@ A member value that is `null` is never skipped and never false. `any` is `or` ov
 | 1 and N | | | | N | N | 2 |
 
 `all` over no member is false: it never holds vacuously, as a `related` selector's `all`.
+
+`sum` over no member is 0 in the unit its members' value is typed in, as the
+type checker types it: a measured value or member field, a property of a
+declared kind and dimension, a derived value, a literal, an `inUnit`, and
+arithmetic over them. So `sum(openings' area) ≤ 3 m²` holds with 0 m² for
+a wall without openings, never a unit mismatch. Only a value whose unit no
+declaration tells (a property declared without a dimension, a parameter)
+sums to a plain 0 over no member; `inUnit` states its unit.
 
 ## Other rules' outcomes
 

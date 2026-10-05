@@ -179,6 +179,8 @@ pub enum Refers {
     SourceField,
     Pattern,
     Label,
+    /// A written unit, such as `mm` or `%`, of the engine's unit symbols.
+    Unit,
 }
 
 /// One field of a node.
@@ -219,6 +221,8 @@ pub enum ResultRule {
     Aggregate,
     /// An angle when converting to an angle, else a plain number.
     Slope,
+    /// A number of the unit the field `field` names.
+    NamedUnit { field: &'static str },
 }
 
 /// The categories expression node kinds are grouped by in an editor.
@@ -825,6 +829,19 @@ pub const EXPRESSION_KINDS: &[NodeKind] = &[
             "A slope restated: 1:12 as a ratio is 8.33 as a percentage and about 4.76° as an angle.",
             "Eine Neigung umgerechnet: 1:12 als Verhältnis sind 8,33 Prozent und etwa 4,76° als \
              Winkel.",
+        ),
+    },
+    NodeKind {
+        kind: "inUnit",
+        category: "arithmetic",
+        fields: &[one("operand", NUMERIC), named("unit", Refers::Unit, true)],
+        result: ResultRule::NamedUnit { field: "unit" },
+        label: &en_de("In a unit", "In einer Einheit"),
+        help: &en_de(
+            "The value restated in a unit of its dimension, such as mm, cm or %: the same \
+             value, shown in that unit.",
+            "Der Wert in einer Einheit seiner Dimension ausgedrückt, etwa mm, cm oder %: \
+             derselbe Wert, in dieser Einheit angezeigt.",
         ),
     },
     NodeKind {
@@ -1687,6 +1704,7 @@ mod tests {
             E::Floor { .. } => "floor", E::Ceil { .. } => "ceil", E::Sqrt { .. } => "sqrt",
             E::Sin { .. } => "sin", E::Cos { .. } => "cos", E::Tan { .. } => "tan",
             E::Atan2 { .. } => "atan2", E::ConvertSlope { .. } => "convertSlope",
+            E::InUnit { .. } => "inUnit",
             E::Aggregate { .. } => "aggregate", E::RuleOutcome { .. } => "ruleOutcome",
             E::Selected { .. } => "selected",
             E::FindingCount { .. } => "findingCount", E::Deviation { .. } => "deviation",

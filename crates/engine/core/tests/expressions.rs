@@ -1072,3 +1072,116 @@ fn fuzzing_text_never_panics() {
     }
     assert!(parsed > 100, "only {parsed} texts parsed");
 }
+
+#[test]
+fn in_unit_restates_a_value_checked_by_dimension() {
+    let quantity = |value: f64, unit: &str| json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": unit}});
+    let in_unit = |operand: serde_json::Value, unit: &str| json!({"kind": "inUnit", "operand": operand, "unit": unit});
+    let run = |value: serde_json::Value| {
+        let evaluation = evaluate(&expression(value), "v", &mut Context::default());
+        let shown = evaluation.trace.last().and_then(|step| step.value.clone());
+        (evaluation.outcome, shown)
+    };
+    // The same value, shown in the unit.
+    let (outcome, shown) = run(in_unit(quantity(0.3, "m"), "mm"));
+    assert_eq!(
+        outcome,
+        Ok(Value::quantity(
+            Interval::point(0.3),
+            QuantityDimension::Length
+        ))
+    );
+    assert_eq!(shown.as_deref(), Some("300 mm"));
+    let (_, shown) = run(in_unit(quantity(1.25, "m"), "cm"));
+    assert_eq!(shown.as_deref(), Some("125 cm"));
+    let ratio = json!({"kind": "literal", "value": {"type": "number", "value": 0.05}});
+    let (outcome, shown) = run(in_unit(ratio, "%"));
+    assert_eq!(outcome, Ok(Value::number(0.05)));
+    assert_eq!(shown.as_deref(), Some("5 %"));
+    // A restated value compares with a literal in any unit of its dimension.
+    let compared = json!({"kind": "compare", "operator": "lessThan",
+        "left": in_unit(quantity(300.0, "mm"), "cm"), "right": quantity(0.31, "m")});
+    assert_eq!(run(compared).0, Ok(Value::Boolean(true)));
+    // `null` stays `null`; another dimension is not evaluated when read.
+    assert_eq!(
+        run(in_unit(json!({"kind": "null"}), "mm")).0,
+        Ok(Value::Null)
+    );
+    let mut context = Context::default();
+    context.parameters.insert("a".into(), Value::number(3.0));
+    let why = evaluate(
+        &expression(in_unit(parameter("a"), "mm")),
+        "v",
+        &mut context,
+    )
+    .outcome
+    .unwrap_err();
+    assert!(matches!(why.reason, Reason::Mismatch(_)), "{why}");
+    // The type checker checks the dimension where it is known.
+    let typed = check(
+        &expression(in_unit(property("Load"), "mm")),
+        "v",
+        &Environment,
+    );
+    assert_eq!(
+        typed,
+        Ok(Type::Number(Unit::of(Some(QuantityDimension::Length))))
+    );
+    let (path, kind) = type_error(in_unit(property("Height"), "m2"));
+    assert_eq!(path, "requirement");
+    assert!(
+        matches!(
+            kind,
+            TypeErrorKind::UnitMismatch {
+                operation: "restates",
+                ..
+            }
+        ),
+        "{kind:?}"
+    );
+    let (_, kind) = type_error(in_unit(property("Height"), "parsec"));
+    assert!(matches!(kind, TypeErrorKind::InvalidUnit(_)), "{kind:?}");
+    let blank: Expression = serde_json::from_value(json!({"kind": "inUnit",
+        "operand": quantity(1.0, "m"), "unit": " "}))
+    .unwrap();
+    assert!(blank.validate().is_err());
+}
+
+#[test]
+fn a_sum_over_no_member_is_zero_in_its_members_unit() {
+    let at_most = |value: serde_json::Value| {
+        expression(json!({"kind": "compare", "operator": "lessThanOrEquals",
+            "left": {"kind": "aggregate", "function": "sum",
+                "over": {"kind": "path", "path": ["Hosts"]}, "value": value},
+            "right": {"kind": "literal", "value": {"type": "quantity", "value": 3.0, "unit": "m"}}}))
+    };
+    let measured =
+        json!({"kind": "property", "propertySet": "axioval:measured", "property": "extent_z"});
+    let restated = json!({"kind": "inUnit", "operand": property("Load"), "unit": "mm"});
+    for value in [measured, restated] {
+        let requirement = at_most(value.clone());
+        assert_eq!(
+            check(&requirement, "requirement", &Environment),
+            Ok(Type::Boolean)
+        );
+        let evaluation = evaluate(&requirement, "requirement", &mut Members(Vec::new()));
+        assert_eq!(evaluation.outcome, Ok(Value::Boolean(true)), "{value}");
+        let sum = evaluation
+            .trace
+            .iter()
+            .find(|step| step.kind == "aggregate")
+            .and_then(|step| step.value.clone());
+        assert_eq!(sum.as_deref(), Some("0 m"));
+    }
+    // A value whose unit only a read can tell sums to a plain zero, which
+    // a length does not compare with: `inUnit` states the unit.
+    let unread = evaluate(
+        &at_most(property("Load")),
+        "requirement",
+        &mut Members(Vec::new()),
+    );
+    assert!(matches!(
+        unread.outcome.map_err(|why| why.reason),
+        Err(Reason::Mismatch(_))
+    ));
+}

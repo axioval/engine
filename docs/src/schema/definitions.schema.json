@@ -1245,6 +1245,34 @@
         },
         {
           "additionalProperties": false,
+          "description": "`operand` restated in `unit` (`mm`, `cm`, `%`), a written unit of\nthe same dimension: the same value, shown in that unit.",
+          "properties": {
+            "kind": {
+              "const": "inUnit",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "operand": {
+              "$ref": "#/$defs/Expression"
+            },
+            "unit": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "operand",
+            "unit"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
           "description": "An aggregate over the objects `over` reaches from the object in\nscope, those `filter` (`where`) selects: `value` is evaluated with\neach member in scope. A member whose membership cannot be decided\nwidens the result or leaves it not evaluated, never dropped.",
           "properties": {
             "function": {

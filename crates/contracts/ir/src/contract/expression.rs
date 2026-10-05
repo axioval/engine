@@ -301,6 +301,14 @@ pub enum Expression {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         label: Option<String>,
     },
+    /// `operand` restated in `unit` (`mm`, `cm`, `%`), a written unit of
+    /// the same dimension: the same value, shown in that unit.
+    InUnit {
+        operand: Box<Expression>,
+        unit: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        label: Option<String>,
+    },
     /// An aggregate over the objects `over` reaches from the object in
     /// scope, those `filter` (`where`) selects: `value` is evaluated with
     /// each member in scope. A member whose membership cannot be decided
@@ -555,7 +563,7 @@ pub enum ExpressionError {
 
 impl Expression {
     /// Every node `kind`, in declaration order.
-    pub const KINDS: [&'static str; 46] = [
+    pub const KINDS: [&'static str; 47] = [
         "literal",
         "null",
         "property",
@@ -592,6 +600,7 @@ impl Expression {
         "tan",
         "atan2",
         "convertSlope",
+        "inUnit",
         "aggregate",
         "ruleOutcome",
         "selected",
@@ -644,6 +653,7 @@ impl Expression {
             Self::Tan { .. } => "tan",
             Self::Atan2 { .. } => "atan2",
             Self::ConvertSlope { .. } => "convertSlope",
+            Self::InUnit { .. } => "inUnit",
             Self::Aggregate { .. } => "aggregate",
             Self::RuleOutcome { .. } => "ruleOutcome",
             Self::Selected { .. } => "selected",
@@ -697,6 +707,7 @@ impl Expression {
             | Self::Tan { label, .. }
             | Self::Atan2 { label, .. }
             | Self::ConvertSlope { label, .. }
+            | Self::InUnit { label, .. }
             | Self::Aggregate { label, .. }
             | Self::RuleOutcome { label, .. }
             | Self::Selected { label, .. }
@@ -737,6 +748,7 @@ impl Expression {
             | Self::Cos { operand, .. }
             | Self::Tan { operand, .. }
             | Self::ConvertSlope { operand, .. }
+            | Self::InUnit { operand, .. }
             | Self::Length { operand, .. }
             | Self::Lower { operand, .. }
             | Self::Upper { operand, .. }
@@ -869,6 +881,7 @@ impl Expression {
             | Self::Cos { operand, .. }
             | Self::Tan { operand, .. }
             | Self::ConvertSlope { operand, .. }
+            | Self::InUnit { operand, .. }
             | Self::Length { operand, .. }
             | Self::Lower { operand, .. }
             | Self::Upper { operand, .. }
@@ -994,6 +1007,7 @@ impl Expression {
                 value: ScalarValue::Quantity { unit, .. },
                 ..
             } => blank(kind, "unit", unit)?,
+            Self::InUnit { unit, .. } => blank(kind, "unit", unit)?,
             Self::Property { property, .. } => blank(kind, "property", property)?,
             Self::Parameter { name, .. } | Self::Derived { name, .. } => {
                 blank(kind, "name", name)?;

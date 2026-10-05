@@ -194,6 +194,7 @@ fn operands<'e>(node: &'e Expression, path: &str) -> Vec<(String, &'e Expression
         | Expression::Cos { operand, .. }
         | Expression::Tan { operand, .. }
         | Expression::ConvertSlope { operand, .. }
+        | Expression::InUnit { operand, .. }
         | Expression::Length { operand, .. }
         | Expression::Lower { operand, .. }
         | Expression::Upper { operand, .. }

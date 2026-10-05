@@ -792,6 +792,8 @@ pub struct ExecutionPlan {
     supplied: BTreeMap<String, SuppliedPairs>,
     /// The values the ruleset derives, by name.
     values: Arc<BTreeMap<String, schema::Expression>>,
+    /// The types the ruleset declares for its expressions' reads.
+    types: Arc<expression::DeclaredTypes>,
 }
 impl ExecutionPlan {
     /// Rules in execution order: every rule after the rules its gates and
@@ -1233,8 +1235,10 @@ impl Runtime {
         &self,
         services: &mut ServiceRegistry,
         derived: &Arc<BTreeMap<String, schema::Expression>>,
+        types: &Arc<expression::DeclaredTypes>,
     ) {
         services.replace(values::ValueExpressions(derived.clone()));
+        services.replace(types.clone());
         services.replace(Arc::new(expression::EvaluationBudget::new(
             self.evaluation_budget,
         )));
@@ -1426,7 +1430,7 @@ impl Runtime {
                 location: None,
             })
             .collect();
-        self.install_expressions(&mut services, &plan.values);
+        self.install_expressions(&mut services, &plan.values, &plan.types);
         self.registry.install_measured(&mut services, project);
         // Measured values are answered through the host's resolver in
         // every run; classifications are derived first when the plan has

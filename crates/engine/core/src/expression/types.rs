@@ -10,7 +10,9 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
-use axioval_ir::contract::{Expression, ExpressionComparison, ScalarValue, SlopeForm};
+use axioval_ir::contract::{
+    AggregateSource, Expression, ExpressionComparison, ScalarValue, SlopeForm,
+};
 
 use super::unit::{Unit, parse_unit};
 
@@ -236,6 +238,114 @@ fn member_type(
         MemberFieldKind::Number { dimension } => Type::Number(Unit::of(dimension)),
         MemberFieldKind::Truth => Type::Boolean,
     })
+}
+
+/// The types a compiled ruleset declares for what its expressions read: its
+/// vocabulary's properties, by property ID, and its derived values, by
+/// name. The runtime installs them for every run (as
+/// `Arc<DeclaredTypes>`), so an evaluation types a value as the compiler
+/// did where no value read tells: a sum over no member.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DeclaredTypes {
+    properties: BTreeMap<String, Type>,
+    values: BTreeMap<String, Type>,
+}
+
+impl DeclaredTypes {
+    /// The declared types of `properties` and derived `values`.
+    #[must_use]
+    pub fn new(properties: BTreeMap<String, Type>, values: BTreeMap<String, Type>) -> Self {
+        Self { properties, values }
+    }
+
+    /// Adds another ruleset's declarations.
+    pub fn extend(&mut self, other: &Self) {
+        self.properties.extend(
+            other
+                .properties
+                .iter()
+                .map(|(id, found)| (id.clone(), found.clone())),
+        );
+        self.values.extend(
+            other
+                .values
+                .iter()
+                .map(|(name, found)| (name.clone(), found.clone())),
+        );
+    }
+
+    /// The type of the property `set`/`name` as the compiler types it:
+    /// a measured value's from the registry, a derived value's, a
+    /// vocabulary property's declared kind; [`Type::Any`] for one known
+    /// only when read.
+    #[must_use]
+    pub fn property(&self, set: Option<&str>, name: &str) -> Type {
+        if set == Some(axioval_ir::MEASURED_SET) {
+            return measured_type(name).unwrap_or(Type::Any);
+        }
+        if set == Some(axioval_ir::VALUE_SET) {
+            return self.derived(name);
+        }
+        if set.is_some_and(axioval_ir::is_derived_set) {
+            return Type::Any;
+        }
+        self.properties.get(name).cloned().unwrap_or(Type::Any)
+    }
+
+    /// The type of the derived value `name`; [`Type::Any`] when unknown.
+    #[must_use]
+    pub fn derived(&self, name: &str) -> Type {
+        self.values.get(name).cloned().unwrap_or(Type::Any)
+    }
+}
+
+/// The unit the members' `value` of an aggregate over `over` is typed in,
+/// as the compiler types it from `declared` (literals, `inUnit`, measured
+/// values and member fields, declared properties and derived values, and
+/// arithmetic over them). `None` when only a read can tell.
+#[must_use]
+pub(super) fn member_value_unit(
+    over: &AggregateSource,
+    value: &Expression,
+    declared: Option<&DeclaredTypes>,
+) -> Option<Unit> {
+    /// The declared types, every parameter known only when read.
+    struct Declared<'d>(Option<&'d DeclaredTypes>);
+    impl TypeEnvironment for Declared<'_> {
+        fn property(&self, set: Option<&str>, name: &str) -> Result<Type, String> {
+            Ok(match self.0 {
+                Some(declared) => declared.property(set, name),
+                None if set == Some(axioval_ir::MEASURED_SET) => {
+                    measured_type(name).unwrap_or(Type::Any)
+                }
+                None => Type::Any,
+            })
+        }
+
+        fn parameter(&self, _: &str) -> Result<Type, String> {
+            Ok(Type::Any)
+        }
+
+        fn derived(&self, name: &str) -> Result<Type, String> {
+            Ok(self.0.map_or(Type::Any, |declared| declared.derived(name)))
+        }
+    }
+    let unread = Declared(declared);
+    let member = match over {
+        AggregateSource::Measured { name } => axioval_ir::measured::parse_members(name)
+            .ok()
+            .and_then(|call| axioval_ir::measured::members_of(&call)),
+        _ => None,
+    };
+    let checker = Checker {
+        environment: &unread,
+        member,
+    };
+    match checker.check(value, "value").ok()? {
+        Type::Number(unit) => Some(unit),
+        Type::Integer => Some(Unit::NONE),
+        _ => None,
+    }
 }
 
 /// Infers the type of `expression`, whose path is `root`.
@@ -596,6 +706,21 @@ impl Checker<'_> {
                 } else {
                     Type::NUMBER
                 }
+            }
+            Expression::InUnit { operand, unit, .. } => {
+                let (_, target) =
+                    parse_unit(unit).map_err(|why| here(TypeErrorKind::InvalidUnit(why)))?;
+                let found = self.numeric(operand, &child("operand"))?;
+                if let Some(own) = found.unit()
+                    && own != target
+                {
+                    return Err(here(TypeErrorKind::UnitMismatch {
+                        operation: "restates",
+                        left: target,
+                        right: own,
+                    }));
+                }
+                Type::Number(target)
             }
             Expression::Aggregate {
                 function,

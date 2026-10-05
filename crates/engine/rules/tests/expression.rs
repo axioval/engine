@@ -1188,3 +1188,73 @@ fn a_spent_evaluation_budget_leaves_the_rest_open_never_passed() {
     let report = check(&package, vec![cover_rule()], &session(slabs()));
     assert!(report.not_evaluated.is_empty());
 }
+
+/// A sum over no member is zero of the unit the compiler types its members'
+/// value in, a declared property's included, so a wall without openings
+/// meets a bound in square metres; `inUnit` shows a value in a unit.
+#[test]
+fn a_sum_over_no_member_takes_its_members_declared_unit() {
+    let registry = registry();
+    let mut package = vocabulary(&registry, &[]);
+    package
+        .properties
+        .get_mut("t.Cover")
+        .unwrap()
+        .unit_dimension = Some("area".into());
+    let square_metres = |value: f64| json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": "m2"}});
+    let bounded = |id: &str, value: Value| {
+        rule(
+            id,
+            EXPRESSION,
+            "error",
+            entity("slab"),
+            json!({
+                "requirement": {"type": "expression", "value": {"kind": "compare",
+                    "operator": "lessThanOrEquals",
+                    "left": {"kind": "inUnit", "unit": "cm2", "label": "openings",
+                             "operand": openings("sum", Some(value))},
+                    "right": square_metres(4.5)}},
+                "message": {"type": "string", "value": "openings take {openings}"}
+            }),
+            json!({}),
+        )
+    };
+    let model = walls_with_openings().object("w3", "slab").value(
+        "w3",
+        "Pset",
+        "Cover",
+        PropertyValue::Quantity {
+            value: 9.0,
+            dimension: QuantityDimension::Area,
+        },
+    );
+    let report = check(
+        &package,
+        vec![
+            bounded("declared", property("Cover")),
+            bounded(
+                "restated",
+                json!({"kind": "inUnit", "operand": property("Cover"), "unit": "m2"}),
+            ),
+        ],
+        &session(model),
+    );
+    assert!(
+        report.not_evaluated.is_empty(),
+        "{:?}",
+        report.not_evaluated
+    );
+    // w1 has 4 m² of openings, w2 5 m², w3 none: 0 m², never a mismatch.
+    for rule in ["declared", "restated"] {
+        assert_eq!(subjects(&report, rule), ["w2"], "{rule}");
+    }
+    let messages: Vec<&str> = report
+        .findings()
+        .iter()
+        .map(|finding| finding.message.as_str())
+        .collect();
+    assert_eq!(
+        messages,
+        ["openings take 50000 cm2", "openings take 50000 cm2"]
+    );
+}

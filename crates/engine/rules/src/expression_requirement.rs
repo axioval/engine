@@ -86,16 +86,14 @@ impl RuleCapability for ExpressionRequirement {
                 Ok(Value::Boolean(true)) => {}
                 Ok(Value::Boolean(false) | Value::Null) => {
                     let (deciding, failed) = failing(requirement, REQUIREMENT, &result);
-                    let mut labelled = result.labelled.clone();
+                    let mut labelled = shown(&result);
                     let mut cited = evidence(&result);
                     let deviation = match rule.parameters.get(DEVIATION) {
                         Some(ParameterValue::Expression { value }) => {
                             let graded = evaluate(value, DEVIATION, &mut leaves);
                             cited.extend(evidence(&graded));
-                            for (label, value) in &graded.labelled {
-                                labelled
-                                    .entry(label.clone())
-                                    .or_insert_with(|| value.clone());
+                            for (label, value) in shown(&graded) {
+                                labelled.entry(label).or_insert(value);
                             }
                             graded_deviation(&graded)
                         }
@@ -159,12 +157,24 @@ fn graded_deviation(evaluation: &Evaluation) -> Option<Deviation> {
 
 /// `template` with each `{label}` replaced by the value of the labelled
 /// subexpression, with its unit and interval; an unknown label stays.
-fn render(template: &str, labelled: &BTreeMap<String, Value>) -> String {
+fn render(template: &str, labelled: &BTreeMap<String, String>) -> String {
     let mut message = template.to_owned();
     for (label, value) in labelled {
-        message = message.replace(&format!("{{{label}}}"), &value.to_string());
+        message = message.replace(&format!("{{{label}}}"), value);
     }
     message
+}
+
+/// Every labelled subexpression's value as the evaluation shows it (an
+/// `inUnit` value in its unit), by label: the first, where a label repeats.
+fn shown(evaluation: &Evaluation) -> BTreeMap<String, String> {
+    let mut shown = BTreeMap::new();
+    for step in &evaluation.trace {
+        if let (Some(label), Some(value)) = (&step.label, &step.value) {
+            shown.entry(label.clone()).or_insert_with(|| value.clone());
+        }
+    }
+    shown
 }
 
 /// Why an outcome is not evaluated, in the report's terms.

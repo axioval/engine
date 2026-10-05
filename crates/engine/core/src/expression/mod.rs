@@ -17,5 +17,7 @@ pub use evaluate::{
 };
 pub use interval::{Interval, IntervalFailure, IntervalResult};
 pub use text::{MAX_TEXT_LENGTH, parse_text};
-pub use types::{Type, TypeEnvironment, TypeError, TypeErrorKind, check, check_as, measured_type};
+pub use types::{
+    DeclaredTypes, Type, TypeEnvironment, TypeError, TypeErrorKind, check, check_as, measured_type,
+};
 pub use unit::{UNIT_SYMBOLS, Unit, UnitSymbol, parse_unit};

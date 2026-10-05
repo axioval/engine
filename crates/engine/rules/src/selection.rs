@@ -1,5 +1,6 @@
 //! Deterministic, fail-closed selector evaluation.
 
+use axioval_engine::comparison::{self as shared, Order, Pattern, Tolerance, Undecided};
 use axioval_engine::{
     BindingError, CapabilityEvaluation, ClassificationAssignment, ClassificationError,
     ClassificationServiceHandle, Classifications, ConceptBindings, NameMatch, NamePattern,
@@ -15,12 +16,11 @@ use axioval_ir::{
     CLASSIFICATION_SET, Date, DateTime, Discipline, Evidence, Object, ObjectId, PropertyValue,
     QuantityDimension, SourceId, TemporalPrecision,
 };
-use regex::{Regex, RegexBuilder};
-use std::cmp::Ordering;
+use regex::Regex;
 
-use crate::support::{
-    Tolerance, Traversal, exact_f64, si_quantity, temporal_holds, temporal_order, undefined,
-};
+pub(crate) use axioval_engine::comparison::TextOptions;
+
+use crate::support::{Traversal, exact_f64, si_quantity, undefined};
 
 pub(crate) fn select_objects<'a>(
     context: &RuleContext<'a>,
@@ -722,32 +722,6 @@ impl CodeTest {
     }
 }
 
-/// How a property selector compares text: case folding and trimming.
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct TextOptions {
-    pub(crate) case_sensitive: bool,
-    pub(crate) trim: bool,
-}
-
-impl TextOptions {
-    fn is_default(self) -> bool {
-        self.case_sensitive && !self.trim
-    }
-
-    fn fold(self, text: &str) -> String {
-        if self.case_sensitive {
-            text.to_owned()
-        } else {
-            text.to_lowercase()
-        }
-    }
-
-    /// The resolved value as compared: trimmed, then folded, as declared.
-    fn prepare(self, text: &str) -> String {
-        self.fold(if self.trim { text.trim() } else { text })
-    }
-}
-
 fn property_selector_matches(
     context: &RuleContext<'_>,
     object: &Object,
@@ -1029,54 +1003,18 @@ fn unavailable(error: PropertyResolutionError) -> Selection {
     Selection::NotEvaluated(reason, message)
 }
 
-#[derive(Clone, Copy, Debug)]
-enum Order {
-    Equal,
-    NotEqual,
-    Less,
-    LessOrEqual,
-    Greater,
-    GreaterOrEqual,
-}
-
-impl Order {
-    fn of(operator: &ComparisonOperator) -> Option<Self> {
-        Some(match operator {
-            ComparisonOperator::Equals => Self::Equal,
-            ComparisonOperator::NotEquals => Self::NotEqual,
-            ComparisonOperator::LessThan => Self::Less,
-            ComparisonOperator::LessThanOrEquals => Self::LessOrEqual,
-            ComparisonOperator::GreaterThan => Self::Greater,
-            ComparisonOperator::GreaterThanOrEquals => Self::GreaterOrEqual,
-            _ => return None,
-        })
-    }
-
-    fn is_equality(self) -> bool {
-        matches!(self, Self::Equal | Self::NotEqual)
-    }
-
-    /// Whether the comparison holds for two dates whose order may be
-    /// indeterminate (see `temporal_order`).
-    fn temporal(self, ordering: Option<Ordering>) -> Result<bool, String> {
-        let equality = match self {
-            Self::Equal => Some(false),
-            Self::NotEqual => Some(true),
-            _ => None,
-        };
-        temporal_holds(ordering, equality, |ordering| self.holds(ordering))
-    }
-
-    fn holds(self, ordering: Ordering) -> bool {
-        match self {
-            Self::Equal => ordering.is_eq(),
-            Self::NotEqual => !ordering.is_eq(),
-            Self::Less => ordering.is_lt(),
-            Self::LessOrEqual => ordering.is_le(),
-            Self::Greater => ordering.is_gt(),
-            Self::GreaterOrEqual => ordering.is_ge(),
-        }
-    }
+/// The order a selector's comparison operator states; `None` for every
+/// operator that is no order.
+fn order_of(operator: &ComparisonOperator) -> Option<Order> {
+    Some(match operator {
+        ComparisonOperator::Equals => Order::Equal,
+        ComparisonOperator::NotEquals => Order::NotEqual,
+        ComparisonOperator::LessThan => Order::Less,
+        ComparisonOperator::LessThanOrEquals => Order::LessOrEqual,
+        ComparisonOperator::GreaterThan => Order::Greater,
+        ComparisonOperator::GreaterThanOrEquals => Order::GreaterOrEqual,
+        _ => return None,
+    })
 }
 
 impl Expected {
@@ -1131,6 +1069,7 @@ impl Test {
         matches!(self, Self::Exists | Self::Empty | Self::NotEmpty)
     }
 
+    #[allow(clippy::too_many_lines)]
     fn parse(
         operator: &ComparisonOperator,
         expected: Option<&ParameterValue>,
@@ -1174,18 +1113,23 @@ impl Test {
                     operator_name(operator)
                 ));
             }
-            ComparisonOperator::Matches => Self::Pattern(
-                RegexBuilder::new(&format!("^(?:{})$", string("a string")?))
-                    .case_insensitive(!options.case_sensitive)
-                    .build()
-                    .map_err(|error| format!("invalid regular expression: {error}"))?,
-            ),
-            ComparisonOperator::Like => Self::Pattern(
-                RegexBuilder::new(&wildcard(string("a string")?)?)
-                    .case_insensitive(!options.case_sensitive)
-                    .build()
-                    .map_err(|error| format!("invalid wildcard pattern: {error}"))?,
-            ),
+            ComparisonOperator::Matches | ComparisonOperator::Like => {
+                let kind = if matches!(operator, ComparisonOperator::Like) {
+                    Pattern::Like
+                } else {
+                    Pattern::Matches
+                };
+                Self::Pattern(
+                    shared::pattern(kind, string("a string")?, options.case_sensitive).map_err(
+                        |error| match error {
+                            shared::PatternError::Wildcard(why) => why,
+                            shared::PatternError::Compile(why) => {
+                                format!("invalid {}: {why}", kind.kind())
+                            }
+                        },
+                    )?,
+                )
+            }
             ComparisonOperator::Contains => Self::Contains(options.fold(string("a string")?)),
             ComparisonOperator::OneOf | ComparisonOperator::NoneOf => match expected {
                 ParameterValue::StringList { value } => Self::Member {
@@ -1197,7 +1141,7 @@ impl Test {
                 }
             },
             ordered => {
-                let order = Order::of(ordered).expect("every other operator is ordered");
+                let order = order_of(ordered).expect("every other operator is ordered");
                 let value = match expected {
                     ParameterValue::Boolean { value } if order.is_equality() => {
                         Expected::Boolean(*value)
@@ -1315,21 +1259,20 @@ impl Test {
                         unit(dimension)
                     ));
                 }
-                let tolerance = Tolerance::unit_conversion();
-                let (Some(least), Some(greatest)) = (
-                    tolerance.order(lower, *expected),
-                    tolerance.order(upper, *expected),
-                ) else {
-                    return Err("the measured value is not finite".into());
-                };
-                crate::support::interval_verdict(least, greatest, |ordering| order.holds(ordering))
-                    .ok_or_else(|| {
-                        format!(
-                            "the measured value lies between {lower} and {upper} ({}), which \
-                             straddles the bound",
-                            unit(held)
-                        )
-                    })
+                shared::numbers(
+                    *order,
+                    (lower, upper),
+                    (*expected, *expected),
+                    &Tolerance::unit_conversion(),
+                )
+                .map_err(|undecided| match undecided {
+                    Undecided::NotFinite => "the measured value is not finite".into(),
+                    Undecided::Straddles => format!(
+                        "the measured value lies between {lower} and {upper} ({}), which \
+                         straddles the bound",
+                        unit(held)
+                    ),
+                })
             }
             _ => Err(format!(
                 "the value is measured in {} but the selector compares another kind",
@@ -1341,6 +1284,7 @@ impl Test {
     /// Whether `actual` satisfies the test; `Err` when the value's type
     /// cannot be compared with the declared one, so the object is not
     /// evaluated rather than silently left out.
+    #[allow(clippy::too_many_lines)]
     fn holds(&self, actual: &PropertyValue, options: TextOptions) -> Result<bool, String> {
         // A comparison presupposes a value: null is no more a match than an
         // absent property.
@@ -1368,26 +1312,38 @@ impl Test {
             Self::NotEmpty => Ok(!undefined(Some(actual))),
             Self::Compare(order, expected, precision) => {
                 if let Some((expected, declared)) = expected.temporal() {
-                    return match temporal_order(actual, &expected, *precision) {
-                        Some(ordering) => order.temporal(ordering?),
+                    return match shared::temporal(*order, actual, &expected, *precision) {
+                        Some(holds) => holds,
                         None => mismatch(declared),
                     };
                 }
-                let ordering = match (expected, actual) {
+                let exact = |actual: f64, expected: f64| {
+                    shared::numbers(
+                        *order,
+                        (actual, actual),
+                        (expected, expected),
+                        &Tolerance::EXACT,
+                    )
+                    .map_err(|_| "the value is not a finite number".to_owned())
+                };
+                let beyond =
+                    || "an integer beyond 2^53 cannot be compared with a number".to_owned();
+                match (expected, actual) {
                     (Expected::Boolean(expected), PropertyValue::Boolean(actual)) => {
-                        actual.cmp(expected)
+                        shared::booleans(*order, *actual, *expected)
+                            .ok_or_else(|| "booleans have no order".to_owned())
                     }
                     (Expected::Integer(expected), PropertyValue::Integer(actual)) => {
-                        actual.cmp(expected)
+                        Ok(shared::integers(*order, *actual, *expected))
                     }
                     (Expected::Integer(expected), PropertyValue::Decimal(actual)) => {
-                        numeric(*actual, exact_f64(*expected))?
+                        exact(*actual, exact_f64(*expected).ok_or_else(beyond)?)
                     }
                     (Expected::Number(expected), PropertyValue::Decimal(actual)) => {
-                        numeric(*actual, Some(*expected))?
+                        exact(*actual, *expected)
                     }
                     (Expected::Number(expected), PropertyValue::Integer(actual)) => {
-                        numeric_integer(*actual, *expected)?
+                        exact(exact_f64(*actual).ok_or_else(beyond)?, *expected)
                     }
                     (
                         Expected::Quantity(expected, dimension),
@@ -1403,28 +1359,31 @@ impl Test {
                                 dimension.unit_symbol()
                             ));
                         }
-                        Tolerance::unit_conversion()
-                            .order(*value, *expected)
-                            .ok_or("the quantity is not finite")?
+                        shared::numbers(
+                            *order,
+                            (*value, *value),
+                            (*expected, *expected),
+                            &Tolerance::unit_conversion(),
+                        )
+                        .map_err(|_| "the quantity is not finite".to_owned())
                     }
                     (Expected::Text(expected), PropertyValue::String(actual)) => {
-                        options.prepare(actual).as_str().cmp(expected.as_str())
+                        Ok(shared::texts(*order, actual, expected, options))
                     }
-                    (Expected::Boolean(_), _) => return mismatch("a boolean"),
+                    (Expected::Boolean(_), _) => mismatch("a boolean"),
                     (Expected::Integer(_) | Expected::Number(_), _) => {
-                        return mismatch("a unit-less number");
+                        mismatch("a unit-less number")
                     }
                     (Expected::Quantity(_, dimension), _) => {
-                        return mismatch(&format!("a quantity in {}", dimension.unit_symbol()));
+                        mismatch(&format!("a quantity in {}", dimension.unit_symbol()))
                     }
-                    (Expected::Text(_), _) => return mismatch("text"),
-                    (Expected::Date(_), _) => return mismatch("a date"),
-                    (Expected::DateTime(_), _) => return mismatch("a date-time"),
-                };
-                Ok(order.holds(ordering))
+                    (Expected::Text(_), _) => mismatch("text"),
+                    (Expected::Date(_), _) => mismatch("a date"),
+                    (Expected::DateTime(_), _) => mismatch("a date-time"),
+                }
             }
             Self::Contains(text) => match actual {
-                PropertyValue::String(actual) => Ok(options.prepare(actual).contains(text)),
+                PropertyValue::String(actual) => Ok(shared::contains(actual, text, options)),
                 _ => mismatch("text"),
             },
             Self::Pattern(pattern) => match actual {
@@ -1435,27 +1394,12 @@ impl Test {
             },
             Self::Member { texts, none } => match actual {
                 PropertyValue::String(actual) => {
-                    Ok(texts.contains(&options.prepare(actual)) != *none)
+                    Ok(shared::member(actual, texts, options) != *none)
                 }
                 _ => mismatch("text"),
             },
         }
     }
-}
-
-fn numeric(actual: f64, expected: Option<f64>) -> Result<Ordering, String> {
-    match expected {
-        Some(expected) => actual
-            .partial_cmp(&expected)
-            .ok_or_else(|| "the value is not a finite number".into()),
-        None => Err("an integer beyond 2^53 cannot be compared with a number".into()),
-    }
-}
-
-fn numeric_integer(actual: i64, expected: f64) -> Result<Ordering, String> {
-    let actual = exact_f64(actual)
-        .ok_or_else(|| "an integer beyond 2^53 cannot be compared with a number".to_owned())?;
-    numeric(actual, Some(expected))
 }
 
 fn kind(value: &PropertyValue) -> String {

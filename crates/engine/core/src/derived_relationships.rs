@@ -690,6 +690,7 @@ fn side_record<'l>(
 /// a tessellation near a boundary it decides) refuses the whole answer.
 pub trait DerivedRelationshipService: Send + Sync {
     /// Exact source snapshots used to construct this service.
+    // gate: reads
     fn source_snapshots(&self) -> &[SourceSnapshot] {
         &[]
     }
@@ -698,6 +699,7 @@ pub trait DerivedRelationshipService: Send + Sync {
     /// # Errors
     ///
     /// A refusal when the answer cannot be decided exactly.
+    // gate: reads
     fn derive(
         &self,
         derivation: &Derivation,

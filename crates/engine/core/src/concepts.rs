@@ -276,8 +276,10 @@ pub enum TypeHierarchyError {
 /// Source-declared subtype relation, used for `includeSubtypes` selection.
 pub trait TypeHierarchyService: Send + Sync {
     /// Exact source snapshots this hierarchy answers for.
+    // gate: reads
     fn source_snapshots(&self) -> &[SourceSnapshot];
     /// Whether `kind` is `ancestor` or one of its subtypes.
+    // gate: reads
     fn is_a(&self, kind: &str, ancestor: &str) -> Result<bool, TypeHierarchyError>;
 }
 

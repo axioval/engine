@@ -90,6 +90,7 @@ impl TriangleCount {
 /// Counts the triangles of model objects' meshes.
 pub trait TriangleCountService: Send + Sync + 'static {
     /// The number of triangles in `object`'s mesh.
+    // gate: measures number
     fn count_triangles(&self, object: &ObjectId) -> Result<TriangleCount, TriangleCountError>;
 }
 

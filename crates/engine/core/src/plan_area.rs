@@ -413,10 +413,12 @@ impl ElevationCover {
 pub trait PlanAreaService: Send + Sync + 'static {
     /// The area of `object`'s footprint: its geometry projected onto the
     /// horizontal plane, overlapping parts counted once.
+    // gate: measures area
     fn measure_footprint(&self, object: &ObjectId) -> Result<PlanArea, PlanAreaError>;
     /// The length of the boundary of `object`'s footprint, holes included.
     ///
     /// A service that does not measure perimeters refuses.
+    // gate: measures length
     fn measure_footprint_perimeter(
         &self,
         object: &ObjectId,
@@ -427,6 +429,7 @@ pub trait PlanAreaService: Send + Sync + 'static {
         ))
     }
     /// The area where the footprints of `first` and `second` overlap.
+    // gate: measures area
     fn measure_plan_overlap(
         &self,
         first: &ObjectId,
@@ -440,6 +443,7 @@ pub trait PlanAreaService: Send + Sync + 'static {
     /// An empty `cover` leaves the whole footprint uncovered. A service that
     /// does not measure uncovered areas refuses; it never answers with the
     /// footprint or with zero.
+    // gate: measures area
     fn measure_uncovered_area(
         &self,
         object: &ObjectId,
@@ -457,6 +461,7 @@ pub trait PlanAreaService: Send + Sync + 'static {
     /// An empty set of bands leaves the whole footprint outside. A service
     /// that does not measure bands refuses; it never answers with the
     /// footprint or with zero.
+    // gate: measures area
     fn measure_outside_bands(
         &self,
         object: &ObjectId,
@@ -473,6 +478,7 @@ pub trait PlanAreaService: Send + Sync + 'static {
     ///
     /// A service that does not measure coverage refuses; it never answers
     /// with an empty or a whole cover.
+    // gate: measures area, number
     fn measure_coverage(
         &self,
         request: &CoverageRequest,
@@ -488,6 +494,7 @@ pub trait PlanAreaService: Send + Sync + 'static {
     ///
     /// A service that does not measure elevations refuses; it never answers
     /// with the whole elevation or with zero.
+    // gate: measures area, length
     fn measure_elevation_cover(
         &self,
         request: &ElevationRequest,

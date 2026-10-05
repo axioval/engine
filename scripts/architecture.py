@@ -12,6 +12,8 @@ import sys
 import tomllib
 from pathlib import Path
 
+import measurement_gate
+
 # Crates that must stay source-neutral. Adapters, output sinks and the facade
 # are exempt by name; everything else is core by default, so a newly added crate is guarded
 # from its first commit rather than whenever someone remembers to list it.
@@ -418,42 +420,8 @@ def self_test() -> None:
     assert source_violations("use openbim_ids::Ids;")
     assert "axioval-ids" not in ADAPTER_CRATES
     assert not source_violations("/// IFC is an adapter, not the IR.\npub struct Project;")
-    # Composability: a capability that adds an unregistered measurement fails.
-    lib = "registry.register_measured(stair::StairMeasures)"
-    stair = {"stair.rs": "fn f(s: &S) { s.measure_tread_flight(r); }", "stair/measured.rs": ""}
-    assert not measurement_violations(stair, lib, {}, {"riser"})
-    mutated = {**stair, "gauge.rs": "fn g(s: &S) { s.measure_new_quantity(r); }"}
-    assert measurement_violations(mutated, lib, {}, {"riser"}) == [
-        "rules module `gauge` measures through measure_new_quantity but registers no "
-        "measured value; add a `measured.rs` provider or a ledger entry in "
-        "scripts/measurement_ledger.json"
-    ]
-    # A provider file that is never registered exposes nothing.
-    assert measurement_violations({**mutated, "gauge/measured.rs": ""}, lib, {}, {"riser"})
-    assert not measurement_violations(
-        {**mutated, "gauge/measured.rs": ""},
-        lib + " registry.register_measured(gauge::GaugeMeasures)",
-        {},
-        {"riser"},
-    )
-    # A call in a comment is no measurement.
-    assert not measurement_violations(
-        {**stair, "gauge.rs": "// s.measure_new_quantity(r)"}, lib, {}, {"riser"}
-    )
-    assert not measurement_violations(
-        mutated, lib, {"answeredBy": {"gauge": ["riser"]}}, {"riser"}
-    )
-    assert measurement_violations(
-        mutated, lib, {"answeredBy": {"gauge": ["unknown_value"]}}, {"riser"}
-    )
-    assert not measurement_violations(mutated, lib, {"searchOnly": {"gauge": "a search"}}, set())
-    assert measurement_violations(mutated, lib, {"searchOnly": {"gauge": " "}}, set())
-    # Stale ledger entries fail, so the ledger only shrinks.
-    assert measurement_violations(stair, lib, {"searchOnly": {"gauge": "a search"}}, set())
-    assert measurement_violations(stair, lib, {"searchOnly": {"stair": "a search"}}, set())
-    assert registered_measured(
-        ['name: "riser",', 'pub const SLOPE: &str = "slope";', 'plain!(\n    "plan_diameter",']
-    ) == {"riser", "slope", "plan_diameter"}
+    # Composability: each bypass of the measurement gate is a rejected mutation.
+    measurement_gate.self_test()
     # A capability without catalogue texts fails.
     capability = {
         "gauge.rs": 'fn id(&self) -> &\'static str {\n    "axioval:capability.gauge"\n}'
@@ -690,78 +658,13 @@ def source_ratchet(source_root: Path | None, budget: int) -> list[str]:
 
 
 
-# Composability (#225): a quantity a capability measures through a service
-# is exposed as a registered measured value, so a rule can state the same
-# requirement as an expression. A rules module calling a measuring service
-# method needs its own registered `measured.rs` provider, or an entry in
-# `scripts/measurement_ledger.json` naming the registered values that
-# already answer it or why it only searches.
-MEASURE_CALL = re.compile(r"\.(measure_[a-z0-9_]+)\s*\(")
-REGISTERED_PROVIDER = re.compile(r"register_measured\(\s*([a-z_0-9]+)::")
-# A descriptor's `name: "…"`, or the first argument of a descriptor macro.
-MEASURED_NAME = re.compile(r"(?:\bname:\s*|\b[a-z_]+!\(\s*)\"([a-z0-9_]+)\"")
-MEASURED_CONST = re.compile(r"pub const [A-Z0-9_]+: &str = \"([a-z0-9_]+)\";")
+# Composability (#225, #274): every measurement a capability takes is
+# exposed as a registered measured value, call site by call site. The check
+# lives in `measurement_gate.py`: service traits mark their measuring methods,
+# and `scripts/measurement_ledger.json` maps each call site to the value that
+# provides it or to a reviewed search kind.
 CAPABILITY_ID = re.compile(r"fn id\(&self\) -> &'static str \{\s*\"(axioval:capability\.[a-z0-9-]+)\"")
 CATALOGUED_ID = re.compile(r"^\s*id: \"(axioval:capability\.[a-z0-9-]+)\",", re.M)
-
-
-def measuring_modules(files: dict[str, str]) -> dict[str, set[str]]:
-    """Each top-level rules module and the service measure methods it calls."""
-    modules: dict[str, set[str]] = {}
-    for path, text in files.items():
-        module = path.split("/", 1)[0].removesuffix(".rs")
-        calls = set(MEASURE_CALL.findall(strip_noise(text)))
-        if calls:
-            modules.setdefault(module, set()).update(calls)
-    return modules
-
-
-def measurement_violations(
-    files: dict[str, str], lib: str, ledger: dict, registered: set[str]
-) -> list[str]:
-    """Measurements a capability takes that no measured value exposes."""
-    failures: list[str] = []
-    providers = set(REGISTERED_PROVIDER.findall(lib))
-    answered: dict[str, list[str]] = ledger.get("answeredBy", {})
-    search: dict[str, str] = ledger.get("searchOnly", {})
-    modules = measuring_modules(files)
-    for module, calls in sorted(modules.items()):
-        own = module in providers and f"{module}/measured.rs" in files
-        if own or module in answered or module in search:
-            continue
-        failures.append(
-            f"rules module `{module}` measures through {', '.join(sorted(calls))} "
-            "but registers no measured value; add a `measured.rs` provider or a "
-            "ledger entry in scripts/measurement_ledger.json"
-        )
-    for module in sorted(set(answered) | set(search)):
-        if module in answered and module in search:
-            failures.append(f"ledger lists `{module}` both as answered and as search-only")
-        if module not in modules:
-            failures.append(f"ledger entry `{module}` is stale: it calls no measuring service")
-        elif module in providers and f"{module}/measured.rs" in files:
-            failures.append(f"ledger entry `{module}` is stale: it registers its own provider")
-    for module, values in sorted(answered.items()):
-        if not values:
-            failures.append(f"ledger entry `{module}` names no measured value")
-        for value in values:
-            if value not in registered:
-                failures.append(
-                    f"ledger entry `{module}` names `{value}`, which is no registered measured value"
-                )
-    for module, reason in sorted(search.items()):
-        if not str(reason).strip():
-            failures.append(f"ledger entry `{module}` gives no reason it only searches")
-    return failures
-
-
-def registered_measured(sources: list[str]) -> set[str]:
-    """Every measured value and member list name the IR registry declares."""
-    names: set[str] = set()
-    for text in sources:
-        names.update(MEASURED_NAME.findall(text))
-        names.update(MEASURED_CONST.findall(text))
-    return names
 
 
 def catalogue_violations(files: dict[str, str], texts: str) -> list[str]:
@@ -784,18 +687,7 @@ def composability(root: Path) -> list[str]:
         source.relative_to(rules).as_posix(): source.read_text(encoding="utf-8")
         for source in sorted(rules.rglob("*.rs"))
     }
-    ledger = json.loads((root / "scripts" / "measurement_ledger.json").read_text(encoding="utf-8"))
-    ir = root / "crates" / "contracts" / "ir" / "src"
-    registered = registered_measured(
-        [
-            (ir / "lib.rs").read_text(encoding="utf-8"),
-            *(
-                path.read_text(encoding="utf-8")
-                for path in sorted((ir / "measured").glob("*.rs"))
-            ),
-        ]
-    )
-    failures = measurement_violations(files, files["lib.rs"], ledger, registered)
+    failures = measurement_gate.check(root, [path for _, path in core_crates(root)])
     failures.extend(catalogue_violations(files, files.get("catalogue_texts.rs", "")))
     return failures
 

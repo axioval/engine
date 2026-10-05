@@ -861,6 +861,7 @@ pub enum WalkabilityRouteOutcome {
     Indeterminate,
 }
 pub trait WalkabilityService: Send + Sync {
+    // gate: measures length
     fn snapshot(
         &self,
         request: &WalkabilityRequest,

@@ -138,8 +138,10 @@ impl ObjectFrame {
 /// Trusted adapter seam supplying objects' placement frames.
 pub trait ObjectFrameService: Send + Sync + 'static {
     /// Exact source snapshots this service answers for.
+    // gate: reads
     fn source_snapshots(&self) -> &[SourceSnapshot];
     /// The placement frame of `object`, or why it has none.
+    // gate: measures length, plane_angle
     fn object_frame(&self, object: &ObjectId) -> Result<ObjectFrame, ObjectFrameError>;
     /// The leaves of `door`, a door or a window: each leaf's (or window
     /// panel's) closed position, width, motion, hinge side and swing
@@ -147,6 +149,7 @@ pub trait ObjectFrameService: Send + Sync + 'static {
     ///
     /// The default refuses with [`DoorLeavesError::Unsupported`], so a
     /// service that reads no door operation fails closed.
+    // gate: measures length, plane_angle
     fn leaves(&self, door: &ObjectId) -> Result<DoorLeaves, DoorLeavesError> {
         let _ = door;
         Err(DoorLeavesError::Unsupported)

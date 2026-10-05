@@ -81,8 +81,10 @@ pub enum ClassificationError {
 /// Trusted adapter seam listing the classifications an object carries.
 pub trait ClassificationService: Send + Sync {
     /// Exact source snapshots this service answers for.
+    // gate: reads
     fn source_snapshots(&self) -> &[SourceSnapshot];
     /// Every classification `object` carries, complete or refused.
+    // gate: reads
     fn classifications(
         &self,
         object: &ObjectId,

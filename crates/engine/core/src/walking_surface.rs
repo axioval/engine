@@ -2301,20 +2301,24 @@ impl HandrailEvidence {
 pub trait WalkingSurfaceService: Send + Sync + 'static {
     /// The treads, base and top of the request's object as a stair flight,
     /// walked along the requested line should it turn.
+    // gate: measures length, plane_angle, truth
     fn measure_tread_flight(
         &self,
         request: &TreadFlightRequest,
     ) -> Result<TreadFlight, WalkingSurfaceError>;
 
     /// The sloped runs of `object` as a ramp.
+    // gate: measures length, number, plane_angle
     fn measure_sloped_runs(&self, object: &ObjectId) -> Result<SlopedSurface, WalkingSurfaceError>;
 
     /// The headroom above the request subject's walking surface.
+    // gate: measures length
     fn measure_headroom(&self, request: &HeadroomRequest) -> Result<Headroom, WalkingSurfaceError>;
 
     /// The landing at the requested end of a flight or run. The default
     /// refuses: a service that does not look for landings never answers
     /// that there is none.
+    // gate: measures length
     fn measure_landing(
         &self,
         request: &LandingRequest,
@@ -2327,6 +2331,7 @@ pub trait WalkingSurfaceService: Send + Sync + 'static {
 
     /// The clearance below the request subject over the requested spaces'
     /// floors. The default refuses.
+    // gate: measures length
     fn measure_clearance_below(
         &self,
         request: &ClearanceBelowRequest,
@@ -2340,6 +2345,7 @@ pub trait WalkingSurfaceService: Send + Sync + 'static {
     /// The handrails along the requested stretch. The default refuses: a
     /// service that does not look for handrails never answers that there is
     /// none.
+    // gate: measures length, truth
     fn measure_handrails(
         &self,
         request: &HandrailRequest,
@@ -2353,6 +2359,7 @@ pub trait WalkingSurfaceService: Send + Sync + 'static {
     /// The clear width along the requested stretch. The default refuses: a
     /// service that does not measure clear widths never answers with the
     /// walking surface's own width.
+    // gate: measures length
     fn measure_clear_width(
         &self,
         request: &ClearWidthRequest,
@@ -2366,6 +2373,7 @@ pub trait WalkingSurfaceService: Send + Sync + 'static {
     /// The clear width of the requested landing. The default refuses: a
     /// service that does not measure landings' clear widths never answers
     /// with the landing's own width or that there is no landing.
+    // gate: measures length
     fn measure_landing_clear_width(
         &self,
         request: &LandingClearWidthRequest,

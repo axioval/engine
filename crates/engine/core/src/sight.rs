@@ -225,6 +225,7 @@ impl SightEvidence {
 /// Assesses lines of sight between an eye point and model objects.
 pub trait SightService: Send + Sync + 'static {
     /// Whether any part of the request's target is in view from its eye.
+    // gate: measures truth
     fn assess_sight(&self, request: &SightRequest) -> Result<SightEvidence, SightError>;
 }
 

@@ -1658,11 +1658,13 @@ impl FaceDistanceEvidence {
 /// ADR 0004: every method returns a measurement. None decides a clash.
 pub trait ProximityService: Send + Sync + 'static {
     /// The extent of one object's measured geometry.
+    // gate: measures length
     fn bounds(&self, object: &ObjectId) -> Result<ObjectBounds, ProximityError>;
     /// How close two objects come and how far they overlap, in space.
     ///
     /// A request in any other projection is refused with
     /// [`ProximityError::UnsupportedProjection`].
+    // gate: measures length
     fn measure_proximity(
         &self,
         request: &ProximityRequest,
@@ -1672,6 +1674,7 @@ pub trait ProximityService: Send + Sync + 'static {
     /// The default answers [`ProximityProjection::Minimum3d`] from
     /// [`Self::measure_proximity`] and refuses every other projection, so a
     /// service that does not measure projections fails closed.
+    // gate: measures length
     fn measure_distance(
         &self,
         request: &ProximityRequest,
@@ -1687,6 +1690,7 @@ pub trait ProximityService: Send + Sync + 'static {
     ///
     /// The default refuses with [`FaceDistanceError::Unsupported`], so a
     /// service that does not measure face distances fails closed.
+    // gate: measures length
     fn measure_face_distance(
         &self,
         request: &FaceDistanceRequest,
@@ -1698,6 +1702,7 @@ pub trait ProximityService: Send + Sync + 'static {
     ///
     /// The default refuses with [`ProximityError::UnsupportedProjection`],
     /// so a service that does not measure regions fails closed.
+    // gate: measures length
     fn measure_region_distance(
         &self,
         request: &RegionDistanceRequest,
@@ -1709,6 +1714,7 @@ pub trait ProximityService: Send + Sync + 'static {
     ///
     /// The default refuses with [`ProximityError::UnsupportedProjection`],
     /// so a service that does not measure them fails closed.
+    // gate: measures length
     fn measure_overlap_along(
         &self,
         request: &OverlapAlongRequest,
@@ -1721,6 +1727,7 @@ pub trait ProximityService: Send + Sync + 'static {
     ///
     /// The default refuses with [`ProximityError::Unavailable`], so a
     /// service that does not measure volumes fails closed.
+    // gate: measures volume
     fn measure_body_volume(&self, object: &ObjectId) -> Result<BodyVolume, ProximityError> {
         let _ = object;
         Err(ProximityError::Unavailable)
@@ -1731,6 +1738,7 @@ pub trait ProximityService: Send + Sync + 'static {
     ///
     /// The default refuses with [`ProximityError::Unavailable`], so a
     /// service that does not hand out surfaces fails closed.
+    // gate: measures area, length
     fn body_surface(&self, object: &ObjectId) -> Result<BodySurface, ProximityError> {
         let _ = object;
         Err(ProximityError::Unavailable)
@@ -1746,6 +1754,7 @@ pub trait ProximityService: Send + Sync + 'static {
     ///
     /// The default refuses with [`ProximityError::Unavailable`], so a
     /// service that does not measure surface distances fails closed.
+    // gate: measures length
     fn measure_surface_distance(
         &self,
         request: &SurfaceDistanceRequest,
@@ -1763,6 +1772,7 @@ pub trait ProximityService: Send + Sync + 'static {
     /// to compare: pairwise rules (clash, containment, distance) leave it
     /// out. The default answers `false`, which is right for a service that
     /// measures no body through its parts.
+    // gate: reads
     fn shares_body(&self, first: &ObjectId, second: &ObjectId) -> bool {
         let _ = (first, second);
         false

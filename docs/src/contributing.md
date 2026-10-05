@@ -27,13 +27,41 @@ also be stated by an author:
   narrows.
 
 The architecture gate (`scripts/architecture.py`, mutation-proven by its
-`--self-test`) holds this. A rules module that calls a measuring service
-method (`measure_*`) must register its own `measured.rs` provider, or have
-an entry in `scripts/measurement_ledger.json`: `answeredBy` names the
-registered measured values that already expose what it measures,
-`searchOnly` says why it only searches. Every named value must be
-registered, and an entry for a module that no longer measures or now has
-its own provider is stale and fails, so the ledger only shrinks. The gate
-also fails a capability without labels and help in
+`--self-test`) holds this, call site by call site
+(`scripts/measurement_gate.py`):
+
+- **Service traits mark their measuring methods.** Every method of a
+  `pub trait …Service` in a core crate carries a marker comment:
+  `// gate: measures <kinds>` when it returns a measured quantity
+  (`length`, `area`, `volume`, `plane_angle`, `number`, `truth`), or
+  `// gate: reads` when it returns stated facts, identities, relations or
+  configuration. A method without a marker fails, and one named `measure_*`
+  cannot be marked `reads`. The gate reads the set of measuring methods from
+  these markers, not from method names, so renaming a method does not hide
+  it.
+- **Every call site is in the ledger.** Each call of a measuring method (by
+  name and arity, or as a `…Service::method` path) and each piece of inline
+  geometry (`hypot`, `sqrt`, `atan2`, trigonometry) in the rules crate,
+  outside a file that only implements registered `MeasuredProvider`s, is a
+  call site keyed `module::function::method` in
+  `scripts/measurement_ledger.json`, with the number of such calls in that
+  function. A new call, in a new function or beside an existing one, fails
+  until it is mapped, and an entry for a call that is gone is stale.
+- **`providedBy` must match.** It names the registered measured values or
+  member lists that expose the quantity. Each must be in the authoring
+  catalogue (`crates/engine/rules/tests/golden/catalogue.json`), list the
+  called method's service among its `services`, and have a dimension the
+  method's marker declares (a plain number, a count or share, may be taken
+  from any).
+- **`searchOnly` is reviewed.** It names one kind from the closed vocabulary
+  `SEARCH_KINDS` in the gate (`candidate-filter`, `pairing`, `route-search`,
+  `obstruction-search`, `description`, `classification`,
+  `revision-comparison`, `derivation` for inline arithmetic only, and
+  `unregistered`), with a reason of at least four words. Adding a kind is a
+  change to the gate. `unregistered` marks a measurement no value exposes
+  yet: its reason names the issue that registers it, and their number is
+  capped by `UNREGISTERED_BUDGET`, which only falls.
+
+The gate also fails a capability without labels and help in
 `crates/engine/rules/src/catalogue_texts.rs`; see the
 [authoring catalogue](./catalogue.md).

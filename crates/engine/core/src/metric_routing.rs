@@ -1267,12 +1267,14 @@ const TRACE_ROUNDING: f64 = 1e-9;
 /// Backend-neutral metric routing interface implemented by trusted host code.
 pub trait MetricRoutingService: Send + Sync + 'static {
     /// Evaluates one route request or explicitly refuses unavailable evidence.
+    // gate: measures length
     fn route(&self, request: &MetricRouteRequest)
     -> Result<MetricRouteOutcome, MetricRoutingError>;
 
     /// Bounds the distance from the origin to the nearest target. The
     /// default refuses: a backend that cannot search many targets at once
     /// must not answer with a single pair.
+    // gate: measures length
     fn nearest_target(
         &self,
         request: &NearestTargetRequest,
@@ -1285,6 +1287,7 @@ pub trait MetricRoutingService: Send + Sync + 'static {
 
     /// Brackets the largest distance from any point of the region to the
     /// nearest target. The default refuses rather than sampling points.
+    // gate: measures length
     fn farthest_point(
         &self,
         request: &FarthestPointRequest,
@@ -1299,6 +1302,7 @@ pub trait MetricRoutingService: Send + Sync + 'static {
     /// [`NearestTargetRequest::avoided`]. The default is `false`, and the
     /// handle then refuses a request avoiding anything rather than let the
     /// backend answer the plain walk.
+    // gate: reads
     fn avoids_objects(&self) -> bool {
         false
     }
@@ -1307,12 +1311,14 @@ pub trait MetricRoutingService: Send + Sync + 'static {
     /// a request's [`TravelCost`]s. The default is `false`, and the handle
     /// then refuses a weighted request rather than let the backend answer
     /// the plain length.
+    // gate: reads
     fn weighs_travel(&self) -> bool {
         false
     }
 
     /// Brackets the shortest walk to a target that enters an object. The
     /// default refuses.
+    // gate: measures length
     fn forced_walk(
         &self,
         request: &ForcedWalkRequest,
@@ -1326,12 +1332,14 @@ pub trait MetricRoutingService: Send + Sync + 'static {
     /// Whether the queries honour a request's [`ConnectorRouting`]. The
     /// default is `false`, and the handle then refuses a request carrying
     /// connectors rather than let the backend answer a walk on one level.
+    // gate: reads
     fn climbs_connectors(&self) -> bool {
         false
     }
 
     /// Measures how much of a polyline lies over each requested object. The
     /// default refuses.
+    // gate: measures length
     fn trace_path(&self, request: &PathTraceRequest) -> Result<PathTrace, MetricRoutingError> {
         let _ = request;
         Err(MetricRoutingError::Unavailable(

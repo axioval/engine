@@ -641,9 +641,11 @@ pub trait PlanSpanService: Send + Sync + 'static {
     /// The longest distance between two points of `object`'s footprint: its
     /// longest plan diagonal. A footprint with no point has none, and is
     /// refused, never zero.
+    // gate: measures length
     fn measure_diameter(&self, object: &ObjectId) -> Result<PlanLength, PlanSpanError>;
     /// The plan distance between the footprints of `first` and `second`,
     /// measured `between` their centres or their farthest points.
+    // gate: measures length
     fn measure_span(
         &self,
         first: &ObjectId,
@@ -654,6 +656,7 @@ pub trait PlanSpanService: Send + Sync + 'static {
     /// [`PlanSpan::Centres`] measures between, and whether it lies inside
     /// the footprint. A service that does not locate centres refuses by
     /// default, never answering with another point.
+    // gate: measures length
     fn measure_centre(&self, object: &ObjectId) -> Result<PlanCentre, PlanSpanError> {
         Err(PlanSpanError::Unavailable(format!(
             "this plan-span service does not locate the centre of {object}"
@@ -662,6 +665,7 @@ pub trait PlanSpanService: Send + Sync + 'static {
     /// The rectangle of least area enclosing `object`'s footprint. A
     /// service that does not orient footprints refuses by default, never
     /// answering with the footprint's axis-aligned box.
+    // gate: measures length, plane_angle
     fn measure_rectangle(&self, object: &ObjectId) -> Result<PlanRectangle, PlanSpanError> {
         Err(PlanSpanError::Unavailable(format!(
             "this plan-span service does not orient the footprint of {object}"
@@ -670,6 +674,7 @@ pub trait PlanSpanService: Send + Sync + 'static {
     /// The recesses of `object`'s footprint: the pockets between its outer
     /// boundary and its convex hull. A service that does not find recesses
     /// refuses by default, never answering that there are none.
+    // gate: measures length
     fn measure_recesses(&self, object: &ObjectId) -> Result<PlanRecesses, PlanSpanError> {
         Err(PlanSpanError::Unavailable(format!(
             "this plan-span service does not measure the recesses of {object}"
@@ -678,6 +683,7 @@ pub trait PlanSpanService: Send + Sync + 'static {
     /// The plan section `objects` share: the intersection of their
     /// footprints, its area and its minimum-area rectangle. A service that
     /// does not intersect footprints refuses by default.
+    // gate: measures length
     fn measure_section(&self, objects: &[ObjectId]) -> Result<PlanSection, PlanSpanError> {
         Err(PlanSpanError::Unavailable(format!(
             "this plan-span service does not measure the section of {} objects",
@@ -688,6 +694,7 @@ pub trait PlanSpanService: Send + Sync + 'static {
     /// wall each runs into, and the request's subjects measured against
     /// every decided wall (see [`CorridorEnds`]). A service that does not
     /// find corridor ends refuses by default, never answering with none.
+    // gate: measures length
     fn measure_corridor_ends(
         &self,
         request: &CorridorEndRequest,
@@ -701,6 +708,7 @@ pub trait PlanSpanService: Send + Sync + 'static {
     /// least-area rectangle, and how far from its centre lines (see
     /// [`SideDistances`]). A service that does not measure them refuses by
     /// default, never answering with none.
+    // gate: measures length
     fn measure_side_distances(
         &self,
         request: &SideDistanceRequest,

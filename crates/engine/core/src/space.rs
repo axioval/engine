@@ -511,11 +511,14 @@ fn canonical(mut elements: Vec<ObjectId>) -> Vec<ObjectId> {
 /// each aspect fails independently.
 pub trait SpaceService: Send + Sync + 'static {
     /// Spaces whose body coincides with `space`.
+    // gate: measures number
     fn measure_duplicates(&self, space: &ObjectId) -> Result<Vec<ObjectId>, SpaceError>;
     /// The clear height of `space`.
+    // gate: measures length
     fn measure_clear_height(&self, space: &ObjectId) -> Result<ClearHeightEvidence, SpaceError>;
     /// Uncovered runs of the space boundary, covered only by the elements
     /// `request` names or, when it names none, by any body but a space.
+    // gate: measures length, area
     fn measure_boundary_gaps(
         &self,
         space: &ObjectId,
@@ -523,6 +526,7 @@ pub trait SpaceService: Send + Sync + 'static {
     ) -> Result<Vec<BoundaryGap>, SpaceError>;
     /// Bodies overlapping `space`: the elements `request` names or, when it
     /// names none, every other body.
+    // gate: measures volume, area
     fn measure_overlaps(
         &self,
         space: &ObjectId,
@@ -530,6 +534,7 @@ pub trait SpaceService: Send + Sync + 'static {
     ) -> Result<Vec<SpaceOverlap>, SpaceError>;
     /// Coverage of one horizontal cap of `space`, by the elements `request`
     /// names or, when it names none, by the host-declared cap elements.
+    // gate: measures area, number
     fn measure_cap_coverage(
         &self,
         space: &ObjectId,
@@ -537,10 +542,13 @@ pub trait SpaceService: Send + Sync + 'static {
     ) -> Result<CapCoverage, SpaceError>;
     /// Floor area belonging to no space, one entry per connected region of
     /// each storey.
+    // gate: measures area, number
     fn measure_unallocated_regions(&self) -> Result<Vec<UnallocatedRegion>, SpaceError>;
     /// Counts of the elements that can form horizontal caps.
+    // gate: measures number
     fn measure_support_counts(&self) -> Result<SupportCounts, SpaceError>;
     /// Evidence backing this service's measurements.
+    // gate: reads
     fn evidence(&self) -> Evidence;
 }
 

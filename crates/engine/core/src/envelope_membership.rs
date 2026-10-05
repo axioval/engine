@@ -215,6 +215,7 @@ fn difference(left: &[ObjectId], right: &[ObjectId]) -> Vec<ObjectId> {
 ///
 /// ADR 0004: every method returns a measurement. None returns a finding.
 pub trait EnvelopeMembershipService: Send + Sync + 'static {
+    // gate: measures truth
     fn measure_envelope_membership(
         &self,
         request: &EnvelopeMembershipRequest,

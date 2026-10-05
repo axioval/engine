@@ -456,10 +456,12 @@ pub trait RelationshipSelectionService: Send + Sync {
     ///
     /// The default is intentionally unbound for services used only through a
     /// raw [`crate::ServiceRegistry`]; an [`crate::EvidenceSession`] rejects it.
+    // gate: reads
     fn source_snapshots(&self) -> &[SourceSnapshot] {
         &[]
     }
     /// Selects candidates or reports why the result is not conclusive.
+    // gate: reads
     fn select(
         &self,
         request: &RelationshipSelectionRequest,
@@ -469,6 +471,7 @@ pub trait RelationshipSelectionService: Send + Sync {
     ///
     /// The default refuses: a service that cannot list edges is never read
     /// as one stating none.
+    // gate: reads
     fn edges(
         &self,
         request: &RelationshipEdgesRequest,

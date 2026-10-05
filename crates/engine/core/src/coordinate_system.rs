@@ -326,8 +326,10 @@ impl SourceCoordinateSystem {
 /// Trusted adapter seam supplying sources' coordinate systems.
 pub trait CoordinateSystemService: Send + Sync + 'static {
     /// Exact source snapshots this service answers for.
+    // gate: reads
     fn source_snapshots(&self) -> &[SourceSnapshot];
     /// The coordinate system of `source`, or why it cannot be read.
+    // gate: reads
     fn coordinate_system(
         &self,
         source: &SourceId,

@@ -339,6 +339,7 @@ impl AlignmentParameterValue {
 pub trait AlignmentService: Send + Sync + 'static {
     /// Where `request`'s object lies along its alignment, or why that
     /// cannot be told.
+    // gate: measures length
     fn measure_alignment_position(
         &self,
         request: &AlignmentRequest,
@@ -348,6 +349,7 @@ pub trait AlignmentService: Send + Sync + 'static {
     ///
     /// The default refuses, so a service that reads no parameters fails
     /// closed rather than answering with a straight, level, uncanted line.
+    // gate: measures length, number
     fn measure_alignment_parameter(
         &self,
         request: &AlignmentParameterRequest,
@@ -362,6 +364,7 @@ pub trait AlignmentService: Send + Sync + 'static {
     ///
     /// The default refuses, so a service that cuts no bodies fails closed
     /// rather than answering with empty sections.
+    // gate: measures length, area
     fn measure_section(&self, request: &SectionRequest) -> Result<Section, AlignmentError> {
         let _ = request;
         Err(AlignmentError::Unavailable(
@@ -374,6 +377,7 @@ pub trait AlignmentService: Send + Sync + 'static {
     ///
     /// The default refuses, so a service that sweeps no envelope fails
     /// closed rather than answering that every body is clear.
+    // gate: measures length, area
     fn measure_envelope(&self, request: &EnvelopeRequest) -> Result<EnvelopeSweep, AlignmentError> {
         let _ = request;
         Err(AlignmentError::Unavailable(

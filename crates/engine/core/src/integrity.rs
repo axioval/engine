@@ -57,8 +57,10 @@ pub enum IntegrityError {
 /// Adapter seam listing a source's integrity issues.
 pub trait SourceIntegrityService: Send + Sync {
     /// Exact source snapshots the scan covers.
+    // gate: reads
     fn source_snapshots(&self) -> &[SourceSnapshot];
     /// Every issue in one covered source, in a deterministic order.
+    // gate: reads
     fn issues(&self, source: &SourceId) -> Result<Vec<IntegrityIssue>, IntegrityError>;
 }
 

@@ -1140,20 +1140,24 @@ impl FreeAreaEvidence {
 }
 
 pub trait FreeSpaceService: Send + Sync + 'static {
+    // gate: measures truth, length
     fn assess_clearance(
         &self,
         request: &ClearanceRequest,
     ) -> Result<ClearanceOutcome, FreeSpaceError>;
+    // gate: measures truth, length
     fn find_placement(
         &self,
         request: &PlacementRequest,
     ) -> Result<PlacementOutcome, FreeSpaceError>;
+    // gate: measures area, length
     fn measure_free_area(
         &self,
         request: &FreeAreaRequest,
     ) -> Result<FreeAreaEvidence, FreeSpaceError>;
     /// Whether a clearance footprint lies inside its scopes. A service that
     /// does not compare footprints refuses, never answering either way.
+    // gate: measures truth
     fn assess_containment(
         &self,
         request: &ContainmentRequest,
@@ -1166,6 +1170,7 @@ pub trait FreeSpaceService: Send + Sync + 'static {
     /// Whether the tops of the request's supports hold a clearance
     /// footprint. A service that does not compare footprints with supports
     /// refuses, never answering either way.
+    // gate: measures area, number
     fn assess_support_coverage(
         &self,
         request: &SupportCoverageRequest,
@@ -1178,6 +1183,7 @@ pub trait FreeSpaceService: Send + Sync + 'static {
     /// Where a path of the request's width can run in its space, and which
     /// entrances and components it comes near (see [`CirculationMap`]). A
     /// service that does not map circulation refuses.
+    // gate: measures area, length
     fn map_circulation(
         &self,
         request: &CirculationRequest,

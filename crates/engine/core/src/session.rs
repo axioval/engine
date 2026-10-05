@@ -19,6 +19,7 @@ use crate::{RelationshipSelectionServiceHandle, ServiceRegistry, ServiceRegistry
 /// multi-source session, but every declared binding must match exactly.
 pub trait SnapshotBoundService: Any + Send + Sync {
     /// Exact source snapshots used to construct this service.
+    // gate: reads
     fn source_snapshots(&self) -> &[SourceSnapshot];
 }
 

@@ -552,6 +552,7 @@ impl Thickness {
 /// Measures the vertical extents of model objects.
 pub trait VerticalExtentService: Send + Sync + 'static {
     /// The elevations of `object`'s lowest and highest points.
+    // gate: measures length
     fn measure_vertical_extent(
         &self,
         object: &ObjectId,
@@ -562,6 +563,7 @@ pub trait VerticalExtentService: Send + Sync + 'static {
     ///
     /// A service that measures elevations only refuses; it never answers
     /// with the vertical extent.
+    // gate: measures length
     fn measure_directional_extent(
         &self,
         object: &ObjectId,
@@ -576,6 +578,7 @@ pub trait VerticalExtentService: Send + Sync + 'static {
     /// How thick `object`'s body is along `direction`.
     ///
     /// A service that does not measure thicknesses refuses.
+    // gate: measures length
     fn measure_thickness(
         &self,
         object: &ObjectId,
@@ -590,6 +593,7 @@ pub trait VerticalExtentService: Send + Sync + 'static {
     /// The normals of the pieces of `object`'s `face`.
     ///
     /// A service that does not measure faces refuses.
+    // gate: measures plane_angle, number
     fn measure_face_normals(
         &self,
         object: &ObjectId,

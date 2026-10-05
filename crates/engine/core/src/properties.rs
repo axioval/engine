@@ -505,10 +505,12 @@ pub trait PropertyResolutionService: Send + Sync {
     ///
     /// The default is intentionally unbound for services used only through a
     /// raw [`crate::ServiceRegistry`]; an [`crate::EvidenceSession`] rejects it.
+    // gate: reads
     fn source_snapshots(&self) -> &[SourceSnapshot] {
         &[]
     }
     /// Resolves one request or reports why it is not conclusive.
+    // gate: reads
     fn resolve(
         &self,
         request: &PropertyRequest,
@@ -519,6 +521,7 @@ pub trait PropertyResolutionService: Send + Sync {
     /// The default refuses: a source that cannot list an object's
     /// properties never answers with an empty enumeration, which would be a
     /// proof of absence.
+    // gate: reads
     fn enumerate(
         &self,
         request: &PropertyEnumerationRequest,

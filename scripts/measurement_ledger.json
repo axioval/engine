@@ -1,29 +1,947 @@
 {
-  "schemaVersion": "1.0.0",
-  "description": "Rules modules that call a measuring service method (`measure_*`) without a measured-value provider of their own. `answeredBy` names the registered measured values or member lists that expose what the module measures (answered by the engine or a shared provider); `searchOnly` gives why the module only searches. A module absent here must register a `measured.rs` provider; an entry for a module that no longer measures, or now has its own provider, is stale and fails the gate.",
-  "answeredBy": {
-    "corridor_end_openings": ["end_walls"],
-    "effective_coverage": ["effect_covered_area", "effect_covered_share"],
-    "exit_separation": ["exit_pairs", "plan_diameter"],
-    "light_well": ["well_gap", "well_height", "well_section_area", "well_section_width"],
-    "measured_plan": ["centre_line_distance", "end_walls", "exit_pairs", "plan_diameter", "recesses", "well_gap"],
-    "orientation": ["axes_within", "rectangle_side", "skew"],
-    "quantity_takeoff": ["boundary_area"],
-    "recess_width": ["recesses"],
-    "space_boundary_coverage": ["boundary_covered_share", "boundary_off_surface_count", "boundary_overlap_area", "boundary_uncovered_area"],
-    "space_distance": ["distance", "plan_diameter"],
-    "space_validation": ["boundary_gap", "cap_coverage", "clear_height", "duplicate_count", "intersection_count", "largest_unallocated_region", "support_count", "unallocated_share"],
-    "wall_sides": ["centre_line_distance"]
-  },
-  "searchOnly": {
-    "accessible_route": "searches a route through connectors and walkable runs; the runs' own measurements are the stair and ramp values",
-    "clash": "proximity only narrows the candidate pairs the clash service decides",
-    "clash_cases": "measures a found clash's overlap to describe it, never to decide it",
-    "comparison": "distances only pair an object with its counterpart in the other revision",
-    "component_clearance": "searches the free zone in front of a component for obstructions",
-    "component_visibility": "searches sight lines from a component's centre",
-    "containment": "face distances decide which container an object lies in",
-    "external_wall_validation": "envelope membership classifies walls by the envelope search",
-    "local_circulation": "searches routes between spaces"
+  "schemaVersion": "2.0.0",
+  "description": "Every call site in the rules crate that measures through a service method marked `// gate: measures`, or computes inline geometry, outside a registered measured-value provider. Keyed `module::function::method`, with the number of such calls in that function. `providedBy` names the registered measured values (or member lists) that expose the quantity: each must be in the authoring catalogue, list the called service, and be of a kind the method's marker declares (a plain number may count or share any). `searchOnly` names a reviewed kind from `SEARCH_KINDS` in scripts/measurement_gate.py with a reason. A new call, a changed count or a stale entry fails the gate.",
+  "callSites": {
+    "accessible_route::evaluate::snapshot": {
+      "count": 1,
+      "searchOnly": "route-search",
+      "reason": "builds the walkable network the accessible route search runs over; the runs' own measurements are the stair and ramp values"
+    },
+    "accessible_route::measure_width::measure_sloped_runs": {
+      "count": 1,
+      "providedBy": [
+        "clear_width",
+        "runs"
+      ]
+    },
+    "accessible_route::measure_width::measure_tread_flight": {
+      "count": 1,
+      "providedBy": [
+        "flight_width",
+        "steps"
+      ]
+    },
+    "body_extent::check::measure_directional_extent": {
+      "count": 1,
+      "providedBy": [
+        "body_extent",
+        "extent"
+      ]
+    },
+    "body_extent::check::object_frame": {
+      "count": 1,
+      "providedBy": [
+        "body_extent"
+      ]
+    },
+    "clash::measure::measure_proximity": {
+      "count": 1,
+      "searchOnly": "unregistered",
+      "reason": "a pair's penetration depth and containment are measured but no value exposes them yet (#225)"
+    },
+    "clash_cases::frame::object_frame": {
+      "count": 1,
+      "searchOnly": "description",
+      "reason": "reads the clashing objects' frames to place a found clash's viewpoint, never to decide it"
+    },
+    "clash_cases::measure::measure_overlap_along": {
+      "count": 1,
+      "searchOnly": "description",
+      "reason": "measures a found clash's overlap to describe it, never to decide it"
+    },
+    "comparison::facets::bounds::bounds": {
+      "count": 2,
+      "searchOnly": "revision-comparison",
+      "reason": "compares an object's geometry with its counterpart's in the other revision: the shift of its bounds"
+    },
+    "comparison::facets::distance::sqrt": {
+      "count": 1,
+      "searchOnly": "revision-comparison",
+      "reason": "compares an object's geometry with its counterpart's in the other revision: the distance its placement moved"
+    },
+    "comparison::facets::mesh::body_surface": {
+      "count": 2,
+      "searchOnly": "revision-comparison",
+      "reason": "compares an object's geometry with its counterpart's in the other revision: its body's surface"
+    },
+    "comparison::facets::mesh::measure_surface_distance": {
+      "count": 1,
+      "searchOnly": "revision-comparison",
+      "reason": "compares an object's geometry with its counterpart's in the other revision: the distance between the two surfaces"
+    },
+    "comparison::facets::placement::object_frame": {
+      "count": 2,
+      "searchOnly": "revision-comparison",
+      "reason": "compares an object's geometry with its counterpart's in the other revision: its placement frame"
+    },
+    "comparison::facets::plan_angle::atan2": {
+      "count": 1,
+      "searchOnly": "revision-comparison",
+      "reason": "compares an object's geometry with its counterpart's in the other revision: the angle its plan axis turned"
+    },
+    "comparison::facets::rotation::asin": {
+      "count": 1,
+      "searchOnly": "revision-comparison",
+      "reason": "compares an object's geometry with its counterpart's in the other revision: the angle its frame turned"
+    },
+    "comparison::facets::rotation::sqrt": {
+      "count": 1,
+      "searchOnly": "revision-comparison",
+      "reason": "compares an object's geometry with its counterpart's in the other revision: the angle its frame turned"
+    },
+    "comparison::matching::coincide::measure_proximity": {
+      "count": 1,
+      "searchOnly": "pairing",
+      "reason": "matches an object with its counterpart in the other revision by where its body lies"
+    },
+    "comparison::matching::overlap::measure_proximity": {
+      "count": 1,
+      "searchOnly": "pairing",
+      "reason": "matches an object with its counterpart in the other revision by where its body lies"
+    },
+    "comparison::matching::pairwise::bounds": {
+      "count": 1,
+      "searchOnly": "pairing",
+      "reason": "matches an object with its counterpart in the other revision by where its body lies"
+    },
+    "comparison::matching::placed_alike::object_frame": {
+      "count": 2,
+      "searchOnly": "pairing",
+      "reason": "matches an object with its counterpart in the other revision by where its body lies and how it is placed"
+    },
+    "component_clearance::against_wall::hypot": {
+      "count": 1,
+      "searchOnly": "obstruction-search",
+      "reason": "searches the free zone in front of a component for obstructions; inline lengths size that zone"
+    },
+    "component_clearance::clearance::assess_clearance": {
+      "count": 1,
+      "searchOnly": "obstruction-search",
+      "reason": "searches the declared free zone in front of a component for obstructing objects"
+    },
+    "component_clearance::containment::assess_containment": {
+      "count": 1,
+      "searchOnly": "classification",
+      "reason": "decides whether the declared zone's plan lies inside the reached spaces"
+    },
+    "component_clearance::faces::measure_directional_extent": {
+      "count": 2,
+      "providedBy": [
+        "extent"
+      ]
+    },
+    "component_clearance::farthest::hypot": {
+      "count": 2,
+      "searchOnly": "obstruction-search",
+      "reason": "searches the free zone in front of a component for obstructions; inline lengths size that zone"
+    },
+    "component_clearance::of::object_frame": {
+      "count": 1,
+      "providedBy": [
+        "bearing",
+        "x",
+        "y",
+        "z"
+      ]
+    },
+    "component_clearance::outline::hypot": {
+      "count": 1,
+      "searchOnly": "obstruction-search",
+      "reason": "searches the free zone in front of a component for obstructions; inline lengths size that zone"
+    },
+    "component_clearance::search::find_placement": {
+      "count": 1,
+      "providedBy": [
+        "free_placements"
+      ]
+    },
+    "component_clearance::search::hypot": {
+      "count": 1,
+      "searchOnly": "obstruction-search",
+      "reason": "searches the free zone in front of a component for obstructions; inline lengths size that zone"
+    },
+    "component_clearance::support::assess_support_coverage": {
+      "count": 1,
+      "searchOnly": "unregistered",
+      "reason": "how much of a zone's base the supports cover is measured but no value exposes it yet (#225)"
+    },
+    "component_visibility::of::assess_sight": {
+      "count": 1,
+      "searchOnly": "obstruction-search",
+      "reason": "searches the sight lines from a component's centre for obstructing objects"
+    },
+    "component_visibility::of::measure_centre": {
+      "count": 1,
+      "searchOnly": "obstruction-search",
+      "reason": "places the origin of the sight lines searched at the footprint's centre"
+    },
+    "component_visibility::of::measure_vertical_extent": {
+      "count": 1,
+      "providedBy": [
+        "top",
+        "bottom"
+      ]
+    },
+    "containment::cover::measure_face_distance": {
+      "count": 1,
+      "searchOnly": "classification",
+      "reason": "face distances decide which container an object lies in, by the containment search"
+    },
+    "corridor_end_openings::check::measure_corridor_ends": {
+      "count": 1,
+      "providedBy": [
+        "end_walls"
+      ]
+    },
+    "counterpart_coverage::cover::measure_uncovered_area": {
+      "count": 1,
+      "providedBy": [
+        "counterpart_uncovered_share",
+        "uncovered_area"
+      ]
+    },
+    "counterpart_coverage::elevation_share::measure_elevation_cover": {
+      "count": 1,
+      "providedBy": [
+        "counterpart_uncovered_share"
+      ]
+    },
+    "counterpart_coverage::find::bounds": {
+      "count": 1,
+      "searchOnly": "candidate-filter",
+      "reason": "the bounding boxes only propose the objects near enough to measure"
+    },
+    "counterpart_coverage::height_share::measure_vertical_extent": {
+      "count": 1,
+      "providedBy": [
+        "counterpart_uncovered_share",
+        "top",
+        "bottom"
+      ]
+    },
+    "counterpart_coverage::plan_share::measure_uncovered_area": {
+      "count": 1,
+      "providedBy": [
+        "counterpart_uncovered_share",
+        "uncovered_area"
+      ]
+    },
+    "distance::admit::measure_vertical_extent": {
+      "count": 1,
+      "providedBy": [
+        "top",
+        "bottom"
+      ]
+    },
+    "distance::candidates::measure_distance": {
+      "count": 1,
+      "providedBy": [
+        "distance",
+        "count_within"
+      ]
+    },
+    "distance::enter::measure_vertical_extent": {
+      "count": 1,
+      "providedBy": [
+        "top",
+        "bottom"
+      ]
+    },
+    "distance::prepare::bounds": {
+      "count": 1,
+      "searchOnly": "candidate-filter",
+      "reason": "the bounding boxes only propose the objects near enough to measure"
+    },
+    "distance::to_body::measure_region_distance": {
+      "count": 1,
+      "providedBy": [
+        "distance"
+      ]
+    },
+    "door_swing::box_gap::hypot": {
+      "count": 1,
+      "searchOnly": "candidate-filter",
+      "reason": "the gap between plan boxes only proposes the swings near enough to measure"
+    },
+    "door_swing::leaves::leaves": {
+      "count": 1,
+      "providedBy": [
+        "leaf_width",
+        "leaf_count"
+      ]
+    },
+    "door_swing::probe::assess_containment": {
+      "count": 1,
+      "providedBy": [
+        "swing_spaces",
+        "swings_into"
+      ]
+    },
+    "effective_coverage::checks::measure_coverage": {
+      "count": 1,
+      "providedBy": [
+        "effect_covered_area",
+        "effect_covered_share"
+      ]
+    },
+    "effective_coverage::find::bounds": {
+      "count": 1,
+      "searchOnly": "candidate-filter",
+      "reason": "the bounding boxes only propose the objects near enough to measure"
+    },
+    "effective_coverage::touches::measure_distance": {
+      "count": 1,
+      "providedBy": [
+        "distance"
+      ]
+    },
+    "escape_route::assign::measure_plan_overlap": {
+      "count": 1,
+      "providedBy": [
+        "plan_overlap"
+      ]
+    },
+    "escape_route::clear_height::measure_clear_height": {
+      "count": 1,
+      "providedBy": [
+        "clear_height"
+      ]
+    },
+    "escape_route::clear_height::measure_vertical_extent": {
+      "count": 1,
+      "providedBy": [
+        "extent_z"
+      ]
+    },
+    "escape_route::crossed::trace_path": {
+      "count": 1,
+      "providedBy": [
+        "travel_distance"
+      ]
+    },
+    "escape_route::crossing::hypot": {
+      "count": 2,
+      "searchOnly": "route-search",
+      "reason": "finds where a searched walk crosses a door leaf's closed line"
+    },
+    "escape_route::door_direction::leaves": {
+      "count": 1,
+      "searchOnly": "classification",
+      "reason": "decides which way an exit door opens, out of the space or into it"
+    },
+    "escape_route::farther::measure_distance": {
+      "count": 1,
+      "providedBy": [
+        "distance"
+      ]
+    },
+    "escape_route::forced_off::forced_walk": {
+      "count": 1,
+      "providedBy": [
+        "travel_distance"
+      ]
+    },
+    "escape_route::off_every_walk::measure_distance": {
+      "count": 1,
+      "searchOnly": "route-search",
+      "reason": "bounds every walk through a passage from below by plain distances, pruning the route search"
+    },
+    "escape_route::plain_farthest::farthest_point": {
+      "count": 1,
+      "providedBy": [
+        "travel_distance"
+      ]
+    },
+    "escape_route::route_leaves::leaves": {
+      "count": 1,
+      "searchOnly": "classification",
+      "reason": "decides which way a door on a searched route opens along the walk"
+    },
+    "escape_route::walk::nearest_target": {
+      "count": 1,
+      "providedBy": [
+        "travel_distance"
+      ]
+    },
+    "escape_route::walked_cost::trace_path": {
+      "count": 1,
+      "providedBy": [
+        "travel_distance"
+      ]
+    },
+    "escape_route::width::measure_diameter": {
+      "count": 1,
+      "providedBy": [
+        "plan_diameter"
+      ]
+    },
+    "escape_route::width::measure_rectangle": {
+      "count": 1,
+      "providedBy": [
+        "rectangle_side"
+      ]
+    },
+    "exit_separation::measure_pairs::measure_distance": {
+      "count": 1,
+      "providedBy": [
+        "exit_pairs"
+      ]
+    },
+    "exit_separation::measure_pairs::measure_span": {
+      "count": 1,
+      "providedBy": [
+        "exit_pairs"
+      ]
+    },
+    "exit_separation::separation::measure_diameter": {
+      "count": 1,
+      "providedBy": [
+        "plan_diameter"
+      ]
+    },
+    "external_wall_validation::evaluate::measure_envelope_membership": {
+      "count": 1,
+      "searchOnly": "classification",
+      "reason": "envelope membership classifies walls as external by the envelope search"
+    },
+    "free_floor::ask::find_placement": {
+      "count": 1,
+      "providedBy": [
+        "free_placements"
+      ]
+    },
+    "horizontal_guard::evaluate::measure_guard_edges": {
+      "count": 1,
+      "providedBy": [
+        "guard_edges"
+      ]
+    },
+    "keyed_limit::defaults::operation::leaves": {
+      "count": 1,
+      "searchOnly": "classification",
+      "reason": "reads the operation type a door's leaves state to choose its default limit"
+    },
+    "keyed_limit::from_leaves::leaves": {
+      "count": 1,
+      "providedBy": [
+        "door_clear_width",
+        "leaf_width"
+      ]
+    },
+    "keyed_limit::threshold::near::bounds": {
+      "count": 1,
+      "searchOnly": "candidate-filter",
+      "reason": "the bounding boxes only propose the objects near enough to measure"
+    },
+    "keyed_limit::threshold::near::hypot": {
+      "count": 1,
+      "searchOnly": "candidate-filter",
+      "reason": "the gap between plan boxes only proposes the ramps near enough to measure"
+    },
+    "keyed_limit::threshold::near::measure_distance": {
+      "count": 1,
+      "providedBy": [
+        "threshold_step"
+      ]
+    },
+    "keyed_limit::threshold::overlaps::measure_distance": {
+      "count": 1,
+      "providedBy": [
+        "threshold_step"
+      ]
+    },
+    "keyed_limit::threshold::ramps::bounds": {
+      "count": 1,
+      "searchOnly": "candidate-filter",
+      "reason": "the bounding boxes only propose the objects near enough to measure"
+    },
+    "level_spacing::extent::measure_vertical_extent": {
+      "count": 1,
+      "providedBy": [
+        "prevailing_elevation",
+        "prevailing_rise"
+      ]
+    },
+    "light_well::judge_well::measure_section": {
+      "count": 1,
+      "providedBy": [
+        "well_section_area",
+        "well_section_width"
+      ]
+    },
+    "local_circulation::branch::hypot": {
+      "count": 1,
+      "searchOnly": "route-search",
+      "reason": "searches the circulation skeleton for routes between spaces; inline lengths walk its branches"
+    },
+    "local_circulation::heading::hypot": {
+      "count": 1,
+      "searchOnly": "route-search",
+      "reason": "searches the circulation skeleton for routes between spaces; inline lengths walk its branches"
+    },
+    "local_circulation::keep::hypot": {
+      "count": 2,
+      "searchOnly": "route-search",
+      "reason": "searches the circulation skeleton for routes between spaces; inline lengths walk its branches"
+    },
+    "local_circulation::near_exempt::measure_region_distance": {
+      "count": 1,
+      "searchOnly": "route-search",
+      "reason": "decides whether a searched route's end lies near an exempting object"
+    },
+    "local_circulation::search::find_placement": {
+      "count": 1,
+      "searchOnly": "route-search",
+      "reason": "searches each route piece for a place wide enough to pass"
+    },
+    "local_circulation::space::map_circulation": {
+      "count": 1,
+      "searchOnly": "route-search",
+      "reason": "maps the circulation skeleton the route search runs over"
+    },
+    "name_sequence::placement_height::object_frame": {
+      "count": 1,
+      "providedBy": [
+        "z"
+      ]
+    },
+    "opening_zone::face::range::hypot": {
+      "count": 3,
+      "providedBy": [
+        "opening_placements"
+      ]
+    },
+    "opening_zone::face::separation::hypot": {
+      "count": 1,
+      "providedBy": [
+        "opening_placements"
+      ]
+    },
+    "opening_zone::spacing::hypot": {
+      "count": 1,
+      "providedBy": [
+        "opening_placements"
+      ]
+    },
+    "opening_zone::supports::contact::bounds": {
+      "count": 1,
+      "searchOnly": "candidate-filter",
+      "reason": "the bounding boxes only propose the objects near enough to measure"
+    },
+    "opening_zone::supports::contact::measure_distance": {
+      "count": 1,
+      "searchOnly": "classification",
+      "reason": "decides which objects support an opening's host by contact within a tolerance"
+    },
+    "opening_zone::supports::find::bounds": {
+      "count": 1,
+      "searchOnly": "candidate-filter",
+      "reason": "the bounding boxes only propose the objects near enough to measure"
+    },
+    "orientation::along::measure_directional_extent": {
+      "count": 1,
+      "providedBy": [
+        "extent"
+      ]
+    },
+    "orientation::rectangle::measure_rectangle": {
+      "count": 1,
+      "providedBy": [
+        "rectangle_side",
+        "skew"
+      ]
+    },
+    "pairs::prepare::bounds": {
+      "count": 1,
+      "searchOnly": "candidate-filter",
+      "reason": "the bounding boxes only propose the objects near enough to measure"
+    },
+    "parking_bay::centre_angle::asin": {
+      "count": 1,
+      "providedBy": [
+        "axes_within"
+      ]
+    },
+    "parking_bay::centre_angle::atan2": {
+      "count": 1,
+      "providedBy": [
+        "axes_within"
+      ]
+    },
+    "parking_bay::centre_angle::hypot": {
+      "count": 1,
+      "providedBy": [
+        "axes_within"
+      ]
+    },
+    "parking_bay::count::hypot": {
+      "count": 1,
+      "providedBy": [
+        "obstruction_count"
+      ]
+    },
+    "parking_bay::count::sin": {
+      "count": 1,
+      "providedBy": [
+        "obstruction_count"
+      ]
+    },
+    "parking_bay::height::measure_vertical_extent": {
+      "count": 1,
+      "providedBy": [
+        "obstruction_count",
+        "top",
+        "bottom"
+      ]
+    },
+    "parking_bay::of::bounds": {
+      "count": 1,
+      "searchOnly": "candidate-filter",
+      "reason": "the bounding boxes only propose the objects near enough to measure"
+    },
+    "parking_bay::within_reach::measure_distance": {
+      "count": 1,
+      "providedBy": [
+        "distance"
+      ]
+    },
+    "passing_spaces::piece::find_placement": {
+      "count": 1,
+      "searchOnly": "route-search",
+      "reason": "searches each piece of a route for a place wide enough to pass"
+    },
+    "passing_spaces::segments::hypot": {
+      "count": 1,
+      "searchOnly": "route-search",
+      "reason": "walks the searched route's segments by their plan length"
+    },
+    "passing_spaces::walk::route": {
+      "count": 1,
+      "searchOnly": "route-search",
+      "reason": "searches the route along which passing places are looked for"
+    },
+    "plan_area::body_volume::measure_body_volume": {
+      "count": 1,
+      "providedBy": [
+        "volume"
+      ]
+    },
+    "plan_area::coverage::measure_footprint": {
+      "count": 1,
+      "providedBy": [
+        "area"
+      ]
+    },
+    "plan_area::coverage::measure_plan_overlap": {
+      "count": 1,
+      "providedBy": [
+        "plan_overlap"
+      ]
+    },
+    "plan_area::facades::measure_facade_area": {
+      "count": 1,
+      "providedBy": [
+        "facade_area"
+      ]
+    },
+    "plan_area::face_area::measure_face_area": {
+      "count": 1,
+      "providedBy": [
+        "face_area"
+      ]
+    },
+    "plan_area::footprint::measure_footprint": {
+      "count": 1,
+      "providedBy": [
+        "area"
+      ]
+    },
+    "plan_area::footprints::measure_footprint": {
+      "count": 1,
+      "providedBy": [
+        "area"
+      ]
+    },
+    "quantity_takeoff::measure_coverage::measure_boundary_coverage": {
+      "count": 1,
+      "providedBy": [
+        "boundary_area"
+      ]
+    },
+    "recess_width::evaluate::measure_recesses": {
+      "count": 1,
+      "providedBy": [
+        "recesses"
+      ]
+    },
+    "shelf_capacity::measure::measure_linear_quantity": {
+      "count": 1,
+      "providedBy": [
+        "shelf_length",
+        "shelf_clear_height"
+      ]
+    },
+    "slab_contact::evaluate::measure_contact": {
+      "count": 1,
+      "providedBy": [
+        "contact_area",
+        "contact_gap",
+        "contact_share"
+      ]
+    },
+    "slab_stack::evaluate::measure_vertical_extent": {
+      "count": 1,
+      "providedBy": [
+        "stack_distance"
+      ]
+    },
+    "slab_stack::footprint::measure_footprint": {
+      "count": 1,
+      "providedBy": [
+        "area"
+      ]
+    },
+    "slab_stack::measure::measure_plan_overlap": {
+      "count": 1,
+      "providedBy": [
+        "plan_overlap"
+      ]
+    },
+    "slab_stack::plan_disjoint::bounds": {
+      "count": 1,
+      "searchOnly": "candidate-filter",
+      "reason": "the bounding boxes only propose the objects near enough to measure"
+    },
+    "space_boundary_coverage::evaluate::measure_boundary_coverage": {
+      "count": 1,
+      "providedBy": [
+        "boundary_covered_share",
+        "boundary_off_surface_count",
+        "boundary_overlap_area",
+        "boundary_uncovered_area"
+      ]
+    },
+    "space_distance::measure_pair::measure_distance": {
+      "count": 1,
+      "providedBy": [
+        "distance"
+      ]
+    },
+    "space_distance::measure_pair::measure_span": {
+      "count": 1,
+      "providedBy": [
+        "plan_diameter"
+      ]
+    },
+    "space_distance::nearest_walking::nearest_target": {
+      "count": 1,
+      "providedBy": [
+        "travel_distance"
+      ]
+    },
+    "space_distance::representative_point::measure_centre": {
+      "count": 1,
+      "searchOnly": "route-search",
+      "reason": "places a walk's start at the footprint's centre for the route search"
+    },
+    "space_distance::representative_point::measure_vertical_extent": {
+      "count": 1,
+      "providedBy": [
+        "bottom"
+      ]
+    },
+    "space_validation::cap_plans::measure_support_counts": {
+      "count": 1,
+      "providedBy": [
+        "support_count"
+      ]
+    },
+    "space_validation::check_boundary::measure_boundary_gaps": {
+      "count": 1,
+      "providedBy": [
+        "boundary_gap"
+      ]
+    },
+    "space_validation::check_cap::measure_cap_coverage": {
+      "count": 1,
+      "providedBy": [
+        "cap_coverage"
+      ]
+    },
+    "space_validation::check_duplicates::measure_duplicates": {
+      "count": 1,
+      "providedBy": [
+        "duplicate_count"
+      ]
+    },
+    "space_validation::check_height::measure_clear_height": {
+      "count": 1,
+      "providedBy": [
+        "clear_height"
+      ]
+    },
+    "space_validation::check_overlaps::measure_overlaps": {
+      "count": 1,
+      "providedBy": [
+        "intersection_count"
+      ]
+    },
+    "space_validation::check_residuals::measure_unallocated_regions": {
+      "count": 1,
+      "providedBy": [
+        "largest_unallocated_region",
+        "unallocated_share"
+      ]
+    },
+    "stair_geometry::below::measure_clearance_below": {
+      "count": 1,
+      "providedBy": [
+        "clearance_below"
+      ]
+    },
+    "stair_geometry::clear_width::landing_width::measure_landing_clear_width": {
+      "count": 1,
+      "providedBy": [
+        "landing_clear_width"
+      ]
+    },
+    "stair_geometry::clear_width::stretch_width::measure_clear_width": {
+      "count": 1,
+      "providedBy": [
+        "clear_width"
+      ]
+    },
+    "stair_geometry::continuity::touching::bounds": {
+      "count": 2,
+      "searchOnly": "candidate-filter",
+      "reason": "the bounding boxes only propose the objects near enough to measure"
+    },
+    "stair_geometry::continuity::touching::measure_distance": {
+      "count": 1,
+      "providedBy": [
+        "handrail_breaks"
+      ]
+    },
+    "stair_geometry::handrails::measure::measure_handrails": {
+      "count": 1,
+      "providedBy": [
+        "handrails"
+      ]
+    },
+    "stair_geometry::headroom::measure_headroom": {
+      "count": 1,
+      "providedBy": [
+        "headroom"
+      ]
+    },
+    "stair_geometry::landing::measure_landing": {
+      "count": 1,
+      "providedBy": [
+        "landing_depth",
+        "landing_width"
+      ]
+    },
+    "stair_geometry::measure::measure_tread_flight": {
+      "count": 1,
+      "providedBy": [
+        "steps",
+        "flight_rise",
+        "flight_width"
+      ]
+    },
+    "stair_geometry::obstruction::overlaps::measure_distance": {
+      "count": 1,
+      "providedBy": [
+        "rails_over_surfaces"
+      ]
+    },
+    "stair_geometry::ramp::measure_sloped_runs": {
+      "count": 1,
+      "providedBy": [
+        "runs"
+      ]
+    },
+    "stair_geometry::ramp_ends::assess::assess_clearance": {
+      "count": 1,
+      "providedBy": [
+        "obstructed_end_spaces"
+      ]
+    },
+    "stair_geometry::ramp_ends::flight_end_space::measure_landing": {
+      "count": 1,
+      "providedBy": [
+        "obstructed_end_spaces"
+      ]
+    },
+    "stair_geometry::tactile::apart::hypot": {
+      "count": 1,
+      "providedBy": [
+        "missing_tactile_strips"
+      ]
+    },
+    "stair_geometry::tactile::inside::hypot": {
+      "count": 1,
+      "providedBy": [
+        "missing_tactile_strips"
+      ]
+    },
+    "stair_geometry::tactile::place::measure_landing": {
+      "count": 1,
+      "providedBy": [
+        "missing_tactile_strips"
+      ]
+    },
+    "stair_geometry::tactile::read::measure_rectangle": {
+      "count": 1,
+      "searchOnly": "obstruction-search",
+      "reason": "reads the selected strips' rectangles to search a flight's end zone for them"
+    },
+    "stair_geometry::whole::exempt::measure_landing": {
+      "count": 1,
+      "providedBy": [
+        "landing_door_conflicts"
+      ]
+    },
+    "triangle_count::evaluate::count_triangles": {
+      "count": 1,
+      "providedBy": [
+        "triangle_count"
+      ]
+    },
+    "wall_sides::measure::measure_side_distances": {
+      "count": 1,
+      "providedBy": [
+        "centre_line_distance"
+      ]
+    },
+    "wall_spacing::facing::hypot": {
+      "count": 1,
+      "providedBy": [
+        "parallel_pairs"
+      ]
+    },
+    "wall_spacing::facing::sin": {
+      "count": 1,
+      "providedBy": [
+        "parallel_pairs"
+      ]
+    },
+    "wall_spacing::pair::measure_distance": {
+      "count": 1,
+      "providedBy": [
+        "parallel_pairs"
+      ]
+    },
+    "wall_spacing::pairs::bounds": {
+      "count": 1,
+      "searchOnly": "candidate-filter",
+      "reason": "the bounding boxes only propose the objects near enough to measure"
+    },
+    "wall_spacing::uncovered::measure_outside_bands": {
+      "count": 1,
+      "providedBy": [
+        "band_uncovered_area"
+      ]
+    }
   }
 }

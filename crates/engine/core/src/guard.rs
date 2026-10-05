@@ -370,6 +370,7 @@ impl GuardEvidence {
 ///
 /// ADR 0004: every method returns a measurement. None returns a finding.
 pub trait GuardService: Send + Sync + 'static {
+    // gate: measures length
     fn measure_guard_edges(&self, search: GuardSearch) -> Result<GuardEvidence, GuardError>;
 }
 

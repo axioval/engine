@@ -108,6 +108,7 @@ impl FacadeArea {
 /// Measures the outward-facing surface area of model objects.
 pub trait FacadeAreaService: Send + Sync + 'static {
     /// The area of `object`'s faces that face the outside.
+    // gate: measures area
     fn measure_facade_area(&self, object: &ObjectId) -> Result<FacadeArea, FacadeAreaError>;
     /// The area of `object`'s largest plane face: all of its body's faces
     /// lying in one oriented plane, such as a wall's side less its openings
@@ -115,6 +116,7 @@ pub trait FacadeAreaService: Send + Sync + 'static {
     ///
     /// The default refuses with [`FacadeAreaError::Unavailable`], so a
     /// service that does not measure faces fails closed.
+    // gate: measures area
     fn measure_face_area(&self, object: &ObjectId) -> Result<FacadeArea, FacadeAreaError> {
         let _ = object;
         Err(FacadeAreaError::Unavailable(

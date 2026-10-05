@@ -486,6 +486,7 @@ pub trait BoundaryCoverageService: Send + Sync + 'static {
     /// # Errors
     ///
     /// Returns [`BoundaryCoverageError::Unsupported`] unless implemented.
+    // gate: measures area, number
     fn measure_boundary_coverage(
         &self,
         request: &BoundaryCoverageRequest,

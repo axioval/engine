@@ -234,6 +234,7 @@ impl ContactEvidence {
 ///
 /// ADR 0004: every method returns a measurement. None returns a finding.
 pub trait ContactService: Send + Sync + 'static {
+    // gate: measures area, length, number
     fn measure_contact(&self, request: &ContactRequest) -> Result<ContactEvidence, ContactError>;
 }
 

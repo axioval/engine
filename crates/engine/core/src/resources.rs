@@ -105,6 +105,7 @@ pub enum ResourceError {
 /// Trusted adapter seam listing a source's resource objects by class.
 pub trait ResourceService: Send + Sync {
     /// Exact source snapshots this service answers for.
+    // gate: reads
     fn source_snapshots(&self) -> &[SourceSnapshot];
 
     /// Every resource object of the request's class, complete or refused,
@@ -116,6 +117,7 @@ pub trait ResourceService: Send + Sync {
     /// answered object is of the request's source and carries no properties,
     /// classifications or relationships of its own; its facts are resolved
     /// through the source's services.
+    // gate: reads
     fn resources(&self, request: &ResourceRequest) -> Result<Vec<Object>, ResourceError>;
 }
 

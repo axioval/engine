@@ -76,4 +76,8 @@ section as its own parallel job (with the package check beside them), and its
 `check` job passes only when every one does. Pages does not re-run the gate:
 it requires CI to have passed on the commit and builds only `docs`.
 With `IDS_TEST_CASES` pointing at the buildingSMART IDS test cases (not
-vendored), `test` also runs the `axioval-ids` conformance corpus.
+vendored), `test` also runs the `axioval-ids` conformance corpus. With
+`AXIOVAL_PARITY_MODELS` naming the cache `scripts/parity_models.py fetch`
+fills, it also runs the parity harness on the pinned public IFC models
+(`crates/apps/cli/tests/parity.rs`); CI runs that in its own `parity` job,
+the models cached by the manifest's hash, and `check` requires it.

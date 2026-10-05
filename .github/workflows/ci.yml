@@ -87,17 +87,45 @@ jobs:
         # a fresh temporary target directory, so a build cache cannot help.
         run: ./scripts/package.sh --structure-only
 
+  # The parity harness on the pinned public IFC models: every built-in
+  # capability beside its re-expression, through the real binary. The models
+  # are openly licensed but not vendored; they are fetched once per manifest
+  # and verified against their pinned SHA-256 on every run.
+  parity:
+    name: Parity (public models)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master 2026-08-31
+        with:
+          toolchain: 1.88.0
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: parity
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Restore the public models
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/axioval/parity-models
+          key: parity-models-${{ hashFiles('fixtures/parity/models.json') }}
+      - name: Fetch and verify the public models
+        run: python3 scripts/parity_models.py fetch "$HOME/.cache/axioval/parity-models"
+      - name: Hold re-expressions to parity on the public models
+        run: |
+          AXIOVAL_PARITY_MODELS="$HOME/.cache/axioval/parity-models" \
+            cargo test -p axioval-cli --test parity -- --ignored --nocapture
+
   # The one check that means "the whole gate passed", under the name the
   # single-job gate had. The Pages workflow requires this workflow's run on
   # the commit it publishes to have succeeded.
   check:
-    needs: [deny, gate, package]
+    needs: [deny, gate, package, parity]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Require every gate job to pass
         env:
-          RESULTS: ${{ needs.deny.result }} ${{ needs.gate.result }} ${{ needs.package.result }}
+          RESULTS: ${{ needs.deny.result }} ${{ needs.gate.result }} ${{ needs.package.result }} ${{ needs.parity.result }}
         run: |
           for result in $RESULTS; do
             [ "$result" = success ] \

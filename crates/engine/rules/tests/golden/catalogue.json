@@ -23086,7 +23086,8 @@
             "type": "choice",
             "options": [
               "top",
-              "bottom"
+              "bottom",
+              "facing"
             ]
           },
           "required": false,
@@ -23094,11 +23095,46 @@
           "help": [
             {
               "language": "en",
-              "text": "The face read: `top`, looking up, or `bottom`, looking down. An open surface is both."
+              "text": "The face read: `top`, looking up, or `bottom`, looking down (an open surface is both), or `facing`, the pieces of a closed body whose outward normal lies within `tolerance` of `direction`."
             },
             {
               "language": "de",
-              "text": "Die gelesene Fläche: `top`, nach oben, oder `bottom`, nach unten. Eine offene Fläche ist beides."
+              "text": "Die gelesene Fläche: `top`, nach oben, oder `bottom`, nach unten (eine offene Fläche ist beides), oder `facing`, die Teile eines geschlossenen Körpers, deren äußere Normale höchstens `tolerance` von `direction` abweicht."
+            }
+          ]
+        },
+        {
+          "key": "direction",
+          "kind": {
+            "type": "vector"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `face=facing`: the direction the pieces face, `x,y,z` in world coordinates."
+            },
+            {
+              "language": "de",
+              "text": "Mit `face=facing`: die Richtung, in die die Teile zeigen, `x,y,z` in Weltkoordinaten."
+            }
+          ]
+        },
+        {
+          "key": "tolerance",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `face=facing`: how far a piece's outward normal may lean from `direction`, in degrees, at most 180."
+            },
+            {
+              "language": "de",
+              "text": "Mit `face=facing`: wie weit die äußere Normale eines Teils von `direction` abweichen darf, in Grad, höchstens 180."
             }
           ]
         }
@@ -23112,7 +23148,8 @@
       "notEvaluated": [
         "the object has no body the service can measure",
         "the body has no such face, or it cannot be told apart",
-        "a piece of the face stands vertical, so it has no gradient"
+        "a piece of the face stands vertical, so it has no gradient",
+        "whether a piece faces the direction cannot be decided"
       ],
       "label": [
         {
@@ -24305,7 +24342,8 @@
             "type": "choice",
             "options": [
               "top",
-              "bottom"
+              "bottom",
+              "facing"
             ]
           },
           "required": false,
@@ -24313,11 +24351,46 @@
           "help": [
             {
               "language": "en",
-              "text": "The face read: `top`, looking up, or `bottom`, looking down. An open surface is both."
+              "text": "The face read: `top`, looking up, or `bottom`, looking down (an open surface is both), or `facing`, the pieces of a closed body whose outward normal lies within `tolerance` of `direction`."
             },
             {
               "language": "de",
-              "text": "Die gelesene Fläche: `top`, nach oben, oder `bottom`, nach unten. Eine offene Fläche ist beides."
+              "text": "Die gelesene Fläche: `top`, nach oben, oder `bottom`, nach unten (eine offene Fläche ist beides), oder `facing`, die Teile eines geschlossenen Körpers, deren äußere Normale höchstens `tolerance` von `direction` abweicht."
+            }
+          ]
+        },
+        {
+          "key": "direction",
+          "kind": {
+            "type": "vector"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `face=facing`: the direction the pieces face, `x,y,z` in world coordinates."
+            },
+            {
+              "language": "de",
+              "text": "Mit `face=facing`: die Richtung, in die die Teile zeigen, `x,y,z` in Weltkoordinaten."
+            }
+          ]
+        },
+        {
+          "key": "tolerance",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `face=facing`: how far a piece's outward normal may lean from `direction`, in degrees, at most 180."
+            },
+            {
+              "language": "de",
+              "text": "Mit `face=facing`: wie weit die äußere Normale eines Teils von `direction` abweichen darf, in Grad, höchstens 180."
             }
           ]
         }
@@ -24331,6 +24404,7 @@
         "the object has no body the service can measure",
         "the body has no such face, or it cannot be told apart",
         "a piece of the face stands vertical, so it has no gradient",
+        "whether a piece faces the direction cannot be decided",
         "a piece of the face is level, so it descends nowhere",
         "the face descends in directions more than a half turn apart"
       ],
@@ -28678,7 +28752,8 @@
             "type": "choice",
             "options": [
               "top",
-              "bottom"
+              "bottom",
+              "facing"
             ]
           },
           "required": false,
@@ -28686,11 +28761,46 @@
           "help": [
             {
               "language": "en",
-              "text": "The face read: `top`, looking up, or `bottom`, looking down. An open surface is both."
+              "text": "The face read: `top`, looking up, or `bottom`, looking down (an open surface is both), or `facing`, the pieces of a closed body whose outward normal lies within `tolerance` of `direction`."
             },
             {
               "language": "de",
-              "text": "Die gelesene Fläche: `top`, nach oben, oder `bottom`, nach unten. Eine offene Fläche ist beides."
+              "text": "Die gelesene Fläche: `top`, nach oben, oder `bottom`, nach unten (eine offene Fläche ist beides), oder `facing`, die Teile eines geschlossenen Körpers, deren äußere Normale höchstens `tolerance` von `direction` abweicht."
+            }
+          ]
+        },
+        {
+          "key": "direction",
+          "kind": {
+            "type": "vector"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `face=facing`: the direction the pieces face, `x,y,z` in world coordinates."
+            },
+            {
+              "language": "de",
+              "text": "Mit `face=facing`: die Richtung, in die die Teile zeigen, `x,y,z` in Weltkoordinaten."
+            }
+          ]
+        },
+        {
+          "key": "tolerance",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `face=facing`: how far a piece's outward normal may lean from `direction`, in degrees, at most 180."
+            },
+            {
+              "language": "de",
+              "text": "Mit `face=facing`: wie weit die äußere Normale eines Teils von `direction` abweichen darf, in Grad, höchstens 180."
             }
           ]
         }
@@ -28703,7 +28813,8 @@
       "notEvaluated": [
         "the object has no body the service can measure",
         "the body has no such face, or it cannot be told apart",
-        "a piece of the face stands vertical, so it has no gradient"
+        "a piece of the face stands vertical, so it has no gradient",
+        "whether a piece faces the direction cannot be decided"
       ],
       "label": [
         {
@@ -30707,6 +30818,182 @@
             {
               "language": "de",
               "text": "Wie weit die beiden Ausgänge im Grundriss auseinanderliegen."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "face_pieces",
+      "parameters": [
+        {
+          "key": "face",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "top",
+              "bottom",
+              "facing"
+            ]
+          },
+          "required": false,
+          "default": "top",
+          "help": [
+            {
+              "language": "en",
+              "text": "The face read: `top`, looking up, or `bottom`, looking down (an open surface is both), or `facing`, the pieces of a closed body whose outward normal lies within `tolerance` of `direction`."
+            },
+            {
+              "language": "de",
+              "text": "Die gelesene Fläche: `top`, nach oben, oder `bottom`, nach unten (eine offene Fläche ist beides), oder `facing`, die Teile eines geschlossenen Körpers, deren äußere Normale höchstens `tolerance` von `direction` abweicht."
+            }
+          ]
+        },
+        {
+          "key": "direction",
+          "kind": {
+            "type": "vector"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `face=facing`: the direction the pieces face, `x,y,z` in world coordinates."
+            },
+            {
+              "language": "de",
+              "text": "Mit `face=facing`: die Richtung, in die die Teile zeigen, `x,y,z` in Weltkoordinaten."
+            }
+          ]
+        },
+        {
+          "key": "tolerance",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `face=facing`: how far a piece's outward normal may lean from `direction`, in degrees, at most 180."
+            },
+            {
+              "language": "de",
+              "text": "Mit `face=facing`: wie weit die äußere Normale eines Teils von `direction` abweichen darf, in Grad, höchstens 180."
+            }
+          ]
+        }
+      ],
+      "services": [
+        "vertical-extent"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "the body has no such face, or it cannot be told apart",
+        "an open surface faces no direction"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Face pieces"
+        },
+        {
+          "language": "de",
+          "text": "Flächenteile"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The planar or smooth pieces of a face of the body, one by one, in the order the geometry service lists them. With `face=facing`, a piece whose facing cannot be decided is a possible member."
+        },
+        {
+          "language": "de",
+          "text": "Die ebenen oder glatten Teile einer Fläche des Körpers, einzeln, in der Reihenfolge des Geometriedienstes. Mit `face=facing` ist ein Teil, dessen Ausrichtung sich nicht entscheiden lässt, ein mögliches Mitglied."
+        }
+      ],
+      "fields": [
+        {
+          "name": "slope",
+          "kind": {
+            "type": "number",
+            "dimension": "plane_angle"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Slope"
+            },
+            {
+              "language": "de",
+              "text": "Neigung"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The piece's steepest gradient as an angle from the horizontal, in `[0, π/2]`: the hull over the piece, `π/2` where it stands vertical."
+            },
+            {
+              "language": "de",
+              "text": "Das steilste Gefälle des Teils als Winkel zur Waagerechten, in `[0, π/2]`: die Hülle über das Teil, `π/2`, wo es senkrecht steht."
+            }
+          ]
+        },
+        {
+          "name": "area",
+          "kind": {
+            "type": "number",
+            "dimension": "area"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Area"
+            },
+            {
+              "language": "de",
+              "text": "Fläche"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The piece's surface area."
+            },
+            {
+              "language": "de",
+              "text": "Der Flächeninhalt des Teils."
+            }
+          ]
+        },
+        {
+          "name": "gradient_direction",
+          "kind": {
+            "type": "number",
+            "dimension": "plane_angle"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Direction of descent"
+            },
+            {
+              "language": "de",
+              "text": "Fallrichtung"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The plan bearing of the piece's steepest descent, clockwise from plan north; `null` for a level piece, undecided where the piece may be level or stand vertical."
+            },
+            {
+              "language": "de",
+              "text": "Die Grundrissrichtung des steilsten Gefälles des Teils, im Uhrzeigersinn von Plannord; `null` für ein waagerechtes Teil, unentschieden, wo es waagerecht sein oder senkrecht stehen kann."
             }
           ]
         }

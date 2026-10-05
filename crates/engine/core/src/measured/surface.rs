@@ -137,6 +137,40 @@ pub(crate) fn slope(normals: &[FaceNormal]) -> Result<Interval, String> {
     })
 }
 
+/// The steepest gradient over the parts of one piece, as an angle from the
+/// horizontal in `[0, π/2]`: exactly zero for a level piece, and up to
+/// `π/2` where a part may stand vertical, so a piece that may stand
+/// vertical still has a slope.
+pub(crate) fn piece_slope(normals: &[FaceNormal]) -> Result<Interval, String> {
+    let mut hull: Option<Interval> = None;
+    for normal in normals {
+        let (lower, upper) = (normal.lower(), normal.upper());
+        let component = |axis: usize| Interval {
+            lower: lower[axis],
+            upper: upper[axis],
+        };
+        let [x, y, z] = [component(0), component(1), component(2)];
+        let value = if level(&[x, y, z]) {
+            Interval::point(0.0)
+        } else {
+            let run = square(x).plus(square(y)).and_then(Interval::sqrt);
+            let angle = run
+                .and_then(|run| Interval::atan2(run, z.abs()))
+                .map_err(|_| "a part of the piece may be level or vertical alike".to_owned())?;
+            clamp(angle, 0.0, PI / 2.0)
+        };
+        hull = Some(hull.map_or(value, |hull| hull.hull(value)));
+    }
+    hull.ok_or_else(|| "the piece has no parts".into())
+}
+
+/// Whether every part lies exactly level.
+pub(crate) fn exactly_level(normals: &[FaceNormal]) -> bool {
+    normals
+        .iter()
+        .all(|normal| upward(normal).is_ok_and(|normal| level(&normal)))
+}
+
 /// One piece's gradient along `direction`, as a signed angle.
 fn along(normal: &[Interval; 3], direction: PlanDirection) -> Result<Interval, String> {
     if level(normal) {
@@ -322,6 +356,19 @@ mod tests {
         let east = PlanDirection::of([1.0, 0.0, 0.0]).unwrap();
         let along = slope_along(&crowned, east).unwrap();
         assert!(holds(along, -angle) && holds(along, angle));
+    }
+
+    #[test]
+    fn a_piece_standing_vertical_still_has_a_slope() {
+        let side = FaceNormal::try_new([1.0, 0.0, -0.1], [1.0, 0.0, 0.1]).unwrap();
+        let slope = piece_slope(&[side]).unwrap();
+        assert!(holds(slope, PI / 2.0) && holds(slope, (10.0_f64).atan()));
+        let level = piece_slope(&[exact([0.0, 0.0, -3.0])]).unwrap();
+        assert_eq!(level, Interval::point(0.0));
+        assert!(exactly_level(&[exact([0.0, 0.0, -3.0])]));
+        assert!(!exactly_level(&[exact([0.0, 0.1, 1.0])]));
+        let batter = piece_slope(&[exact([-1.0, 0.0, 1.5])]).unwrap();
+        assert!(holds(batter, (1.0_f64 / 1.5).atan()) && batter.upper - batter.lower < 1e-12);
     }
 
     #[test]

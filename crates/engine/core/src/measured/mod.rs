@@ -28,6 +28,7 @@ mod alignment;
 mod angles;
 mod areas;
 mod clearance;
+pub(crate) mod faces;
 mod levels;
 pub(crate) mod provider;
 mod section;
@@ -831,17 +832,15 @@ impl Measures {
             let tilt = surface::inclination(axis, from_vertical).map_err(unavailable)?;
             return Ok(angle(tilt, locator));
         }
-        let face = match call.choice("face") {
-            Some("bottom") => SurfaceFace::Bottom,
-            _ => SurfaceFace::Top,
-        };
-        let normals = self
-            .vertical
-            .as_ref()
-            .ok_or_else(|| Self::missing(name, "vertical-extent"))?
-            .measure_face_normals(object, face)
-            .map_err(|error| unavailable(error.to_string()))?;
-        let pieces = normals.normals();
+        let (normals, evidence) = faces::face_normals(
+            self.vertical
+                .as_ref()
+                .ok_or_else(|| Self::missing(name, "vertical-extent"))?,
+            call,
+            object,
+        )
+        .map_err(unavailable)?;
+        let pieces = &normals[..];
         let value = match name {
             SLOPE => surface::slope(pieces),
             GRADIENT_DIRECTION => surface::gradient_direction(pieces),
@@ -866,7 +865,7 @@ impl Measures {
             }
         }
         .map_err(unavailable)?;
-        Ok(angle(value, normals.evidence().locator.clone()))
+        Ok(angle(value, evidence.locator))
     }
 
     /// The objects `steps` reach from `object`, walked one after another

@@ -9,7 +9,8 @@ use axioval_axiolid::{
     AxiolidGeometry, AxiolidVerticalExtentService, AxiolidWalkingSurfaceService,
 };
 use axioval_engine::{
-    FaceNormal, SurfaceFace, VerticalExtentError, VerticalExtentService, WalkingSurfaceService,
+    FaceNormal, FacePiece, FacePieceSet, SurfaceFace, VerticalExtentError, VerticalExtentService,
+    WalkingSurfaceService,
 };
 use axioval_ir::{ObjectId, SourceId};
 
@@ -289,4 +290,115 @@ fn the_ramp_run_slope_agrees_with_the_steepest_piece_of_the_top() {
         assert!((steepest - high).abs() < 1e-12 && (steepest - low).abs() < 1e-12);
         assert!(steepest < PI / 2.0);
     }
+}
+
+/// A prism of the (x, z) `profile` (anticlockwise, convex) extruded
+/// `width` along y.
+fn prism(profile: &[[f64; 2]], width: f64) -> TriMesh {
+    let n = profile.len();
+    let mut points: Vec<Point3> = profile
+        .iter()
+        .map(|p| Point3::new(p[0], 0.0, p[1]))
+        .collect();
+    points.extend(profile.iter().map(|p| Point3::new(p[0], width, p[1])));
+    let index = |i: usize| u32::try_from(i).unwrap();
+    let mut indices = Vec::new();
+    for i in 1..n - 1 {
+        indices.extend([0, i, i + 1].map(index));
+        indices.extend([n, n + i + 1, n + i].map(index));
+    }
+    for i in 0..n {
+        let j = (i + 1) % n;
+        indices.extend([i, j + n, j, i, i + n, j + n].map(index));
+    }
+    TriMesh::new(points, indices)
+}
+
+/// A fill 9 m wide at its base and 3 m at its 2 m high crest, 10 m long:
+/// a level crest between two batters falling 1:1.5.
+fn embankment() -> TriMesh {
+    prism(&[[-4.5, 0.0], [4.5, 0.0], [1.5, 2.0], [-1.5, 2.0]], 10.0)
+}
+
+/// The slope range over a piece's parts.
+fn piece_slopes(piece: &FacePiece) -> (f64, f64) {
+    piece
+        .normals()
+        .iter()
+        .map(slope_range)
+        .fold((f64::INFINITY, 0.0_f64), |(low, high), (l, h)| {
+            (low.min(l), high.max(h))
+        })
+}
+
+#[test]
+fn a_single_body_embankment_has_a_crest_and_two_batters() {
+    let batter = (2.0_f64 / 3.0).atan();
+    let batter_area = 13.0_f64.sqrt() * 10.0;
+    let service = AxiolidVerticalExtentService::new(
+        AxiolidGeometry::new()
+            .with_mesh(id("exact"), embankment())
+            .with_tessellated_mesh(id("meshed"), embankment(), 0.001),
+    );
+    let top = service
+        .measure_face_pieces(&id("exact"), FacePieceSet::Top)
+        .unwrap();
+    assert!(top.evidence().exact);
+    // Two triangles each: one level crest and two batters.
+    assert_eq!(top.pieces().len(), 3, "{top:#?}");
+    let mut level = 0;
+    for piece in top.pieces() {
+        assert_eq!(piece.normals().len(), 2);
+        let (low, high) = piece_slopes(piece);
+        let (least, most) = piece.area_square_metres();
+        let expected = if high == 0.0 {
+            level += 1;
+            30.0
+        } else {
+            assert!(low <= batter + 1e-15 && batter - 1e-15 <= high && high - low < 1e-12);
+            batter_area
+        };
+        assert!(least <= expected && expected <= most && most - least < 1e-9);
+    }
+    assert_eq!(level, 1);
+    // The whole boundary adds the base and the two ends.
+    let boundary = service
+        .measure_face_pieces(&id("exact"), FacePieceSet::Boundary)
+        .unwrap();
+    assert_eq!(boundary.pieces().len(), 6);
+
+    // Tessellated: the same pieces, never exact, every interval holding
+    // the true slope and area.
+    let meshed = service
+        .measure_face_pieces(&id("meshed"), FacePieceSet::Top)
+        .unwrap();
+    assert!(!meshed.evidence().exact);
+    assert_eq!(meshed.pieces().len(), 3);
+    for piece in meshed.pieces() {
+        assert!(piece.normals().iter().all(|normal| !normal.is_exact()));
+        let (low, high) = piece_slopes(piece);
+        let (least, most) = piece.area_square_metres();
+        assert!(least < most);
+        if low > 0.1 {
+            assert!(low < batter && batter < high && high - low < 0.01);
+            assert!(least < batter_area && batter_area < most);
+        } else {
+            assert!(least < 30.0 && 30.0 < most);
+        }
+    }
+
+    // An open surface has no outside, so no piece faces a direction.
+    let sheet = AxiolidVerticalExtentService::new(
+        AxiolidGeometry::new().with_mesh(id("sheet"), sheet(2, 2.0, |x, _| 0.1 * x)),
+    );
+    assert!(matches!(
+        sheet.measure_face_pieces(&id("sheet"), FacePieceSet::Boundary),
+        Err(VerticalExtentError::Unavailable(reason)) if reason.contains("open surface")
+    ));
+    // Its top is one planar piece of eight triangles.
+    let top = sheet
+        .measure_face_pieces(&id("sheet"), FacePieceSet::Top)
+        .unwrap();
+    assert_eq!(top.pieces().len(), 1);
+    assert_eq!(top.pieces()[0].normals().len(), 8);
 }

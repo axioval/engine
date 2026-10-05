@@ -790,7 +790,17 @@ by a bound on the rounding; a component computed without rounding stays a
 point, so exactly stated vertices give exact normals. A tessellated
 triangle widens its box by `2d / h` of its normal's length, for chord
 deviation `d` and least height `h`, and a triangle too small for that
-refuses the face. Degenerate triangles are skipped. Thicknesses
+refuses the face. Degenerate triangles are skipped. The same triangles
+grouped into pieces answer `measure_face_pieces`: triangles sharing an
+edge (by exact coordinates) join one piece when their normals agree within
+a part in a billion on an exact mesh, or within both triangles' leans on a
+tessellated one, so a crease between a crest and a batter always parts
+them. The whole boundary (`FacePieceSet::Boundary`) holds every triangle
+of a closed mesh, vertical sides included, and is refused on an open one.
+A piece's area sums its triangles', boxed by their rounding; a tessellated
+piece's widens by `2·P·d + π·d²` for its triangles' summed perimeter `P`
+and its upper bound by the secant of its greatest lean. Pieces are exact
+only for a mesh that is the exact shape. Thicknesses
 (`measure_thickness`) are measured on a closed mesh between the triangles
 looking along the direction within 60° and those looking back, at every
 projected corner and every crossing of their projected edges, where the

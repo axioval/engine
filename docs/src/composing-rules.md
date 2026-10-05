@@ -114,15 +114,23 @@ key read as text, and the single most specific matching row applies; no
 matching row gives `null`.
 
 The requirement is an `and` of three labelled operands: the soil class is
-stated, the table has a limit for it, and the measured `slope`, restated
-by `convertSlope` from an angle to a rise per run, is at most that limit.
-Because the first two are separate operands, a finding says which of the
-three failed.
+stated, the table has a limit for it, and the steepest piece of the fill's
+top is at most that limit. That operand is a `max` aggregate over the
+measured member list `face_pieces`: each planar or smooth piece of the top
+face, its `slope` restated by `convertSlope` from an angle to a rise per
+run. Because the first two are separate operands, a finding says which of
+the three failed.
 
-`slope` is the hull of the steepest gradient over the planar pieces of the
-top face, so the side slope is measured as its own object: a level crest in
-the same body would widen the interval down to zero and leave every limit
-undecided.
+The fill is one body: a level crest between two batters. The measured
+value `slope` would be the hull over the whole top, from the crest's zero
+to the batters' fall, and would leave every limit undecided. Piece by
+piece, the crest's zero is only the least member, so the steepest batter
+decides. A batter warped within itself is still one piece, and its own
+range can straddle the limit. `all(implies(area > 1 m², slope ≤ limit))`
+over the same list would judge every batter but leave small pieces out,
+and `slope;face=facing;direction=1,0,0;tolerance=60` reads only the pieces
+of the body facing east ([Slopes, falls and
+tilts](./derived.md#slopes-falls-and-tilts)).
 
 ```json
 {{#include ../examples/composing/embankment.definitions.json}}
@@ -134,9 +142,9 @@ undecided.
 
 | Object | Stated and measured | Outcome |
 | --- | --- | --- |
-| `steady` | sand, 0.3 | passes |
-| `steep` | clay, 0.4 | finding: `slope within the limit` is false |
-| `uneven` | sand, pieces from 0.3 to 0.5 | not evaluated: 0.3–0.5 straddles 0.4 |
+| `steady` | sand, a level crest and batters of 0.3 | passes |
+| `steep` | clay, a level crest and batters of 0.4 | finding: `slope within the limit` is false |
+| `uneven` | sand, one batter warped from 0.3 to 0.5 | not evaluated: 0.3–0.5 straddles 0.4 |
 | `unclassified` | soil class `null` | finding: `soil class stated` is false |
 | `unlisted` | `peat`, no row | finding: `limit for the soil class` is false |
 | `unread` | soil class unreadable | not evaluated |
@@ -250,8 +258,8 @@ given.
 
 The test gives the in-memory project geometry through the typed host
 services a geometry adapter provides: the vertical-extent service answers
-`extent_z` and the face normals `slope` and `cross_fall` are measured
-from, the object-frame service the placements `own_x` is read along, and
+`extent_z`, the face normals `cross_fall` is measured from and the face
+pieces `face_pieces` lists, the object-frame service the placements `own_x` is read along, and
 the walking-surface service the treads of each flight. A host checking a
 real model registers its adapters' services the same way, and the same
 packages run unchanged; a value no service can measure leaves its objects

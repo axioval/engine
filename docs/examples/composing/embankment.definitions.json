@@ -17,7 +17,7 @@
     "axioval:example.composing.embankment": {
       "id": "axioval:example.composing.embankment",
       "name": {
-        "default": "Embankment side slope",
+        "default": "Embankment fill",
         "translations": {}
       },
       "externalNames": [
@@ -67,7 +67,7 @@
         "translations": {}
       },
       "description": {
-        "default": "A measured slope compared with the limit a table gives for the stated soil class.",
+        "default": "The steepest piece of a fill's top compared with the limit a table gives for the stated soil class.",
         "translations": {}
       },
       "capability": "axioval:capability.expression",

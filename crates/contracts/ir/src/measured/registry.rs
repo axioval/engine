@@ -29,10 +29,30 @@ pub const fn en_de(en: &'static str, de: &'static str) -> [LocalizedText; 2] {
 const VERTICAL: &[&str] = &["vertical-extent"];
 const FACES: &[&str] = &["vertical-extent"];
 const FACES_AND_FRAMES: &[&str] = &["vertical-extent", "object-frame"];
-const NO_FACE: &str = "the body has no such face, or it cannot be told apart";
+pub(super) const NO_FACE: &str = "the body has no such face, or it cannot be told apart";
 const STANDS_VERTICAL: &str = "a piece of the face stands vertical, so it has no gradient";
 
-const FACE: MeasuredParameter = MeasuredParameter {
+/// The face a surface value reads: the pieces looking up or down, or those
+/// facing a direction ([`FACING`]).
+pub(super) const FACE: MeasuredParameter = MeasuredParameter {
+    key: "face",
+    kind: MeasuredParameterKind::Choice {
+        options: &["top", "bottom", "facing"],
+    },
+    required: false,
+    default: Some("top"),
+    help: &en_de(
+        "The face read: `top`, looking up, or `bottom`, looking down (an open \
+         surface is both), or `facing`, the pieces of a closed body whose outward \
+         normal lies within `tolerance` of `direction`.",
+        "Die gelesene Fläche: `top`, nach oben, oder `bottom`, nach unten (eine \
+         offene Fläche ist beides), oder `facing`, die Teile eines geschlossenen \
+         Körpers, deren äußere Normale höchstens `tolerance` von `direction` abweicht.",
+    ),
+};
+
+/// The face a surface value reads where `direction` is taken: up or down.
+const FACE_UP_OR_DOWN: MeasuredParameter = MeasuredParameter {
     key: "face",
     kind: MeasuredParameterKind::Choice {
         options: &["top", "bottom"],
@@ -46,6 +66,37 @@ const FACE: MeasuredParameter = MeasuredParameter {
          offene Fläche ist beides.",
     ),
 };
+
+/// The direction and tolerance of `face=facing`, stated exactly with it.
+pub(super) const FACING: [MeasuredParameter; 2] = [
+    MeasuredParameter {
+        key: "direction",
+        kind: MeasuredParameterKind::Vector,
+        required: false,
+        default: None,
+        help: &en_de(
+            "With `face=facing`: the direction the pieces face, `x,y,z` in world \
+             coordinates.",
+            "Mit `face=facing`: die Richtung, in die die Teile zeigen, `x,y,z` in \
+             Weltkoordinaten.",
+        ),
+    },
+    MeasuredParameter {
+        key: "tolerance",
+        kind: MeasuredParameterKind::Length { minimum: 0.0 },
+        required: false,
+        default: None,
+        help: &en_de(
+            "With `face=facing`: how far a piece's outward normal may lean from \
+             `direction`, in degrees, at most 180.",
+            "Mit `face=facing`: wie weit die äußere Normale eines Teils von \
+             `direction` abweichen darf, in Grad, höchstens 180.",
+        ),
+    },
+];
+
+/// Why a face's pieces facing a direction cannot be told apart.
+pub(super) const FACING_UNDECIDED: &str = "whether a piece faces the direction cannot be decided";
 
 const RECTANGLES: &[&str] = &["plan-span", "relationship-selection"];
 const NO_LONG_AXIS: &str = "a footprint has no long axis of its own (a square, a tie, a \
@@ -490,7 +541,7 @@ const OWN_AXIS: MeasuredParameterKind = MeasuredParameterKind::Choice {
 const PLAN_AXIS: MeasuredParameterKind = MeasuredParameterKind::Choice {
     options: &["x", "y", "own_x", "own_y"],
 };
-const NO_GEOMETRY: &str = "the object has no body the service can measure";
+pub(super) const NO_GEOMETRY: &str = "the object has no body the service can measure";
 
 /// The members paired as `wall-spacing` pairs them.
 pub(super) const SPACED_MEMBERS: MeasuredParameter = MeasuredParameter {
@@ -1902,11 +1953,13 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
                 ),
             },
             FACE,
+            FACING[0],
+            FACING[1],
         ],
         dimension: Some(QuantityDimension::PlaneAngle),
         services: FACES_AND_FRAMES,
         exactness: MeasuredExactness::Measured,
-        not_evaluated: &[NO_GEOMETRY, NO_FACE, STANDS_VERTICAL],
+        not_evaluated: &[NO_GEOMETRY, NO_FACE, STANDS_VERTICAL, FACING_UNDECIDED],
         label: &en_de("Cross fall", "Quergefälle"),
         help: &en_de(
             "The face's gradient across a plan axis, unsigned, as an angle; the hull \
@@ -2296,7 +2349,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
     },
     MeasuredDescriptor {
         name: GRADIENT_DIRECTION,
-        parameters: &[FACE],
+        parameters: &[FACE, FACING[0], FACING[1]],
         dimension: Some(QuantityDimension::PlaneAngle),
         services: FACES,
         exactness: MeasuredExactness::Measured,
@@ -2304,6 +2357,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             NO_GEOMETRY,
             NO_FACE,
             STANDS_VERTICAL,
+            FACING_UNDECIDED,
             "a piece of the face is level, so it descends nowhere",
             "the face descends in directions more than a half turn apart",
         ],
@@ -3580,11 +3634,11 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
     },
     MeasuredDescriptor {
         name: SLOPE,
-        parameters: &[FACE],
+        parameters: &[FACE, FACING[0], FACING[1]],
         dimension: Some(QuantityDimension::PlaneAngle),
         services: FACES,
         exactness: MeasuredExactness::Measured,
-        not_evaluated: &[NO_GEOMETRY, NO_FACE, STANDS_VERTICAL],
+        not_evaluated: &[NO_GEOMETRY, NO_FACE, STANDS_VERTICAL, FACING_UNDECIDED],
         label: &en_de("Slope", "Neigung der Fläche"),
         help: &en_de(
             "The face's steepest gradient as an angle from the horizontal; a curved \
@@ -3610,7 +3664,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
                      `own_x` oder `own_y` im Grundriss.",
                 ),
             },
-            FACE,
+            FACE_UP_OR_DOWN,
         ],
         dimension: Some(QuantityDimension::PlaneAngle),
         services: FACES_AND_FRAMES,

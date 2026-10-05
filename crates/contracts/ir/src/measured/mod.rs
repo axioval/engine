@@ -57,6 +57,10 @@ pub const CROSS_FALL: &str = "cross_fall";
 pub const INCLINATION: &str = "inclination";
 /// The plan bearing of a face's steepest descent.
 pub const GRADIENT_DIRECTION: &str = "gradient_direction";
+/// The `face` that selects the pieces facing a direction.
+pub const FACING: &str = "facing";
+/// A face's pieces, one by one: the measured member list.
+pub const FACE_PIECES: &str = "face_pieces";
 
 use crate::{MEASURED_SET, QuantityDimension};
 
@@ -346,10 +350,59 @@ fn parse_in(
         let argument = argument(parameter.kind, value).map_err(invalid)?;
         arguments.insert(parameter.key, argument);
     }
+    facing(descriptor, &arguments)?;
     Ok(MeasuredCall {
         descriptor,
         arguments,
     })
+}
+
+/// Where a value's `face` may face a direction, `face=facing` states its
+/// `direction` and a `tolerance` of at most 180 degrees, and no other face
+/// states either.
+fn facing(
+    descriptor: &MeasuredDescriptor,
+    arguments: &BTreeMap<&'static str, MeasuredArgument>,
+) -> Result<(), MeasuredError> {
+    let offered = descriptor.parameter("face").is_some_and(|face| {
+        matches!(face.kind, MeasuredParameterKind::Choice { options } if options.contains(&FACING))
+    });
+    if !offered {
+        return Ok(());
+    }
+    let name = || descriptor.name.to_owned();
+    let facing = matches!(
+        arguments.get("face"),
+        Some(MeasuredArgument::Choice(FACING))
+    );
+    for key in ["direction", "tolerance"] {
+        match (facing, arguments.contains_key(key)) {
+            (true, false) => {
+                return Err(MeasuredError::Missing {
+                    name: name(),
+                    key: key.to_owned(),
+                });
+            }
+            (false, true) => {
+                return Err(MeasuredError::Invalid {
+                    name: name(),
+                    key: key.to_owned(),
+                    detail: "only `face=facing` takes it".into(),
+                });
+            }
+            _ => {}
+        }
+    }
+    if let Some(MeasuredArgument::Length(degrees)) = arguments.get("tolerance")
+        && *degrees > 180.0
+    {
+        return Err(MeasuredError::Invalid {
+            name: name(),
+            key: "tolerance".into(),
+            detail: format!("{degrees} degrees is more than 180"),
+        });
+    }
+    Ok(())
 }
 
 /// The argument `value` states for a parameter of `kind`, or why it is
@@ -605,6 +658,50 @@ mod tests {
             ("area;flat", "`flat` of `area` is not `key=value`"),
         ] {
             let error = parse(name).unwrap_err().to_string();
+            assert!(error.starts_with(message), "{name}: {error}");
+        }
+    }
+
+    #[test]
+    fn a_face_facing_a_direction_states_its_direction_and_tolerance() {
+        let call = parse("slope;face=Facing;direction=1,0,1;tolerance=30").unwrap();
+        assert_eq!(call.choice("face"), Some(FACING));
+        assert_eq!(
+            call.argument("direction"),
+            Some(&MeasuredArgument::Vector([1.0, 0.0, 1.0]))
+        );
+        let members = parse_members("face_pieces;face=facing;direction=0,0,1;tolerance=180");
+        assert!(members.is_ok(), "{members:?}");
+        assert!(parse("cross_fall;axis=x;face=bottom").is_ok());
+        for (name, message) in [
+            (
+                "slope;face=facing;tolerance=10",
+                "`slope` needs `direction`",
+            ),
+            (
+                "gradient_direction;face=facing;direction=1,0,0",
+                "`gradient_direction` needs `tolerance`",
+            ),
+            (
+                "slope;direction=1,0,0;tolerance=10",
+                "`slope` parameter `direction`: only `face=facing` takes it",
+            ),
+            (
+                "face_pieces;face=facing;direction=1,0,0;tolerance=181",
+                "`face_pieces` parameter `tolerance`: 181 degrees is more than 180",
+            ),
+            (
+                "slope_along;direction=x;face=facing",
+                "`slope_along` parameter `face`",
+            ),
+        ] {
+            let error = if name.starts_with(FACE_PIECES) {
+                parse_members(name)
+            } else {
+                parse(name)
+            }
+            .unwrap_err()
+            .to_string();
             assert!(error.starts_with(message), "{name}: {error}");
         }
     }

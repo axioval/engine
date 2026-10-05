@@ -367,10 +367,10 @@ ignoring ASCII case):
 | `bottom_above_level;path=<steps>` | its bottom above the one level the path reaches | `RelationshipSelectionService`, `ObjectFrameService`, `VerticalExtentService` |
 | `boundary_area;kind=<kind>[;plane=<m>]` | a space's summed boundary area against elements of one kind | `BoundaryCoverageService`, `TypeHierarchyService` |
 | `level_height` | a storey's height to the next storey, a length | the source's property resolver |
-| `slope[;face=top\|bottom]` | a face's steepest gradient, an angle | `VerticalExtentService::measure_face_normals` |
+| `slope[;face=top\|bottom\|facing;direction=<x,y,z>;tolerance=<degrees>]` | a face's steepest gradient, an angle | `VerticalExtentService::measure_face_normals`, `measure_face_pieces` for `facing` |
 | `slope_along;direction=x\|y\|own_x\|own_y[;face=…]` | a face's signed gradient in a plan direction, an angle | `VerticalExtentService::measure_face_normals`, `ObjectFrameService` for own axes |
-| `cross_fall;axis=x\|y\|own_x\|own_y[;face=…]` | a face's unsigned gradient across a plan axis, an angle | as `slope_along` |
-| `gradient_direction[;face=…]` | the plan bearing of a face's steepest descent, an angle | `VerticalExtentService::measure_face_normals` |
+| `cross_fall;axis=x\|y\|own_x\|own_y[;face=…]` | a face's unsigned gradient across a plan axis, an angle | as `slope` |
+| `gradient_direction[;face=…]` | the plan bearing of a face's steepest descent, an angle | as `slope` |
 | `inclination;axis=own_x\|own_y\|own_z` | the tilt of one of the placement's axes, an angle | `ObjectFrameService` |
 | `extent;axis=own_x\|own_y\|own_z\|x\|y\|z` or `extent;direction=<x,y,z>` | the body's extent along an axis or direction, a length | `VerticalExtentService::measure_directional_extent`, `ObjectFrameService` for own axes |
 | `length[;axis=own_x\|own_y\|own_z]` | a member's extent along its own sweep axis (`own_x` by default), a length | as `extent` |
@@ -481,6 +481,20 @@ a closed body by its outward normal (a mesh wound inside out is read by the
 sign of its volume); an open surface, such as a terrain sheet, is both.
 Vertical sides belong to neither face.
 
+`face=facing;direction=<x,y,z>;tolerance=<degrees>` (not taken by
+`slope_along`, whose `direction` is a plan axis) is the pieces of a closed
+body's whole boundary (`VerticalExtentService::measure_face_pieces` with
+`FacePieceSet::Boundary`) whose outward normal lies within the tolerance,
+at most 180°, of the direction: a batter facing east is
+`direction=1,0,0;tolerance=60`. A piece faces the direction when the
+normal box of every part of it surely does, judged with sound interval
+arithmetic against the cosine of the tolerance; a part surely outside
+leaves the piece out. A piece that may or may not face the direction
+leaves the value not evaluated, and so does a body with no piece facing
+it or an open surface, which has no outside. `direction` and `tolerance`
+are stated with `face=facing` and with nothing else, or the name is
+refused.
+
 Every value is an angle, in radians, computed with the expression
 language's sound interval arithmetic, and is the hull over the face's
 pieces. A curved or warped face therefore gives the range of its slopes,
@@ -499,6 +513,22 @@ zero slope, and `convertSlope` turns an angle into a ratio or percent.
   `[0, 2π)`, so a face descending about north may read `[-0.1, 0.1]`.
 - `inclination;axis=own_z` is the own z axis's tilt from the vertical;
   `own_x` and `own_y` are measured from the horizontal, unsigned.
+
+The values above are the hull over the whole face: a single-body fill
+whose top is a level crest between two batters measures a `slope` from
+zero to the batters' fall, and every limit between stays undecided. The
+member list `face_pieces[;face=…]` lists the face's pieces one by one, so
+an aggregate judges each ([Measured members](#measured-members)): `max`
+of their `slope` is the steepest piece, decided where its own interval
+is, and `all(implies(area > 1 m², slope ≤ limit))` judges every piece but
+the small ones. A piece is planar, or smooth across the triangles of a
+tessellation whose normals may be one surface's; where the pieces part is
+the service's, and any partition is sound, since a piece's values hold
+over all of its parts. With `face=facing` a piece whose facing cannot be
+decided is a possible member. Its `slope` is the hull over its parts in
+`[0, π/2]` (`π/2` where a part may stand vertical), its `area` the
+service's interval, and its `gradient_direction` as above, `null` for a
+piece lying exactly level and undecided where it may be level or vertical.
 
 A face that may stand vertical somewhere has no gradient there, and
 `gradient_direction` has no answer when a piece is level or the pieces
@@ -886,6 +916,7 @@ and declare their parameters and typed fields:
 | `steps` (`walking_line_offset`) | one per riser of a flight, bottom to top | `riser`, `going`, `step_length` (`2r + g`), `nosing`, `winder_angle`, `open_riser` |
 | `runs` (`landing`) | a ramp's sloped runs, lowest first | `run`, `slope`, `length`, `rise`, `width`, and with `landing` `bottom_landing`, `top_landing` and their `_depth` and `_width` |
 | `handrails` (`rails`, `reach_across`, `reach_above`, `level_over`, `from`, `of`) | each rail along a flight or each run of a ramp | `run`, `left`, `right`, `height_lowest`, `height_highest`, `extension_bottom`, `extension_top`, `bottom_rise`, `top_rise`, `first_on_side`, `last_on_side`, `gap_after` |
+| `face_pieces` (`face`, `direction`, `tolerance`) | the planar or smooth pieces of a face of the body, as the vertical-extent service lists them; with `face=facing`, a piece whose facing is undecided is a possible member | `slope`, `area`, `gradient_direction` |
 | `recesses` | the pockets between a footprint's boundary and its convex hull | `width`, `depth` |
 | `end_walls` (`corridor`, `kinds`) | the walls the ends of the corridors an opening faces run into | `gap`, `facing` |
 | `exit_pairs` (`exits`, `kinds`, `between`) | every pair of a space's exits | `separation` |

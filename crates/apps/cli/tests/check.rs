@@ -2304,6 +2304,112 @@ fn with_geometry_a_clearance_envelope_and_sections_are_judged_along_an_alignment
     assert!(objects(&result, "not_evaluated").is_empty(), "{result:#}");
 }
 
+/// engine#275 on real tessellated data: an `IfcEarthworksFill` of the
+/// buildingSMART IFC 4.3 sample scene (`fixtures/ifc4x3-earthworks`), one
+/// `IfcTriangulatedFaceSet` whose top is a level part, a ramp rising one in
+/// ten and a short step about 84° steep. Over the whole top the slope
+/// spans the level part to the step, so a 1:1.5 limit is undecided. Piece
+/// by piece, the steepest piece (the step) decides the limit, and the
+/// pieces larger than 1 m² (the level part and the ramp) keep it.
+#[test]
+fn with_geometry_an_earthworks_fill_is_judged_piece_by_piece() {
+    let case = Case::new("geometry-earthworks-pieces");
+    let model = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../../fixtures/ifc4x3-earthworks/infra-road-fill.ifc"
+    ))
+    .unwrap();
+    let rule = |name: &str, requirement: Value| {
+        let (output, result) = case.geometry_rule(
+            &model,
+            &[("fill", "IfcEarthworksFill")],
+            "axioval:capability.expression",
+            &registry_signature("axioval:capability.expression"),
+            entity("fill"),
+            json!({"requirement": {"type": "expression", "value": requirement}}),
+        );
+        let objects = |key: &str| -> Vec<String> {
+            result["report"][key]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter_map(|entry| entry["object_id"]["local_id"].as_str())
+                .map(str::to_owned)
+                .collect()
+        };
+        let judged = (objects("findings"), objects("not_evaluated"));
+        assert!(
+            result["geometry"]["unmeasured"]
+                .as_array()
+                .is_none_or(Vec::is_empty),
+            "{name}: {result:#}"
+        );
+        (output, judged, result)
+    };
+    let ratio = |angle: Value| json!({"kind": "convertSlope", "from": "angle", "to": "ratio", "operand": angle});
+    let member = |field: &str| json!({"kind": "property", "propertySet": "axioval:member", "property": field});
+    let limit = json!({"kind": "literal", "value": {"type": "number", "value": 1.0 / 1.5}});
+    let pieces = json!({"kind": "measured", "name": "face_pieces"});
+
+    // The hull over the whole top: from level to the step, undecided.
+    let (output, judged, result) = rule(
+        "hull",
+        json!({"kind": "compare", "operator": "lessThanOrEquals", "left": ratio(json!(
+            {"kind": "property", "propertySet": "axioval:measured", "property": "slope"})),
+            "right": limit}),
+    );
+    assert_eq!(output.status.code(), Some(4), "{result:#}");
+    assert_eq!(judged, (vec![], vec!["#473".to_owned()]), "{result:#}");
+
+    // The steepest piece is the step: a finding.
+    let (output, judged, result) = rule(
+        "steepest",
+        json!({"kind": "compare", "operator": "lessThanOrEquals",
+            "left": {"kind": "aggregate", "function": "max", "over": pieces,
+                     "value": ratio(member("slope"))},
+            "right": limit}),
+    );
+    assert_eq!(output.status.code(), Some(3), "{result:#}");
+    assert_eq!(judged, (vec!["#473".to_owned()], vec![]), "{result:#}");
+    // The step rises about ten in one, cited piece by piece.
+    let finding = &result["report"]["findings"][0];
+    let steepest = finding["explanation"]["entries"][0]["value"]
+        .as_str()
+        .unwrap();
+    assert!(steepest.starts_with("9.99"), "{finding:#}");
+    assert!(
+        finding["evidence"].to_string().contains("face-pieces:"),
+        "{finding:#}"
+    );
+
+    // Every piece of more than 1 m² (the level part and the ramp) is
+    // within 1:1.5: the fill passes.
+    let (output, judged, result) = rule(
+        "large",
+        json!({"kind": "aggregate", "function": "all", "over": pieces,
+            "value": {"kind": "implies",
+                "antecedent": {"kind": "compare", "operator": "greaterThan",
+                    "left": member("area"),
+                    "right": {"kind": "literal",
+                              "value": {"type": "quantity", "value": 1.0, "unit": "m2"}}},
+                "consequent": {"kind": "compare", "operator": "lessThanOrEquals",
+                    "left": ratio(member("slope")), "right": limit}}}),
+    );
+    assert_eq!(output.status.code(), Some(0), "{result:#}");
+    assert_eq!(judged, (vec![], vec![]), "{result:#}");
+
+    // The ramp rises one in ten: some piece lies between 1:20 and 1:5.
+    let (output, judged, result) = rule(
+        "ramp",
+        json!({"kind": "aggregate", "function": "any", "over": pieces,
+            "value": {"kind": "between", "operand": ratio(member("slope")),
+                "low": {"kind": "literal", "value": {"type": "number", "value": 0.05}},
+                "high": {"kind": "literal", "value": {"type": "number", "value": 0.2}}}}),
+    );
+    assert_eq!(output.status.code(), Some(0), "{result:#}");
+    assert_eq!(judged, (vec![], vec![]), "{result:#}");
+}
+
 /// The crossing walls with an `IfcOpeningElement` (#208) voiding the first
 /// wall (#16) where the second crosses it: a 1 m square prism from below
 /// the floor to above the walls, under the representation `identifier`, or

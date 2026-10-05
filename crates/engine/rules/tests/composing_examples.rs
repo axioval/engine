@@ -14,12 +14,12 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use axioval_engine::{
-    CapabilityRegistry, ElevationInterval, EvidenceSession, FaceNormal, FaceNormals, Headroom,
-    HeadroomRequest, MetricDirection, MetricFrame, MetricPoint, ObjectFrame, ObjectFrameError,
-    ObjectFrameService, ObjectFrameServiceHandle, ObjectFront, SlopedSurface, SourceSnapshot,
-    SurfaceFace, Tread, TreadFlight, TreadFlightRequest, VerticalExtent, VerticalExtentError,
-    VerticalExtentService, VerticalExtentServiceHandle, WalkingLine, WalkingSurfaceError,
-    WalkingSurfaceService, WalkingSurfaceServiceHandle, compile,
+    CapabilityRegistry, ElevationInterval, EvidenceSession, FaceNormal, FaceNormals, FacePiece,
+    FacePieceSet, FacePieces, Headroom, HeadroomRequest, MetricDirection, MetricFrame, MetricPoint,
+    ObjectFrame, ObjectFrameError, ObjectFrameService, ObjectFrameServiceHandle, ObjectFront,
+    SlopedSurface, SourceSnapshot, SurfaceFace, Tread, TreadFlight, TreadFlightRequest,
+    VerticalExtent, VerticalExtentError, VerticalExtentService, VerticalExtentServiceHandle,
+    WalkingLine, WalkingSurfaceError, WalkingSurfaceService, WalkingSurfaceServiceHandle, compile,
 };
 use axioval_ir::{
     DefinitionPackage, Evidence, NotEvaluatedReason, ObjectId, PropertyValue, QuantityDimension,
@@ -58,12 +58,12 @@ const COVER: Example = Example {
     ruleset: include_str!("../../../../docs/examples/composing/cover.ruleset.json"),
 };
 
-/// What the geometry services answer per object: the top face's normals,
-/// the vertical extent, the placement (every object along the world axes)
-/// and a stair flight.
+/// What the geometry services answer per object: the top face's pieces
+/// and their normals, the vertical extent, the placement (every object
+/// along the world axes) and a stair flight.
 #[derive(Default)]
 struct Geometry {
-    normals: BTreeMap<ObjectId, Vec<FaceNormal>>,
+    pieces: BTreeMap<ObjectId, Vec<Vec<FaceNormal>>>,
     extents: BTreeMap<ObjectId, (f64, f64)>,
     flights: BTreeMap<ObjectId, TreadFlight>,
     snapshots: Vec<SourceSnapshot>,
@@ -80,11 +80,16 @@ impl Geometry {
     /// A top face of planar pieces, each falling `ratio` (rise per run)
     /// along `direction` in plan.
     fn face(mut self, object: &str, pieces: &[([f64; 2], f64)]) -> Self {
-        let normals = pieces
-            .iter()
-            .map(|([x, y], ratio)| FaceNormal::exact([x * ratio, y * ratio, 1.0]).unwrap())
-            .collect();
-        self.normals.insert(id(object), normals);
+        let pieces = pieces.iter().map(|piece| vec![normal(*piece)]).collect();
+        self.pieces.insert(id(object), pieces);
+        self
+    }
+
+    /// A top face of one warped piece, its parts falling as `face`'s
+    /// pieces do.
+    fn warped(mut self, object: &str, parts: &[([f64; 2], f64)]) -> Self {
+        let parts = parts.iter().map(|part| normal(*part)).collect();
+        self.pieces.insert(id(object), vec![parts]);
         self
     }
 
@@ -140,12 +145,32 @@ impl VerticalExtentService for Geometry {
         face: SurfaceFace,
     ) -> Result<FaceNormals, VerticalExtentError> {
         let normals = self
-            .normals
+            .pieces
             .get(object)
-            .cloned()
-            .ok_or_else(|| VerticalExtentError::UnknownObject(object.clone()))?;
+            .ok_or_else(|| VerticalExtentError::UnknownObject(object.clone()))?
+            .concat();
         let evidence = Evidence::exact(source(), format!("faces:{object}"));
         FaceNormals::try_new(object.clone(), face, normals, evidence)
+    }
+
+    /// The top face's pieces, each of area 1 m²; only the top is known.
+    fn measure_face_pieces(
+        &self,
+        object: &ObjectId,
+        set: FacePieceSet,
+    ) -> Result<FacePieces, VerticalExtentError> {
+        if set != FacePieceSet::Top {
+            return Err(VerticalExtentError::Unavailable("only the top".into()));
+        }
+        let pieces = self
+            .pieces
+            .get(object)
+            .ok_or_else(|| VerticalExtentError::UnknownObject(object.clone()))?
+            .iter()
+            .map(|parts| FacePiece::try_new(parts.clone(), 1.0, 1.0))
+            .collect::<Result<_, _>>()?;
+        let evidence = Evidence::exact(source(), format!("pieces:{object}"));
+        FacePieces::try_new(object.clone(), set, pieces, evidence)
     }
 }
 
@@ -189,6 +214,12 @@ impl WalkingSurfaceService for Geometry {
     fn measure_headroom(&self, _: &HeadroomRequest) -> Result<Headroom, WalkingSurfaceError> {
         Err(WalkingSurfaceError::Unavailable("no headroom".into()))
     }
+}
+
+/// The normal of a planar part falling `ratio` (rise per run) along
+/// `direction` in plan.
+fn normal(([x, y], ratio): ([f64; 2], f64)) -> FaceNormal {
+    FaceNormal::exact([x * ratio, y * ratio, 1.0]).unwrap()
 }
 
 /// A straight flight of `count` equal risers and goings, every position
@@ -296,12 +327,17 @@ fn length(metres: f64) -> PropertyValue {
     }
 }
 
-/// The steepest slope a soil class allows, from the rule's table.
+/// The steepest slope a soil class allows, from the rule's table, over
+/// each piece of a single-body fill: a level crest between two batters.
 #[test]
 fn an_embankment_slope_is_limited_by_its_soil_class() {
     const SET: &str = "Ground";
     const CLASS: &str = "SoilClass";
     const FALL: [f64; 2] = [1.0, 0.0];
+    const EAST: [f64; 2] = [1.0, 0.0];
+    const WEST: [f64; 2] = [-1.0, 0.0];
+    // A crest between batters falling `ratio` to either side.
+    let fill = |ratio: f64| [(EAST, 0.0), (EAST, ratio), (WEST, ratio)];
     let model = [
         "steady",
         "steep",
@@ -321,12 +357,13 @@ fn an_embankment_slope_is_limited_by_its_soil_class() {
     .value("unlisted", SET, CLASS, text("peat"))
     .unreadable_value("unread", SET, CLASS, "IFCLABEL");
     let geometry = Geometry::new()
-        // One in three in sand, which allows 1:2.5.
-        .face("steady", &[(FALL, 0.3)])
+        // Batters of one in three in sand, which allows 1:2.5; the level
+        // crest beside them leaves nothing open.
+        .face("steady", &fill(0.3))
         // 1:2.5 in clay, which allows 1:4.
-        .face("steep", &[(FALL, 0.4)])
-        // A face warped from 1:3 to 1:2: is it within 1:2.5?
-        .face("uneven", &[(FALL, 0.3), (FALL, 0.5)])
+        .face("steep", &fill(0.4))
+        // A batter warped from 1:3 to 1:2: is it within 1:2.5?
+        .warped("uneven", &[(FALL, 0.3), (FALL, 0.5)])
         .face("unclassified", &[(FALL, 0.1)])
         .face("unlisted", &[(FALL, 0.1)])
         .face("unread", &[(FALL, 0.1)]);

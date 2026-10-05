@@ -472,6 +472,150 @@ impl FaceNormals {
     }
 }
 
+/// Which pieces of a body's boundary a piece measurement lists.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum FacePieceSet {
+    /// The pieces of the top face, as [`SurfaceFace::Top`] reads it.
+    Top,
+    /// The pieces of the bottom face, as [`SurfaceFace::Bottom`] reads it.
+    Bottom,
+    /// Every piece of a closed body's boundary, vertical sides included,
+    /// each normal pointing out of the body. An open surface has no
+    /// outside, so a service refuses it.
+    Boundary,
+}
+
+impl From<SurfaceFace> for FacePieceSet {
+    fn from(face: SurfaceFace) -> Self {
+        match face {
+            SurfaceFace::Top => Self::Top,
+            SurfaceFace::Bottom => Self::Bottom,
+        }
+    }
+}
+
+/// One planar or smooth piece of a body's boundary: the normal boxes of
+/// the triangles (or other planar parts) it is made of, each as
+/// [`FaceNormal`] bounds it, and its surface area as an interval sure to
+/// hold the true piece's.
+///
+/// Where one piece ends and the next begins is the service's: a piece
+/// never spans a crease the geometry states, so a crest and the batters
+/// beside it are separate pieces. Any partition is sound, since every
+/// value of a piece is taken over all of its parts.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FacePiece {
+    normals: Vec<FaceNormal>,
+    area: (f64, f64),
+}
+
+impl FacePiece {
+    /// A piece of the parts `normals`, with an area in `[lower, upper]`
+    /// square metres.
+    ///
+    /// # Errors
+    ///
+    /// [`VerticalExtentError::InvalidMeasurement`] for a piece without parts
+    /// or an area not finite, negative or reversed.
+    pub fn try_new(
+        normals: Vec<FaceNormal>,
+        lower: f64,
+        upper: f64,
+    ) -> Result<Self, VerticalExtentError> {
+        if normals.is_empty()
+            || !lower.is_finite()
+            || !upper.is_finite()
+            || lower < 0.0
+            || lower > upper
+        {
+            return Err(VerticalExtentError::InvalidMeasurement);
+        }
+        Ok(Self {
+            normals,
+            area: (lower, upper),
+        })
+    }
+
+    /// The normal box of each part of the piece.
+    #[must_use]
+    pub fn normals(&self) -> &[FaceNormal] {
+        &self.normals
+    }
+
+    /// The least and greatest area the piece may have, in square metres.
+    #[must_use]
+    pub fn area_square_metres(&self) -> (f64, f64) {
+        self.area
+    }
+}
+
+/// The pieces of one set of a body's boundary, in the service's stable
+/// order, with evidence.
+///
+/// The evidence is exact only where the service states that the pieces
+/// are of the object's exact shape, so every box and area holds nothing
+/// but rounding; a tessellation is never exact.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FacePieces {
+    object: ObjectId,
+    set: FacePieceSet,
+    pieces: Vec<FacePiece>,
+    evidence: Evidence,
+}
+
+impl FacePieces {
+    /// The pieces of `object`'s `set`; at least one.
+    ///
+    /// # Errors
+    ///
+    /// [`VerticalExtentError::InvalidMeasurement`] for a set without
+    /// pieces, [`VerticalExtentError::InexactEvidence`] for evidence
+    /// without a locator.
+    pub fn try_new(
+        object: ObjectId,
+        set: FacePieceSet,
+        pieces: Vec<FacePiece>,
+        evidence: Evidence,
+    ) -> Result<Self, VerticalExtentError> {
+        if pieces.is_empty() {
+            return Err(VerticalExtentError::InvalidMeasurement);
+        }
+        if evidence.locator.trim().is_empty() {
+            return Err(VerticalExtentError::InexactEvidence);
+        }
+        Ok(Self {
+            object,
+            set,
+            pieces,
+            evidence,
+        })
+    }
+
+    /// The measured object.
+    #[must_use]
+    pub fn object(&self) -> &ObjectId {
+        &self.object
+    }
+
+    /// The set of pieces measured.
+    #[must_use]
+    pub fn set(&self) -> FacePieceSet {
+        self.set
+    }
+
+    /// Every piece, in the service's order.
+    #[must_use]
+    pub fn pieces(&self) -> &[FacePiece] {
+        &self.pieces
+    }
+
+    /// The source and exactness of the measurement.
+    #[must_use]
+    pub fn evidence(&self) -> &Evidence {
+        &self.evidence
+    }
+}
+
 /// How thick a body is along a direction: every local thickness, the
 /// length inside the body of a line along the direction, lies in `[lower,
 /// upper]`. A slab of constant thickness is a point; a tapered or sloped
@@ -604,6 +748,23 @@ pub trait VerticalExtentService: Send + Sync + 'static {
             "this service does not measure faces".into(),
         ))
     }
+
+    /// The planar or smooth pieces of `object`'s boundary in `set`.
+    ///
+    /// A service that does not tell a face's pieces apart refuses; it
+    /// never answers with one piece per face or per triangle it cannot
+    /// group.
+    // gate: measures plane_angle, area
+    fn measure_face_pieces(
+        &self,
+        object: &ObjectId,
+        set: FacePieceSet,
+    ) -> Result<FacePieces, VerticalExtentError> {
+        let _ = (object, set);
+        Err(VerticalExtentError::Unavailable(
+            "this service does not measure the pieces of faces".into(),
+        ))
+    }
 }
 
 /// Registry handle for a [`VerticalExtentService`].
@@ -671,6 +832,20 @@ impl VerticalExtentServiceHandle {
             return Err(VerticalExtentError::InvalidMeasurement);
         }
         Ok(normals)
+    }
+
+    /// The pieces of `object`'s `set`. Pieces naming another object or set
+    /// answer a different question and are refused.
+    pub fn measure_face_pieces(
+        &self,
+        object: &ObjectId,
+        set: FacePieceSet,
+    ) -> Result<FacePieces, VerticalExtentError> {
+        let pieces = self.0.measure_face_pieces(object, set)?;
+        if pieces.object() != object || pieces.set() != set {
+            return Err(VerticalExtentError::InvalidMeasurement);
+        }
+        Ok(pieces)
     }
 }
 

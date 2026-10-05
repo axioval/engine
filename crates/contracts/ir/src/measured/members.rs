@@ -8,10 +8,11 @@
 use serde::Serialize;
 
 use super::registry::{
-    ANGLE_TOLERANCE, FACE_AXES, MEMBER_PATH, OPENINGS_MINIMUM, PAIRED, SPACED_MEMBERS, en_de,
+    ANGLE_TOLERANCE, FACE, FACE_AXES, FACING, MEMBER_PATH, NO_FACE, NO_GEOMETRY, OPENINGS_MINIMUM,
+    PAIRED, SPACED_MEMBERS, en_de,
 };
 use super::{
-    LocalizedText, MeasuredCall, MeasuredDescriptor, MeasuredError, MeasuredExactness,
+    FACE_PIECES, LocalizedText, MeasuredCall, MeasuredDescriptor, MeasuredError, MeasuredExactness,
     MeasuredParameter, MeasuredParameterKind,
 };
 use crate::QuantityDimension;
@@ -84,6 +85,9 @@ const ANGLE: MemberFieldKind = MemberFieldKind::Number {
     dimension: Some(QuantityDimension::PlaneAngle),
 };
 const RATIO: MemberFieldKind = MemberFieldKind::Number { dimension: None };
+const AREA: MemberFieldKind = MemberFieldKind::Number {
+    dimension: Some(QuantityDimension::Area),
+};
 
 const fn required_length(key: &'static str, help: &'static [LocalizedText]) -> MeasuredParameter {
     MeasuredParameter {
@@ -351,6 +355,57 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
                 "Wie weit die beiden Ausgänge im Grundriss auseinanderliegen.",
             ),
         )],
+    },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
+            name: FACE_PIECES,
+            parameters: &[FACE, FACING[0], FACING[1]],
+            dimension: None,
+            services: &["vertical-extent"],
+            exactness: MeasuredExactness::Measured,
+            not_evaluated: &[NO_GEOMETRY, NO_FACE, "an open surface faces no direction"],
+            label: &en_de("Face pieces", "Flächenteile"),
+            help: &en_de(
+                "The planar or smooth pieces of a face of the body, one by one, in the \
+                 order the geometry service lists them. With `face=facing`, a piece \
+                 whose facing cannot be decided is a possible member.",
+                "Die ebenen oder glatten Teile einer Fläche des Körpers, einzeln, in der \
+                 Reihenfolge des Geometriedienstes. Mit `face=facing` ist ein Teil, dessen \
+                 Ausrichtung sich nicht entscheiden lässt, ein mögliches Mitglied.",
+            ),
+        },
+        fields: &[
+            field(
+                "slope",
+                ANGLE,
+                &en_de("Slope", "Neigung"),
+                &en_de(
+                    "The piece's steepest gradient as an angle from the horizontal, in \
+                     `[0, π/2]`: the hull over the piece, `π/2` where it stands vertical.",
+                    "Das steilste Gefälle des Teils als Winkel zur Waagerechten, in \
+                     `[0, π/2]`: die Hülle über das Teil, `π/2`, wo es senkrecht steht.",
+                ),
+            ),
+            field(
+                "area",
+                AREA,
+                &en_de("Area", "Fläche"),
+                &en_de("The piece's surface area.", "Der Flächeninhalt des Teils."),
+            ),
+            field(
+                "gradient_direction",
+                ANGLE,
+                &en_de("Direction of descent", "Fallrichtung"),
+                &en_de(
+                    "The plan bearing of the piece's steepest descent, clockwise from plan \
+                     north; `null` for a level piece, undecided where the piece may be level \
+                     or stand vertical.",
+                    "Die Grundrissrichtung des steilsten Gefälles des Teils, im Uhrzeigersinn \
+                     von Plannord; `null` für ein waagerechtes Teil, unentschieden, wo es \
+                     waagerecht sein oder senkrecht stehen kann.",
+                ),
+            ),
+        ],
     },
     MemberDescriptor {
         list: MeasuredDescriptor {

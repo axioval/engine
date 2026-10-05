@@ -1003,6 +1003,7 @@ pub use linear_quantity::{
     LinearInterval, LinearQuantityError, LinearQuantityEvidence, LinearQuantityKind,
     LinearQuantityRequest, LinearQuantityService, LinearQuantityServiceHandle, ShelfGeometry,
 };
+pub use measured::faces::FacePieceMeasures;
 pub use measured::measured_value;
 pub use measured::provider::{
     MeasuredMember, MeasuredProvider, Measurement, MemberValue, measured_members,
@@ -1100,8 +1101,9 @@ pub use triangle_count::{
     TriangleCount, TriangleCountError, TriangleCountService, TriangleCountServiceHandle,
 };
 pub use vertical_extent::{
-    DirectionalExtent, ElevationInterval, FaceNormal, FaceNormals, SurfaceFace, Thickness,
-    VerticalExtent, VerticalExtentError, VerticalExtentService, VerticalExtentServiceHandle,
+    DirectionalExtent, ElevationInterval, FaceNormal, FaceNormals, FacePiece, FacePieceSet,
+    FacePieces, SurfaceFace, Thickness, VerticalExtent, VerticalExtentError, VerticalExtentService,
+    VerticalExtentServiceHandle,
 };
 pub use walkability::{
     PassageAdmission, StretchLimit, VerifiedWalkablePassage, VerticalConnector,

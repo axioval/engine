@@ -93,14 +93,20 @@
                   "operator": "lessThanOrEquals",
                   "label": "slope within the limit",
                   "left": {
-                    "kind": "convertSlope",
-                    "label": "rise per run",
-                    "from": "angle",
-                    "to": "ratio",
-                    "operand": {
-                      "kind": "property",
-                      "propertySet": "axioval:measured",
-                      "property": "slope"
+                    "kind": "aggregate",
+                    "label": "steepest piece",
+                    "function": "max",
+                    "over": {"kind": "measured", "name": "face_pieces"},
+                    "value": {
+                      "kind": "convertSlope",
+                      "label": "rise per run",
+                      "from": "angle",
+                      "to": "ratio",
+                      "operand": {
+                        "kind": "property",
+                        "propertySet": "axioval:member",
+                        "property": "slope"
+                      }
                     }
                   },
                   "right": {

@@ -2165,6 +2165,11 @@ fn missed(limit: &SlopeLimit, run: &SlopedRun) -> Option<Deviation> {
 
 /// Whether one row holds for a run: `Some(true)` holds, `Some(false)`
 /// violated, `None` undecided.
+///
+/// The slope is the run's (`SlopedRun::slope`, rise over length between
+/// landings), the one the row's length and rise bound with it; the
+/// face-normal `slope` of `axioval:measured` is a different reading, of any
+/// face's pieces (the book's "Which slope a value reads").
 fn holds(limit: &SlopeLimit, run: &SlopedRun) -> Option<bool> {
     let slack = slack(run_scale(run));
     let slope = run.slope();

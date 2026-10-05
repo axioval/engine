@@ -7,6 +7,11 @@
 //! A face of several pieces (a warped or tessellated surface) answers the
 //! hull over its pieces, never one triangle's value. A piece standing
 //! vertical has no gradient, so it leaves the face not evaluated.
+//!
+//! These are the slopes of any face of any body. A ramp's gradient is the
+//! walking-surface run's (`SlopedRun::slope`, rise over length between its
+//! landings), which `ramp-geometry` and the `runs` list read instead; the
+//! book's "Which slope a value reads" says why each reader takes which.
 
 use std::f64::consts::{PI, TAU};
 

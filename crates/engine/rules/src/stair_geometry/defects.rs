@@ -5,6 +5,15 @@
 //! check of `stair-geometry` or `ramp-geometry` alone on the object, with
 //! the sizes and kinds the value states, so the count is the capability's:
 //! from the defects found to those found or left open.
+//!
+//! This is an inverted wrapper, kept on purpose until the template rebuild
+//! (#280): the five checks have no search callable on its own yet, so the
+//! count runs the capability rather than copying its judgement. The rebuild
+//! splits each check into a search over the stair or ramp (end spaces in
+//! `ramp_ends.rs`, landing doors, tactile strips in `tactile.rs`, breaks in
+//! `continuity.rs`, rails over surfaces in `obstruction.rs`) returning one
+//! three-valued result per searched item, which the template judges and
+//! this count sums; then this module's synthesised rule goes.
 
 use std::collections::{BTreeMap, BTreeSet};
 

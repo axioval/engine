@@ -864,6 +864,12 @@ impl SlopedRun {
     /// The run's slope, rise over horizontal length. On a planar face the
     /// height changes linearly along the direction of steepest ascent, so
     /// this is the face's gradient.
+    ///
+    /// This is the slope `ramp-geometry` judges and the `runs` list
+    /// measures, not the face-normal `slope` of `axioval:measured`: a ramp
+    /// rule bounds a run between landings, with its length and rise, and
+    /// end positions over the whole run bound it far tighter on a mesh than
+    /// one triangle's normal does (the book's "Which slope a value reads").
     #[must_use]
     pub fn slope(&self) -> MeasuredInterval {
         let (rise, length) = (self.rise(), self.length());

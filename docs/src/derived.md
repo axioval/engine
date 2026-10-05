@@ -546,6 +546,34 @@ ramp, the steepest piece of the top face is the run that
 `WalkingSurfaceService::measure_sloped_runs` measures, and the landings
 are level.
 
+#### Which slope a value reads
+
+The engine has two slope definitions, and each reader takes one on
+purpose:
+
+| Reader | Slope | Form |
+| --- | --- | --- |
+| `slope`, `slope_along`, `cross_fall`, `face_pieces`' `slope` | the face's normals, per piece (`measured/surface.rs`) | an angle, the hull over the pieces |
+| `ramp-geometry`'s `slope_limits` and `slope_tolerance`, the `runs` list's `slope` | the run's rise over its horizontal length (`SlopedRun::slope`) | a ratio, one per run |
+
+A ramp is judged on its runs because what a ramp rule bounds is a run: the
+gradient between two landings, together with that run's length and rise
+in the same `slope_limits` row, and the spread between runs. The
+walking-surface service decides where a run ends and a landing begins, and
+the run's slope is derived from its end positions over its whole length,
+so a tessellation's chord deviation `d` costs about `d / length`, where the
+normals of a mesh triangle of least height `h` lean by about `2d / h`. On
+a planar run whose direction is its steepest ascent (as the service
+measures it) the two agree: the run's ratio is the tangent of its piece's
+`slope`. They differ where they should: a run that also falls across has
+a steeper face `slope` than its run slope, and a warped run's face `slope`
+is the range over its pieces.
+
+The face slopes read any face of any body, with no walking direction and
+no runs: a roof, a batter, a cross fall, a terrain sheet. Use `runs` (or
+`ramp-geometry`) to judge a ramp's gradient, and `slope` or `cross_fall`
+for a face's steepest or sideways fall, including a ramp's cross fall.
+
 ### Dimensions
 
 `extent` is the body's depth along an axis: its highest less its lowest

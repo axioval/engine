@@ -700,6 +700,8 @@ impl MeasuredProvider for StairMeasures {
                         locator: at("run"),
                     }),
                 ),
+                // The run's slope `ramp-geometry` judges, a ratio; never the
+                // face-normal `slope` angle, which reads any face's pieces.
                 ("slope", number(Some(run.slope()), None, at("slope"))),
                 ("length", number(Some(run.length()), LENGTH, at("length"))),
                 ("rise", number(Some(run.rise()), LENGTH, at("rise"))),

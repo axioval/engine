@@ -4,6 +4,14 @@
 //! placement is a sure member, a proven absence none, and a search the
 //! selections leave open one undecided member, so `count >= 1` is the
 //! three-valued fit.
+//!
+//! This is an inverted wrapper, kept on purpose until the search/decision
+//! split (#286): the placement search, with its retry without undecided
+//! obstacles and swings and its entrance reach, lives inside the free-floor
+//! capabilities, so the members run the capability rather than copying
+//! it. The split moves that search into `free_floor.rs` as one function
+//! answering found, proven absent or open, which the capabilities' template
+//! judges and these members list; then this module's synthesised rule goes.
 
 use std::collections::{BTreeMap, BTreeSet};
 

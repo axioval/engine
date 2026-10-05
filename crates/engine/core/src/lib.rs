@@ -1285,6 +1285,63 @@ impl Runtime {
     /// concepts bind to nothing and concept-based selection is reported as not
     /// evaluated. Hosts that want concept binding run an [`EvidenceSession`].
     pub fn run(&self, project: &Project, plan: ExecutionPlan) -> Result<Report, EngineError> {
+        self.run_project(project, plan).map(|(report, _)| report)
+    }
+
+    /// Executes a plan as [`Self::run`] does, and returns beside the report
+    /// every rule's [`RuleRecord`], each with its applicability selection
+    /// recorded: how the rule judged every object, passed and not selected
+    /// told apart. The selection is recorded through the registry's
+    /// [`OutcomeRefiner`], so a registry without one is refused.
+    ///
+    /// The report is the one [`Self::run`] returns; recording costs one more
+    /// selector evaluation per rule and object. The differential parity
+    /// harness reads it.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::run`], and [`EngineError::MissingRefiner`] without an
+    /// outcome refiner.
+    pub fn run_recorded(
+        &self,
+        project: &Project,
+        plan: ExecutionPlan,
+    ) -> Result<(Report, RuleOutcomes), EngineError> {
+        self.run_project(project, self.recording(plan)?)
+    }
+
+    /// Executes a plan against one session as [`Self::run_session`] does,
+    /// and returns every rule's record as [`Self::run_recorded`] does.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::run_session`], and [`EngineError::MissingRefiner`] without
+    /// an outcome refiner.
+    pub fn run_session_recorded(
+        &self,
+        session: &EvidenceSession,
+        plan: ExecutionPlan,
+    ) -> Result<(Report, RuleOutcomes), EngineError> {
+        self.run_in_session(session, self.recording(plan)?)
+    }
+
+    /// `plan` with every rule's selection recorded.
+    fn recording(&self, mut plan: ExecutionPlan) -> Result<ExecutionPlan, EngineError> {
+        if self.registry.refiner().is_none() {
+            return Err(EngineError::MissingRefiner(
+                "recording each rule's selection",
+            ));
+        }
+        let every: Vec<RuleId> = plan.rules.iter().map(|rule| rule.id.clone()).collect();
+        plan.recorded.extend(every);
+        Ok(plan)
+    }
+
+    fn run_project(
+        &self,
+        project: &Project,
+        plan: ExecutionPlan,
+    ) -> Result<(Report, RuleOutcomes), EngineError> {
         self.run_with_services(
             project,
             &self.services,
@@ -1304,6 +1361,14 @@ impl Runtime {
         session: &EvidenceSession,
         plan: ExecutionPlan,
     ) -> Result<Report, EngineError> {
+        self.run_in_session(session, plan).map(|(report, _)| report)
+    }
+
+    fn run_in_session(
+        &self,
+        session: &EvidenceSession,
+        plan: ExecutionPlan,
+    ) -> Result<(Report, RuleOutcomes), EngineError> {
         let type_systems = session
             .snapshots()
             .map(|snapshot| (snapshot.source().clone(), snapshot.type_systems().to_vec()))
@@ -1385,6 +1450,31 @@ impl Runtime {
         evaluation
     }
 
+    /// The deferred rules' project-scoped outcomes, and their summaries
+    /// when the host asked for them.
+    fn deferred(
+        &self,
+        deferred: Vec<DeferredRule>,
+        summaries: &mut Vec<RuleSummary>,
+    ) -> Vec<NotEvaluated> {
+        deferred
+            .into_iter()
+            .inspect(|rule| {
+                if self.summaries {
+                    summaries.push(RuleSummary::new(rule.id.clone(), 0, (0, false), (0, true)));
+                }
+            })
+            .map(|rule| NotEvaluated {
+                explanation: None,
+                rule_id: rule.id,
+                scope: Scope::Project,
+                reason: NotEvaluatedReason::InvalidDeclaration,
+                message: rule.reason,
+                location: None,
+            })
+            .collect()
+    }
+
     fn run_with_services(
         &self,
         project: &Project,
@@ -1392,7 +1482,7 @@ impl Runtime {
         type_systems: BTreeMap<axioval_ir::SourceId, Vec<Arc<str>>>,
         (sources, disciplines, metadata): (SessionSources, SourceDisciplines, SourceMetadataIndex),
         plan: ExecutionPlan,
-    ) -> Result<Report, EngineError> {
+    ) -> Result<(Report, RuleOutcomes), EngineError> {
         // Bindings are per run: they join this plan's package concepts to this
         // project's declared type systems, so they cannot be registered once by
         // a host. A host-registered `ConceptBindings` is overridden rather than
@@ -1413,23 +1503,7 @@ impl Runtime {
         let mut summaries: Vec<RuleSummary> = Vec::new();
         let mut findings = Vec::new();
         let mut tables: Vec<ReportTable> = Vec::new();
-        let mut not_evaluated: Vec<NotEvaluated> = plan
-            .deferred
-            .into_iter()
-            .inspect(|rule| {
-                if self.summaries {
-                    summaries.push(RuleSummary::new(rule.id.clone(), 0, (0, false), (0, true)));
-                }
-            })
-            .map(|rule| NotEvaluated {
-                explanation: None,
-                rule_id: rule.id,
-                scope: Scope::Project,
-                reason: NotEvaluatedReason::InvalidDeclaration,
-                message: rule.reason,
-                location: None,
-            })
-            .collect();
+        let mut not_evaluated = self.deferred(plan.deferred, &mut summaries);
         self.install_expressions(&mut services, &plan.values, &plan.types);
         self.registry.install_measured(&mut services, project);
         // Measured values are answered through the host's resolver in
@@ -1510,7 +1584,10 @@ impl Runtime {
             );
             not_evaluated.extend(collapse_source_wide(&rule_id, evaluation.not_evaluated));
         }
-        assemble(findings, not_evaluated, tables, summaries, &services)
+        Ok((
+            assemble(findings, not_evaluated, tables, summaries, &services)?,
+            outcomes,
+        ))
     }
 }
 

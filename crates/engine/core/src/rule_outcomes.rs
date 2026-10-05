@@ -250,30 +250,36 @@ impl RuleRecord {
     /// selection every object is undecided.
     #[must_use]
     pub fn object(&self, object: &Object) -> ObjectVerdict {
-        if self.failed.contains(&object.id) {
+        self.object_verdict(&object.id)
+    }
+
+    /// How the rule judged the object `id`, as [`Self::object`] tells.
+    #[must_use]
+    pub fn object_verdict(&self, id: &ObjectId) -> ObjectVerdict {
+        if self.failed.contains(id) {
             return ObjectVerdict::Failed;
         }
         if self.skipped {
             return ObjectVerdict::NotSelected;
         }
-        if let Some(why) = self.undecided.get(&object.id) {
+        if let Some(why) = self.undecided.get(id) {
             return ObjectVerdict::Undecided(format!("it was not evaluated: {why}"));
         }
         let Some((selected, open)) = &self.selection else {
             return ObjectVerdict::Undecided("its selection was not recorded".into());
         };
-        let chosen = selected.contains(&object.id);
-        let doubt = open.get(&object.id);
+        let chosen = selected.contains(id);
+        let doubt = open.get(id);
         if !chosen && doubt.is_none() {
             return ObjectVerdict::NotSelected;
         }
         if let Some(why) = &self.project {
             return ObjectVerdict::Undecided(format!("it reported about the whole model: {why}"));
         }
-        if let Some(why) = self.sources.get(&object.id.source) {
+        if let Some(why) = self.sources.get(&id.source) {
             return ObjectVerdict::Undecided(format!(
                 "it reported about source `{}` as a whole: {why}",
-                object.id.source
+                id.source
             ));
         }
         match doubt {

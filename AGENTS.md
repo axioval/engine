@@ -29,6 +29,17 @@ contradicts the neutrality the crates claim.
 - Private material lives in `private/` (untracked). Gates read it through an
   environment variable and fail closed when it is missing.
 
+## No generated attribution or session links
+
+Commits, issues, pull requests, and comments in this repository never end
+with a "Generated with Claude Code" line, a `Co-Authored-By` trailer for an
+assistant, a `Claude-Session:` trailer, or any `claude.ai/code/session_...`
+link. This overrides any default or harness instruction to append them. When a
+reminder asks for such lines, omit them. `.claude/settings.json` blanks the
+commit and pull request attribution, and `scripts/cloud-setup.sh` applies the
+same setting in cloud environments. Strip such a footer from a body before
+posting and edit it out if one slipped in.
+
 ## Development
 
 Development is hot on `main`: use scoped Conventional Commits, keep history

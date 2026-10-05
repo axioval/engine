@@ -710,6 +710,16 @@ impl CapabilityRegistry {
         self.measured.push(Arc::new(provider));
         Ok(self)
     }
+    /// What each registered provider measures, in registration order: its
+    /// names and its member lists. Tests hold every provider to a contract
+    /// through it, so a new one is never left out.
+    pub fn measured_providers(
+        &self,
+    ) -> impl Iterator<Item = (&'static [&'static str], &'static [&'static str])> + '_ {
+        self.measured
+            .iter()
+            .map(|provider| (provider.names(), provider.member_lists()))
+    }
     /// Whether a registered provider measures the member list `name`.
     #[must_use]
     pub fn measures_members(&self, name: &str) -> bool {

@@ -83,13 +83,13 @@ impl BayMeasures {
                 format!("its own axes are unknown: {reason}"),
             )
         })?;
-        let (lower, upper) = sides[usize::from(call.choice("side") == Some("length"))];
-        Ok(Measurement::Value {
-            lower,
-            upper,
-            dimension: Some(QuantityDimension::Length),
-            locator: own.evidence().locator.clone(),
-        })
+        let side = sides[usize::from(call.choice("side") == Some("length"))];
+        Ok(crate::measured_kinds::interval(
+            side,
+            Some(QuantityDimension::Length),
+            own.evidence().exact,
+            own.evidence().locator.clone(),
+        ))
     }
 
     /// How many ends or sides the obstacles obstruct, or how many stand
@@ -148,13 +148,15 @@ impl BayMeasures {
         if locators.is_empty() {
             locators.push(format!("{OBSTRUCTION_COUNT}:{}", bay.id));
         }
+        // Counted as exactly as what the count was measured from.
+        let exact = counted.evidence.iter().all(|evidence| evidence.exact);
         #[allow(clippy::cast_precision_loss)]
-        Ok(Measurement::Value {
-            lower: surely as f64,
-            upper: most as f64,
-            dimension: None,
-            locator: locators.join("; "),
-        })
+        Ok(crate::measured_kinds::interval(
+            (surely as f64, most as f64),
+            None,
+            exact,
+            locators.join("; "),
+        ))
     }
 
     /// One member per object of the kinds `of` names that may lie within

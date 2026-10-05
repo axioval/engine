@@ -1412,3 +1412,43 @@ fn distance_expressions_hold_to_the_parity_harness_in_every_mode() {
         assert_eq!(parity.open, 1 + usize::from(open));
     }
 }
+
+/// Measured against a tessellated counterpart, a distance and a count are
+/// never exact, even where the tessellation measures a point; against an
+/// exact one they are.
+#[test]
+fn tessellated_counterparts_measure_inexactly() {
+    use axioval_engine::ServiceRegistry;
+    let model = Model::default()
+        .object("pipe", "pipe")
+        .object("near", "wall");
+    let project = model.project();
+    for (exact, stub) in [
+        (
+            false,
+            Stub::default()
+                .at("pipe", 0.0, 0.0)
+                .curved("near", 1.5, 0.0)
+                .distance("pipe", "near", "Minimum3d", (0.5, 0.5)),
+        ),
+        (
+            true,
+            Stub::default()
+                .at("pipe", 0.0, 0.0)
+                .at("near", 1.5, 0.0)
+                .distance("pipe", "near", "Minimum3d", (0.5, 0.5)),
+        ),
+    ] {
+        let mut services = ServiceRegistry::new();
+        services
+            .register(ProximityServiceHandle::new(Arc::new(stub)))
+            .unwrap();
+        for (name, value) in [
+            ("distance;to=wall;within=1", 0.5),
+            ("count_within;to=wall;radius=1", 1.0),
+        ] {
+            let measured = common::measured_cited(&services, &project, &id("pipe"), name);
+            assert_eq!(measured, Ok(Some(((value, value), exact))), "{name}");
+        }
+    }
+}

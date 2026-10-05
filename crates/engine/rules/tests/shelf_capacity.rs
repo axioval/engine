@@ -422,6 +422,27 @@ fn a_rule_without_an_access_path_is_an_invalid_declaration() {
     );
 }
 
+/// An estimated run never becomes an exact measured value: the service
+/// contract refuses it, so it is not measured at all. A measured run is
+/// exact as its evidence.
+#[test]
+fn an_estimated_run_is_never_measured_exactly() {
+    let name = "shelf_length;depth=0.4;horizontal=0.3;vertical=0.35;bottom=0.1;top=2;\
+                clearance=0.9;doors=door;access=bounds:forward";
+    let read = |answer: Answer| {
+        let (project, mut services) = common::Model::default().object("store", "space").services();
+        services
+            .register(LinearQuantityServiceHandle::new(Arc::new(StubQuantities(
+                answer,
+            ))))
+            .unwrap();
+        common::measured_cited(&services, &project, &common::id("store"), name)
+    };
+    let run = LinearInterval::exact(4.0).unwrap();
+    assert!(read(Answer::Inexact(run)).is_err());
+    assert_eq!(read(Answer::Measured(run)), Ok(Some(((4.0, 4.0), true))));
+}
+
 /// `shelf_clear_height` reaching the shelving's top and `shelf_length` the
 /// minimum reach `shelf-capacity`'s verdicts, from the same request with the
 /// same doors.

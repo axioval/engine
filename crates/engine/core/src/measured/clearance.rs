@@ -62,9 +62,15 @@ impl Measures {
     ) -> Result<Answer, PropertyResolutionError> {
         let name = call.name();
         let unavailable = |error: String| Self::unavailable(name, object, &error);
-        let length = QuantityDimension::Length;
-        let value = |interval: MeasuredInterval, locator: String| {
-            Answer::Value(interval.lower(), interval.upper(), length, locator)
+        let length = Some(QuantityDimension::Length);
+        let value = |interval: MeasuredInterval, evidence: &axioval_ir::Evidence| {
+            Answer::Value(
+                interval.lower(),
+                interval.upper(),
+                length,
+                evidence.locator.clone(),
+                evidence.exact,
+            )
         };
         if name == CLEAR_HEIGHT {
             let height = self
@@ -79,6 +85,7 @@ impl Measures {
                 height.metres(),
                 length,
                 height.evidence().locator.clone(),
+                height.evidence().exact,
             ));
         }
         let walking = self
@@ -91,10 +98,13 @@ impl Measures {
                 let measured = walking
                     .measure_headroom(&HeadroomRequest::new(object.clone(), obstacles))
                     .map_err(|error| unavailable(error.to_string()))?;
-                let locator = measured.evidence().locator.clone();
+                let evidence = measured.evidence();
                 Ok(match measured.clearance() {
-                    Some(clearance) => value(clearance, locator),
-                    None => Answer::Absent(format!("nothing selected stands above: {locator}")),
+                    Some(clearance) => value(clearance, evidence),
+                    None => Answer::Absent(format!(
+                        "nothing selected stands above: {}",
+                        evidence.locator
+                    )),
                 })
             }
             CLEARANCE_BELOW => {
@@ -102,55 +112,71 @@ impl Measures {
                 let measured = walking
                     .measure_clearance_below(&ClearanceBelowRequest::new(object.clone(), spaces))
                     .map_err(|error| unavailable(error.to_string()))?;
-                let locator = measured.evidence().locator.clone();
+                let evidence = measured.evidence();
                 Ok(match measured.clearance() {
-                    Some(clearance) => value(clearance, locator),
-                    None => Answer::Absent(format!("it stands above no selected floor: {locator}")),
+                    Some(clearance) => value(clearance, evidence),
+                    None => Answer::Absent(format!(
+                        "it stands above no selected floor: {}",
+                        evidence.locator
+                    )),
                 })
             }
-            _ => {
-                let obstacles = self.of_kinds(call, "obstacles", object)?;
-                let band = match (call.argument("band_from"), call.argument("band_to")) {
-                    (Some(MeasuredArgument::Length(from)), Some(MeasuredArgument::Length(to)))
-                        if from < to =>
-                    {
-                        (*from, *to)
-                    }
-                    _ => return Err(unavailable("the band's bottom is not below its top".into())),
-                };
-                let stretches = if call.choice("along") == Some("runs") {
-                    let runs = walking
-                        .measure_sloped_runs(object)
-                        .map_err(|error| unavailable(error.to_string()))?;
-                    (0..runs.runs().len()).map(WalkingStretch::Run).collect()
-                } else {
-                    vec![WalkingStretch::Flight]
-                };
-                // The least over the stretches: no narrower than the least
-                // lower bound, and no wider than the least upper.
-                let mut least: Option<(f64, f64)> = None;
-                let mut locators = Vec::new();
-                for stretch in stretches {
-                    let request = ClearWidthRequest::try_new(
-                        object.clone(),
-                        stretch,
-                        obstacles.clone(),
-                        band,
-                    )
-                    .map_err(|error| unavailable(error.to_string()))?;
-                    let measured = walking
-                        .measure_clear_width(&request)
-                        .map_err(|error| unavailable(error.to_string()))?;
-                    let width = measured.width();
-                    least = Some(least.map_or((width.lower(), width.upper()), |(low, high)| {
-                        (low.min(width.lower()), high.min(width.upper()))
-                    }));
-                    locators.push(measured.evidence().locator.clone());
-                }
-                let (lower, upper) =
-                    least.ok_or_else(|| unavailable("it has no run to measure".into()))?;
-                Ok(Answer::Value(lower, upper, length, locators.join("; ")))
-            }
+            _ => self.clear_width(call, object, walking),
         }
+    }
+
+    /// The narrowest clear width along a flight or a ramp's runs.
+    fn clear_width(
+        &self,
+        call: &MeasuredCall,
+        object: &ObjectId,
+        walking: &crate::walking_surface::WalkingSurfaceServiceHandle,
+    ) -> Result<Answer, PropertyResolutionError> {
+        let unavailable = |error: String| Self::unavailable(call.name(), object, &error);
+        let length = Some(QuantityDimension::Length);
+        let obstacles = self.of_kinds(call, "obstacles", object)?;
+        let band = match (call.argument("band_from"), call.argument("band_to")) {
+            (Some(MeasuredArgument::Length(from)), Some(MeasuredArgument::Length(to)))
+                if from < to =>
+            {
+                (*from, *to)
+            }
+            _ => return Err(unavailable("the band's bottom is not below its top".into())),
+        };
+        let stretches = if call.choice("along") == Some("runs") {
+            let runs = walking
+                .measure_sloped_runs(object)
+                .map_err(|error| unavailable(error.to_string()))?;
+            (0..runs.runs().len()).map(WalkingStretch::Run).collect()
+        } else {
+            vec![WalkingStretch::Flight]
+        };
+        // The least over the stretches: no narrower than the least
+        // lower bound, and no wider than the least upper.
+        let mut least: Option<(f64, f64)> = None;
+        let mut locators = Vec::new();
+        let mut exact = true;
+        for stretch in stretches {
+            let request =
+                ClearWidthRequest::try_new(object.clone(), stretch, obstacles.clone(), band)
+                    .map_err(|error| unavailable(error.to_string()))?;
+            let measured = walking
+                .measure_clear_width(&request)
+                .map_err(|error| unavailable(error.to_string()))?;
+            let width = measured.width();
+            least = Some(least.map_or((width.lower(), width.upper()), |(low, high)| {
+                (low.min(width.lower()), high.min(width.upper()))
+            }));
+            locators.push(measured.evidence().locator.clone());
+            exact &= measured.evidence().exact;
+        }
+        let (lower, upper) = least.ok_or_else(|| unavailable("it has no run to measure".into()))?;
+        Ok(Answer::Value(
+            lower,
+            upper,
+            length,
+            locators.join("; "),
+            exact,
+        ))
     }
 }

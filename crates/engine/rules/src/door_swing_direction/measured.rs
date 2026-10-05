@@ -60,22 +60,27 @@ impl SwingMeasures {
                     locator: format!("{SWING_SPACES}:{}:{space}", door.id),
                 };
                 let undecided = |why: String| MemberValue::Undecided { why };
+                let mut exact = false;
                 let (into, away) = match door_swing::relation(free, &leaves, space) {
-                    Ok((relation, _)) => (
-                        truth(relation.swings_into()),
-                        match relation {
-                            Relation::Away => truth(true),
-                            Relation::Into | Relation::BothWays => truth(false),
-                            Relation::Apart => undecided(format!(
-                                "neither side of the door lies in {space} at its probes"
-                            )),
-                        },
-                    ),
+                    Ok((relation, evidence)) => {
+                        // As exact as the leaves and every probe were.
+                        exact = evidence.iter().all(|evidence| evidence.exact);
+                        (
+                            truth(relation.swings_into()),
+                            match relation {
+                                Relation::Away => truth(true),
+                                Relation::Into | Relation::BothWays => truth(false),
+                                Relation::Apart => undecided(format!(
+                                    "neither side of the door lies in {space} at its probes"
+                                )),
+                            },
+                        )
+                    }
                     Err((_, why)) => (undecided(why.clone()), undecided(why)),
                 };
                 MeasuredMember {
                     certain: true,
-                    exact: true,
+                    exact,
                     fields: [("into", into), ("away", away)].into_iter().collect(),
                 }
             })

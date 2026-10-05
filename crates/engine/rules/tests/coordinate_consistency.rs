@@ -370,6 +370,66 @@ fn one_source_or_no_service_is_not_evaluated() {
     );
 }
 
+/// A coordinate system is stated, so its evidence is exact by contract: an
+/// approximate one is refused before anything is measured. A departure
+/// between two is cited exact, widened by its own arithmetic's rounding.
+#[test]
+fn a_departure_is_exact_only_as_stated_and_rounded_outward() {
+    let stated = |name: &str, exact: bool| {
+        let mut evidence = Evidence::exact(document(name), format!("crs:{name}"));
+        evidence.exact = exact;
+        SourceCoordinateSystem::try_new(
+            document(name),
+            Some(frame([0.3, 0.4, 0.0])),
+            Some([0.0, 1.0]),
+            None,
+            evidence,
+        )
+    };
+    assert_eq!(
+        stated("structure", false).err(),
+        Some(CoordinateSystemError::InexactEvidence)
+    );
+    let model = Model::default()
+        .object_in("architecture", "#1", "wall")
+        .object_in("structure", "#1", "wall");
+    let (project, mut services) = model.services();
+    let snapshots = ["architecture", "structure"]
+        .map(|name| SourceSnapshot::try_new(document(name), "r", format!("sha256:{name}")).unwrap())
+        .to_vec();
+    services
+        .register(CoordinateSystemServiceHandle::new(Arc::new(Systems(
+            snapshots,
+            BTreeMap::from([
+                (document("architecture"), Ok(system("architecture", None))),
+                (document("structure"), stated("structure", true)),
+            ]),
+        ))))
+        .unwrap();
+    services
+        .register(SourceDisciplines::new(
+            ["architecture", "structure"]
+                .map(|name| (document(name), Discipline::new(name).unwrap()))
+                .to_vec(),
+        ))
+        .unwrap();
+    let wall = axioval_ir::ObjectId::new(document("structure"), "#1").unwrap();
+    let ((lower, upper), exact) = common::measured_cited(
+        &services,
+        &project,
+        &wall,
+        "coordinate_shift;of=world;reference=architecture",
+    )
+    .unwrap()
+    .unwrap();
+    // 0.3 and 0.4 m apart: a 0.5 m shift, rounded outward.
+    assert!(
+        lower <= 0.5 && 0.5 <= upper && upper - lower < 4e-15,
+        "{lower}..{upper}"
+    );
+    assert!(exact);
+}
+
 /// Each statement's `coordinate_shift`, `coordinate_turn`,
 /// `map_scale_change` and `map_target_change` within the tolerances, and
 /// `map_conversion` where one is required, reach `coordinate-consistency`'s

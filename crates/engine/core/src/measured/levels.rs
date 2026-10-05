@@ -68,13 +68,11 @@ impl Measures {
             )));
         };
         let locator = format!("{name}:{object}:{level}");
+        // Levels stand at their placements' elevations, read only when
+        // stated exactly: every value here is exact.
+        let length = Some(QuantityDimension::Length);
         if name == "level_elevation" {
-            return Ok(Answer::Value(
-                elevation,
-                elevation,
-                QuantityDimension::Length,
-                locator,
-            ));
+            return Ok(Answer::Value(elevation, elevation, length, locator, true));
         }
         let datum = match call.argument("datum") {
             Some(MeasuredArgument::Length(datum)) => *datum,
@@ -108,12 +106,7 @@ impl Measures {
         if name == "height_above_ground" {
             let ground = elevations[ground];
             let (lower, upper) = crate::measured::rounded_difference(elevation, ground);
-            return Ok(Answer::Value(
-                lower,
-                upper,
-                QuantityDimension::Length,
-                locator,
-            ));
+            return Ok(Answer::Value(lower, upper, length, locator, true));
         }
         // The level is among its own kind's levels; never count it as the
         // ground level should it be missing.
@@ -125,6 +118,6 @@ impl Measures {
             })?;
         #[allow(clippy::cast_precision_loss, clippy::cast_possible_wrap)]
         let index = (own as i64 - ground as i64) as f64;
-        Ok(Answer::Number(index, index, locator))
+        Ok(Answer::Value(index, index, None, locator, true))
     }
 }

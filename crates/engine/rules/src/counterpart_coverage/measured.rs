@@ -54,13 +54,15 @@ enum Check {
 }
 
 /// The share of `object` the check leaves uncovered, as the capability
-/// measures it before grading.
+/// measures it before grading, and whether every counterpart that may
+/// cover it was read: one that was not drops the lower bound to zero
+/// without evidence of its own.
 fn measure(
     context: &RuleContext<'_>,
     config: &Config<'_>,
     check: Check,
     object: &Object,
-) -> Result<Share, Unavailable> {
+) -> Result<(Share, bool), Unavailable> {
     let services = Services::of(context, config)?;
     let margin = config.horizontal.unwrap_or(0.0)
         * if config.elevation {
@@ -87,10 +89,13 @@ fn measure(
         object,
     };
     if check == Check::Elevation {
-        return subject.elevation_share().map(|(share, _)| share);
+        return subject
+            .elevation_share()
+            .map(|(share, cover)| (share, cover.unknown.is_empty()));
     }
     let area = footprint(context, &object.id)?;
     let cover = subject.cover(&area);
+    let read = cover.unknown.is_empty();
     match (check, config.horizontal, config.vertical, services.extents) {
         (Check::Height, _, Some(growth), Some(extents)) => {
             subject.height_share(extents, &cover, growth)
@@ -98,6 +103,7 @@ fn measure(
         (_, Some(growth), _, _) => subject.plan_share(&area, &cover, growth),
         _ => Err(invalid("the check has no tolerance")),
     }
+    .map(|share| (share, read))
 }
 
 impl MeasuredProvider for CoverageMeasures {
@@ -157,28 +163,24 @@ impl MeasuredProvider for CoverageMeasures {
                 "the object is not in the project".into(),
             )));
         };
-        let Share {
-            interval: (lower, upper),
-            evidence,
-            ..
-        } = measure(context, &config, check, object).map_err(refused)?;
+        let (
+            Share {
+                interval: (lower, upper),
+                evidence,
+                ..
+            },
+            read,
+        ) = measure(context, &config, check, object).map_err(refused)?;
         let locator = format!("{NAME}:{}", object.id);
         // Measured from exact evidence, the share is cited exact, as the
-        // capability cites it; its interval holds the undecided cover.
-        Ok(if evidence.iter().all(|cited| cited.exact) {
-            Measurement::Rounded {
-                lower,
-                upper,
-                dimension: None,
-                locator,
-            }
-        } else {
-            Measurement::Value {
-                lower,
-                upper,
-                dimension: None,
-                locator,
-            }
+        // capability cites it; its interval holds the undecided cover, not
+        // only rounding, so it is cited rather than rounded.
+        Ok(Measurement::Cited {
+            lower,
+            upper,
+            dimension: None,
+            locator,
+            exact: read && evidence.iter().all(|cited| cited.exact),
         })
     }
 }

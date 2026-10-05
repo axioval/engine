@@ -8,7 +8,9 @@
 //! for it.
 
 use axioval_ir::measured::{MeasuredArgument, MeasuredCall};
-use axioval_ir::{MEASURED_SET, ObjectId, QuantityDimension};
+use axioval_ir::{Evidence, MEASURED_SET, ObjectId, QuantityDimension};
+
+use crate::expression::Interval;
 
 use super::{Answer, Measures};
 use crate::properties::PropertyResolutionError;
@@ -39,9 +41,38 @@ fn length(call: &MeasuredCall, key: &str) -> Option<f64> {
 }
 
 #[allow(clippy::cast_precision_loss)]
-fn count(value: usize, locator: String) -> Answer {
+fn count(value: usize, locator: String, exact: bool) -> Answer {
     let value = value as f64;
-    Answer::Number(value, value, locator)
+    Answer::Value(value, value, None, locator, exact)
+}
+
+/// The longest of the gaps at least `at_least` long, or their total, summed
+/// outward so that it holds the exact sum.
+fn gap_length(
+    gaps: &[crate::space::BoundaryGap],
+    at_least: f64,
+    longest: bool,
+) -> Result<Interval, PropertyResolutionError> {
+    let mut counted = gaps
+        .iter()
+        .map(crate::space::BoundaryGap::length_metres)
+        .filter(|gap| *gap >= at_least);
+    if longest {
+        let longest = counted.fold(0.0, f64::max);
+        return Ok(super::span(longest, longest));
+    }
+    counted.try_fold(super::span(0.0, 0.0), |total, gap| {
+        total
+            .plus(super::span(gap, gap))
+            .map_err(|_| PropertyResolutionError::InvalidValue)
+    })
+}
+
+/// The share `part / whole` of two areas the service states, rounded
+/// outward and kept in `[0, 1]`.
+fn share(part: Interval, whole: f64) -> Result<(f64, f64), PropertyResolutionError> {
+    let (lower, upper) = super::bounds(part.divided_by(super::span(whole, whole)))?;
+    Ok((lower.clamp(0.0, 1.0), upper.clamp(0.0, 1.0)))
 }
 
 impl Measures {
@@ -90,12 +121,13 @@ impl Measures {
             .as_ref()
             .ok_or_else(|| Self::missing(name, "space"))?
             .get();
-        let locator = service.evidence().locator;
+        // Every aspect is exact as the service's evidence is.
+        let Evidence { locator, exact, .. } = service.evidence();
         let elements = self.elements(call, object)?;
         match name {
             "duplicate_count" => {
                 let duplicates = service.measure_duplicates(object).map_err(unavailable)?;
-                Ok(count(duplicates.len(), locator))
+                Ok(count(duplicates.len(), locator, exact))
             }
             "boundary_gap" => {
                 let mut request = BoundaryRequest::new();
@@ -105,22 +137,17 @@ impl Measures {
                 let gaps = service
                     .measure_boundary_gaps(object, &request)
                     .map_err(unavailable)?;
-                let longest = call.choice("measure") == Some("longest");
-                let at_least = length(call, "at_least").unwrap_or(0.0);
-                let counted = gaps
-                    .iter()
-                    .map(crate::space::BoundaryGap::length_metres)
-                    .filter(|gap| *gap >= at_least);
-                let value = if longest {
-                    counted.fold(0.0, f64::max)
-                } else {
-                    counted.sum()
-                };
+                let value = gap_length(
+                    &gaps,
+                    length(call, "at_least").unwrap_or(0.0),
+                    call.choice("measure") == Some("longest"),
+                )?;
                 Ok(Answer::Value(
-                    value,
-                    value,
-                    QuantityDimension::Length,
+                    value.lower,
+                    value.upper,
+                    Some(QuantityDimension::Length),
                     locator,
+                    exact,
                 ))
             }
             "intersection_count" => {
@@ -142,7 +169,7 @@ impl Measures {
                         }
                     })
                     .count();
-                Ok(count(intersecting, locator))
+                Ok(count(intersecting, locator, exact))
             }
             "cap_coverage" => {
                 let cap = if call.choice("cap") == Some("bottom") {
@@ -162,8 +189,12 @@ impl Measures {
                 let coverage = service
                     .measure_cap_coverage(object, &request)
                     .map_err(unavailable)?;
-                let share = coverage.covered_ratio();
-                Ok(Answer::Number(share, share, locator))
+                let covered = coverage.covered_area_square_metres();
+                let (lower, upper) = share(
+                    super::span(covered, covered),
+                    coverage.whole_area_square_metres(),
+                )?;
+                Ok(Answer::Value(lower, upper, None, locator, exact))
             }
             "support_count" => {
                 let counts = service.measure_support_counts().map_err(unavailable)?;
@@ -174,9 +205,10 @@ impl Measures {
                         counts.slabs()
                     },
                     locator,
+                    exact,
                 ))
             }
-            _ => unallocated(service, name, object, locator),
+            _ => unallocated(service, name, object, (locator, exact)),
         }
     }
 }
@@ -187,7 +219,7 @@ fn unallocated(
     service: &dyn SpaceService,
     name: &str,
     object: &ObjectId,
-    locator: String,
+    (locator, exact): (String, bool),
 ) -> Result<Answer, PropertyResolutionError> {
     let regions = service
         .measure_unallocated_regions()
@@ -204,12 +236,13 @@ fn unallocated(
         return Ok(Answer::Value(
             largest,
             largest,
-            QuantityDimension::Area,
+            Some(QuantityDimension::Area),
             locator,
+            exact,
         ));
     }
     let Some(first) = regions.first() else {
-        return Ok(Answer::Number(0.0, 0.0, locator));
+        return Ok(Answer::Value(0.0, 0.0, None, locator, exact));
     };
     let gross = first
         .floor_area_square_metres()
@@ -225,10 +258,15 @@ fn unallocated(
                  not measured, so its unallocated share is undefined"
             ))
         })?;
-    let area: f64 = regions
+    // Summed and divided outward, so the share holds the exact one.
+    let area = regions
         .iter()
-        .map(|region| region.area_square_metres())
-        .sum();
-    let share = area / gross;
-    Ok(Answer::Number(share, share, locator))
+        .try_fold(super::span(0.0, 0.0), |total, region| {
+            let area = region.area_square_metres();
+            total
+                .plus(super::span(area, area))
+                .map_err(|_| PropertyResolutionError::InvalidValue)
+        })?;
+    let (lower, upper) = share(area, gross)?;
+    Ok(Answer::Value(lower, upper, None, locator, exact))
 }

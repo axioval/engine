@@ -99,6 +99,8 @@ struct Stub {
     boundary_requests: Mutex<Vec<BoundaryRequest>>,
     /// Every overlap request the capability made, in order.
     overlap_requests: Mutex<Vec<OverlapRequest>>,
+    /// A service measuring tessellations: its evidence is not exact.
+    approximate: bool,
 }
 
 fn evidence() -> Evidence {
@@ -170,7 +172,9 @@ impl SpaceService for Stub {
         Ok(SupportCounts::new(slabs, roofs, vec![oid("bldg")]))
     }
     fn evidence(&self) -> Evidence {
-        evidence()
+        let mut evidence = evidence();
+        evidence.exact = !self.approximate;
+        evidence
     }
 }
 
@@ -1011,6 +1015,79 @@ fn measured(stub: Stub, object: &str, name: &str) -> f64 {
             other => panic!("{name}: {other:?}"),
         },
         PropertyResolution::Absent(_) => panic!("{name} of {object} is absent"),
+    }
+}
+
+/// Sums and shares of the lengths and areas the service states round
+/// outward, so they hold the exact value, and are exact as the service's
+/// evidence is: a service measuring tessellations measures nothing exactly.
+#[test]
+fn space_values_round_outward_and_are_exact_as_their_evidence() {
+    let read = |approximate: bool, name: &str| {
+        let stub = Stub {
+            gaps: Some(Ok(vec![(0.1, vec![]), (0.2, vec![])])),
+            cap: Some(Ok((3.0, 1.0))),
+            residuals: Some(Ok(vec![
+                (oid("storey"), 0.1, vec![]),
+                (oid("storey"), 0.2, vec![]),
+            ])),
+            floor: Some(3.0),
+            approximate,
+            ..Stub::default()
+        };
+        let project = Project::new(vec![
+            Object::new(oid("space-1"), "space"),
+            Object::new(oid("storey"), "storey"),
+        ])
+        .unwrap();
+        let mut services = ServiceRegistry::new();
+        services
+            .register(SpaceServiceHandle::new(Arc::new(stub)))
+            .unwrap();
+        let object = if name == "unallocated_share" {
+            "storey"
+        } else {
+            "space-1"
+        };
+        let axioval_engine::PropertyResolution::Present(resolved) =
+            axioval_engine::measured_value(&services, &project, &oid(object), name).unwrap()
+        else {
+            panic!("{name} is absent");
+        };
+        let axioval_ir::PropertyValue::Measured { lower, upper, .. } = resolved.property().value()
+        else {
+            panic!("{name} is {:?}", resolved.property().value());
+        };
+        let exact = resolved
+            .property()
+            .evidence
+            .as_ref()
+            .is_some_and(|evidence| evidence.exact);
+        ((*lower, *upper), exact)
+    };
+    // 0.1 + 0.2 rounds up in binary, a third either way; a share of a
+    // rounded sum holds both roundings.
+    let sum = 0.1_f64 + 0.2;
+    for (name, holds) in [
+        ("boundary_gap", (sum.next_down(), sum)),
+        (
+            "cap_coverage;cap=top",
+            ((1.0_f64 / 3.0).next_down(), (1.0_f64 / 3.0).next_up()),
+        ),
+        (
+            "unallocated_share",
+            ((sum.next_down() / 3.0).next_down(), (sum / 3.0).next_up()),
+        ),
+    ] {
+        for approximate in [false, true] {
+            let ((lower, upper), exact) = read(approximate, name);
+            assert!(lower < upper, "{name}: a rounded value is no point");
+            assert!(
+                holds.0 <= lower && upper <= holds.1,
+                "{name}: {lower}..{upper}"
+            );
+            assert_eq!(exact, !approximate, "{name}");
+        }
     }
 }
 

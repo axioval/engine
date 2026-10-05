@@ -239,14 +239,23 @@ impl LevelMeasures {
             if heights.len() < 2 {
                 return Ok(absent("fewer than two levels have a height"));
             }
+            // Points decide the prevailing height, as `level-spacing`
+            // decides it; the value is cited as exactly as the height it is.
             #[allow(clippy::float_cmp)]
-            let exact: Vec<f64> = heights
+            let (exact, cited): (Vec<f64>, Vec<bool>) = heights
                 .iter()
                 .filter(|height| height.lower == height.upper)
-                .map(|height| height.lower)
-                .collect();
+                .map(|height| {
+                    (
+                        height.lower,
+                        height.evidence.iter().all(|evidence| evidence.exact),
+                    )
+                })
+                .unzip();
             return Ok(match prevailing(&exact, config.tolerance) {
-                Some(index) => interval((exact[index], exact[index]), LENGTH, true, locator),
+                Some(index) => {
+                    interval((exact[index], exact[index]), LENGTH, cited[index], locator)
+                }
                 None => absent("no level has an exact height"),
             });
         }
@@ -298,7 +307,10 @@ impl LevelMeasures {
         }
         let service = extents(context)?;
         let top = call.choice("side") == Some("top");
+        // Points decide the prevailing elevation, as `level-spacing`
+        // decides it; the value is cited as exactly as the extent it is of.
         let mut exact = Vec::new();
+        let mut cited = Vec::new();
         for space in &members {
             match extent(service, space) {
                 Ok(extent) => {
@@ -306,6 +318,7 @@ impl LevelMeasures {
                     #[allow(clippy::float_cmp)]
                     if elevation.lower_metres() == elevation.upper_metres() {
                         exact.push(elevation.lower_metres());
+                        cited.push(extent.evidence().exact);
                     }
                 }
                 Err(refusal) if space == object => return Err(refusal),
@@ -316,7 +329,7 @@ impl LevelMeasures {
             Some(index) => Ok(interval(
                 (exact[index], exact[index]),
                 LENGTH,
-                true,
+                cited[index],
                 locator,
             )),
             None => Err((

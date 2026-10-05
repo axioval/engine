@@ -567,12 +567,12 @@ impl StairMeasures {
         let locator = format!("{name}:{object}:{place}");
         if name == "landing_count" {
             let found = f64::from(u8::from(measured_landing.landing().is_some()));
-            return Ok(Measurement::Value {
-                lower: found,
-                upper: found,
-                dimension: None,
+            return Ok(crate::measured_kinds::interval(
+                (found, found),
+                None,
+                measured_landing.evidence().exact,
                 locator,
-            });
+            ));
         }
         let Some(landing) = measured_landing.landing() else {
             return Ok(Measurement::Absent {
@@ -666,12 +666,12 @@ impl MeasuredProvider for StairMeasures {
         }
         if name == "walking_line_turns" {
             let turns = f64::from(u8::from(flight.walking_line().is_turning()));
-            return Ok(Measurement::Value {
-                lower: turns,
-                upper: turns,
-                dimension: None,
+            return Ok(crate::measured_kinds::interval(
+                (turns, turns),
+                None,
+                flight.evidence().exact,
                 locator,
-            });
+            ));
         }
         if name == "flight_rise" {
             return Ok(measured(flight.rise(), flight.evidence().exact, locator));

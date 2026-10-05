@@ -3797,6 +3797,44 @@ fn measured_clearances_reproduce_the_capabilities_measurements() {
     assert!(near(measured(narrowed, "gentle", &runs), 1.2));
 }
 
+/// Measured on a tessellated flight, every value and member is inexact,
+/// even a width the tessellation states as a point and a flag of whether
+/// it turns; on an exact flight they are exact.
+#[test]
+fn a_tessellated_flight_measures_inexactly() {
+    use axioval_engine::{CapabilityRegistry, ServiceRegistry, measured_members};
+    let project = model().project();
+    for (margin, exact) in [(0.001, false), (0.0, true)] {
+        let mut services = ServiceRegistry::new();
+        services
+            .register(WalkingSurfaceServiceHandle::new(Arc::new(
+                Stairs::default().flight(flight("regular", &[0.17; 4], margin)),
+            )))
+            .unwrap();
+        for (name, expected) in [
+            ("flight_width", 1.2),
+            ("flight_rise", 0.68),
+            ("walking_line_turns", 0.0),
+        ] {
+            let ((lower, upper), cited) =
+                common::measured_cited(&services, &project, &id("regular"), name)
+                    .unwrap()
+                    .unwrap();
+            assert!(
+                lower <= expected + 1e-9 && expected - 1e-9 <= upper,
+                "{name}: {lower}..{upper}"
+            );
+            assert_eq!(cited, exact, "{name} at margin {margin}");
+        }
+        axioval_rules::register_builtins(CapabilityRegistry::new())
+            .unwrap()
+            .install_measured(&mut services, &project);
+        let steps = measured_members(&services, &id("regular"), "steps").unwrap();
+        assert_eq!(steps.len(), 4);
+        assert!(steps.iter().all(|step| step.exact == exact));
+    }
+}
+
 /// A handrail that may reach over the middle or lie wholly in either half
 /// cannot be placed: its sides, its place among the pieces and the gap
 /// after it are undecided, never false or none. One surely over the middle

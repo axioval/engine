@@ -534,6 +534,44 @@ fn the_measured_extent_along_an_own_axis_is_the_body_extent() {
     }
 }
 
+/// Measured on a tessellated body, an extent along an own axis is never
+/// exact, whether built-in code or the engine measures it; on an exact body
+/// it is.
+#[test]
+fn an_extent_measured_on_a_tessellation_is_inexact() {
+    let model = Model::default()
+        .object("mesh", "wall")
+        .object("solid", "wall");
+    let project = model.project();
+    let mut services = ServiceRegistry::new();
+    services
+        .register(ObjectFrameServiceHandle::new(Arc::new(
+            Frames::new()
+                .with("mesh", [1.0, 0.0, 0.0])
+                .with("solid", [1.0, 0.0, 0.0]),
+        )))
+        .unwrap();
+    services
+        .register(VerticalExtentServiceHandle::new(Arc::new(
+            Boxes::default().with("mesh", [5.0, 0.3, 3.0], 0.001).with(
+                "solid",
+                [5.0, 0.3, 3.0],
+                0.0,
+            ),
+        )))
+        .unwrap();
+    for name in ["body_extent;axis=forward", "extent;axis=own_y"] {
+        for (wall, exact) in [("mesh", false), ("solid", true)] {
+            let ((lower, upper), cited) =
+                common::measured_cited(&services, &project, &id(wall), name)
+                    .unwrap()
+                    .unwrap();
+            assert!(lower <= 0.3 && 0.3 <= upper, "{wall} {name}");
+            assert_eq!(cited, exact, "{wall} {name}");
+        }
+    }
+}
+
 /// `body_extent` against the stated thickness within the tolerance, or
 /// within the range, rounded to the micrometre as the capability allows
 /// binary rounding, reaches `body-extent`'s verdicts on its fixtures.

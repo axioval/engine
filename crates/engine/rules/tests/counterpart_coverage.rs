@@ -21,13 +21,15 @@ use common::{Model, id, kind, number, rule, selector, source, string, unevaluate
 
 const ID: &str = "axioval:capability.counterpart-coverage";
 
-/// A box: plan rectangle `(x0, y0, x1, y1)`, bottom and top elevation, and
-/// the chord deviation of a tessellated mesh (zero when exact).
+/// A box: plan rectangle `(x0, y0, x1, y1)`, bottom and top elevation,
+/// whether it is a tessellated mesh, and the mesh's chord deviation (zero
+/// when exact, and possibly for a tessellation too).
 #[derive(Clone, Copy)]
 struct Body {
     plan: [f64; 4],
     bottom: f64,
     top: f64,
+    tessellated: bool,
     deviation: f64,
 }
 
@@ -44,6 +46,7 @@ impl Boxes {
                 plan,
                 bottom,
                 top,
+                tessellated: false,
                 deviation: 0.0,
             },
         );
@@ -51,7 +54,9 @@ impl Boxes {
     }
 
     fn tessellated(mut self, local: &str, deviation: f64) -> Self {
-        self.0.get_mut(&id(local)).unwrap().deviation = deviation;
+        let body = self.0.get_mut(&id(local)).unwrap();
+        body.tessellated = true;
+        body.deviation = deviation;
         self
     }
 
@@ -63,9 +68,13 @@ impl Boxes {
     }
 }
 
-fn area(value: f64, slack: f64, locator: String) -> Result<PlanArea, PlanAreaError> {
+fn area(
+    value: f64,
+    (slack, approximate): (f64, bool),
+    locator: String,
+) -> Result<PlanArea, PlanAreaError> {
     let mut evidence = Evidence::exact(source(), locator);
-    evidence.exact = slack == 0.0;
+    evidence.exact = !approximate;
     PlanArea::try_new((value - slack).max(0.0), value + slack, evidence)
 }
 
@@ -104,7 +113,7 @@ impl PlanAreaService for Boxes {
         let [x0, y0, x1, y1] = body.plan;
         area(
             (x1 - x0) * (y1 - y0),
-            body.deviation,
+            (body.deviation, body.tessellated),
             format!("footprint:{object}"),
         )
     }
@@ -121,10 +130,12 @@ impl PlanAreaService for Boxes {
     ) -> Result<PlanArea, PlanAreaError> {
         let body = self.get(object)?;
         let mut slack = body.deviation;
+        let mut approximate = body.tessellated;
         let mut rects = Vec::new();
         for member in cover {
             let member = self.get(member)?;
             slack += member.deviation;
+            approximate |= member.tessellated;
             let [x0, y0, x1, y1] = member.plan;
             rects.push([
                 x0 - growth_metres,
@@ -135,7 +146,7 @@ impl PlanAreaService for Boxes {
         }
         area(
             outside(body.plan, &rects),
-            slack,
+            (slack, approximate),
             format!("uncovered:{object}"),
         )
     }
@@ -164,11 +175,13 @@ impl PlanAreaService for Boxes {
             request.vertical_growth_metres(),
         );
         let mut slack = subject.deviation;
+        let mut approximate = subject.tessellated;
         let mut near = |objects: &[ObjectId]| -> Result<Vec<[f64; 4]>, PlanAreaError> {
             let mut rects = Vec::new();
             for member in objects {
                 let member = self.get(member)?;
                 slack += member.deviation;
+                approximate |= member.tessellated;
                 let (rect, across) = view(&member);
                 if across.1 >= depth.0 - a && across.0 <= depth.1 + a {
                     rects.push(rect);
@@ -196,7 +209,7 @@ impl PlanAreaService for Boxes {
         let whole = (face[2] - face[0]) * (face[3] - face[1]);
         let open = outside(face, &grown);
         let mut evidence = Evidence::exact(source(), format!("elevation:{}", request.object()));
-        evidence.exact = slack == 0.0;
+        evidence.exact = !approximate;
         ElevationCover::try_new(
             request.object().clone(),
             (
@@ -216,7 +229,7 @@ impl ProximityService for Boxes {
     fn bounds(&self, object: &ObjectId) -> Result<ObjectBounds, ProximityError> {
         let body = self.get(object).map_err(|_| ProximityError::Unavailable)?;
         let [x0, y0, x1, y1] = body.plan;
-        let fidelity = if body.deviation > 0.0 {
+        let fidelity = if body.tessellated {
             GeometryFidelity::tessellated(body.deviation)?
         } else {
             GeometryFidelity::Exact
@@ -256,7 +269,7 @@ impl PlanSpanService for Boxes {
         let [x0, y0, x1, y1] = body.plan;
         let d = body.deviation;
         let mut evidence = Evidence::exact(source(), format!("rectangle:{object}"));
-        evidence.exact = d == 0.0;
+        evidence.exact = !body.tessellated;
         let half = |length: f64| ((length / 2.0 - d).max(0.0), length / 2.0 + d);
         PlanRectangle::try_new(
             object.clone(),
@@ -285,7 +298,7 @@ impl VerticalExtentService for Boxes {
             .map_err(|_| VerticalExtentError::UnknownObject(object.clone()))?;
         let d = body.deviation;
         let mut evidence = Evidence::exact(source(), format!("extent:{object}"));
-        evidence.exact = d == 0.0;
+        evidence.exact = !body.tessellated;
         VerticalExtent::try_new(
             object.clone(),
             ElevationInterval::try_new(body.bottom - d, body.bottom + d)?,
@@ -1257,5 +1270,47 @@ mod as_expressions {
                 details: vec![],
             }]
         );
+    }
+}
+
+/// Covered by a tessellated counterpart, the uncovered share is never
+/// exact; covered by an exact one, it is. (A plan area is a point exactly
+/// when exact, so a tessellation always widens it.)
+#[test]
+fn a_share_measured_on_a_tessellation_is_inexact() {
+    for (deviation, exact) in [(Some(0.05), false), (None, true)] {
+        let mut boxes = Boxes::default()
+            .with("w1", [0.0, 0.0, 4.0, 0.2], 0.0, 3.0)
+            .with("s1", [0.0, 0.0, 2.8, 0.2], 0.0, 3.0);
+        if let Some(deviation) = deviation {
+            boxes = boxes.tessellated("s1", deviation);
+        }
+        let (project, mut services) = model(&boxes).services();
+        let shared = Arc::new(boxes);
+        services
+            .register(PlanAreaServiceHandle::new(shared.clone()))
+            .unwrap();
+        services
+            .register(ProximityServiceHandle::new(shared.clone()))
+            .unwrap();
+        services
+            .register(VerticalExtentServiceHandle::new(shared.clone()))
+            .unwrap();
+        services
+            .register(PlanSpanServiceHandle::new(shared))
+            .unwrap();
+        let ((lower, upper), cited) = common::measured_cited(
+            &services,
+            &project,
+            &id("w1"),
+            "counterpart_uncovered_share;by=structure;horizontal=0",
+        )
+        .unwrap()
+        .unwrap();
+        assert!(
+            lower <= 0.3 + 1e-9 && 0.3 - 1e-9 <= upper,
+            "{lower}..{upper}"
+        );
+        assert_eq!(cited, exact, "deviation {deviation:?}");
     }
 }

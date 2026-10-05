@@ -174,6 +174,35 @@ fn run(slabs: Slabs, rule: &CompiledRule) -> CapabilityEvaluation {
 
 const PLAN: [f64; 4] = [0.0, 0.0, 10.0, 8.0];
 
+/// A distance to a tessellated slab is never exact; between exact slabs it
+/// is.
+#[test]
+fn a_distance_to_a_tessellated_slab_is_inexact() {
+    for (slabs, exact) in [
+        (three_stacked().tessellated("s2", 0.01), false),
+        (three_stacked(), true),
+    ] {
+        let shared = Arc::new(slabs);
+        let (project, mut services) = model(&shared).services();
+        services
+            .register(VerticalExtentServiceHandle::new(shared.clone()))
+            .unwrap();
+        services
+            .register(PlanAreaServiceHandle::new(shared))
+            .unwrap();
+        let ((lower, upper), cited) = common::measured_cited(
+            &services,
+            &project,
+            &id("s1"),
+            "stack_distance;measure=top_to_top;slabs=slab;ratio=0.5",
+        )
+        .unwrap()
+        .unwrap();
+        assert!(lower <= 3.0 && 3.0 <= upper, "{lower}..{upper}");
+        assert_eq!(cited, exact);
+    }
+}
+
 /// Three 0.2 m slabs on one plan; the second storey rises 3.5 m instead of 3.
 fn three_stacked() -> Slabs {
     Slabs::default()

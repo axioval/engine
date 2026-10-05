@@ -87,6 +87,14 @@ impl Scene {
         self
     }
 
+    /// Replaces `local`'s mesh by the same mesh read as a tessellation of
+    /// curved faces, within a millimetre of the true surface.
+    fn tessellated(mut self, local: &str) -> Self {
+        let mesh = self.geometry.mesh(&id(local)).unwrap().clone();
+        self.geometry = self.geometry.with_tessellated_mesh(id(local), mesh, 0.001);
+        self
+    }
+
     fn bodiless(mut self, local: &str, kind: &str) -> Self {
         self.objects.push(Object::new(id(local), kind));
         self.geometry = self.geometry.with_no_body(id(local));
@@ -741,6 +749,107 @@ fn measured_angles_agree_with_the_wall_parallelism_judgement() {
         measured_value(&services, &project, &id("n"), "angle_to;path=beside").unwrap(),
         PropertyResolution::Absent(_)
     ));
+}
+
+/// A scene, the body to tessellate, the object measured, the measured name,
+/// and whether it is exact on exact bodies.
+type Case = (
+    fn() -> Scene,
+    &'static str,
+    &'static str,
+    &'static str,
+    bool,
+);
+
+/// Measured on tessellated bodies, the bays' and walls' values and members
+/// are never exact: refused, or cited approximate, whatever the built-in
+/// code measures them with.
+#[test]
+fn values_measured_on_tessellations_are_never_exact() {
+    use axioval::engine::{CapabilityRegistry, measured_members};
+    let installed = |scene: Scene| {
+        let (project, mut services) = scene.services();
+        axioval::rules::register_builtins(CapabilityRegistry::new())
+            .unwrap()
+            .install_measured(&mut services, &project);
+        (project, services)
+    };
+    let value = |scene: Scene, local: &str, name: &str| {
+        let (project, services) = installed(scene);
+        match measured_value(&services, &project, &id(local), name) {
+            Ok(PropertyResolution::Present(resolved)) => Some(
+                resolved
+                    .property()
+                    .evidence
+                    .as_ref()
+                    .is_some_and(|evidence| evidence.exact),
+            ),
+            Ok(PropertyResolution::Absent(_)) => panic!("{local} has no {name}"),
+            Err(_) => None,
+        }
+    };
+    let members = |scene: Scene, local: &str, name: &str| {
+        let (_, services) = installed(scene);
+        measured_members(&services, &id(local), name).map(|members| {
+            members
+                .iter()
+                .map(|member| member.exact)
+                .collect::<Vec<_>>()
+        })
+    };
+    // Each value and list as exact as on exact bodies, and with one body
+    // tessellated refused or cited approximate, never exact. The walls'
+    // least-area rectangles are cited approximate even on exact bodies, so
+    // their pairs and bands are too.
+    let band = "band_uncovered_area;members=wall;member_path=contains;angle_tolerance=5;\
+                maximum=6;footprints=slab;footprint_path=contains";
+    let values: [Case; 4] = [
+        (car_park, "b1", "b1", "rectangle_side;side=length", true),
+        (car_park, "b1", "b1", "plan_diameter", true),
+        (
+            car_park,
+            "c2",
+            "b1",
+            "obstruction_count;obstacles=column;reach=0.2;at=ends",
+            true,
+        ),
+        (storey, "n", "st", band, false),
+    ];
+    for (scene, mesh, local, name, exact) in values {
+        assert_eq!(value(scene(), local, name), Some(exact), "{name}");
+        assert_ne!(
+            value(scene().tessellated(mesh), local, name),
+            Some(true),
+            "{name} with {mesh} tessellated"
+        );
+    }
+    let lists: [Case; 2] = [
+        (
+            mixed_bays,
+            "p1",
+            "p2",
+            "axes_within;of=bay;reach=0.05",
+            true,
+        ),
+        (
+            storey,
+            "n",
+            "st",
+            "parallel_pairs;members=wall;member_path=contains;angle_tolerance=5;reach=1",
+            false,
+        ),
+    ];
+    for (scene, mesh, local, name, exact) in lists {
+        let listed = members(scene(), local, name).unwrap();
+        assert!(!listed.is_empty(), "{name}");
+        assert_eq!(listed.iter().all(|listed| *listed), exact, "{name}");
+        let tessellated = members(scene().tessellated(mesh), local, name);
+        assert!(
+            tessellated.is_err()
+                || tessellated.is_ok_and(|listed| !listed.iter().all(|listed| *listed)),
+            "{name} with {mesh} tessellated"
+        );
+    }
 }
 
 /// Each capability's verdicts reached by an expression over the values and

@@ -66,6 +66,8 @@ struct Geometry {
     /// Brackets on walks from a start forced through an object; with none
     /// declared the backend measures no forced walk.
     forced: BTreeMap<(String, String), (f64, f64)>,
+    /// A backend walking a tessellation: its walks are never exact.
+    approximate: bool,
 }
 
 impl Geometry {
@@ -115,6 +117,20 @@ impl Geometry {
     fn trace(mut self, from: &str, object: &str, metres: f64) -> Self {
         self.traces.insert((from.into(), object.into()), metres);
         self
+    }
+
+    /// A backend walking a tessellation, whose walks cite approximate
+    /// evidence.
+    fn approximate(mut self) -> Self {
+        self.approximate = true;
+        self
+    }
+
+    /// A walk's evidence: exact unless the backend walks a tessellation.
+    fn walked(&self, locator: String) -> Evidence {
+        let mut evidence = exact(locator);
+        evidence.exact = !self.approximate;
+        evidence
     }
 
     /// A backend that weighs travel over costed objects.
@@ -380,7 +396,7 @@ impl MetricRoutingService for Geometry {
                         0,
                         LengthInterval::try_new(lower, upper)?,
                         waypoints,
-                        exact(format!("nearest:{}", from.local_id)),
+                        self.walked(format!("nearest:{}", from.local_id)),
                     )?,
                 ))
             }
@@ -469,7 +485,7 @@ impl MetricRoutingService for Geometry {
                     LengthInterval::try_new(lower, upper)?,
                     witness,
                     upper - lower <= request.tolerance_metres(),
-                    exact(format!("farthest:{}", region.local_id)),
+                    self.walked(format!("farthest:{}", region.local_id)),
                 )?,
             )),
             Walk::Unreachable => Ok(FarthestPointOutcome::Unreachable(
@@ -3014,6 +3030,28 @@ fn a_space_without_a_door_walks_its_passages_from_its_farthest_point() {
 }
 
 /// The travel requirement of each use row as an expression over
+/// Walked over a tessellation, a travel distance is never exact, even a
+/// walk the backend measures as a point; walked exactly, it is.
+#[test]
+fn a_travel_distance_walked_on_a_tessellation_is_inexact() {
+    let farthest =
+        "travel_distance;exits=bounds:backward;kinds=door;walking_height=2;walking_step=0.02";
+    for (approximate, exact) in [(true, false), (false, true)] {
+        let mut geometry = Geometry::default().walk("hall", "d1,d2", Walk::Between(21.0, 21.0));
+        if approximate {
+            geometry = geometry.approximate();
+        }
+        let (project, mut services) = model().services();
+        geometry.register(&mut services);
+        let ((lower, upper), cited) =
+            common::measured_cited(&services, &project, &id("hall"), farthest)
+                .unwrap()
+                .unwrap();
+        assert!(lower <= 21.0 && 21.0 <= upper, "{lower}..{upper}");
+        assert_eq!(cited, exact);
+    }
+}
+
 /// `travel_distance`: at most the row's maximum. It flags and leaves open
 /// what `escape-route` does, per row.
 #[test]

@@ -79,7 +79,7 @@ impl Measures {
         let invalid = |_| PropertyResolutionError::InvalidValue;
         if name == AREA {
             let area = body.area().map_err(invalid)?;
-            return Ok(Answer::Cited(
+            return Ok(Answer::Value(
                 area.lower(),
                 area.upper(),
                 Some(QuantityDimension::Area),
@@ -93,7 +93,7 @@ impl Measures {
             SectionAxis::Up
         };
         Ok(match body.extent(axis).map_err(invalid)? {
-            Some(extent) => Answer::Cited(
+            Some(extent) => Answer::Value(
                 extent.lower(),
                 extent.upper(),
                 Some(QuantityDimension::Length),
@@ -138,12 +138,15 @@ impl Measures {
         let mut bodies = self.of_kinds(call, "bodies", alignment)?;
         bodies.retain(|body| body.source == alignment.source);
         if bodies.is_empty() {
-            return Ok(Answer::Number(
+            // Nothing selected: a count of none, known exactly.
+            return Ok(Answer::Value(
                 0.0,
                 0.0,
+                None,
                 format!(
                     "no body of the stated kinds in the source of {alignment}, so none intrudes"
                 ),
+                true,
             ));
         }
         let request = EnvelopeRequest::try_new(alignment.clone(), envelope, range, step, bodies)
@@ -189,7 +192,7 @@ impl Measures {
         });
         #[allow(clippy::cast_precision_loss)]
         let (sure, possible) = (sure as f64, possible as f64);
-        Ok(Answer::Cited(
+        Ok(Answer::Value(
             sure,
             possible,
             None,

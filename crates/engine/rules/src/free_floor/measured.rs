@@ -130,9 +130,12 @@ impl MeasuredProvider for PlacementMeasures {
         } else {
             FreeFloorCircle.evaluate(context, &rule)
         };
+        // A sure placement rests on an exact witness and exact support, as
+        // the free-space contract requires of a found placement; an open
+        // search proves nothing exactly.
         let member = |certain| MeasuredMember {
             certain,
-            exact: true,
+            exact: certain,
             fields: BTreeMap::new(),
         };
         if !evaluation.findings().is_empty() {

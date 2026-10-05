@@ -31,7 +31,7 @@ pub(super) const NAMES: &[&str] = &[
     "uncovered_area",
 ];
 
-const AREA: QuantityDimension = QuantityDimension::Area;
+const AREA: Option<QuantityDimension> = Some(QuantityDimension::Area);
 
 fn length(call: &MeasuredCall, key: &str) -> f64 {
     match call.argument(key) {
@@ -51,15 +51,30 @@ fn share((top_low, top_high): (f64, f64), (low, high): (f64, f64)) -> Option<(f6
     })
 }
 
-/// A share as an answer: a point stays a point.
-fn share_answer(top: (f64, f64), bottom: (f64, f64), locator: String) -> Result<Answer, String> {
+/// A share as an answer, exact as the areas it divides are: the quotient
+/// of two points stays a point only where the division is exact, and
+/// rounds outward otherwise.
+fn share_answer(
+    top: (f64, f64),
+    bottom: (f64, f64),
+    locator: String,
+    exact: bool,
+) -> Result<Answer, String> {
     #[allow(clippy::float_cmp)]
     if top.0 == top.1 && bottom.0 == bottom.1 && bottom.0 > 0.0 {
-        let value = (top.0 / bottom.0).clamp(0.0, 1.0);
-        return Ok(Answer::Number(value, value, locator));
+        let quotient = super::span(top.0, top.1)
+            .divided_by(super::span(bottom.0, bottom.1))
+            .map_err(|_| "the share is not finite")?;
+        return Ok(Answer::Value(
+            quotient.lower.clamp(0.0, 1.0),
+            quotient.upper.clamp(0.0, 1.0),
+            None,
+            locator,
+            exact,
+        ));
     }
     let (lower, upper) = share(top, bottom).ok_or("the whole area may be zero")?;
-    Ok(Answer::Number(lower, upper, locator))
+    Ok(Answer::Value(lower, upper, None, locator, exact))
 }
 
 impl Measures {
@@ -88,6 +103,7 @@ impl Measures {
                     area.upper_square_metres(),
                     AREA,
                     area.evidence().locator.clone(),
+                    area.evidence().exact,
                 ))
             }
             "plan_overlap" | "uncovered_area" => self.plan_measure(call, object),
@@ -104,15 +120,16 @@ impl Measures {
                     .measure_boundary_coverage(&request)
                     .map_err(|error| unavailable(error.to_string()))?;
                 let locator = format!("boundary-coverage:{object}");
+                let exact = coverage.evidence().exact;
                 Ok(match name {
                     "boundary_covered_share" => {
                         let share = coverage.covered_share();
-                        Answer::Number(share.lower(), share.upper(), locator)
+                        Answer::Value(share.lower(), share.upper(), None, locator, exact)
                     }
                     "boundary_off_surface_count" => {
                         #[allow(clippy::cast_precision_loss)]
                         let count = coverage.off_surface().count() as f64;
-                        Answer::Number(count, count, locator)
+                        Answer::Value(count, count, None, locator, exact)
                     }
                     "boundary_uncovered_area" => {
                         let area = coverage.uncovered_area();
@@ -121,6 +138,7 @@ impl Measures {
                             area.upper_square_metres(),
                             AREA,
                             locator,
+                            exact,
                         )
                     }
                     _ => {
@@ -130,6 +148,7 @@ impl Measures {
                             area.upper_square_metres(),
                             AREA,
                             locator,
+                            exact,
                         )
                     }
                 })
@@ -159,34 +178,34 @@ impl Measures {
                 area.upper_square_metres(),
                 AREA,
                 area.evidence().locator.clone(),
+                area.evidence().exact,
             ));
         }
         let others = self.of_kinds(call, "with", object)?;
         let total = call.choice("measure") == Some("total");
-        let (mut lower, mut upper) = (0.0_f64, 0.0_f64);
+        let mut measured = super::span(0.0, 0.0);
+        let mut exact = true;
         for other in &others {
             let overlap = plan
                 .measure_plan_overlap(object, other)
                 .map_err(|error| unavailable(error.to_string()))?;
-            let (low, high) = (overlap.lower_square_metres(), overlap.upper_square_metres());
-            if total {
-                lower += low;
-                upper += high;
+            exact &= overlap.evidence().exact;
+            let each = super::span(overlap.lower_square_metres(), overlap.upper_square_metres());
+            measured = if total {
+                // Summed outward, so the sum holds the exact one.
+                measured
+                    .plus(each)
+                    .map_err(|_| PropertyResolutionError::InvalidValue)?
             } else {
-                lower = lower.max(low);
-                upper = upper.max(high);
-            }
-        }
-        if total && others.len() > 1 {
-            // Summing rounds; keep the exact value inside.
-            lower = lower.next_down().max(0.0);
-            upper = upper.next_up();
+                measured.max(each)
+            };
         }
         Ok(Answer::Value(
-            lower,
-            upper,
+            measured.lower,
+            measured.upper,
             AREA,
             format!("plan-overlap:{object}:{}", others.len()),
+            exact,
         ))
     }
 
@@ -226,18 +245,21 @@ impl Measures {
             ))
             .map_err(|error| refused_contact(name, object, error))?;
         let locator = contact.evidence().locator.clone();
+        let exact = contact.evidence().exact;
         let area = contact.contact_area_square_metres();
         if name == "contact_area" {
-            return Ok(Answer::Value(area, area, AREA, locator));
+            return Ok(Answer::Value(area, area, AREA, locator, exact));
         }
         if name == "contact_gap" {
             return Ok(match contact.nearest_distance_metres() {
-                Some(gap) => Answer::Value(gap, gap, QuantityDimension::Length, locator),
+                Some(gap) => {
+                    Answer::Value(gap, gap, Some(QuantityDimension::Length), locator, exact)
+                }
                 None => Answer::Absent(format!("{locator}: no candidate is reported near")),
             });
         }
         let whole = contact.whole_area_square_metres();
-        share_answer((area, area), (whole, whole), locator).map_err(unavailable)
+        share_answer((area, area), (whole, whole), locator, exact).map_err(unavailable)
     }
 
     /// The part of the footprint the sources' effects cover, or its share.
@@ -279,9 +301,16 @@ impl Measures {
             .map_err(|error| unavailable(error.to_string()))?;
         let covered = coverage.covered();
         let locator = covered.evidence().locator.clone();
+        let covered_exact = covered.evidence().exact;
         let covered = (covered.lower_square_metres(), covered.upper_square_metres());
         if name == "effect_covered_area" {
-            return Ok(Answer::Value(covered.0, covered.1, AREA, locator));
+            return Ok(Answer::Value(
+                covered.0,
+                covered.1,
+                AREA,
+                locator,
+                covered_exact,
+            ));
         }
         let footprint = coverage.footprint();
         share_answer(
@@ -291,6 +320,7 @@ impl Measures {
                 footprint.upper_square_metres(),
             ),
             locator,
+            covered_exact && footprint.evidence().exact,
         )
         .map_err(unavailable)
     }

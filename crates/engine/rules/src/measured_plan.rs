@@ -33,25 +33,31 @@ fn length(call: &MeasuredCall, key: &str) -> f64 {
     }
 }
 
+/// A value cited as exactly as the evidence it was measured from.
 fn value(
-    lower: f64,
-    upper: f64,
+    (lower, upper): (f64, f64),
     dimension: Option<QuantityDimension>,
+    exact: bool,
     locator: String,
 ) -> Measurement {
-    Measurement::Value {
-        lower,
-        upper,
-        dimension,
-        locator,
-    }
+    crate::measured_kinds::interval((lower, upper), dimension, exact, locator)
+}
+
+/// `minuend − subtrahend`, rounded outward: a point where it is exact.
+fn difference(minuend: f64, subtrahend: f64) -> (f64, f64) {
+    use axioval_engine::expression::Interval;
+    Interval::point(minuend)
+        .minus(Interval::point(subtrahend))
+        .map_or((f64::NEG_INFINITY, f64::INFINITY), |difference| {
+            (difference.lower, difference.upper)
+        })
 }
 
 fn plan(length: &PlanLength, locator: String) -> Measurement {
     value(
-        length.lower_metres(),
-        length.upper_metres(),
+        (length.lower_metres(), length.upper_metres()),
         LENGTH,
+        length.evidence().exact,
         locator,
     )
 }
@@ -138,7 +144,11 @@ impl PlanMeasures {
             Some("against-wall") => Line::AgainstWall,
             _ => Line::Long,
         };
-        let (axis, _, _) = line(centre, &walls, &measured)?;
+        let (axis, _, cited) = line(centre, &walls, &measured)?;
+        // Cited as `centre-line-distance` cites its sides.
+        let exact = measured.evidence().exact
+            && measured.rectangle().evidence().exact
+            && cited.iter().all(|evidence| evidence.exact);
         let across = 1 - axis;
         let sides = [RectangleSide::ALL[across], RectangleSide::ALL[across + 2]]
             .map(|side| side_interval(&walls.nearest(&measured, side), reach));
@@ -155,7 +165,7 @@ impl PlanMeasures {
             }
         };
         Ok(match combined {
-            Some((lower, upper)) => value(lower, upper, LENGTH, locator),
+            Some(interval) => value(interval, LENGTH, exact, locator),
             None => Measurement::Absent {
                 locator: format!("{locator}: no wall within the reach"),
             },
@@ -182,9 +192,9 @@ impl PlanMeasures {
                 .map_err(|error| span_error(&error))?;
             if name == "well_section_area" {
                 return Ok(value(
-                    section.area_lower(),
-                    section.area_upper(),
+                    (section.area_lower(), section.area_upper()),
                     Some(QuantityDimension::Area),
+                    section.evidence().exact,
                     locator,
                 ));
             }
@@ -206,6 +216,7 @@ impl PlanMeasures {
                 .total_cmp(&b.bottom().lower_metres())
                 .then_with(|| a.object().cmp(b.object()))
         });
+        let exact = stack.iter().all(|member| member.evidence().exact);
         if name == "well_height" {
             let top = |pick: fn(&axioval_engine::VerticalExtent) -> f64| {
                 stack.iter().map(pick).fold(f64::MIN, f64::max)
@@ -213,20 +224,30 @@ impl PlanMeasures {
             let bottom = |pick: fn(&axioval_engine::VerticalExtent) -> f64| {
                 stack.iter().map(pick).fold(f64::MAX, f64::min)
             };
-            let lower =
-                (top(|m| m.top().lower_metres()) - bottom(|m| m.bottom().upper_metres())).max(0.0);
-            let upper = top(|m| m.top().upper_metres()) - bottom(|m| m.bottom().lower_metres());
-            return Ok(value(lower, upper.max(lower), LENGTH, locator));
+            // The differences round outward; keep the exact height inside.
+            let lower = difference(
+                top(|m| m.top().lower_metres()),
+                bottom(|m| m.bottom().upper_metres()),
+            )
+            .0
+            .max(0.0);
+            let upper = difference(
+                top(|m| m.top().upper_metres()),
+                bottom(|m| m.bottom().lower_metres()),
+            )
+            .1;
+            return Ok(value((lower, upper.max(lower)), LENGTH, exact, locator));
         }
         // The largest gap between consecutive members, bottom to top.
         let mut gap = (0.0_f64, 0.0_f64);
         for pair in stack.windows(2) {
             let (below, above) = (&pair[0], &pair[1]);
-            let low = above.bottom().lower_metres() - below.top().upper_metres();
-            let high = above.bottom().upper_metres() - below.top().lower_metres();
+            // The differences round outward; keep the exact gap inside.
+            let low = difference(above.bottom().lower_metres(), below.top().upper_metres()).0;
+            let high = difference(above.bottom().upper_metres(), below.top().lower_metres()).1;
             gap = (gap.0.max(low.max(0.0)), gap.1.max(high.max(0.0)));
         }
-        Ok(value(gap.0, gap.1, LENGTH, locator))
+        Ok(value(gap, LENGTH, exact, locator))
     }
 
     fn measure_object(
@@ -362,7 +383,9 @@ impl PlanMeasures {
                     .as_ref()
                     .is_ok_and(|(_, _, cited)| cited.exact);
                 let separation = match pair.measured {
-                    Ok((lower, upper, _)) => MemberValue::Measured(value(lower, upper, LENGTH, at)),
+                    Ok((lower, upper, _)) => {
+                        MemberValue::Measured(value((lower, upper), LENGTH, exact, at))
+                    }
                     Err(why) => MemberValue::Undecided {
                         why: format!(
                             "the separation of {} and {} cannot be measured: {why}",

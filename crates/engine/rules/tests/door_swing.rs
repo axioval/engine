@@ -170,6 +170,80 @@ fn the_measured_leaves_and_swing_match_the_judged_doors() {
     assert!(read("unknown", "leaf_count").is_err());
 }
 
+/// Probes answered on approximate geometry prove nothing: the containment
+/// contract refuses them, so the swung spaces are undecided and never
+/// exact; probed exactly, they are exact.
+#[test]
+fn spaces_probed_approximately_are_never_exact() {
+    use axioval_engine::{
+        CapabilityRegistry, ClearanceOutcome, ClearanceRequest, ContainmentEvidence,
+        ContainmentOutcome, ContainmentRequest, FreeAreaEvidence, FreeAreaRequest, FreeSpaceError,
+        FreeSpaceService, FreeSpaceServiceHandle, MemberValue, PlacementOutcome, PlacementRequest,
+        ServiceRegistry, measured_members,
+    };
+    /// Containment measured on a tessellation.
+    struct Approximate;
+    impl FreeSpaceService for Approximate {
+        fn assess_clearance(
+            &self,
+            _: &ClearanceRequest,
+        ) -> Result<ClearanceOutcome, FreeSpaceError> {
+            Err(FreeSpaceError::Unavailable("containment only".into()))
+        }
+        fn find_placement(&self, _: &PlacementRequest) -> Result<PlacementOutcome, FreeSpaceError> {
+            Err(FreeSpaceError::Unavailable("containment only".into()))
+        }
+        fn measure_free_area(
+            &self,
+            _: &FreeAreaRequest,
+        ) -> Result<FreeAreaEvidence, FreeSpaceError> {
+            Err(FreeSpaceError::Unavailable("containment only".into()))
+        }
+        fn assess_containment(
+            &self,
+            request: &ContainmentRequest,
+        ) -> Result<ContainmentOutcome, FreeSpaceError> {
+            let mut evidence = axioval_ir::Evidence::exact(common::source(), "mesh");
+            evidence.exact = false;
+            ContainmentEvidence::try_new(request.clone(), evidence).map(ContainmentOutcome::Inside)
+        }
+    }
+    let (project, stated) = model().services();
+    let registry = axioval_rules::register_builtins(CapabilityRegistry::new()).unwrap();
+    let rooms = || {
+        Rooms::default()
+            .room("office", [-5.0, 0.0], [5.0, 4.0])
+            .room("corridor", [-5.0, -2.0], [5.0, 0.0])
+            .handle()
+    };
+    for (free, exact) in [
+        (
+            FreeSpaceServiceHandle::new(std::sync::Arc::new(Approximate)),
+            false,
+        ),
+        (rooms(), true),
+    ] {
+        let mut services: ServiceRegistry = stated.clone();
+        services.register(doors().handle()).unwrap();
+        services.register(free).unwrap();
+        registry.install_measured(&mut services, &project);
+        let spaces = measured_members(
+            &services,
+            &common::id("in"),
+            "swing_spaces;path=opens:forward",
+        )
+        .unwrap();
+        assert_eq!(spaces.len(), 2);
+        for space in &spaces {
+            assert_eq!(space.exact, exact);
+            assert_eq!(
+                matches!(space.fields["into"], MemberValue::Undecided { .. }),
+                !exact
+            );
+        }
+    }
+}
+
 /// Each direction as an expression over the spaces a door opens onto
 /// (`swing_spaces`): `swing_not_into` as no picked space swung into,
 /// `swing_into` as not every picked space swung away from. Both judge every

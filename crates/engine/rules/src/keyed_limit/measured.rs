@@ -8,6 +8,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use axioval_engine::expression::Interval;
 use axioval_engine::{
     CompiledRule, FreeSpaceServiceHandle, MeasuredProvider, Measurement, NotEvaluatedReason,
     ObjectFrameServiceHandle, PropertyResolutionError, RuleContext,
@@ -19,7 +20,7 @@ use axioval_ir::{Object, ObjectId, QuantityDimension, RuleId};
 use super::threshold;
 use super::{ClearHeight, ClearWidth, LeafMode, extent, extents, sill_interval};
 use crate::door_swing::{self, Footprint};
-use crate::measured_kinds::objects_of_kinds;
+use crate::measured_kinds::{interval, objects_of_kinds};
 use crate::support::{Parameters, Traversal, Unavailable};
 
 /// The names measured here.
@@ -327,28 +328,15 @@ impl DoorMeasures {
         })?;
         #[allow(clippy::cast_precision_loss)]
         let count = |value: usize| value as f64;
+        // Leaves are derived from what the source states; cited as exactly
+        // as their evidence.
+        let stated = leaves.evidence().exact;
         match call.name() {
             "leaf_count" => {
-                let leaves = count(leaves.leaves().len());
-                Ok(value(leaves, leaves, None, "leaves".into()))
+                let counted = count(leaves.leaves().len());
+                Ok(interval((counted, counted), None, stated, "leaves".into()))
             }
-            "leaf_width" => {
-                let widths = leaves
-                    .leaves()
-                    .iter()
-                    .map(axioval_engine::DoorLeaf::width_metres);
-                let width = match call.choice("measure") {
-                    Some("narrowest") => widths.fold(f64::INFINITY, f64::min),
-                    Some("total") => widths.sum(),
-                    _ => widths.fold(f64::NEG_INFINITY, f64::max),
-                };
-                if !width.is_finite() {
-                    return Ok(Measurement::Absent {
-                        locator: "the door has no leaves".into(),
-                    });
-                }
-                Ok(value(width, width, LENGTH, "leaf widths".into()))
-            }
+            "leaf_width" => leaf_width(call, &leaves),
             "swing_area" => {
                 let footprint = Footprint::of(&leaves)?;
                 let (lower, upper) =
@@ -385,17 +373,57 @@ impl DoorMeasures {
                 let (spaces, _) =
                     Traversal::path(steps)?.related(context, &object.id, &everything)?;
                 let mut into = BTreeSet::new();
+                let mut exact = true;
                 for space in spaces {
-                    let (relation, _) = door_swing::relation(free, &leaves, &space)?;
+                    let (relation, evidence) = door_swing::relation(free, &leaves, &space)?;
+                    exact &= evidence.iter().all(|evidence| evidence.exact);
                     if relation.swings_into() {
                         into.insert(space);
                     }
                 }
                 let into = count(into.len());
-                Ok(value(into, into, None, "spaces swung into".into()))
+                Ok(interval(
+                    (into, into),
+                    None,
+                    exact,
+                    "spaces swung into".into(),
+                ))
             }
         }
     }
+}
+
+/// The widest, narrowest or total width of `leaves`, cited as exactly as
+/// the leaves are; none for a door without leaves.
+fn leaf_width(
+    call: &MeasuredCall,
+    leaves: &axioval_engine::DoorLeaves,
+) -> Result<Measurement, Unavailable> {
+    if leaves.leaves().is_empty() {
+        return Ok(Measurement::Absent {
+            locator: "the door has no leaves".into(),
+        });
+    }
+    let mut widths = leaves
+        .leaves()
+        .iter()
+        .map(axioval_engine::DoorLeaf::width_metres);
+    let width = match call.choice("measure") {
+        Some("narrowest") => Interval::point(widths.fold(f64::INFINITY, f64::min)),
+        // Summed outward, so the total holds the exact sum.
+        Some("total") => widths
+            .try_fold(Interval::point(0.0), |total, width| {
+                total.plus(Interval::point(width))
+            })
+            .map_err(|_| crate::support::invalid("the leaves' widths overflow"))?,
+        _ => Interval::point(widths.fold(f64::NEG_INFINITY, f64::max)),
+    };
+    Ok(interval(
+        (width.lower, width.upper),
+        LENGTH,
+        leaves.evidence().exact,
+        "leaf widths".into(),
+    ))
 }
 
 impl MeasuredProvider for DoorMeasures {

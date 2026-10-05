@@ -44,12 +44,32 @@ fn middle_face(
     )?;
     let face = read_host(context, host)?;
     let area = face_area(&face, axes)?;
-    Ok(Measurement::Value {
-        lower: area,
-        upper: area,
-        dimension: Some(QuantityDimension::Area),
-        locator: format!("{MIDDLE_FACE_AREA}:{host}"),
-    })
+    Ok(crate::measured_kinds::interval(
+        (area, area),
+        Some(QuantityDimension::Area),
+        exact(&face.evidence),
+        format!("{MIDDLE_FACE_AREA}:{host}"),
+    ))
+}
+
+/// Whether every evidence a value was measured from is exact: the body
+/// facts are stated, so this holds unless a source cites an estimate.
+fn exact(evidence: &[axioval_ir::Evidence]) -> bool {
+    evidence.iter().all(|evidence| evidence.exact)
+}
+
+/// A sum of `terms` non-negative doubles, widened by the most its
+/// rounding may have moved it, so it holds the exact sum of the terms.
+fn summed(sum: f64, terms: usize) -> (f64, f64) {
+    if terms < 2 || sum == 0.0 {
+        return (sum, sum);
+    }
+    #[allow(clippy::cast_precision_loss)]
+    let margin = (terms - 1) as f64 * f64::EPSILON * sum;
+    (
+        (sum - margin).next_down().max(0.0),
+        (sum + margin).next_up(),
+    )
 }
 
 impl MeasuredProvider for OpeningMeasures {
@@ -144,18 +164,18 @@ impl MeasuredProvider for OpeningMeasures {
         if call.name() == OPENING_COUNT {
             #[allow(clippy::cast_precision_loss)]
             let counted = voided.counted.len() as f64;
-            return Ok(Measurement::Value {
-                lower: counted,
-                upper: counted,
-                dimension: None,
-                locator: format!("{OPENING_COUNT}:{object}"),
-            });
+            return Ok(crate::measured_kinds::interval(
+                (counted, counted),
+                None,
+                exact(&evidence),
+                format!("{OPENING_COUNT}:{object}"),
+            ));
         }
-        Ok(Measurement::Value {
-            lower: voided.sum,
-            upper: voided.sum,
-            dimension: Some(QuantityDimension::Area),
-            locator: format!(
+        Ok(crate::measured_kinds::interval(
+            summed(voided.sum, voided.counted.len()),
+            Some(QuantityDimension::Area),
+            exact(&evidence),
+            format!(
                 "{OPENING_AREA}:{object}:{}",
                 evidence
                     .iter()
@@ -163,7 +183,7 @@ impl MeasuredProvider for OpeningMeasures {
                     .collect::<Vec<_>>()
                     .join("; ")
             ),
-        })
+        ))
     }
 }
 
@@ -198,10 +218,11 @@ fn section(
     // not a missing area (an area that cannot be measured is an error).
     let area = crate::opening_area::opening_area(context, openings, &face, opening, &mut evidence)?
         .map_or(0.0, |(area, _)| area);
-    Ok(Measurement::Value {
-        lower: area,
-        upper: area,
-        dimension: Some(QuantityDimension::Area),
-        locator: format!("{OPENING_SECTION_AREA}:{}:{host}", opening.id),
-    })
+    evidence.extend(face.evidence.iter().cloned());
+    Ok(crate::measured_kinds::interval(
+        (area, area),
+        Some(QuantityDimension::Area),
+        exact(&evidence),
+        format!("{OPENING_SECTION_AREA}:{}:{host}", opening.id),
+    ))
 }

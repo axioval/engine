@@ -209,6 +209,41 @@ fn unusable_proofs_remain_not_evaluated() {
     }
 }
 
+/// A placement is exact only where found on exact evidence: a search the
+/// evidence leaves open lists an uncertain placement that is never exact,
+/// and an approximate witness (a tessellation's) lists none at all.
+#[test]
+fn only_a_placement_found_exactly_is_exact() {
+    let project = Project::new(vec![
+        Object::new(ObjectId::new(source(), "room").unwrap(), "space"),
+        Object::new(ObjectId::new(source(), "chair").unwrap(), "furniture"),
+    ])
+    .unwrap();
+    let registry =
+        axioval_rules::register_builtins(axioval_engine::CapabilityRegistry::new()).unwrap();
+    let measure = |answer: Answer| {
+        let mut services = ServiceRegistry::new();
+        services
+            .register(FreeSpaceServiceHandle::new(Arc::new(FakeService(answer))))
+            .unwrap();
+        registry.install_measured(&mut services, &project);
+        axioval_engine::measured_members(
+            &services,
+            &ObjectId::new(source(), "room").unwrap(),
+            "free_placements;shape=circle;diameter=1.5;height=2",
+        )
+        .map(|members| {
+            members
+                .iter()
+                .map(|member| (member.certain, member.exact))
+                .collect::<Vec<_>>()
+        })
+    };
+    assert_eq!(measure(Answer::Found), Ok(vec![(true, true)]));
+    assert_eq!(measure(Answer::Incomplete), Ok(vec![(false, false)]));
+    assert!(measure(Answer::Invalid).is_err());
+}
+
 /// Whether the shape fits as an expression over the measured placements
 /// (at least one), held to the parity harness on every answer of the
 /// service and without it.

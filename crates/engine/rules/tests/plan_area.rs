@@ -75,6 +75,51 @@ fn run(
     })
 }
 
+/// An area measured on a tessellated footprint is never exact, whether
+/// built-in code or the engine measures it; a total of overlaps holds the
+/// exact sum, cited as exactly as every overlap.
+#[test]
+fn an_area_measured_on_a_tessellation_is_inexact() {
+    let model = Model::default()
+        .object("mesh", "space")
+        .object("solid", "space")
+        .object("a", "compartment")
+        .object("b", "compartment");
+    let project = model.project();
+    let mut services = axioval_engine::ServiceRegistry::new();
+    services
+        .register(PlanAreaServiceHandle::new(Arc::new(
+            Rectangles::default()
+                .with("mesh", [0.0, 0.0, 4.0, 3.0], 0.01)
+                .with("solid", [0.0, 0.0, 4.0, 3.0], 0.0)
+                .with("a", [0.0, 0.0, 0.1, 3.0], 0.0)
+                .with("b", [0.1, 0.0, 0.3, 3.0], 0.0),
+        )))
+        .unwrap();
+    for name in ["plan_area", "area"] {
+        for (space, exact) in [("mesh", false), ("solid", true)] {
+            let ((lower, upper), cited) =
+                common::measured_cited(&services, &project, &id(space), name)
+                    .unwrap()
+                    .unwrap();
+            assert!(lower <= 12.0 && 12.0 <= upper, "{space} {name}");
+            assert_eq!(cited, exact, "{space} {name}");
+        }
+    }
+    // 0.3 + 0.6 rounds in binary: the total holds the exact 0.9.
+    let ((lower, upper), cited) = common::measured_cited(
+        &services,
+        &project,
+        &id("solid"),
+        "plan_overlap;with=compartment;measure=total",
+    )
+    .unwrap()
+    .unwrap();
+    let (a, b) = (0.1 * 3.0, (0.3 - 0.1) * 3.0);
+    assert!(lower <= a + b && a + b <= upper && upper - lower <= 2.0 * f64::EPSILON);
+    assert!(cited);
+}
+
 mod area_ratio {
     use super::*;
 

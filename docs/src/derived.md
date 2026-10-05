@@ -803,6 +803,45 @@ installs them for `axioval_engine::measured_value` outside a run. Reading
 a name no provider measures leaves the object not evaluated: a missing
 service, never a value.
 
+### Exactness of built-in measurements
+
+A provider states each value's exactness ([Stated rather than
+measured](#stated-rather-than-measured) explains the variants) from the
+evidence it measured from, never from the value. Every provider
+(`CapabilityRegistry::measured_providers` lists them) is held to
+approximate evidence by a test that `axioval-rules`'
+`tests/measured_exactness.rs` names; a provider without one fails it. The
+sites that cite a value exact:
+
+| Provider | Exact when | The interval holds |
+| --- | --- | --- |
+| `distance`, `count_within` | every counterpart that may be the nearest (farthest) or may count was measured exactly | the undecided counterparts, as `distance` cites them (`Cited`) |
+| `door_clear_width`, `door_clear_height`, `sill_height`, `threshold_step` | every extent, leaf and stated value read is exact | rounding of the differences, widened outward |
+| `leaf_count`, `leaf_width`, `swings_into` | the leaves (stated, exact by contract) and every probe are exact | a total width summed outward |
+| `swing_spaces` (members) | the leaves and every containment probe are exact (both exact by contract) | nothing |
+| `profile_dimension`, `profile_slope`, `section_area`, `section_modulus` | every dimension the formula reads is stated | rounding, π included; an unset radius widens the value and makes it inexact |
+| `flight_*`, `landing_*`, `stair_rise`, `end_width`, `walking_line_turns` | the flight's, run's or landing's evidence is exact | rounding of derived positions |
+| `steps`, `runs`, `handrails` (members) | the flight's, runs' and landings' evidence is (handrails never are) | rounding |
+| `guard_edges` (members) | always: the guard service refuses inexact evidence | nothing |
+| `plan_diameter`, `well_*`, `centre_line_distance`, `recesses`, `end_walls`, `exit_pairs` | the plan-span, section or extent evidence (and for the centre line its rectangle and side distances) is exact | differences rounded outward; the centre line's walls that may lie nearer |
+| `travel_distance` | walked with exact evidence | the possible exits, as `escape-route` cites them (`Cited`) |
+| `free_placements` (members) | a placement is surely found (exact witness and support by contract) | nothing; an open search's placement is never exact |
+| `rectangle_side`, `obstruction_count`, `axes_within` | the rectangles and every obstacle measured are exact | the undecided obstacles |
+| `band_uncovered_area`, `parallel_pairs` | every pair and area is exact and every member was read | the possible bands |
+| `level_rise`, `prevailing_rise`, `prevailing_elevation` | the heights' or extent's evidence is exact (points decide the prevailing value, as `level-spacing` decides it) | rounding |
+| `shelf_length`, `shelf_clear_height` | always: the linear-quantity service refuses inexact evidence | nothing |
+| `levels_above`, `levels_below` | always: counted over stated elevations, which the property service answers exactly | nothing |
+| `stack_distance`, `body_extent`, `plan_area`, `triangle_count` | every extent, frame, area or count is exact | rounding |
+| `counterpart_uncovered_share` | every evidence is exact and every counterpart that may cover was read | the undecided cover, as `counterpart-coverage` cites it (`Cited`) |
+| `coordinate_*`, `map_*` | always: coordinate systems are exact by contract | the arithmetic's rounding, widened by a bound on it |
+| `opening_area`, `opening_count`, `opening_section_area`, `middle_face_area`, `opening_placements` | the body facts read are exact (they are, unless a source cites an estimate) | a sum of areas widened by its rounding; a single area's own arithmetic is not widened, which the capability's rounding allowance covers |
+| missing-tactile and other defect counts | every finding's evidence is exact and nothing is open | the open checks |
+
+The engine's own values follow the service's evidence the same way; a
+`boundary_area`, a total `plan_overlap`, a `boundary_gap` total and the
+space shares sum and divide outward, and `bottom_above_level` subtracts
+outward.
+
 ### Angles between objects
 
 `angle_to`, `skew` and `bearing` measure an object against other objects
@@ -1311,13 +1350,21 @@ the highest storey has none (an exact absence). A tilted storey, a sibling
 at the same elevation or unreadable, and a storey aggregated twice are
 refused. The engine forwards the name to the host's property resolver.
 
-A value measured exactly is a quantity with exact evidence. Anything
-coarser (a tessellated body) is a `measured` value, an interval sure to hold
-the exact value, whose evidence is not exact. Built-in code measuring on
-exact geometry may answer an interval holding only the rounding of exact
-arithmetic (`Measurement::Rounded`): its evidence is exact, as the
-capability measuring it cites it. `Measurement::Cited` states the evidence's
-exactness outright, so a count found on inexact evidence is cited as such:
+Exactness is stated by the measurement, never inferred from a point: a
+tessellation measures points too. A value the engine measures itself is
+exact exactly when the geometry service's evidence is (and, for a thickness
+square to a face, the face's normals'). Built-in code states it by the
+variant it answers: `Measurement::Value` is never exact, a point included;
+`Measurement::Rounded` is exact, its interval holding only the rounding of
+exact arithmetic; `Measurement::Cited` is exact as its `exact` says, as the
+capability measuring it cites its own evidence; and a member is exact as
+its `exact` says, unless a field is cited inexact itself. An exact point is
+a quantity (or a number) with exact evidence. Anything else is a `measured`
+value, an interval sure to hold the exact value, its evidence exact only
+where the measurement states it. Sums, differences and shares of measured
+values round outward, so the interval holds the exact result; a sum of
+float lengths is never a point claimed exact. A count found on inexact
+evidence is cited as such:
 
 ```json
 {"type": "measured", "value": {"lower": 0.045, "upper": 0.055, "dimension": "length"}}
@@ -1379,7 +1426,7 @@ A ruleset's `values` name expressions once ([Expressions](./expressions.md)), ev
 - A value may read stated, measured, classified and other derived values. Compilation orders them so each follows those it reads, and refuses one reading an undeclared value or a cycle, naming it: `value `a`: the values read one another: a → b → c → a`. It type checks each value as it would a requirement, and the types reach every expression that reads them.
 - A value reads no rule parameter: it is the ruleset's, not one rule's.
 - The engine evaluates each value at most once per object in a run and caches it. Classifications and groupings derived before the rules read the values as far as they are derived then; rules read the final ones.
-- A number with a unit is a quantity: exact when it is a point, otherwise a `measured` interval, whose evidence is never exact. Text, enumeration values, truths, dates and date-times are themselves, and `null` is an exact absence. An interval of plain numbers is read only by expressions; anywhere else it cannot be read. A value that cannot be computed leaves its reader not evaluated with the reason.
+- A number with a unit is a quantity: exact when it is a point computed from exact reads only, otherwise a `measured` interval (a point computed from an approximation included), whose evidence is never exact. Text, enumeration values, truths, dates and date-times are themselves, and `null` is an exact absence. An interval of plain numbers is read only by expressions; anywhere else it cannot be read. A value that cannot be computed leaves its reader not evaluated with the reason.
 - Its evidence is located at `axioval:value/<name>` and cites the locators of every read it was computed from.
 
 A decimal literal states a value as a source does: `30 mm` is the double nearest 0.030 m, the same one a source stating `0.030` holds, so a cover of exactly 30 mm meets a 30 mm bound rather than straddling it.

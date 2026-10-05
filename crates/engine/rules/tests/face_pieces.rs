@@ -365,3 +365,39 @@ fn a_facing_face_needs_its_direction_and_tolerance() {
     );
     assert!(refused.is_err());
 }
+
+/// The pieces of a face measured from approximate normals, as a
+/// tessellation gives them, are never exact; those of an exact body are.
+#[test]
+fn pieces_measured_from_approximate_normals_are_inexact() {
+    use axioval_engine::measured_members;
+    let model = ["fill", "skewed"]
+        .iter()
+        .fold(Model::default(), |model, local| model.object(local, "fill"));
+    let (project, mut services) = model.services();
+    let fills = Fills(BTreeMap::from([
+        (id("fill"), fill(Vec::new())),
+        (
+            id("skewed"),
+            vec![
+                (vec![exact([0.0, 0.0, 1.0])], 30.0),
+                (
+                    vec![FaceNormal::try_new([0.9, 0.0, 1.0], [1.1, 0.0, 2.0]).unwrap()],
+                    36.0,
+                ),
+            ],
+        ),
+    ]));
+    services
+        .register(VerticalExtentServiceHandle::new(Arc::new(fills)))
+        .unwrap();
+    let registry = register_builtins(CapabilityRegistry::new()).unwrap();
+    registry.install_measured(&mut services, &project);
+    for (object, exact) in [("fill", true), ("skewed", false)] {
+        let pieces = measured_members(&services, &id(object), "face_pieces;face=top").unwrap();
+        assert!(!pieces.is_empty(), "{object}");
+        for piece in &pieces {
+            assert_eq!(piece.exact, exact, "{object}");
+        }
+    }
+}

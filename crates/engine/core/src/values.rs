@@ -208,7 +208,11 @@ impl DerivedValues {
         locators.dedup();
         let locator = format!("{VALUE_SET}/{name}: {}", locators.join("; "));
         let mut evidence = Evidence::exact(object.source.clone(), locator);
-        let value = match property_value(&value) {
+        // A number is exact only where everything it was computed from is:
+        // a point computed from an approximation is as approximate as an
+        // interval, never inferred exact from its being a point.
+        let measured_exactly = read.iter().all(|evidence| evidence.exact);
+        let value = match property_value(&value, measured_exactly) {
             Ok(Some(value)) => value,
             Ok(None) => {
                 return Ok(PropertyResolution::Absent(
@@ -221,7 +225,8 @@ impl DerivedValues {
                 )));
             }
         };
-        // Exact when the value is certain; an interval is never exact.
+        // Exact when the value is certain: an interval, or a point computed
+        // from an approximation, never is.
         evidence.exact = !matches!(value, PropertyValue::Measured { .. });
         let property = Property::new(VALUE_SET, name, value)
             .map_err(|_| PropertyResolutionError::InvalidRequest)?
@@ -233,8 +238,9 @@ impl DerivedValues {
     }
 }
 
-/// A computed value as a property states it; `None` for `null`.
-fn property_value(value: &Value) -> Result<Option<PropertyValue>, String> {
+/// A computed value as a property states it; `None` for `null`. A number
+/// is a quantity or a decimal only where it is a point computed exactly.
+fn property_value(value: &Value, exact: bool) -> Result<Option<PropertyValue>, String> {
     Ok(Some(match value {
         Value::Null => return Ok(None),
         Value::Boolean(value) => PropertyValue::Boolean(*value),
@@ -242,12 +248,12 @@ fn property_value(value: &Value) -> Result<Option<PropertyValue>, String> {
         Value::Date(value) => PropertyValue::Date(*value),
         Value::DateTime(value) => PropertyValue::DateTime(*value),
         Value::Number { value, unit } => match unit.dimension()? {
-            Some(dimension) if value.is_point() => PropertyValue::Quantity {
+            Some(dimension) if exact && value.is_point() => PropertyValue::Quantity {
                 value: value.lower,
                 dimension,
             },
-            None if value.is_point() => PropertyValue::Decimal(value.lower),
-            // A plain number known only to an interval.
+            None if exact && value.is_point() => PropertyValue::Decimal(value.lower),
+            // A number known only to an interval, or approximately.
             dimension => PropertyValue::Measured {
                 lower: value.lower,
                 upper: value.upper,

@@ -1,13 +1,15 @@
 //! Values the engine measures from geometry services and answers as the
 //! reserved property set [`axioval_ir::MEASURED_SET`].
 //!
-//! Each value is an interval sure to hold the exact value: a point is a
-//! quantity with exact evidence, anything wider a
-//! [`PropertyValue::Measured`] whose evidence is never exact, unless built-in
-//! code rounded an exact measurement. A value of an approximation (a
-//! tessellation's count) is a [`PropertyValue::Measured`] with inexact
-//! evidence, a point included. A missing service is a fact of the run,
-//! never of the object.
+//! Each value is an interval sure to hold the exact value, and its evidence
+//! is exact exactly when the measurement states so: the service's evidence
+//! for what the engine measures itself, the [`provider::Measurement`]
+//! variant for built-in code. Exactness is never inferred from a point: a
+//! tessellation may measure a point too. An exact point is a quantity (or
+//! a number); anything else is a [`PropertyValue::Measured`], with exact
+//! evidence when the interval holds only the rounding of exact arithmetic.
+//! Arithmetic over measured values (sums, differences, shares) rounds
+//! outward. A missing service is a fact of the run, never of the object.
 //!
 //! Two names take parameters after the name, `;`-separated `key=value`
 //! pairs: `bottom_above_level;path=<steps>` and
@@ -239,14 +241,29 @@ pub(crate) fn rounded_difference(minuend: f64, subtrahend: f64) -> (f64, f64) {
     }
 }
 
+/// `[lower, upper]` as an interval, for sound arithmetic over measured
+/// bounds.
+pub(crate) fn span(lower: f64, upper: f64) -> crate::expression::Interval {
+    crate::expression::Interval { lower, upper }
+}
+
+/// The bounds of a sum, difference or share of measured intervals, rounded
+/// outward; an overflow is no value.
+pub(crate) fn bounds(
+    result: crate::expression::IntervalResult,
+) -> Result<(f64, f64), PropertyResolutionError> {
+    result
+        .map(|interval| (interval.lower, interval.upper))
+        .map_err(|_| PropertyResolutionError::InvalidValue)
+}
+
 /// A measured answer before it becomes a property.
 enum Answer {
-    Value(f64, f64, QuantityDimension, String),
-    /// A value whose evidence is exact exactly as stated (an interval
-    /// holding only rounding, or a count found on inexact evidence).
-    Cited(f64, f64, Option<QuantityDimension>, String, bool),
-    /// A plain number, such as a count, known to lie in the interval.
-    Number(f64, f64, String),
+    /// A value sure to lie in `[lower, upper]`, of a dimension (`None` for a
+    /// plain number, such as a count), located, and whether its evidence is
+    /// exact. Every measurement states its exactness; none is inferred from
+    /// a point.
+    Value(f64, f64, Option<QuantityDimension>, String, bool),
     Absent(String),
 }
 
@@ -338,14 +355,10 @@ impl Measures {
                 request.property().to_ascii_lowercase()
             )
         };
-        let (lower, upper, dimension, locator, cited) = match self.measure(&name, object)? {
-            Answer::Value(lower, upper, dimension, locator) => {
-                (lower, upper, Some(dimension), locator, None)
+        let (lower, upper, dimension, locator, exact) = match self.measure(&name, object)? {
+            Answer::Value(lower, upper, dimension, locator, exact) => {
+                (lower, upper, dimension, locator, exact)
             }
-            Answer::Cited(lower, upper, dimension, locator, exact) => {
-                (lower, upper, dimension, locator, Some(exact))
-            }
-            Answer::Number(lower, upper, locator) => (lower, upper, None, locator, None),
             Answer::Absent(locator) => {
                 return Ok(PropertyResolution::Absent(
                     CompletePropertyAbsenceEvidence::try_new(
@@ -359,9 +372,8 @@ impl Measures {
             return Err(PropertyResolutionError::InvalidValue);
         }
         let point = lower.to_bits() == upper.to_bits();
-        // A point is exact unless its measurement says otherwise; an
-        // interval is not unless its measurement says it is.
-        let exact = cited.unwrap_or(point);
+        // Exact only as the measurement states: a point measured on a
+        // tessellation is as inexact as an interval.
         let value = match (point && exact, dimension) {
             (true, Some(dimension)) => PropertyValue::Quantity {
                 value: lower,
@@ -427,7 +439,7 @@ impl Measures {
 
     fn plain(&self, name: &str, object: &ObjectId) -> Result<Answer, PropertyResolutionError> {
         let unavailable = |error: String| Self::unavailable(name, object, &error);
-        let length = QuantityDimension::Length;
+        let length = Some(QuantityDimension::Length);
         match name {
             MEASURED_BOTTOM | MEASURED_TOP | MEASURED_EXTENT_Z => {
                 let extent = self
@@ -445,7 +457,13 @@ impl Measures {
                     MEASURED_TOP => (extent.top().lower_metres(), extent.top().upper_metres()),
                     _ => extent.height_metres(),
                 };
-                Ok(Answer::Value(lower, upper, length, locator))
+                Ok(Answer::Value(
+                    lower,
+                    upper,
+                    length,
+                    locator,
+                    extent.evidence().exact,
+                ))
             }
             MEASURED_EXTENT_X | MEASURED_EXTENT_Y => {
                 let axis = if name == MEASURED_EXTENT_X {
@@ -467,9 +485,11 @@ impl Measures {
                     upper,
                     length,
                     extent.evidence().locator.clone(),
+                    extent.evidence().exact,
                 ))
             }
             MEASURED_X | MEASURED_Y | MEASURED_Z => {
+                // A placement is read only when stated exactly.
                 let (coordinate, locator) = self.origin(name, object)?;
                 let axis = match name {
                     MEASURED_X => 0,
@@ -481,6 +501,7 @@ impl Measures {
                     coordinate[axis],
                     length,
                     locator,
+                    true,
                 ))
             }
             MEASURED_AREA => {
@@ -493,8 +514,9 @@ impl Measures {
                 Ok(Answer::Value(
                     area.lower_square_metres(),
                     area.upper_square_metres(),
-                    QuantityDimension::Area,
+                    Some(QuantityDimension::Area),
                     area.evidence().locator.clone(),
+                    area.evidence().exact,
                 ))
             }
             MEASURED_VOLUME => {
@@ -507,8 +529,9 @@ impl Measures {
                 Ok(Answer::Value(
                     body.volume().lower_cubic_metres(),
                     body.volume().upper_cubic_metres(),
-                    QuantityDimension::Volume,
+                    Some(QuantityDimension::Volume),
                     body.evidence().locator.clone(),
+                    body.evidence().exact,
                 ))
             }
             _ => Err(PropertyResolutionError::InvalidRequest),
@@ -583,7 +606,7 @@ impl Measures {
     ) -> Result<Answer, PropertyResolutionError> {
         let name = call.name();
         let unavailable = |error: String| Self::unavailable(name, object, &error);
-        let length = QuantityDimension::Length;
+        let length = Some(QuantityDimension::Length);
         if name == PERIMETER {
             let perimeter = self
                 .plan
@@ -596,6 +619,7 @@ impl Measures {
                 perimeter.upper_metres(),
                 length,
                 perimeter.evidence().locator.clone(),
+                perimeter.evidence().exact,
             ));
         }
         let service = self
@@ -604,6 +628,9 @@ impl Measures {
             .ok_or_else(|| Self::missing(name, "vertical-extent"))?;
         let along = |key: &str| call.argument(key);
         if name == THICKNESS {
+            // A direction square to a face measured on a tessellation is
+            // itself approximate, whatever the thickness along it.
+            let mut stated = true;
             let direction = match (along("direction"), call.choice("face")) {
                 (Some(argument), _) => self.direction(name, argument, object)?,
                 (None, face) => {
@@ -615,6 +642,7 @@ impl Measures {
                     let normals = service
                         .measure_face_normals(object, face)
                         .map_err(|error| unavailable(error.to_string()))?;
+                    stated = normals.evidence().exact;
                     surface::plane_normal(normals.normals())
                         .and_then(|normal| {
                             MetricDirection::try_new(normal).map_err(|error| error.to_string())
@@ -630,6 +658,7 @@ impl Measures {
                 thickness.upper_metres(),
                 length,
                 thickness.evidence().locator.clone(),
+                stated && thickness.evidence().exact,
             ));
         }
         let argument = along("axis")
@@ -645,6 +674,7 @@ impl Measures {
             upper,
             length,
             extent.evidence().locator.clone(),
+            extent.evidence().exact,
         ))
     }
 
@@ -665,29 +695,28 @@ impl Measures {
             project: &providers.project,
             services,
         };
+        // The provider states exactness by the variant it answers; a
+        // `Value` states none, so it is never exact, a point included.
         Ok(match provider.measure(call, object, &context)? {
             provider::Measurement::Value {
                 lower,
                 upper,
                 dimension,
                 locator,
-            } => match dimension {
-                Some(dimension) => Answer::Value(lower, upper, dimension, locator),
-                None => Answer::Number(lower, upper, locator),
-            },
+            } => Answer::Value(lower, upper, dimension, locator, false),
             provider::Measurement::Rounded {
                 lower,
                 upper,
                 dimension,
                 locator,
-            } => Answer::Cited(lower, upper, dimension, locator, true),
+            } => Answer::Value(lower, upper, dimension, locator, true),
             provider::Measurement::Cited {
                 lower,
                 upper,
                 dimension,
                 locator,
                 exact,
-            } => Answer::Cited(lower, upper, dimension, locator, exact),
+            } => Answer::Value(lower, upper, dimension, locator, exact),
             provider::Measurement::Absent { locator } => Answer::Absent(locator),
         })
     }
@@ -715,48 +744,18 @@ impl Measures {
     ) -> Result<Answer, PropertyResolutionError> {
         let name = call.name();
         let unavailable = |error: String| Self::unavailable(name, object, &error);
-        let answer = |value: crate::expression::Interval, locator: String| {
+        let answer = |value: crate::expression::Interval, locator: String, exact: bool| {
             Answer::Value(
                 value.lower,
                 value.upper,
-                QuantityDimension::PlaneAngle,
+                Some(QuantityDimension::PlaneAngle),
                 locator,
+                exact,
             )
         };
         if name == BEARING {
-            let (direction, undirected, locator) = match call.choice("axis") {
-                Some("long") => {
-                    let rectangle = self.rectangle(name, object)?;
-                    let long = rectangle.long_axis().map_err(unavailable)?;
-                    (
-                        rectangle.axes()[long],
-                        true,
-                        rectangle.evidence().locator.clone(),
-                    )
-                }
-                axis => {
-                    let (frame, locator) = self.frame(name, object)?;
-                    let [x, y, _] = if axis == Some("own_y") {
-                        frame.forward().components()
-                    } else {
-                        frame.right().components()
-                    };
-                    ([x, y], false, locator)
-                }
-            };
-            let north = if call.choice("reference") == Some("true_north") {
-                self.coordinates
-                    .as_ref()
-                    .ok_or_else(|| Self::missing(name, "coordinate-system"))?
-                    .coordinate_system(&object.source)
-                    .map_err(|error| unavailable(error.to_string()))?
-                    .true_north()
-                    .ok_or_else(|| unavailable("the source states no true north".into()))?
-            } else {
-                [0.0, 1.0]
-            };
-            let value = angles::bearing(direction, north, undirected).map_err(unavailable)?;
-            return Ok(answer(value, locator));
+            let (value, locator, exact) = self.bearing(call, object)?;
+            return Ok(answer(value, locator, exact));
         }
         let (reached, cited) = self.reach(name, steps, object)?;
         if reached.is_empty() {
@@ -768,6 +767,7 @@ impl Measures {
         let faces = name == ANGLE_TO && call.choice("between") == Some("face_normal");
         let mut hull: Option<crate::expression::Interval> = None;
         let mut locators = Vec::new();
+        let mut exact = true;
         if faces {
             let service = self
                 .vertical
@@ -780,9 +780,11 @@ impl Measures {
             };
             let own = face(object)?;
             locators.push(own.evidence().locator.clone());
+            exact &= own.evidence().exact;
             for other in &reached {
                 let theirs = face(other)?;
                 locators.push(theirs.evidence().locator.clone());
+                exact &= theirs.evidence().exact;
                 let value =
                     angles::between_faces(own.normals(), theirs.normals()).map_err(unavailable)?;
                 hull = Some(hull.map_or(value, |hull| hull.hull(value)));
@@ -790,9 +792,11 @@ impl Measures {
         } else {
             let own = self.rectangle(name, object)?;
             locators.push(own.evidence().locator.clone());
+            exact &= own.evidence().exact;
             for other in &reached {
                 let theirs = self.rectangle(name, other)?;
                 locators.push(theirs.evidence().locator.clone());
+                exact &= theirs.evidence().exact;
                 let value = if name == SKEW {
                     angles::skew(&own, &theirs)
                 } else {
@@ -803,7 +807,56 @@ impl Measures {
             }
         }
         let value = hull.ok_or(PropertyResolutionError::InvalidRequest)?;
-        Ok(answer(value, locators.join("; ")))
+        Ok(answer(value, locators.join("; "), exact))
+    }
+
+    /// The plan bearing of one of `object`'s axes, its locator, and
+    /// whether it is exact.
+    fn bearing(
+        &self,
+        call: &MeasuredCall,
+        object: &ObjectId,
+    ) -> Result<(crate::expression::Interval, String, bool), PropertyResolutionError> {
+        let name = call.name();
+        let unavailable = |error: String| Self::unavailable(name, object, &error);
+        // A placement is read only when stated exactly.
+        let (direction, undirected, locator, mut exact) = match call.choice("axis") {
+            Some("long") => {
+                let rectangle = self.rectangle(name, object)?;
+                let long = rectangle.long_axis().map_err(unavailable)?;
+                (
+                    rectangle.axes()[long],
+                    true,
+                    rectangle.evidence().locator.clone(),
+                    rectangle.evidence().exact,
+                )
+            }
+            axis => {
+                let (frame, locator) = self.frame(name, object)?;
+                let [x, y, _] = if axis == Some("own_y") {
+                    frame.forward().components()
+                } else {
+                    frame.right().components()
+                };
+                ([x, y], false, locator, true)
+            }
+        };
+        let north = if call.choice("reference") == Some("true_north") {
+            let system = self
+                .coordinates
+                .as_ref()
+                .ok_or_else(|| Self::missing(name, "coordinate-system"))?
+                .coordinate_system(&object.source)
+                .map_err(|error| unavailable(error.to_string()))?;
+            exact &= system.evidence().exact;
+            system
+                .true_north()
+                .ok_or_else(|| unavailable("the source states no true north".into()))?
+        } else {
+            [0.0, 1.0]
+        };
+        let value = angles::bearing(direction, north, undirected).map_err(unavailable)?;
+        Ok((value, locator, exact))
     }
 
     /// A slope, fall or tilt of `object`, as an angle.
@@ -814,15 +867,17 @@ impl Measures {
     ) -> Result<Answer, PropertyResolutionError> {
         let name = call.name();
         let unavailable = |error: String| Self::unavailable(name, object, &error);
-        let angle = |value: crate::expression::Interval, locator: String| {
+        let angle = |value: crate::expression::Interval, locator: String, exact: bool| {
             Answer::Value(
                 value.lower,
                 value.upper,
-                QuantityDimension::PlaneAngle,
+                Some(QuantityDimension::PlaneAngle),
                 locator,
+                exact,
             )
         };
         if name == INCLINATION {
+            // A placement is read only when stated exactly.
             let (frame, locator) = self.frame(name, object)?;
             let (axis, from_vertical) = match call.choice("axis") {
                 Some("own_x") => (frame.right(), false),
@@ -830,7 +885,7 @@ impl Measures {
                 _ => (frame.up(), true),
             };
             let tilt = surface::inclination(axis, from_vertical).map_err(unavailable)?;
-            return Ok(angle(tilt, locator));
+            return Ok(angle(tilt, locator, true));
         }
         let (normals, evidence) = faces::face_normals(
             self.vertical
@@ -865,7 +920,7 @@ impl Measures {
             }
         }
         .map_err(unavailable)?;
-        Ok(angle(value, evidence.locator))
+        Ok(angle(value, evidence.locator, evidence.exact))
     }
 
     /// The objects `steps` reach from `object`, walked one after another
@@ -950,11 +1005,21 @@ impl Measures {
             .ok_or_else(|| Self::missing(name, "vertical-extent"))?
             .measure_vertical_extent(object)
             .map_err(|error| Self::unavailable(name, object, &error.to_string()))?;
+        // The difference rounds; keep the exact one inside. The level's
+        // elevation is stated exactly, so the bottom's evidence decides.
+        let (lower, upper) = bounds(
+            span(
+                extent.bottom().lower_metres(),
+                extent.bottom().upper_metres(),
+            )
+            .minus(span(elevation, elevation)),
+        )?;
         Ok(Answer::Value(
-            extent.bottom().lower_metres() - elevation,
-            extent.bottom().upper_metres() - elevation,
-            QuantityDimension::Length,
+            lower,
+            upper,
+            Some(QuantityDimension::Length),
             format!("{} above level {first}", extent.evidence().locator),
+            extent.evidence().exact,
         ))
     }
 
@@ -977,7 +1042,8 @@ impl Measures {
             .ok_or_else(|| Self::missing(name, "boundary-coverage"))?
             .measure_boundary_coverage(&request)
             .map_err(|error| unavailable(error.to_string()))?;
-        let (mut lower, mut upper) = (0.0, 0.0);
+        // Summed outward, so the sum holds the exact one.
+        let mut sum = span(0.0, 0.0);
         for boundary in coverage.boundaries() {
             let Some(element) = boundary.element() else {
                 return Err(unavailable(format!(
@@ -989,15 +1055,17 @@ impl Measures {
                 continue;
             }
             if let BoundaryPlacement::OnSurface { area } = boundary.placement() {
-                lower += area.lower_square_metres();
-                upper += area.upper_square_metres();
+                sum = sum
+                    .plus(span(area.lower_square_metres(), area.upper_square_metres()))
+                    .map_err(|_| PropertyResolutionError::InvalidValue)?;
             }
         }
         Ok(Answer::Value(
-            lower,
-            upper,
-            QuantityDimension::Area,
+            sum.lower,
+            sum.upper,
+            Some(QuantityDimension::Area),
             format!("{} kind={kind}", coverage.evidence().locator),
+            coverage.evidence().exact,
         ))
     }
 

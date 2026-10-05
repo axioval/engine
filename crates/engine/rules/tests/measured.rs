@@ -447,3 +447,134 @@ fn an_unknown_or_malformed_measured_name_is_refused() {
         }
     }
 }
+
+/// Volumes only: 2 m³ each, measured on a tessellation or exactly.
+struct Volumes(axioval_engine::GeometryFidelity);
+
+impl axioval_engine::ProximityService for Volumes {
+    fn bounds(
+        &self,
+        _: &ObjectId,
+    ) -> Result<axioval_engine::ObjectBounds, axioval_engine::ProximityError> {
+        Err(axioval_engine::ProximityError::Unavailable)
+    }
+    fn measure_proximity(
+        &self,
+        _: &axioval_engine::ProximityRequest,
+    ) -> Result<axioval_engine::ProximityEvidence, axioval_engine::ProximityError> {
+        Err(axioval_engine::ProximityError::Unavailable)
+    }
+    fn measure_body_volume(
+        &self,
+        object: &ObjectId,
+    ) -> Result<axioval_engine::BodyVolume, axioval_engine::ProximityError> {
+        let mut evidence = Evidence::exact(source(), format!("volume:{object}"));
+        evidence.exact = self.0.is_exact();
+        axioval_engine::BodyVolume::try_new(
+            object.clone(),
+            axioval_engine::VolumeInterval::exact(2.0)?,
+            self.0,
+            evidence,
+        )
+    }
+}
+
+/// A point measured on a tessellation is as inexact as an interval: the
+/// engine reads exactness from the service's evidence, never from the
+/// point. Measured on exact geometry, the point is an exact quantity.
+#[test]
+fn a_point_measured_on_a_tessellation_is_never_exact() {
+    use axioval_engine::{GeometryFidelity, ProximityServiceHandle, ServiceRegistry};
+    use axioval_ir::{PropertyValue, QuantityDimension};
+    let project = Model::default().object("pipe", "pipe").project();
+    for (fidelity, exact) in [
+        (GeometryFidelity::tessellated(0.0).unwrap(), false),
+        (GeometryFidelity::Exact, true),
+    ] {
+        let mut services = ServiceRegistry::new();
+        services
+            .register(ProximityServiceHandle::new(Arc::new(Volumes(fidelity))))
+            .unwrap();
+        let resolved =
+            match axioval_engine::measured_value(&services, &project, &id("pipe"), "volume")
+                .unwrap()
+            {
+                axioval_engine::PropertyResolution::Present(resolved) => resolved,
+                axioval_engine::PropertyResolution::Absent(_) => panic!("no volume"),
+            };
+        let property = resolved.property();
+        assert_eq!(property.evidence.as_ref().unwrap().exact, exact);
+        let expected = if exact {
+            PropertyValue::Quantity {
+                value: 2.0,
+                dimension: QuantityDimension::Volume,
+            }
+        } else {
+            PropertyValue::Measured {
+                lower: 2.0,
+                upper: 2.0,
+                dimension: Some(QuantityDimension::Volume),
+            }
+        };
+        assert_eq!(property.value(), &expected);
+    }
+}
+
+/// A ruleset value computed from a point measured on a tessellation is as
+/// approximate as what it read, never an exact quantity for being a point;
+/// computed from exact reads, it is exact.
+#[test]
+fn a_value_computed_from_an_approximation_is_never_exact() {
+    use axioval_engine::{GeometryFidelity, ProximityServiceHandle};
+    const PREDICATE: &str = "axioval:capability.property-predicate";
+    let text = |value: &str| json!({"default": value, "translations": {}});
+    for (fidelity, exact) in [
+        (GeometryFidelity::tessellated(0.0).unwrap(), false),
+        (GeometryFidelity::Exact, true),
+    ] {
+        let registry = registry();
+        let definitions = definitions(&registry, &[PREDICATE], &["pipe"], &[], &[]);
+        // Read as a property, the value is cited as the value it states.
+        let small = rule(
+            "small",
+            PREDICATE,
+            "error",
+            entity("pipe"),
+            json!({
+                "property_set": {"type": "string", "value": "axioval:value"},
+                "property": {"type": "string", "value": "content"},
+                "operator": {"type": "string", "value": "less_or_equal"},
+                "quantity": {"type": "quantity", "value": 1.0, "unit": "m3"},
+            }),
+            json!({}),
+        );
+        let mut ruleset = common::runtime::ruleset(vec![small]);
+        ruleset.values = serde_json::from_value(json!({"content": {
+            "name": text("content"),
+            "expression": {"kind": "property", "propertySet": "axioval:measured", "property": "volume"}}}))
+        .unwrap();
+        let plan = axioval_engine::compile(&registry, std::slice::from_ref(&definitions), &ruleset)
+            .unwrap();
+        let session = session(Model::default().object("pipe", "pipe"))
+            .with_host_service(
+                ProximityServiceHandle::new(Arc::new(Volumes(fidelity))),
+                &[snapshot()],
+            )
+            .unwrap();
+        let report = run(registry, plan, &session, |runtime| runtime).unwrap();
+        let [finding] = report.findings() else {
+            panic!(
+                "one finding: {:?} {:?}",
+                report.findings(),
+                report.not_evaluated
+            );
+        };
+        let cited: Vec<bool> = finding
+            .evidence
+            .iter()
+            .filter(|evidence| evidence.locator.starts_with("axioval:value/"))
+            .map(|evidence| evidence.exact)
+            .collect();
+        assert_eq!(cited, [exact], "{:?}", finding.evidence);
+    }
+}

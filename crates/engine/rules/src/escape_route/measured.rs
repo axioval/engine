@@ -135,19 +135,15 @@ impl MeasuredProvider for TravelMeasures {
         };
         let locator = format!("{name}:{object}");
         Ok(match judge.plain_travel(object, start).map_err(refused)? {
-            // Walked with exact evidence, the interval holds only the
-            // walk's rounding, and the capability cites it as exact.
-            Some((lower, upper, true)) => Measurement::Rounded {
+            // Walked with exact evidence, the capability cites the walk as
+            // exact; its interval holds the possible exits too, not only
+            // rounding, so it is cited rather than rounded.
+            Some((lower, upper, exact)) => Measurement::Cited {
                 lower,
                 upper,
                 dimension: Some(QuantityDimension::Length),
                 locator,
-            },
-            Some((lower, upper, false)) => Measurement::Value {
-                lower,
-                upper,
-                dimension: Some(QuantityDimension::Length),
-                locator,
+                exact,
             },
             None => Measurement::Absent {
                 locator: format!("{locator}: no exit is reached"),

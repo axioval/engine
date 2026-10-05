@@ -99,7 +99,16 @@ impl<'a> ObjectLeaves<'a> {
             ));
         };
         let source = self.object.id.source.clone();
-        let exact = member.exact;
+        // Exact as the member states, unless the field itself is cited as
+        // an approximation.
+        let exact = member.exact
+            && !matches!(
+                member.fields.get(name),
+                Some(MemberValue::Measured(Measurement::Cited {
+                    exact: false,
+                    ..
+                }))
+            );
         let cited = |locator: &str| {
             let locator = format!("{}/{name}:{locator}", axioval_ir::MEMBER_SET);
             vec![Evidence {

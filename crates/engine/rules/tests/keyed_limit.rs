@@ -767,6 +767,31 @@ fn a_sill_height_straddling_the_limit_is_not_evaluated() {
     );
 }
 
+/// A sill height above a tessellated window or floor is never exact; above
+/// exact ones it is.
+#[test]
+fn a_sill_height_measured_on_a_tessellation_is_inexact() {
+    let model = rooms(&[("w1", &["o1"]), ("w2", &["o1"])]);
+    let (project, mut services) = model.services();
+    services
+        .register(VerticalExtentServiceHandle::new(Arc::new(
+            floors().with("w1", 1.0, 0.01).with("w2", 1.0, 0.0),
+        )))
+        .unwrap();
+    for (window, exact) in [("w1", false), ("w2", true)] {
+        let ((lower, upper), cited) = common::measured_cited(
+            &services,
+            &project,
+            &id(window),
+            "sill_height;floor_path=adjacent",
+        )
+        .unwrap()
+        .unwrap();
+        assert!(lower <= 1.0 && 1.0 <= upper, "{window}: {lower}..{upper}");
+        assert_eq!(cited, exact, "{window}");
+    }
+}
+
 #[test]
 fn an_unmeasured_floor_is_not_evaluated_unless_another_floor_fails() {
     let model = rooms(&[("w1", &["o1", "o3"]), ("w2", &["o1", "o3"])]);

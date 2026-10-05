@@ -103,7 +103,7 @@ impl Measures {
         let locator = position.evidence().locator.clone();
         let length = Some(QuantityDimension::Length);
         let cited = |value: AlignmentInterval, dimension, locator: String, exact| {
-            Answer::Cited(value.lower(), value.upper(), dimension, locator, exact)
+            Answer::Value(value.lower(), value.upper(), dimension, locator, exact)
         };
         let parameter = match name {
             STATION => return Ok(cited(position.station(), length, locator, exact)),
@@ -111,7 +111,7 @@ impl Measures {
             OFFSET => {
                 let offset = position.offset();
                 return Ok(if call.choice("side") == Some("right") {
-                    Answer::Cited(-offset.upper(), -offset.lower(), length, locator, exact)
+                    Answer::Value(-offset.upper(), -offset.lower(), length, locator, exact)
                 } else {
                     cited(offset, length, locator, exact)
                 });
@@ -148,7 +148,7 @@ impl Measures {
                         ),
                     )
                 })?;
-                Answer::Cited(lower, upper, length, locator, false)
+                Answer::Value(lower, upper, length, locator, false)
             }
             _ => cited(value, None, locator, exact),
         })

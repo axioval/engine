@@ -87,6 +87,25 @@ fn a_mesh_with_more_triangles_than_allowed_is_found() {
     );
 }
 
+/// The measured count of a tessellation's triangles is never exact, a
+/// point though it is; the count of a mesh that is the exact shape is.
+#[test]
+fn a_tessellated_count_is_measured_inexactly() {
+    let (project, mut services) = model().services();
+    services
+        .register(TriangleCountServiceHandle::new(Arc::new(
+            Counts::default()
+                .with("box", 12, true)
+                .with("round", 480, false),
+        )))
+        .unwrap();
+    let read = |local: &str| {
+        common::measured_cited(&services, &project, &id(local), "triangle_count").unwrap()
+    };
+    assert_eq!(read("round"), Some(((480.0, 480.0), false)));
+    assert_eq!(read("box"), Some(((12.0, 12.0), true)));
+}
+
 /// A tessellation's count follows the host's chord budget, and says so.
 #[test]
 fn a_tessellated_count_says_it_depends_on_the_tessellation() {

@@ -68,7 +68,9 @@ fn count(
         .count();
     #[allow(clippy::cast_precision_loss)]
     let counted = counted as f64;
-    Ok(Measurement::Value {
+    // Counted over stated elevations, which the property service answers
+    // only with exact evidence: an exact count.
+    Ok(Measurement::Rounded {
         lower: counted,
         upper: counted,
         dimension: None,

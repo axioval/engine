@@ -741,6 +741,41 @@ fn a_role_selector_of_the_wrong_type_is_refused() {
     );
 }
 
+/// Guard edges are measured from exact evidence only: the service contract
+/// refuses an approximate measurement, so no tessellated edge is ever
+/// listed, and an exact one lists exact members.
+#[test]
+fn approximate_guard_edges_are_never_measured() {
+    use axioval_engine::{CapabilityRegistry, measured_members};
+    let tall = || edge(vec![barrier(0.0, 1.2, [0.0, 1.0], None)], vec![], vec![]);
+    let approximate = Evidence {
+        source: source(),
+        locator: "guard:mesh".into(),
+        exact: false,
+    };
+    assert!(matches!(
+        GuardEvidence::try_new(vec![tall()], 1, approximate),
+        Err(GuardError::InexactEvidence)
+    ));
+    let project = Project::new(vec![Object::new(oid("slab-1"), "slab")]).unwrap();
+    let mut services = ServiceRegistry::new();
+    services
+        .register(GuardServiceHandle::new(Arc::new(Stub(Ok(tall())))))
+        .unwrap();
+    axioval_rules::register_builtins(CapabilityRegistry::new())
+        .unwrap()
+        .install_measured(&mut services, &project);
+    let edges = measured_members(
+        &services,
+        &oid("slab-1"),
+        "guard_edges;barrier_gap=0.1;platform_gap=0.1;landing_gap=0.3;landing_width=1;\
+         climb_distance=0.3;climb_side=0.1",
+    )
+    .unwrap();
+    assert_eq!(edges.len(), 1);
+    assert!(edges[0].exact);
+}
+
 /// `horizontal-guard`'s decision as an expression over the measured edges:
 /// an edge is guarded when its barriers reach the height along all of it and
 /// nothing beside them defeats them, or, reached by barriers along at most

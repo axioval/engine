@@ -18,9 +18,20 @@ use crate::properties::PropertyResolutionError;
 use crate::{RuleContext, ServiceRegistry};
 
 /// What a provider measured.
+///
+/// A provider states the exactness of a value by the variant it answers;
+/// none is ever inferred from a point, since a tessellation measures points
+/// too. [`Measurement::Value`] is never exact, [`Measurement::Rounded`]
+/// always, [`Measurement::Cited`] as its `exact` says. A provider measuring
+/// from evidence answers exact only when every evidence it measured from is
+/// exact (`crate::Evidence::exact`), and rounds any arithmetic of its own
+/// outward.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Measurement {
-    /// A value sure to lie in `[lower, upper]`, a point when exact.
+    /// A value sure to lie in `[lower, upper]` whose evidence is never
+    /// exact, a point included: an approximation, or a value whose
+    /// exactness the provider does not state. As a member's field it is
+    /// exact as the member states ([`MeasuredMember::exact`]).
     Value {
         /// The least value it may have.
         lower: f64,
@@ -47,7 +58,9 @@ pub enum Measurement {
     },
     /// A value whose evidence is exact exactly when `exact` says so, as
     /// the capability measuring it cites its own: a count of what a search
-    /// found, say.
+    /// found, say, or a share whose interval holds an undecided cover
+    /// measured on exact evidence. A member's field cited inexact is
+    /// inexact whatever the member states.
     Cited {
         /// The least value it may have.
         lower: f64,
@@ -96,7 +109,8 @@ pub struct MeasuredMember {
     pub certain: bool,
     /// Whether the measurement it comes from is exact: its fields' evidence
     /// is then exact, an interval holding only the rounding of exact
-    /// arithmetic.
+    /// arithmetic, unless a field is cited inexact itself. Stated by the
+    /// provider from the evidence it measured from, never from its values.
     pub exact: bool,
     /// Every field its list declares, by name.
     pub fields: BTreeMap<&'static str, MemberValue>,

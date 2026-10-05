@@ -85,14 +85,66 @@ fn unknown(reason: String) -> Unavailable {
     (NotEvaluatedReason::IncompleteEvidence, reason)
 }
 
-/// A value computed exactly from what both sources state.
-fn stated(value: f64, dimension: Option<QuantityDimension>, locator: String) -> Measurement {
-    Measurement::Value {
-        lower: value,
-        upper: value,
-        dimension,
-        locator,
-    }
+/// How far a value computed from stated coordinates may lie from the exact
+/// one, in units in the last place: relative to the value, and absolute (an
+/// angle between two plan directions cancels in its cross product).
+#[derive(Clone, Copy)]
+struct Rounding {
+    relative: f64,
+    absolute: f64,
+}
+
+/// A flag or a count: no arithmetic, no rounding.
+const COUNTED: Rounding = Rounding {
+    relative: 0.0,
+    absolute: 0.0,
+};
+/// A difference of two scales.
+const DIFFERENCE: Rounding = Rounding {
+    relative: 1.0,
+    absolute: 0.0,
+};
+/// A distance between two points: differences, squares, a sum and a root.
+const DISTANCE: Rounding = Rounding {
+    relative: 4.0,
+    absolute: 0.0,
+};
+/// The rotation between two axis triples, from the norm of their
+/// difference.
+const ROTATION: Rounding = Rounding {
+    relative: 8.0,
+    absolute: 0.0,
+};
+/// The angle between two unit plan directions, from a cross and a dot
+/// product.
+const PLAN_ANGLE: Rounding = Rounding {
+    relative: 4.0,
+    absolute: 4.0,
+};
+
+/// A value computed from what both sources state, widened by its
+/// computation's rounding, so it holds the exact one: cited exact when both
+/// coordinate systems are (an identical statement stays an exact zero).
+fn stated(
+    value: f64,
+    rounding: Rounding,
+    dimension: Option<QuantityDimension>,
+    (locator, exact): (String, bool),
+) -> Measurement {
+    let margin = if value == 0.0 && rounding.absolute == 0.0 {
+        0.0
+    } else {
+        f64::EPSILON * rounding.relative.mul_add(value.abs(), rounding.absolute)
+    };
+    let (lower, upper) = if margin == 0.0 {
+        (value, value)
+    } else {
+        (
+            (value - margin).next_down().max(0.0),
+            (value + margin).next_up(),
+        )
+    };
+    crate::measured_kinds::interval((lower, upper), dimension, exact, locator)
 }
 
 impl CoordinateMeasures {
@@ -108,6 +160,7 @@ impl CoordinateMeasures {
             own.evidence().locator,
             base.evidence().locator
         );
+        let exact = own.evidence().exact && base.evidence().exact;
         let absent = |what: &str| Measurement::Absent {
             locator: format!("{locator}: {what} is stated by neither source"),
         };
@@ -118,15 +171,16 @@ impl CoordinateMeasures {
             let system = if of == Some("reference") { &base } else { &own };
             return Ok(stated(
                 if system.map().is_some() { 1.0 } else { 0.0 },
+                COUNTED,
                 None,
-                locator,
+                (locator, exact),
             ));
         }
         let frame = |compared: Compared<(f64, f64)>, what: &str| match compared {
             Compared::Both((shift, turn)) => Ok(if call.name() == COORDINATE_SHIFT {
-                stated(shift, length, locator.clone())
+                stated(shift, DISTANCE, length, (locator.clone(), exact))
             } else {
-                stated(turn, angle, locator.clone())
+                stated(turn, ROTATION, angle, (locator.clone(), exact))
             }),
             Compared::Neither => Ok(absent(what)),
             Compared::Unknown(reason) => Err(unknown(reason)),
@@ -136,7 +190,7 @@ impl CoordinateMeasures {
             (_, Some("site")) => return frame(sites(&base, &own), "a site placement"),
             (_, Some("north")) => {
                 return match true_norths(&base, &own) {
-                    Compared::Both(turn) => Ok(stated(turn, angle, locator)),
+                    Compared::Both(turn) => Ok(stated(turn, PLAN_ANGLE, angle, (locator, exact))),
                     Compared::Neither => Ok(absent("true north")),
                     Compared::Unknown(reason) => Err(unknown(reason)),
                 };
@@ -160,13 +214,14 @@ impl CoordinateMeasures {
         Ok(match call.name() {
             MAP_TARGET_CHANGE => stated(
                 if compared.target_differs { 1.0 } else { 0.0 },
+                COUNTED,
                 None,
-                locator,
+                (locator, exact),
             ),
-            MAP_SCALE_CHANGE => stated(compared.scale, None, locator),
-            COORDINATE_TURN => stated(compared.turn, angle, locator),
+            MAP_SCALE_CHANGE => stated(compared.scale, DIFFERENCE, None, (locator, exact)),
+            COORDINATE_TURN => stated(compared.turn, PLAN_ANGLE, angle, (locator, exact)),
             _ => match compared.shift {
-                Compared::Both(shift) => stated(shift, length, locator),
+                Compared::Both(shift) => stated(shift, DISTANCE, length, (locator, exact)),
                 Compared::Neither => absent("a map offset"),
                 Compared::Unknown(reason) => return Err(unknown(reason)),
             },

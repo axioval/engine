@@ -168,9 +168,16 @@ impl SpacingMeasures {
             path(call, "footprint_path")?.related(context, &object.id, &universe)?;
         let mut largest: Option<(f64, f64)> = None;
         let mut locators = Vec::new();
+        // Cited as exactly as every pair and area it was measured from.
+        let mut exact = unknown.is_empty()
+            && pairs
+                .iter()
+                .flat_map(|pair| &pair.evidence)
+                .all(|evidence| evidence.exact);
         for footprint in footprints {
             let ((lower, upper), cited) =
                 uncovered(areas, &footprint, (&least, &most), unknown.is_empty())?;
+            exact &= cited.iter().all(|evidence| evidence.exact);
             locators.extend(cited.into_iter().map(|evidence| evidence.locator));
             largest = Some(largest.map_or((lower, upper), |(low, high)| {
                 (low.max(lower), high.max(upper))
@@ -185,12 +192,12 @@ impl SpacingMeasures {
                 ),
             )
         })?;
-        Ok(Measurement::Value {
-            lower,
-            upper,
-            dimension: Some(QuantityDimension::Area),
-            locator: locators.join("; "),
-        })
+        Ok(crate::measured_kinds::interval(
+            (lower, upper),
+            Some(QuantityDimension::Area),
+            exact,
+            locators.join("; "),
+        ))
     }
 }
 

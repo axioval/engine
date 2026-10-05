@@ -410,6 +410,27 @@ fn space_elevations_are_judged_three_valued_and_declared_with_the_spaces() {
     }
 }
 
+/// The highest level's rise measured from a tessellated wall is never
+/// exact; from an exact one it is.
+#[test]
+fn a_rise_measured_on_a_tessellation_is_inexact() {
+    let name = "level_rise;levels=storey;order=Levels/Elevation;anchor=aggregates;\
+                contents=contains;content_kinds=wall";
+    for (slack, exact) in [(0.001, false), (0.0, true)] {
+        let (project, mut services) = model().services();
+        services
+            .register(VerticalExtentServiceHandle::new(Arc::new(
+                extents().with("wall-og", 3.0, 6.5, slack),
+            )))
+            .unwrap();
+        let ((lower, upper), cited) = common::measured_cited(&services, &project, &id("og"), name)
+            .unwrap()
+            .unwrap();
+        assert!(lower <= 3.5 && 3.5 <= upper, "{lower}..{upper}");
+        assert_eq!(cited, exact, "slack {slack}");
+    }
+}
+
 /// `level_rise` measured from contents, each space's height against its
 /// level's, and each space's elevation against the `prevailing_elevation`
 /// of its level's spaces reach `level-spacing`'s verdicts: storeys and

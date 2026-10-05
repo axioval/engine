@@ -135,12 +135,40 @@ fn extreme(all: &[&Candidate], farthest: bool) -> Result<Measurement, String> {
             if farthest { "farthest" } else { "nearest" }
         ));
     }
-    Ok(Measurement::Value {
+    Ok(Measurement::Cited {
         lower: lower.max(0.0),
         upper,
         dimension: Some(QuantityDimension::Length),
         locator: String::new(),
+        // Exact as the counterparts that may be the nearest (or farthest)
+        // were measured; one surely beyond it decides nothing.
+        exact: measured_exactly(
+            related
+                .iter()
+                .map(|candidate| **candidate)
+                .filter(|candidate| {
+                    let (low, high) = interval(candidate);
+                    if farthest {
+                        high >= lower
+                    } else {
+                        low <= upper
+                    }
+                }),
+        ),
     })
+}
+
+/// Whether every possible counterpart measured was measured exactly, as
+/// `distance` cites its verdicts: an unmeasurable counterpart widens the
+/// value without evidence of its own.
+fn measured_exactly<'a>(candidates: impl Iterator<Item = &'a Candidate>) -> bool {
+    candidates
+        .filter(|candidate| candidate.possibly_in_scope())
+        .all(|candidate| {
+            candidate.measured.as_ref().map_or(true, |measured| {
+                measured.evidence.iter().all(|evidence| evidence.exact)
+            })
+        })
 }
 
 /// How many counterparts surely and possibly lie within `[from, radius]`.
@@ -165,26 +193,15 @@ fn count(all: &[&Candidate], from: f64, radius: f64) -> Measurement {
         }
         if upper >= from && lower <= radius {
             possible += 1;
-            exact &= candidate.measured.as_ref().map_or(true, |measured| {
-                measured.evidence.iter().all(|evidence| evidence.exact)
-            });
+            exact &= measured_exactly(std::iter::once(*candidate));
         }
     }
-    let (lower, upper) = (f64::from(sure), f64::from(possible));
-    if exact {
-        Measurement::Rounded {
-            lower,
-            upper,
-            dimension: None,
-            locator: String::new(),
-        }
-    } else {
-        Measurement::Value {
-            lower,
-            upper,
-            dimension: None,
-            locator: String::new(),
-        }
+    Measurement::Cited {
+        lower: f64::from(sure),
+        upper: f64::from(possible),
+        dimension: None,
+        locator: String::new(),
+        exact,
     }
 }
 

@@ -233,6 +233,18 @@ and `.fields.<name>` a field (`$.inputs.operands[1]`: `expression.not`
 needs the input `operand`). A node the contract refuses is named by its
 block's path with the contract's reason.
 
+## Templates
+
+A built-in capability built as a [template](./templates.md) lists each of
+its forms in the catalogue as an expression and its block tree
+(`capabilities[].template.requirements[].blocks`), so an editor can show
+what the capability composes. They still hold the template's slots
+(`{axis}`) and `parameter` reads, kept as written. A rule bound to the
+capability forks (`axioval_rules::templates::fork`) into an `expression`
+rule with every slot filled and every parameter folded in, whose measured
+reads are canonical `measured.` blocks: the tree an editor opens as the
+starting point of a new rule.
+
 ## Fixtures
 
 `crates/contracts/ir/tests/blocks/*.json` pairs an expression with its

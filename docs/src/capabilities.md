@@ -1999,7 +1999,7 @@ Checks on how a model is built rather than on what it designs. Each sub-check ma
 | Space-boundary coverage of a space's surface | `space-boundary-coverage` with `minimum_covered_share`, `maximum_uncovered_area` and/or `maximum_overlap_area`. |
 | Door swing direction | `door-swing`: the swing the declared operation type and placement give, against the spaces the model relates to the door, such as `swing_not_into` corridors or `swing_into` the rooms a corridor serves. |
 
-`axioval:capability.body-extent` measures each selected object's body along one of its own placement axes, through `ObjectFrameService` (the frame) and `VerticalExtentService` (the extent along the frame's axis), so it needs both a semantic adapter that states placements and a geometry adapter.
+`axioval:capability.body-extent` measures each selected object's body along one of its own placement axes, through `ObjectFrameService` (the frame) and `VerticalExtentService` (the extent along the frame's axis), so it needs both a semantic adapter that states placements and a geometry adapter. It runs as a [template](./templates.md): the measured `body_extent` judged by the generic range judge, its outside contract unchanged, and a rule bound to it can be forked into the `expression` rule it composes.
 
 | Parameter | Kind | Meaning |
 |---|---|---|

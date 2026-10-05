@@ -413,6 +413,7 @@ ignoring ASCII case):
 | `stack_distance;measure=top_to_top\|bottom_to_bottom\|top_to_bottom;slabs=<kinds>;ratio=<share>` | the distance to the next slab up in the slab's stack, none where none stacks above | built in, over `VerticalExtentService`, `PlanAreaService` |
 | `shelf_length`, `shelf_clear_height` `;depth=…;horizontal=…;vertical=…;bottom=…;top=…;clearance=…;access=<steps>[;doors=<kinds>][;openings=<kinds>]` | a space's running metres of shelving and its clear height, as `shelf-capacity` measures them | built in, over `LinearQuantityService` |
 | `body_extent;axis=right\|forward\|up` | the body's depth along one of its own placement axes, as `body-extent` measures it | built in, over `ObjectFrameService`, `VerticalExtentService` |
+| `body_position;axis=right\|forward\|up;end=low\|high` | where the body begins or ends along one of its own placement axes, from the origin of the coordinates along it | built in, over `ObjectFrameService`, `VerticalExtentService` |
 | `triangle_count` | how many triangles the host's mesh of the body holds | built in, over `TriangleCountService` |
 | `coordinate_shift;of=world\|site\|map`, `coordinate_turn;of=world\|site\|north\|map`, `map_scale_change`, `map_target_change`, `map_conversion[;of=own\|reference]` `[;reference=<discipline>]` | how the object's source's coordinate system departs from the reference source's | built in, over `CoordinateSystemService` |
 | `station`, `offset[;side=left\|right]`, `height_above_gradient` `;alignment=<kinds>[;path=<steps>]` | the reference point's station along an alignment, its signed plan offset from it and its height above the gradient line, each a length | `AlignmentService::measure_alignment_position`, `TypeHierarchyService`, `RelationshipSelectionService` for a path |
@@ -1184,6 +1185,13 @@ incomplete evidence), and cited as exactly as its frame and extent are.
 tolerance, or the extent within a range, reaches the capability's verdicts
 on its fixtures; a stated length that is absent fails, one that is no
 length is invalid evidence.
+
+`body_position;axis=…;end=low|high` is the position of the body's lowest
+or highest point projected onto the same axis, measured with the extent and
+refused for the same reasons. `body_extent` is the high less the low end;
+the positions are the magnitudes the binary rounding of that difference
+scales with, which the `body-extent` template's rounding allowance reads
+(see [Capability templates](./templates.md)).
 
 `triangle_count` is the host's count of the body's mesh. A count of a
 tessellation is a point whose evidence is not exact

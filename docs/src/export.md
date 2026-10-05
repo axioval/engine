@@ -136,6 +136,15 @@ differently. A `deviation` grades findings and is refused like any
 grading; a `message` only words a finding, which a profile leaves out of
 the comparison as a presentation parameter.
 
+### Templates and forked rules
+
+A rule bound to a capability built as a [template](./templates.md) is
+still a rule of that capability with its parameters: a profile writes it,
+or refuses it, exactly as before the capability was rebuilt. A rule forked
+from it is an `expression` rule like any other: exported only where the
+profile's `expression_kinds` state every node of its requirement, and
+otherwise refused naming the first node it cannot state.
+
 ## A host-owned format
 
 A host application implements its own format's profile in its own crate,

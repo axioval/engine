@@ -125,6 +125,25 @@ impl MetricDirection {
     }
 }
 
+/// Whether `x`, `y` and `z` are a right-handed orthonormal triple, within
+/// rounding: the one test every frame of metric directions passes
+/// (`MetricFrame`, `CoordinateFrame`).
+pub(crate) fn right_handed_orthonormal(
+    x: MetricDirection,
+    y: MetricDirection,
+    z: MetricDirection,
+) -> bool {
+    const ORTHOGONAL_TOLERANCE: f64 = 1.0e-9;
+    let [x0, x1, x2] = x.components();
+    let [y0, y1, y2] = y.components();
+    let [z0, z1, z2] = z.components();
+    let handedness = (x1 * y2 - x2 * y1) * z0 + (x2 * y0 - x0 * y2) * z1 + (x0 * y1 - x1 * y0) * z2;
+    x.dot(y).abs() <= ORTHOGONAL_TOLERANCE
+        && x.dot(z).abs() <= ORTHOGONAL_TOLERANCE
+        && y.dot(z).abs() <= ORTHOGONAL_TOLERANCE
+        && handedness >= 1.0 - ORTHOGONAL_TOLERANCE
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct MetricFrame {
     origin: MetricPoint,
@@ -139,17 +158,7 @@ impl MetricFrame {
         forward: MetricDirection,
         up: MetricDirection,
     ) -> Result<Self, FreeSpaceError> {
-        const ORTHOGONAL_TOLERANCE: f64 = 1.0e-9;
-        let [rx, ry, rz] = right.components();
-        let [fx, fy, fz] = forward.components();
-        let [ux, uy, uz] = up.components();
-        let handedness =
-            (ry * fz - rz * fy) * ux + (rz * fx - rx * fz) * uy + (rx * fy - ry * fx) * uz;
-        if right.dot(forward).abs() > ORTHOGONAL_TOLERANCE
-            || right.dot(up).abs() > ORTHOGONAL_TOLERANCE
-            || forward.dot(up).abs() > ORTHOGONAL_TOLERANCE
-            || handedness < 1.0 - ORTHOGONAL_TOLERANCE
-        {
+        if !right_handed_orthonormal(right, forward, up) {
             return Err(FreeSpaceError::InvalidMetricFrame);
         }
         Ok(Self {

@@ -75,21 +75,8 @@ impl CoordinateFrame {
         y: MetricDirection,
         z: MetricDirection,
     ) -> Result<Self, CoordinateSystemError> {
-        const ORTHOGONAL_TOLERANCE: f64 = 1.0e-9;
-        if !origin_metres.iter().all(|value| value.is_finite()) {
-            return Err(CoordinateSystemError::InvalidMeasurement);
-        }
-        let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-        let [first, second, third] = [x.components(), y.components(), z.components()];
-        let cross = [
-            first[1] * second[2] - first[2] * second[1],
-            first[2] * second[0] - first[0] * second[2],
-            first[0] * second[1] - first[1] * second[0],
-        ];
-        if dot(first, second).abs() > ORTHOGONAL_TOLERANCE
-            || dot(first, third).abs() > ORTHOGONAL_TOLERANCE
-            || dot(second, third).abs() > ORTHOGONAL_TOLERANCE
-            || dot(cross, third) < 1.0 - ORTHOGONAL_TOLERANCE
+        if !origin_metres.iter().all(|value| value.is_finite())
+            || !crate::free_space::right_handed_orthonormal(x, y, z)
         {
             return Err(CoordinateSystemError::InvalidMeasurement);
         }

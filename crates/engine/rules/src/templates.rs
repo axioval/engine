@@ -170,6 +170,17 @@ fn check(check: &Check, rule: &CompiledRule, template: &Template) -> Result<(), 
             }
         }
         Check::Length { parameter } => length(rule, parameter).map(|_| ()),
+        Check::Count { parameter } => {
+            let required = template
+                .parameters
+                .iter()
+                .any(|descriptor| descriptor.name == *parameter && descriptor.required);
+            match Parameters(rule).integer(parameter)? {
+                None if required => Err(invalid(format!("parameter `{parameter}` is required"))),
+                Some(value) if value < 0 => Err(invalid(format!("`{parameter}` is negative"))),
+                _ => Ok(()),
+            }
+        }
         Check::Exclusive {
             one,
             other,
@@ -433,6 +444,8 @@ struct Read {
     values: BTreeMap<&'static str, Value>,
     stated: BTreeMap<&'static str, Option<PropertyValue>>,
     evidence: Vec<Evidence>,
+    /// The values read from evidence that is not exact.
+    inexact: std::collections::BTreeSet<&'static str>,
     bound: Option<String>,
     why: Option<String>,
 }
@@ -586,6 +599,7 @@ fn placeholder(plan: &Plan<'_>, read: &Read, key: &str) -> Option<String> {
                     .get(parameter)
                     .and_then(Constant::number)
                     .is_some_and(|value| value > 0.0),
+                Some(Condition::Inexact { value }) => read.inexact.contains(value),
             };
             return Some(if holds {
                 render(plan, read, text.text)
@@ -658,7 +672,14 @@ fn judge_object(
     let mut read = Read::default();
     for (step, expression) in &plan.values {
         let evaluation = evaluate(expression, step.name, &mut leaves);
+        let before = read.evidence.len();
         read.evidence.extend(evidence_of(&evaluation));
+        if read.evidence[before..]
+            .iter()
+            .any(|evidence| !evidence.exact)
+        {
+            read.inexact.insert(step.name);
+        }
         let stated = property_read(expression)
             .and_then(|(set, name)| leaves.stated(set, name))
             .map(|stated| stated.0);

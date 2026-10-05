@@ -98,6 +98,10 @@ pub enum Check {
     /// otherwise `` `<parameter>` is negative `` or
     /// `` `<parameter>` is not a length ``.
     Length { parameter: &'static str },
+    /// An integer parameter is stated where the descriptor requires it,
+    /// and is at least zero: otherwise `` parameter `<parameter>` is
+    /// required `` or `` `<parameter>` is negative ``.
+    Count { parameter: &'static str },
     /// No parameter of `one` is stated together with one of `other`.
     Exclusive {
         one: &'static [&'static str],
@@ -139,6 +143,7 @@ pub struct Services {
 pub enum Service {
     ObjectFrame,
     VerticalExtent,
+    TriangleCount,
 }
 
 impl Service {
@@ -149,6 +154,9 @@ impl Service {
             Self::ObjectFrame => services.get::<crate::ObjectFrameServiceHandle>().is_some(),
             Self::VerticalExtent => services
                 .get::<crate::VerticalExtentServiceHandle>()
+                .is_some(),
+            Self::TriangleCount => services
+                .get::<crate::TriangleCountServiceHandle>()
                 .is_some(),
         }
     }
@@ -171,6 +179,9 @@ pub struct Text {
 pub enum Condition {
     /// The parameter (or its default) is a number above zero.
     Positive { parameter: &'static str },
+    /// The value was read from evidence that is not exact: a count of a
+    /// tessellation, a measurement within a chord deviation.
+    Inexact { value: &'static str },
 }
 
 /// One composition of a template.
@@ -325,7 +336,7 @@ impl Decision {
     /// expression and parameters read as `parameter`. A
     /// [`Decision::Within`] is `value ≥ minimum − allowance` and
     /// `value ≤ maximum + allowance`, the allowance
-    /// `4ε · max(|m|…)` over its magnitudes. Evaluated by the expression
+    /// `4ε · max(|m|…)` over its magnitudes, none without one. Evaluated by the expression
     /// evaluator's sound interval arithmetic, it reaches the judge's
     /// verdicts except where a value lies within a unit in the last place
     /// of the widened bound, which the expression leaves undecided.
@@ -372,7 +383,9 @@ impl Decision {
                         },
                     })
                 };
-                let allowance = Expression::Multiply {
+                // Without a magnitude to scale with there is no allowance:
+                // the bound is compared as it is.
+                let allowance = (!rounding.is_empty()).then(|| Expression::Multiply {
                     left: boxed(Expression::Literal {
                         value: ScalarValue::Number {
                             value: ROUNDING_ULPS,
@@ -390,17 +403,26 @@ impl Decision {
                         label: None,
                     }),
                     label: Some("rounding allowance".into()),
+                });
+                let widened = |bound: Expression, up: bool| match allowance.clone() {
+                    None => bound,
+                    Some(allowance) if up => Expression::Add {
+                        left: boxed(bound),
+                        right: boxed(allowance),
+                        label: None,
+                    },
+                    Some(allowance) => Expression::Subtract {
+                        left: boxed(bound),
+                        right: boxed(allowance),
+                        label: None,
+                    },
                 };
                 let mut operands = Vec::new();
                 if let Some(terms) = minimum {
                     operands.push(Expression::Compare {
                         operator: ExpressionComparison::GreaterThanOrEquals,
                         left: boxed(value(subject)),
-                        right: boxed(Expression::Subtract {
-                            left: boxed(sum(terms)),
-                            right: boxed(allowance.clone()),
-                            label: None,
-                        }),
+                        right: boxed(widened(sum(terms), false)),
                         case_sensitive: true,
                         label: Some("at least the lower bound".into()),
                     });
@@ -409,11 +431,7 @@ impl Decision {
                     operands.push(Expression::Compare {
                         operator: ExpressionComparison::LessThanOrEquals,
                         left: boxed(value(subject)),
-                        right: boxed(Expression::Add {
-                            left: boxed(sum(terms)),
-                            right: boxed(allowance),
-                            label: None,
-                        }),
+                        right: boxed(widened(sum(terms), true)),
                         case_sensitive: true,
                         label: Some("at most the upper bound".into()),
                     });
@@ -424,5 +442,44 @@ impl Decision {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn within(rounding: Vec<Magnitude>) -> Decision {
+        Decision::Within {
+            value: "count",
+            minimum: None,
+            maximum: Some(vec![Term::plus(Operand::Parameter("maximum"))]),
+            rounding,
+        }
+    }
+
+    /// Without a magnitude to scale with, a bound is compared as it is;
+    /// with one, it is widened by the rounding allowance.
+    #[test]
+    fn a_bound_is_widened_only_by_a_magnitude() {
+        let value = |name: &str| Expression::Derived {
+            name: name.to_owned(),
+            label: None,
+        };
+        let plain = serde_json::to_string(&within(Vec::new()).expression(&value)).unwrap();
+        assert!(!plain.contains("rounding allowance"), "{plain}");
+        assert!(
+            plain.contains("\"right\":{\"kind\":\"parameter\",\"name\":\"maximum\"}"),
+            "{plain}"
+        );
+        let widened = serde_json::to_string(
+            &within(vec![Magnitude {
+                end: End::Upper,
+                operand: Operand::Value("count"),
+            }])
+            .expression(&value),
+        )
+        .unwrap();
+        assert!(widened.contains("rounding allowance"), "{widened}");
     }
 }

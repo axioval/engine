@@ -275,20 +275,18 @@ impl Whole<'_, '_, '_> {
     /// flight's top, against the maximum. A flight that may be missing can
     /// only raise it: too high stands, a pass does not.
     fn total_rise(&self, maximum: f64) -> Check {
-        let Some(lowest) = self.ok.iter().map(|flight| flight.base()).reduce(lower_of) else {
+        let Some(Rise {
+            lower,
+            upper,
+            lowest,
+            highest,
+        }) = rise(self.ok.iter().copied())
+        else {
             return Check::Undecided(format!(
                 "the stair's rise is not measured: {}",
                 self.missing.join("; ")
             ));
         };
-        let highest = self
-            .ok
-            .iter()
-            .map(|flight| flight.top())
-            .reduce(higher_of)
-            .unwrap_or(lowest);
-        let lower = (highest.lower_metres() - lowest.upper_metres()).next_down();
-        let upper = (highest.upper_metres() - lowest.lower_metres()).next_up();
         let scale = highest
             .upper_metres()
             .abs()
@@ -523,6 +521,33 @@ fn meets(lower: &TreadFlight, upper: &TreadFlight) -> bool {
 
 fn middle(value: ElevationInterval) -> f64 {
     f64::midpoint(value.lower_metres(), value.upper_metres())
+}
+
+/// A whole stair's rise from its lowest flight's base to its highest
+/// flight's top, `[lower, upper]` sure to hold it, with those two
+/// elevations.
+pub(super) struct Rise {
+    pub(super) lower: f64,
+    pub(super) upper: f64,
+    pub(super) lowest: ElevationInterval,
+    pub(super) highest: ElevationInterval,
+}
+
+/// The rise of the stair `flights` make up, or `None` without a flight:
+/// the one computation `maximum_total_rise` judges and the measured
+/// `stair_rise` answers.
+pub(super) fn rise<'f>(flights: impl Iterator<Item = &'f TreadFlight> + Clone) -> Option<Rise> {
+    let lowest = flights.clone().map(TreadFlight::base).reduce(lower_of)?;
+    let highest = flights
+        .map(TreadFlight::top)
+        .reduce(higher_of)
+        .unwrap_or(lowest);
+    Some(Rise {
+        lower: (highest.lower_metres() - lowest.upper_metres()).next_down(),
+        upper: (highest.upper_metres() - lowest.lower_metres()).next_up(),
+        lowest,
+        highest,
+    })
 }
 
 /// The interval holding the lower of two elevations.

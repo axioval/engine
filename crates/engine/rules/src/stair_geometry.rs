@@ -448,6 +448,18 @@ impl Selections {
     }
 }
 
+/// A step's length `2r + g`, an interval sure to hold it: the one
+/// computation `step_length_*` judges and the `steps` member list's
+/// `step_length` measures.
+pub(crate) fn step_length(
+    riser: MeasuredInterval,
+    going: MeasuredInterval,
+) -> Option<MeasuredInterval> {
+    let lower = 2.0f64.mul_add(riser.lower(), going.lower()).next_down();
+    let upper = 2.0f64.mul_add(riser.upper(), going.upper()).next_up();
+    MeasuredInterval::try_new(lower, upper).ok()
+}
+
 /// A few units in the last place of the largest magnitude involved: decimal
 /// coordinates read in binary differ from what was meant by that much.
 fn slack(scale: f64) -> f64 {
@@ -1586,11 +1598,7 @@ fn stair_checks(
         let steps: Vec<MeasuredInterval> = goings
             .iter()
             .zip(risers.iter().skip(1))
-            .filter_map(|(going, riser)| {
-                let lower = 2.0f64.mul_add(riser.lower(), going.lower()).next_down();
-                let upper = 2.0f64.mul_add(riser.upper(), going.upper()).next_up();
-                MeasuredInterval::try_new(lower, upper).ok()
-            })
+            .filter_map(|(going, riser)| step_length(*riser, *going))
             .collect();
         push(every(
             "step length (2r + g)",

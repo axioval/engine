@@ -6,10 +6,10 @@
 use std::collections::BTreeMap;
 
 use axioval_engine::{
-    ElevationInterval, HandrailEvidence, HandrailRequest, LandingRequest, MeasuredInterval,
-    MeasuredMember, MeasuredProvider, Measurement, MemberValue, PropertyResolutionError,
-    RailMeasurement, RailSide, RiserClosure, RuleContext, TreadFlight, TreadFlightRequest,
-    WalkingEnd, WalkingStretch, WalkingSurfaceServiceHandle,
+    HandrailEvidence, HandrailRequest, LandingRequest, MeasuredInterval, MeasuredMember,
+    MeasuredProvider, Measurement, MemberValue, PropertyResolutionError, RailMeasurement, RailSide,
+    RiserClosure, RuleContext, TreadFlight, TreadFlightRequest, WalkingEnd, WalkingStretch,
+    WalkingSurfaceServiceHandle,
 };
 use axioval_ir::measured::{MeasuredArgument, MeasuredCall};
 use axioval_ir::{Evidence, ObjectId, QuantityDimension};
@@ -64,13 +64,6 @@ fn number(
         Some(interval) => value(interval, dimension, locator),
         None => Measurement::Absent { locator },
     })
-}
-
-/// `2r + g`, an interval sure to hold it, as `stair-geometry` computes it.
-fn step_length(riser: MeasuredInterval, going: MeasuredInterval) -> Option<MeasuredInterval> {
-    let lower = 2.0f64.mul_add(riser.lower(), going.lower()).next_down();
-    let upper = 2.0f64.mul_add(riser.upper(), going.upper()).next_up();
-    MeasuredInterval::try_new(lower, upper).ok()
 }
 
 fn walking(
@@ -133,7 +126,7 @@ fn steps(flight: &TreadFlight, object: &ObjectId) -> Vec<MeasuredMember> {
             fields.insert(
                 "step_length",
                 number(
-                    going.and_then(|going| step_length(risers[index], going)),
+                    going.and_then(|going| super::step_length(risers[index], going)),
                     LENGTH,
                     at("step_length"),
                 ),
@@ -500,31 +493,13 @@ fn stair_rise(
                 .map_err(|error| refused(name, part, &error))?,
         );
     }
-    let (Some(lowest), Some(highest)) = (
-        flights.iter().map(TreadFlight::base).reduce(|a, b| {
-            ElevationInterval::try_new(
-                a.lower_metres().min(b.lower_metres()),
-                a.upper_metres().min(b.upper_metres()),
-            )
-            .unwrap_or(a)
-        }),
-        flights.iter().map(TreadFlight::top).reduce(|a, b| {
-            ElevationInterval::try_new(
-                a.lower_metres().max(b.lower_metres()),
-                a.upper_metres().max(b.upper_metres()),
-            )
-            .unwrap_or(a)
-        }),
-    ) else {
+    let Some(rise) = super::whole::rise(flights.iter()) else {
         return Err(PropertyResolutionError::Incomplete(format!(
             "`{name}` of {object}: the path reaches no flight"
         )));
     };
-    let rise = MeasuredInterval::try_new(
-        (highest.lower_metres() - lowest.upper_metres()).next_down(),
-        (highest.upper_metres() - lowest.lower_metres()).next_up(),
-    )
-    .map_err(|_| PropertyResolutionError::InvalidValue)?;
+    let rise = MeasuredInterval::try_new(rise.lower, rise.upper)
+        .map_err(|_| PropertyResolutionError::InvalidValue)?;
     let exact = flights.iter().all(|flight| flight.evidence().exact);
     Ok(measured(rise, exact, format!("{name}:{object}")))
 }

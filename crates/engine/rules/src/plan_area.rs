@@ -294,39 +294,43 @@ impl Bound {
 
 /// Where an interval stands against bounds that may exclude their value: a
 /// verdict needs the whole interval on one side, and an exclusive bound
-/// fails the value it names.
+/// fails the value it names. Each bound is the one comparison every rule
+/// decides with (`axioval_engine::comparison::numbers`, exact): the end
+/// nearest to passing fails the bound or the interval does not, and the
+/// other end decides whether it passes or straddles. A value that is no
+/// number leaves the interval undecided.
 pub(crate) fn judge_bounds(
     lower: f64,
     upper: f64,
     minimum: Option<Bound>,
     maximum: Option<Bound>,
 ) -> Verdict {
-    if let Some(Bound { value, exclusive }) = minimum {
-        let text = if exclusive {
-            format!("more than {value}")
-        } else {
-            format!("at least {value}")
-        };
-        let below = |measured: f64| measured < value || (exclusive && measured <= value);
-        if below(upper) {
-            return Verdict::Fail(text);
-        }
-        if below(lower) {
-            return Verdict::Undecided(text);
-        }
-    }
-    if let Some(Bound { value, exclusive }) = maximum {
-        let text = if exclusive {
-            format!("less than {value}")
-        } else {
-            format!("at most {value}")
-        };
-        let above = |measured: f64| measured > value || (exclusive && measured >= value);
-        if above(lower) {
-            return Verdict::Fail(text);
-        }
-        if above(upper) {
-            return Verdict::Undecided(text);
+    use axioval_engine::comparison::{Order, Tolerance, numbers};
+    let bounds = [
+        minimum.map(|Bound { value, exclusive }| {
+            let (order, text) = if exclusive {
+                (Order::Greater, format!("more than {value}"))
+            } else {
+                (Order::GreaterOrEqual, format!("at least {value}"))
+            };
+            (order, value, text, upper, lower)
+        }),
+        maximum.map(|Bound { value, exclusive }| {
+            let (order, text) = if exclusive {
+                (Order::Less, format!("less than {value}"))
+            } else {
+                (Order::LessOrEqual, format!("at most {value}"))
+            };
+            (order, value, text, lower, upper)
+        }),
+    ];
+    let holds =
+        |order, end: f64, value: f64| numbers(order, (end, end), (value, value), &Tolerance::EXACT);
+    for (order, value, text, nearest, farthest) in bounds.into_iter().flatten() {
+        match (holds(order, nearest, value), holds(order, farthest, value)) {
+            (Ok(false), _) => return Verdict::Fail(text),
+            (Ok(true), Ok(true)) => {}
+            _ => return Verdict::Undecided(text),
         }
     }
     Verdict::Pass
@@ -973,4 +977,89 @@ pub(crate) fn member_areas(
     }
     sum.evidence.extend(reached.evidence);
     Ok((sum, Some((reached.decided, reached.undecided))))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Bound, Verdict, judge_bounds};
+
+    /// The range judge before it decided through the shared comparison.
+    fn replaced(lower: f64, upper: f64, minimum: Option<Bound>, maximum: Option<Bound>) -> Verdict {
+        if let Some(Bound { value, exclusive }) = minimum {
+            let text = if exclusive {
+                format!("more than {value}")
+            } else {
+                format!("at least {value}")
+            };
+            let below = |measured: f64| measured < value || (exclusive && measured <= value);
+            if below(upper) {
+                return Verdict::Fail(text);
+            }
+            if below(lower) {
+                return Verdict::Undecided(text);
+            }
+        }
+        if let Some(Bound { value, exclusive }) = maximum {
+            let text = if exclusive {
+                format!("less than {value}")
+            } else {
+                format!("at most {value}")
+            };
+            let above = |measured: f64| measured > value || (exclusive && measured >= value);
+            if above(lower) {
+                return Verdict::Fail(text);
+            }
+            if above(upper) {
+                return Verdict::Undecided(text);
+            }
+        }
+        Verdict::Pass
+    }
+
+    fn shown(verdict: &Verdict) -> String {
+        match verdict {
+            Verdict::Pass => "pass".into(),
+            Verdict::Fail(bound) => format!("fail {bound}"),
+            Verdict::Undecided(bound) => format!("undecided {bound}"),
+        }
+    }
+
+    /// Every interval (reversed and unbounded ones included) against
+    /// every pair of bounds is judged as before.
+    #[test]
+    fn the_shared_comparison_judges_bounds_as_the_range_judge_did() {
+        let values = [
+            f64::NEG_INFINITY,
+            -1.0,
+            0.0,
+            0.5,
+            1.0,
+            1.0 + f64::EPSILON,
+            2.0,
+            f64::INFINITY,
+        ];
+        let bounds: Vec<Option<Bound>> = std::iter::once(None)
+            .chain(values.iter().flat_map(|value| {
+                [false, true].map(|exclusive| {
+                    Some(Bound {
+                        value: *value,
+                        exclusive,
+                    })
+                })
+            }))
+            .collect();
+        for lower in values {
+            for upper in values {
+                for minimum in &bounds {
+                    for maximum in &bounds {
+                        assert_eq!(
+                            shown(&judge_bounds(lower, upper, *minimum, *maximum)),
+                            shown(&replaced(lower, upper, *minimum, *maximum)),
+                            "{lower} {upper} {minimum:?} {maximum:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
 }

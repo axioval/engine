@@ -76,6 +76,33 @@ fn each_compares_every_candidate_with_a_constant() {
     assert!(evaluation.not_evaluated_outcomes().is_empty());
 }
 
+/// Numbers compare through the one comparison every rule uses: a signed
+/// zero is zero, as for selectors and expressions (divergence D19 of the
+/// parity chapter: the capability once ordered `-0` below `0`).
+#[test]
+fn a_signed_zero_equals_zero() {
+    let model = rooms()
+        .value("c1", "Pset", "Offset", PropertyValue::Decimal(-0.0))
+        .value("c2", "Pset", "Offset", PropertyValue::Decimal(0.0))
+        .value("c3", "Pset", "Offset", PropertyValue::Decimal(0.0))
+        .value("c4", "Pset", "Offset", PropertyValue::Decimal(-0.0));
+    let evaluation = compare(
+        model,
+        "each",
+        "equals",
+        vec![
+            ("compared_property", property(Some("Pset"), "Offset")),
+            ("target_number", number(0.0)),
+        ],
+    );
+    assert!(
+        flagged(&evaluation).is_empty(),
+        "{:?}",
+        findings(&evaluation)
+    );
+    assert!(evaluation.not_evaluated_outcomes().is_empty());
+}
+
 #[test]
 fn a_text_list_target_is_one_of_or_none_of() {
     let allowed = compare(

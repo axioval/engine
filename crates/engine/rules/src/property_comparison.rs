@@ -14,7 +14,8 @@ use axioval_ir::{Evidence, Finding, Object, ObjectId, PropertyValue, Severity, T
 
 use crate::levels::Levels;
 use crate::selection::select_objects;
-use regex::{Regex, RegexBuilder};
+use axioval_engine::comparison::{self as shared, Order, Pattern, TextOptions, Undecided};
+use regex::Regex;
 
 use crate::support::{
     Parameters, PropertyRef, Tolerance, Traversal, Unavailable, invalid, resolve, temporal,
@@ -102,17 +103,23 @@ enum Operator {
 }
 
 impl Operator {
-    /// Whether an ordered operator holds for `ordering`; `None` for any other.
-    fn orders(self, ordering: Ordering) -> Option<bool> {
+    /// The shared comparison's order an ordered operator states; `None`
+    /// for any other.
+    fn order(self) -> Option<Order> {
         Some(match self {
-            Self::Equals => ordering.is_eq(),
-            Self::NotEquals => !ordering.is_eq(),
-            Self::Greater => ordering.is_gt(),
-            Self::GreaterOrEqual => ordering.is_ge(),
-            Self::Less => ordering.is_lt(),
-            Self::LessOrEqual => ordering.is_le(),
+            Self::Equals => Order::Equal,
+            Self::NotEquals => Order::NotEqual,
+            Self::Greater => Order::Greater,
+            Self::GreaterOrEqual => Order::GreaterOrEqual,
+            Self::Less => Order::Less,
+            Self::LessOrEqual => Order::LessOrEqual,
             _ => return None,
         })
+    }
+
+    /// Whether an ordered operator holds for `ordering`; `None` for any other.
+    fn orders(self, ordering: Ordering) -> Option<bool> {
+        self.order().map(|order| order.holds(ordering))
     }
 
     /// Whether the operator judges presence alone and takes no target.
@@ -1099,15 +1106,15 @@ fn compare_side(
 /// A `like` or `matches` pattern compiled as the property selectors compile
 /// it: anchored to the whole value, case folded unless `case_sensitive`.
 fn text_pattern(operator: Operator, pattern: &str, case_sensitive: bool) -> Result<Regex, String> {
-    let (source, kind) = if let Operator::Like = operator {
-        (crate::selection::wildcard(pattern)?, "wildcard pattern")
+    let kind = if let Operator::Like = operator {
+        Pattern::Like
     } else {
-        (format!("^(?:{pattern})$"), "regular expression")
+        Pattern::Matches
     };
-    RegexBuilder::new(&source)
-        .case_insensitive(!case_sensitive)
-        .build()
-        .map_err(|error| format!("invalid {kind}: {error}"))
+    shared::pattern(kind, pattern, case_sensitive).map_err(|error| match error {
+        shared::PatternError::Wildcard(why) => why,
+        shared::PatternError::Compile(why) => format!("invalid {}: {why}", kind.kind()),
+    })
 }
 
 /// `count` and `sum`: one number from all candidates, compared once.
@@ -1336,7 +1343,6 @@ fn compare(
     tolerance: &Tolerance,
     case_sensitive: bool,
 ) -> Result<bool, String> {
-    let equal = |ord: Ordering| operator.orders(ord).unwrap_or(false);
     match (left, right) {
         (PropertyValue::Boolean(a), PropertyValue::Boolean(b)) if exact_one(factor) => {
             match operator {
@@ -1346,22 +1352,22 @@ fn compare(
             }
         }
         (PropertyValue::String(a), PropertyValue::String(b)) if exact_one(factor) => {
-            let (a, b) = if case_sensitive {
-                (a.clone(), b.clone())
-            } else {
-                (a.to_lowercase(), b.to_lowercase())
-            };
+            let options = TextOptions::case(case_sensitive);
             match operator {
-                Operator::Equals => Ok(a == b),
-                Operator::NotEquals => Ok(a != b),
-                Operator::Contains => Ok(a.contains(&b)),
+                Operator::Equals => Ok(shared::texts(Order::Equal, a, &options.fold(b), options)),
+                Operator::NotEquals => {
+                    Ok(shared::texts(Order::NotEqual, a, &options.fold(b), options))
+                }
+                Operator::Contains => Ok(shared::contains(a, &options.fold(b), options)),
                 _ => Err("string comparison operator is invalid".into()),
             }
         }
         (PropertyValue::Integer(a), PropertyValue::Integer(b))
             if exact_one(factor) && tolerance.is_exact() =>
         {
-            Ok(equal(a.cmp(b)))
+            Ok(operator
+                .order()
+                .is_some_and(|order| shared::integers(order, *a, *b)))
         }
         (
             PropertyValue::Quantity {
@@ -1374,7 +1380,7 @@ fn compare(
             },
         ) if da == db => {
             if a.is_finite() && b.is_finite() {
-                numeric(*a, *b, factor, tolerance, equal)
+                numeric(*a, *b, factor, tolerance, operator.order())
             } else {
                 Err("quantity value is non-finite".into())
             }
@@ -1382,30 +1388,30 @@ fn compare(
         (PropertyValue::Integer(a), PropertyValue::Decimal(b))
             if (*a).unsigned_abs() <= (1_u64 << 53) && b.is_finite() =>
         {
-            numeric(integer_to_f64(*a)?, *b, factor, tolerance, equal)
+            numeric(integer_to_f64(*a)?, *b, factor, tolerance, operator.order())
         }
         (PropertyValue::Decimal(a), PropertyValue::Integer(b))
             if (*b).unsigned_abs() <= (1_u64 << 53) && a.is_finite() =>
         {
-            numeric(*a, integer_to_f64(*b)?, factor, tolerance, equal)
+            numeric(*a, integer_to_f64(*b)?, factor, tolerance, operator.order())
         }
         (PropertyValue::Decimal(a), PropertyValue::Decimal(b))
             if a.is_finite() && b.is_finite() =>
         {
-            numeric(*a, *b, factor, tolerance, equal)
+            numeric(*a, *b, factor, tolerance, operator.order())
         }
         (PropertyValue::Integer(a), PropertyValue::Integer(b)) if !tolerance.is_exact() => numeric(
             integer_to_f64(*a)?,
             integer_to_f64(*b)?,
             factor,
             tolerance,
-            equal,
+            operator.order(),
         ),
         (PropertyValue::Integer(_), PropertyValue::Integer(_)) => {
             Err("integer factor cannot be represented exactly".into())
         }
         (PropertyValue::Measured { .. }, _) | (_, PropertyValue::Measured { .. }) => {
-            measured(left, right, factor, tolerance, equal)
+            measured(left, right, factor, tolerance, operator.order())
         }
         _ => Err("property values have incompatible types or dimensions".into()),
     }
@@ -1418,7 +1424,7 @@ fn measured(
     right: &PropertyValue,
     factor: f64,
     tolerance: &Tolerance,
-    predicate: impl Fn(Ordering) -> bool,
+    order: Option<Order>,
 ) -> Result<bool, String> {
     let (Some((a, b, left_dimension)), Some((c, d, right_dimension))) = (
         crate::support::quantity_bounds(left),
@@ -1431,20 +1437,18 @@ fn measured(
     }
     let (c, d) = (c * factor, d * factor);
     let (c, d) = if c <= d { (c, d) } else { (d, c) };
-    let order = |x: f64, y: f64| {
-        if tolerance.is_exact() {
-            x.partial_cmp(&y)
-        } else {
-            tolerance.order(x, y)
-        }
-    };
     // The least difference is the left's least against the right's most.
-    let (Some(least), Some(greatest)) = (order(a, d), order(b, c)) else {
-        return Err("compared value is non-finite".into());
-    };
-    crate::support::interval_verdict(least, greatest, predicate).ok_or_else(|| {
-        format!("the measured values ({a} to {b} against {c} to {d}) straddle the comparison")
-    })
+    match order {
+        None => Ok(false),
+        Some(order) => {
+            shared::numbers(order, (a, b), (c, d), tolerance).map_err(|undecided| match undecided {
+                Undecided::NotFinite => "compared value is non-finite".into(),
+                Undecided::Straddles => format!(
+                    "the measured values ({a} to {b} against {c} to {d}) straddle the comparison"
+                ),
+            })
+        }
+    }
 }
 
 fn numeric(
@@ -1452,21 +1456,17 @@ fn numeric(
     right: f64,
     factor: f64,
     tolerance: &Tolerance,
-    predicate: impl FnOnce(Ordering) -> bool,
+    order: Option<Order>,
 ) -> Result<bool, String> {
     let scaled = right * factor;
-    if scaled.is_finite() {
-        let ordering = if tolerance.is_exact() {
-            left.total_cmp(&scaled)
-        } else {
-            tolerance
-                .order(left, scaled)
-                .ok_or("compared value is non-finite")?
-        };
-        Ok(predicate(ordering))
-    } else {
-        Err("scaled target is non-finite".into())
+    if !scaled.is_finite() {
+        return Err("scaled target is non-finite".into());
     }
+    let Some(order) = order else {
+        return Ok(false);
+    };
+    shared::numbers(order, (left, left), (scaled, scaled), tolerance)
+        .map_err(|_| "compared value is non-finite".into())
 }
 fn exact_one(value: f64) -> bool {
     value.to_bits() == 1.0_f64.to_bits()

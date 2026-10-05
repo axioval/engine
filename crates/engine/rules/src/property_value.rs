@@ -32,7 +32,8 @@ use axioval_ir::{
     Date, DateTime, Evidence, Finding, Object, Property, PropertyValue, Severity, TemporalPrecision,
 };
 
-use crate::support::temporal_order;
+use crate::support::{Tolerance, temporal_order};
+use axioval_engine::comparison::{self as shared, Order};
 
 use crate::selection::{
     NameSpec, bound_property_request, enumerate, property_error, select_objects,
@@ -886,15 +887,15 @@ fn temporal_verdict(value: &PropertyValue, constraints: &Constraints<'_>) -> Ver
         return equal;
     }
     let checks: [Bound<'_>; 4] = [
-        (constraints.min_inclusive, std::cmp::Ordering::is_ge, ">="),
-        (constraints.max_inclusive, std::cmp::Ordering::is_le, "<="),
-        (constraints.min_exclusive, std::cmp::Ordering::is_gt, ">"),
-        (constraints.max_exclusive, std::cmp::Ordering::is_lt, "<"),
+        (constraints.min_inclusive, Order::GreaterOrEqual, ">="),
+        (constraints.max_inclusive, Order::LessOrEqual, "<="),
+        (constraints.min_exclusive, Order::Greater, ">"),
+        (constraints.max_exclusive, Order::Less, "<"),
     ];
-    for (bound, holds, symbol) in checks {
+    for (bound, required, symbol) in checks {
         let Some(bound) = bound else { continue };
         match order(bound) {
-            Ok(Some(ordering)) if holds(ordering) => {}
+            Ok(Some(ordering)) if required.holds(ordering) => {}
             Ok(Some(_)) => return Verdict::Fails(format!("is {shown}, not {symbol} {bound}")),
             Ok(None) => {
                 return Verdict::Inapplicable(
@@ -970,34 +971,33 @@ enum Number {
     Decimal,
 }
 
-/// A range facet: its literal, the ordering it accepts, and its symbol.
-type Bound<'r> = (
-    Option<&'r str>,
-    fn(std::cmp::Ordering) -> bool,
-    &'static str,
-);
+/// A range facet: its literal, the order it requires, and its symbol.
+type Bound<'r> = (Option<&'r str>, Order, &'static str);
 
-/// Range facets, compared exactly: IDS applies no tolerance to ranges.
+/// Range facets, compared exactly through the one comparison every rule
+/// uses: IDS applies no tolerance to ranges.
 fn bounds(number: Number, actual: f64, constraints: &Constraints<'_>) -> Verdict {
     let checks: [Bound<'_>; 4] = [
-        (constraints.min_inclusive, std::cmp::Ordering::is_ge, ">="),
-        (constraints.max_inclusive, std::cmp::Ordering::is_le, "<="),
-        (constraints.min_exclusive, std::cmp::Ordering::is_gt, ">"),
-        (constraints.max_exclusive, std::cmp::Ordering::is_lt, "<"),
+        (constraints.min_inclusive, Order::GreaterOrEqual, ">="),
+        (constraints.max_inclusive, Order::LessOrEqual, "<="),
+        (constraints.min_exclusive, Order::Greater, ">"),
+        (constraints.max_exclusive, Order::Less, "<"),
     ];
-    for (bound, holds, symbol) in checks {
+    for (bound, order, symbol) in checks {
         let Some(bound) = bound else { continue };
-        let ordering = match (number, parse_integer(bound)) {
+        let holds = match (number, parse_integer(bound)) {
             // Integer against integer compares exactly, beyond 2^53 too.
-            (Number::Integer(actual), Some(bound)) => Some(actual.cmp(&bound)),
-            _ => parse_double(bound).and_then(|bound| actual.partial_cmp(&bound)),
+            (Number::Integer(actual), Some(bound)) => Some(shared::integers(order, actual, bound)),
+            _ => parse_double(bound).map(|bound| {
+                // An unordered pair (NaN) meets no bound.
+                shared::numbers(order, (actual, actual), (bound, bound), &Tolerance::EXACT)
+                    == Ok(true)
+            }),
         };
-        if ordering.is_none() && parse_double(bound).is_none() {
-            return invalid(format!("{bound:?} is not a number literal"));
-        }
-        // An unordered pair (NaN) meets no bound.
-        if !ordering.is_some_and(holds) {
-            return Verdict::Fails(format!("is {actual}, not {symbol} {bound}"));
+        match holds {
+            None => return invalid(format!("{bound:?} is not a number literal")),
+            Some(false) => return Verdict::Fails(format!("is {actual}, not {symbol} {bound}")),
+            Some(true) => {}
         }
     }
     Verdict::Meets

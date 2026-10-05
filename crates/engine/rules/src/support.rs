@@ -17,7 +17,7 @@ use crate::selection::{bound_property_request, property_error};
 
 pub(crate) use axioval_engine::comparison::{
     INCOMPARABLE_DATES, MAX_DECIMALS, Tolerance, exact_f64, round_decimal, temporal_holds,
-    temporal_order, verdict as interval_verdict,
+    temporal_order,
 };
 
 /// Why an object or rule could not be evaluated.

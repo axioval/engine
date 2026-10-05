@@ -1,16 +1,17 @@
 //! A declared predicate over one exactly resolved property value.
 
+use axioval_engine::comparison::{self as shared, Order, Pattern, TextOptions};
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, ParameterDescriptor, ParameterType, RuleCapability,
     RuleContext,
 };
 use axioval_ir::{PropertyValue, QuantityDimension, TemporalPrecision};
-use regex::{Regex, RegexBuilder};
+use regex::Regex;
 
 use crate::selection::select_objects;
 use crate::support::{
     Parameters, PropertyRef, Tolerance, Unavailable, display, exact_f64, finding, invalid, resolve,
-    temporal_holds, temporal_order, undefined,
+    undefined,
 };
 
 /// Checks one property of each selected object against a declared predicate.
@@ -44,38 +45,6 @@ use crate::support::{
 /// greater or less. A tolerance on a text, text list or boolean target is an
 /// invalid declaration.
 pub struct PropertyPredicate;
-
-#[derive(Clone, Copy, Debug)]
-enum Order {
-    Equal,
-    NotEqual,
-    GreaterThan,
-    GreaterOrEqual,
-    LessThan,
-    LessOrEqual,
-}
-
-impl Order {
-    /// `Some(negated)` for an equality test, `None` for an order.
-    fn equality(self) -> Option<bool> {
-        match self {
-            Self::Equal => Some(false),
-            Self::NotEqual => Some(true),
-            _ => None,
-        }
-    }
-
-    fn holds(self, ordering: std::cmp::Ordering) -> bool {
-        match self {
-            Self::Equal => ordering.is_eq(),
-            Self::NotEqual => !ordering.is_eq(),
-            Self::GreaterThan => ordering.is_gt(),
-            Self::GreaterOrEqual => ordering.is_ge(),
-            Self::LessThan => ordering.is_lt(),
-            Self::LessOrEqual => ordering.is_le(),
-        }
-    }
-}
 
 enum Predicate {
     Integer(Order, i64),
@@ -133,9 +102,9 @@ impl Predicate {
         let order = match operator {
             "equal" => Some(Order::Equal),
             "not_equal" => Some(Order::NotEqual),
-            "greater_than" => Some(Order::GreaterThan),
+            "greater_than" => Some(Order::Greater),
             "greater_or_equal" => Some(Order::GreaterOrEqual),
-            "less_than" => Some(Order::LessThan),
+            "less_than" => Some(Order::Less),
             "less_or_equal" => Some(Order::LessOrEqual),
             _ => None,
         };
@@ -231,9 +200,7 @@ impl Predicate {
                     text: fold_text(text),
                     fold,
                 }),
-                "matches" => RegexBuilder::new(&format!("^(?:{text})$"))
-                    .case_insensitive(fold)
-                    .build()
+                "matches" => shared::pattern(Pattern::Matches, text, !fold)
                     .map(Self::Matches)
                     .map_err(|error| invalid(format!("invalid regular expression: {error}"))),
                 _ => Err(invalid(format!(
@@ -257,13 +224,8 @@ impl Predicate {
             return Ok(false);
         };
         if let Self::Temporal(order, expected, precision) = self {
-            return match temporal_order(actual, expected, *precision) {
-                Some(ordering) => ordering.and_then(|ordering| {
-                    temporal_holds(ordering, order.equality(), |ordering| order.holds(ordering))
-                }),
-                // A value of another type fails, as for every other target.
-                None => Ok(false),
-            };
+            // A value of another type fails, as for every other target.
+            return shared::temporal(*order, actual, expected, *precision).unwrap_or(Ok(false));
         }
         match (self, actual) {
             (
@@ -291,18 +253,12 @@ impl Predicate {
             }
             _ => {}
         }
-        let fold = |text: &str, fold: bool| {
-            if fold {
-                text.to_lowercase()
-            } else {
-                text.to_owned()
-            }
-        };
+        let equality = |equal: bool| if equal { Order::Equal } else { Order::NotEqual };
         Ok(match (self, actual) {
             (Self::Integer(order, expected), PropertyValue::Integer(value))
                 if tolerance.is_exact() =>
             {
-                order.holds(value.cmp(expected))
+                shared::integers(*order, *value, *expected)
             }
             (Self::Integer(order, expected), PropertyValue::Integer(value)) => {
                 match (exact_f64(*value), exact_f64(*expected)) {
@@ -329,9 +285,9 @@ impl Predicate {
                     fold: f,
                 },
                 PropertyValue::String(value),
-            ) => (fold(value, *f) == *text) == *equal,
+            ) => shared::texts(equality(*equal), value, text, TextOptions::case(!*f)),
             (Self::Contains { text, fold: f }, PropertyValue::String(value)) => {
-                fold(value, *f).contains(text.as_str())
+                shared::contains(value, text, TextOptions::case(!*f))
             }
             (Self::Matches(pattern), PropertyValue::String(value)) => pattern.is_match(value),
             (
@@ -341,22 +297,19 @@ impl Predicate {
                     fold: f,
                 },
                 PropertyValue::String(value),
-            ) => texts.contains(&fold(value, *f)) != *none,
+            ) => shared::member(value, texts, TextOptions::case(!*f)) != *none,
             (Self::Boolean { equal, value }, PropertyValue::Boolean(actual)) => {
-                (actual == value) == *equal
+                shared::booleans(equality(*equal), *actual, *value) == Some(true)
             }
             _ => false,
         })
     }
 }
 
+/// `left order right` through the shared comparison; a number that is no
+/// number fails.
 fn compare(order: Order, left: f64, right: f64, tolerance: &Tolerance) -> bool {
-    let ordering = if tolerance.is_exact() {
-        left.partial_cmp(&right)
-    } else {
-        tolerance.order(left, right)
-    };
-    ordering.is_some_and(|ordering| order.holds(ordering))
+    shared::numbers(order, (left, left), (right, right), tolerance) == Ok(true)
 }
 
 fn target(parameters: &Parameters<'_>) -> String {

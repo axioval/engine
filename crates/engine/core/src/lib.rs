@@ -17,6 +17,8 @@ use thiserror::Error;
 
 mod session;
 
+pub mod comparison;
+
 /// Expressions: units, intervals, evaluation and type checking.
 pub mod expression;
 

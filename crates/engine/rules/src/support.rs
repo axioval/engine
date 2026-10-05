@@ -11,10 +11,14 @@ use axioval_ir::{
     Date, DateTime, Evidence, Finding, Object, ObjectId, Property, PropertyValue,
     QuantityDimension, Severity, SourceId, TemporalPrecision,
 };
-use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
 use crate::selection::{bound_property_request, property_error};
+
+pub(crate) use axioval_engine::comparison::{
+    INCOMPARABLE_DATES, MAX_DECIMALS, Tolerance, exact_f64, round_decimal, temporal_holds,
+    temporal_order, verdict as interval_verdict,
+};
 
 /// Why an object or rule could not be evaluated.
 pub(crate) type Unavailable = (NotEvaluatedReason, String);
@@ -754,76 +758,9 @@ pub(crate) fn value_key(value: &PropertyValue, trim: bool, case_sensitive: bool)
     }
 }
 
-/// The chronological order of two dates or date-times; `None` unless both are.
-///
-/// Dates order as XML Schema orders `xs:date` values (`Date::cmp_timeline`)
-/// and date-times as instants, whatever their offsets. `Ok(None)` is XML
-/// Schema's indeterminate order: a date stating a time zone and one stating
-/// none lie within 14 hours of each other, so neither precedes, equals nor
-/// follows the other. Equality is then decided (they differ) and an order
-/// is not (see [`temporal_holds`]). A date-time and a date compare only
-/// at `day` precision, which reads every date-time and every date as the
-/// calendar day it states, its time zone aside; exactly, a date-time
-/// neither precedes nor follows the day it falls on, so the pair is an
-/// error, never a verdict.
-pub(crate) fn temporal_order(
-    left: &PropertyValue,
-    right: &PropertyValue,
-    precision: Option<TemporalPrecision>,
-) -> Option<Result<Option<Ordering>, String>> {
-    let day = |value: &PropertyValue| match value {
-        PropertyValue::Date(date) => Some(date.calendar_day()),
-        PropertyValue::DateTime(instant) => Some(instant.date()),
-        _ => None,
-    };
-    let (left_day, right_day) = (day(left)?, day(right)?);
-    Some(match (left, right, precision) {
-        (_, _, Some(TemporalPrecision::Day)) => Ok(Some(left_day.cmp(&right_day))),
-        (PropertyValue::Date(left), PropertyValue::Date(right), None) => {
-            Ok(left.cmp_timeline(*right))
-        }
-        (PropertyValue::DateTime(left), PropertyValue::DateTime(right), None) => {
-            Ok(Some(left.cmp_instant(*right)))
-        }
-        _ => Err(
-            "a date-time compares with a date only at day precision; declare precision `day`"
-                .into(),
-        ),
-    })
-}
-
-/// Why an order of two dates XML Schema leaves indeterminate is not decided.
-pub(crate) const INCOMPARABLE_DATES: &str = "a date stating a time zone and one stating none \
-     lie within 14 hours of each other, so neither precedes the other";
-
-/// Whether an equality or order holds between two dates or date-times
-/// whose order may be indeterminate (see [`temporal_order`]).
-///
-/// `is` judges a decided ordering. `equality` is `Some(false)` for an
-/// equality test and `Some(true)` for an inequality test, which an
-/// indeterminate pair answers exactly (they differ), and `None` for an
-/// order, which it cannot answer.
-pub(crate) fn temporal_holds(
-    ordering: Option<Ordering>,
-    equality: Option<bool>,
-    is: impl FnOnce(Ordering) -> bool,
-) -> Result<bool, String> {
-    match (ordering, equality) {
-        (Some(ordering), _) => Ok(is(ordering)),
-        (None, Some(negated)) => Ok(negated),
-        (None, None) => Err(INCOMPARABLE_DATES.into()),
-    }
-}
-
 /// Whether a value is a date or a date-time.
 pub(crate) fn temporal(value: &PropertyValue) -> bool {
     matches!(value, PropertyValue::Date(_) | PropertyValue::DateTime(_))
-}
-
-/// `value` as a float, when the conversion is exact (magnitude up to 2^53).
-pub(crate) fn exact_f64(value: i64) -> Option<f64> {
-    #[allow(clippy::cast_precision_loss)]
-    (value.unsigned_abs() <= 1 << 53).then_some(value as f64)
 }
 
 /// A declared quantity in canonical SI: the value and its dimension.
@@ -881,152 +818,6 @@ impl Parameters<'_> {
     }
 }
 
-/// A declared numeric tolerance: absolute and relative, or rounding to decimals.
-///
-/// With `tolerance` and/or `relative_tolerance`, two numbers are equal when
-/// `|a - b| <= tolerance + relative_tolerance * max(|a|, |b|)`, the boundary
-/// included. The bound is symmetric but not transitive. Values are decimals
-/// as a reviewer reads them, so the comparison allows a few units in the last
-/// place for binary rounding: `1.1` and `1.0` are within `0.1`.
-///
-/// With `decimals`, both numbers are first rounded half away from zero to
-/// that many decimal places of their shortest decimal form (`2.345` rounds
-/// to `2.35`, as displayed) and then compared exactly. Rounding is
-/// transitive; it cannot be combined with a tolerance.
-///
-/// Quantities are compared in canonical SI units, so a tolerance or rounding
-/// on a length is in metres.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub(crate) struct Tolerance {
-    absolute: f64,
-    relative: f64,
-    decimals: Option<u32>,
-}
-
-/// The largest number of decimals a rule may round to.
-pub(crate) const MAX_DECIMALS: i64 = 15;
-
-impl Tolerance {
-    /// Exact up to the binary rounding of one unit conversion.
-    ///
-    /// A quantity declared in `mm` is scaled to metres before it is compared
-    /// with a value the source stated in metres; the product may differ from
-    /// the decimal the author meant in the last place. A few units in the
-    /// last place are equal, anything more is not.
-    pub(crate) fn unit_conversion() -> Self {
-        Self {
-            relative: 4.0 * f64::EPSILON,
-            ..Self::default()
-        }
-    }
-
-    /// Whether this is exact comparison: no tolerance and no rounding.
-    pub(crate) fn is_exact(&self) -> bool {
-        self.decimals.is_none() && self.absolute == 0.0 && self.relative == 0.0
-    }
-
-    /// Whether this rounds to decimals rather than allowing a distance.
-    pub(crate) fn rounds(&self) -> bool {
-        self.decimals.is_some()
-    }
-
-    /// `value` rounded as declared; unchanged without `decimals`.
-    pub(crate) fn round(&self, value: f64) -> f64 {
-        match self.decimals {
-            Some(decimals) => round_decimal(value, decimals),
-            None => value,
-        }
-    }
-
-    /// Whether two finite numbers are equal under this tolerance.
-    pub(crate) fn equal(&self, left: f64, right: f64) -> bool {
-        if self.decimals.is_some() {
-            return self.round(left).total_cmp(&self.round(right)).is_eq();
-        }
-        let magnitude = left.abs().max(right.abs());
-        let bound = self.absolute + self.relative * magnitude;
-        // Binary rounding of decimal inputs and of the bound itself; an
-        // exact comparison takes none.
-        let slack = if bound > 0.0 {
-            4.0 * f64::EPSILON * magnitude.max(bound)
-        } else {
-            0.0
-        };
-        (left - right).abs() <= bound + slack
-    }
-
-    /// The order of two finite numbers, `Equal` when they are equal under
-    /// this tolerance; `None` when either is not finite.
-    pub(crate) fn order(&self, left: f64, right: f64) -> Option<std::cmp::Ordering> {
-        if !left.is_finite() || !right.is_finite() {
-            return None;
-        }
-        if self.equal(left, right) {
-            Some(std::cmp::Ordering::Equal)
-        } else {
-            self.round(left).partial_cmp(&self.round(right))
-        }
-    }
-
-    /// How findings state the tolerance, such as `within tolerance 0.01`.
-    pub(crate) fn describe(&self) -> String {
-        match self.decimals {
-            Some(decimals) => format!("rounded to {decimals} decimal(s)"),
-            None if self.relative == 0.0 => format!("within tolerance {}", self.absolute),
-            None if self.absolute == 0.0 => {
-                format!("within relative tolerance {}", self.relative)
-            }
-            None => format!(
-                "within tolerance {} plus relative tolerance {}",
-                self.absolute, self.relative
-            ),
-        }
-    }
-
-    /// ` (<description>)` for a finding message, or nothing when exact.
-    pub(crate) fn suffix(&self) -> String {
-        if self.is_exact() {
-            String::new()
-        } else {
-            format!(" ({})", self.describe())
-        }
-    }
-}
-
-/// Rounds `value` half away from zero to `decimals` places of its shortest
-/// decimal form.
-pub(crate) fn round_decimal(value: f64, decimals: u32) -> f64 {
-    if !value.is_finite() {
-        return value;
-    }
-    // `{:e}` prints the shortest digits that read back as `value`.
-    let text = format!("{:e}", value.abs());
-    let Some((mantissa, exponent)) = text.split_once('e') else {
-        return value;
-    };
-    let Ok(exponent) = exponent.parse::<i64>() else {
-        return value;
-    };
-    let digits: Vec<u8> = mantissa.bytes().filter(u8::is_ascii_digit).collect();
-    // Digits kept: those before the point plus `decimals` after it.
-    let Ok(keep) = usize::try_from(exponent + 1 + i64::from(decimals)) else {
-        // Every digit lies below half a unit of the last kept place.
-        return 0.0;
-    };
-    if keep >= digits.len() {
-        return value;
-    }
-    let kept = digits[..keep]
-        .iter()
-        .fold(0_u64, |total, digit| total * 10 + u64::from(digit - b'0'));
-    let units = kept + u64::from(digits[keep] >= b'5');
-    let rounded: f64 = format!("{units}e-{decimals}")
-        .parse()
-        .expect("a decimal literal parses");
-    // `+ 0.0` turns a negative zero into zero, so it keys like zero.
-    value.signum() * rounded + 0.0
-}
-
 /// Descriptors of the tolerance parameters numeric comparisons take.
 pub(crate) fn tolerance_parameters() -> Vec<ParameterDescriptor> {
     vec![
@@ -1066,11 +857,11 @@ impl Parameters<'_> {
                 "declare either `decimals` or a tolerance, not both",
             ));
         }
-        Ok(Tolerance {
-            absolute: absolute.unwrap_or(0.0),
-            relative: relative.unwrap_or(0.0),
+        Ok(Tolerance::new(
+            absolute.unwrap_or(0.0),
+            relative.unwrap_or(0.0),
             decimals,
-        })
+        ))
     }
 }
 
@@ -1648,29 +1439,6 @@ pub(crate) mod table {
     }
 }
 
-/// Whether a comparison holds for every value of an interval whose least
-/// and greatest ends order as `least` and `greatest` against the bound:
-/// `Some` when every ordering between them gives one answer, `None` when
-/// the interval straddles the bound. An ordering is monotone in the value,
-/// so the orderings between the ends are every one the interval can take.
-pub(crate) fn interval_verdict(
-    least: std::cmp::Ordering,
-    greatest: std::cmp::Ordering,
-    holds: impl Fn(std::cmp::Ordering) -> bool,
-) -> Option<bool> {
-    use std::cmp::Ordering;
-    let verdicts: Vec<bool> = [Ordering::Less, Ordering::Equal, Ordering::Greater]
-        .into_iter()
-        .filter(|ordering| least <= *ordering && *ordering <= greatest)
-        .map(holds)
-        .collect();
-    let first = *verdicts.first()?;
-    verdicts
-        .iter()
-        .all(|verdict| *verdict == first)
-        .then_some(first)
-}
-
 /// A number or quantity as the interval it lies in, with its dimension:
 /// a quantity is a point, a measured value its interval.
 pub(crate) fn quantity_bounds(value: &PropertyValue) -> Option<(f64, f64, QuantityDimension)> {
@@ -1695,45 +1463,5 @@ pub(crate) fn undecided_reason(values: &[&PropertyValue]) -> NotEvaluatedReason 
         NotEvaluatedReason::IncompleteEvidence
     } else {
         NotEvaluatedReason::InvalidEvidence
-    }
-}
-
-#[cfg(test)]
-#[allow(clippy::float_cmp)]
-mod tests {
-    use super::{Tolerance, round_decimal};
-
-    #[test]
-    fn rounding_reads_the_shortest_decimal_form_half_away_from_zero() {
-        assert_eq!(round_decimal(2.345, 2), 2.35);
-        assert_eq!(round_decimal(1.005, 2), 1.01);
-        assert_eq!(round_decimal(2.344_999, 2), 2.34);
-        assert_eq!(round_decimal(-2.345, 2), -2.35);
-        assert_eq!(round_decimal(0.6, 0), 1.0);
-        assert_eq!(round_decimal(0.4, 0), 0.0);
-        assert_eq!(round_decimal(0.000_4, 2), 0.0);
-        assert_eq!(round_decimal(9.999, 2), 10.0);
-        assert_eq!(round_decimal(123.0, 2), 123.0);
-        assert_eq!(round_decimal(1e300, 2), 1e300);
-        assert!(round_decimal(-0.001, 2).is_sign_positive());
-    }
-
-    #[test]
-    fn a_tolerance_includes_its_boundary_as_written_in_decimal() {
-        let absolute = Tolerance {
-            absolute: 0.1,
-            ..Tolerance::default()
-        };
-        assert!(absolute.equal(1.0, 1.1));
-        assert!(absolute.equal(1.1, 1.0));
-        assert!(!absolute.equal(1.0, 1.100_001));
-        let relative = Tolerance {
-            relative: 0.25,
-            ..Tolerance::default()
-        };
-        assert!(relative.equal(3.0, 4.0));
-        assert!(!relative.equal(2.9, 4.0));
-        assert!(Tolerance::default().is_exact());
-        assert!(!Tolerance::default().equal(1.0, 1.0 + f64::EPSILON * 8.0));
     }
 }

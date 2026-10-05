@@ -20,6 +20,14 @@ thiserror.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
+# The rules crate's own tests hold each template to the implementation it
+# replaced, kept behind `parity-reference`.
+axioval-rules = { path = ".", features = ["parity-reference"] }
+
+[features]
+# The implementations of capabilities since rebuilt as templates, as
+# parity references for tests only (`axioval_rules::reference`).
+parity-reference = []
 
 [lints]
 workspace = true

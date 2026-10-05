@@ -21,14 +21,15 @@
         "steps"
       ]
     },
-    "body_extent::check::measure_directional_extent": {
+    "body_extent::reference::check::measure_directional_extent": {
       "count": 1,
       "providedBy": [
         "body_extent",
+        "body_position",
         "extent"
       ]
     },
-    "body_extent::check::object_frame": {
+    "body_extent::reference::check::object_frame": {
       "count": 1,
       "providedBy": [
         "body_extent"

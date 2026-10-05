@@ -89,6 +89,7 @@ mod space_validation;
 mod stair_geometry;
 mod support;
 mod table_allocation;
+pub mod templates;
 mod triangle_count;
 mod unclassified;
 mod unique_value;
@@ -172,6 +173,13 @@ pub use triangle_count::TriangleCountLimit;
 pub use unclassified::UnclassifiedObject;
 pub use unique_value::UniqueValue;
 pub use wall_spacing::WallSpacing;
+/// The implementations of capabilities since rebuilt as templates, kept
+/// only as the parity references their templates are held to in tests.
+/// Never register one: the capability id resolves to the template.
+#[cfg(feature = "parity-reference")]
+pub mod reference {
+    pub use crate::body_extent::reference::BodyExtent;
+}
 /// XML Schema patterns (as IDS and `property-value` write them) in `regex`
 /// syntax, for a property selector's `matches` operator.
 pub use xsd_pattern::translate as translate_xsd_pattern;

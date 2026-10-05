@@ -17,7 +17,7 @@ use crate::measured::{LocalizedText, en_de};
 /// A consumer reads any catalogue of its own major version: a minor
 /// version only adds entries or optional fields, a patch only changes
 /// texts. Removing or renaming anything raises the major version.
-pub const CATALOGUE_SCHEMA_VERSION: &str = "1.0.0";
+pub const CATALOGUE_SCHEMA_VERSION: &str = "1.1.0";
 
 /// A value type an expression field takes or a node yields.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]

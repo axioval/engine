@@ -1249,3 +1249,67 @@ fn an_expression_selecting_the_objects_is_refused_naming_the_node() {
         other => panic!("{other}"),
     }
 }
+
+/// A rule bound to a capability built as a template exports as that
+/// capability with its parameters, so IDS refuses it as it refused the
+/// capability before the rebuild; the rule forked from it is an
+/// `expression` rule, refused naming the first node IDS cannot state.
+#[test]
+fn a_template_rule_exports_as_its_capability_and_its_fork_by_its_nodes() {
+    let mut package = serde_json::to_value(expression_definitions()).unwrap();
+    package["definitions"]["t:body-extent"] = definition("body-extent");
+    let definitions: DefinitionPackage = serde_json::from_value(package).unwrap();
+    let thickness = rule(
+        "thickness",
+        "body-extent",
+        walls(),
+        json!({
+            "axis": string("forward"),
+            "minimum": { "type": "quantity", "value": 150.0, "unit": "mm" },
+        }),
+    );
+    let registry = default_registry().unwrap();
+    let plan = compile(
+        &registry,
+        std::slice::from_ref(&definitions),
+        &ruleset(vec![thickness.clone()]),
+    )
+    .unwrap();
+    let fork = axioval::rules::templates::fork(
+        registry
+            .get("axioval:capability.body-extent")
+            .unwrap()
+            .as_ref(),
+        &plan.rules()[0],
+    )
+    .unwrap();
+    let mut forked = rule(
+        "thickness-fork",
+        "expression",
+        walls(),
+        json!({ "requirement": { "type": "expression" } }),
+    );
+    forked["parameters"]["requirement"]["value"] = serde_json::to_value(&fork.requirement).unwrap();
+    let export = export(
+        std::slice::from_ref(&definitions),
+        &ruleset(vec![thickness, forked]),
+    );
+    assert!(export.specifications.is_empty());
+    let reasons = reasons(&export);
+    assert_eq!(
+        reasons["thickness"],
+        &Refusal::Capability("axioval:capability.body-extent".to_owned())
+    );
+    match reasons["thickness-fork"] {
+        Refusal::Expression { path, kind, why } => {
+            // The bound less its rounding allowance: IDS states no
+            // arithmetic.
+            assert_eq!(
+                (path.as_str(), kind.as_str()),
+                ("requirement.and[0].compare.right", "subtract")
+            );
+            assert!(!why.is_empty());
+        }
+        other => panic!("{other}"),
+    }
+}

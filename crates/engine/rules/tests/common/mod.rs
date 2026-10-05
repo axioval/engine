@@ -29,6 +29,7 @@ pub fn id(local: &str) -> ObjectId {
 }
 
 /// Objects, their exact property values, and directed relationship edges.
+#[derive(Clone)]
 pub struct Model {
     objects: Vec<Object>,
     values: BTreeMap<(ObjectId, String, String), PropertyValue>,

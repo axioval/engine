@@ -16,6 +16,7 @@ use axioval_engine::{
 use axioval_ir::contract::ParameterValue;
 use axioval_ir::{Evidence, NotEvaluatedReason, ObjectId, PropertyValue, QuantityDimension};
 use axioval_rules::BodyExtent;
+use axioval_rules::parity::{Measure, Observations, Parity};
 use common::{Model, findings, id, kind, property, rule, source, string, unevaluated};
 
 const ID: &str = "axioval:capability.body-extent";
@@ -144,24 +145,83 @@ fn thickness() -> ParameterValue {
     property(Some(MATERIAL), "TotalThickness")
 }
 
+/// The capability's evaluation as a run evaluates it: `body-extent` runs as
+/// its template, reading the measured `body_extent` and `body_position`.
+/// Every fixture also holds the template to the implementation it replaced
+/// under the whole outside contract: the same findings word for word,
+/// counts, evidence exactness, not-evaluated outcomes and messages, and
+/// each wall's extent as the template reads it (`body_extent`) against the
+/// extent the replaced implementation measured, exactly.
 fn run(
     model: Model,
     frames: Frames,
     boxes: Boxes,
     parameters: Vec<(&str, ParameterValue)>,
 ) -> CapabilityEvaluation {
-    model.evaluate_with(
-        &BodyExtent,
-        &rule(ID, kind("wall"), parameters),
-        |services: &mut ServiceRegistry| {
-            services
-                .register(ObjectFrameServiceHandle::new(Arc::new(frames)))
-                .unwrap();
-            services
-                .register(VerticalExtentServiceHandle::new(Arc::new(boxes)))
-                .unwrap();
-        },
-    )
+    let rule = rule(ID, kind("wall"), parameters);
+    let (frames, boxes) = (Arc::new(frames), Arc::new(boxes));
+    let register = |services: &mut ServiceRegistry| {
+        services
+            .register(ObjectFrameServiceHandle::new(frames.clone()))
+            .unwrap();
+        services
+            .register(VerticalExtentServiceHandle::new(boxes.clone()))
+            .unwrap();
+    };
+    let template = model
+        .clone()
+        .evaluate_measured(&BodyExtent, &rule, register);
+    let reference =
+        model
+            .clone()
+            .evaluate_with(&axioval_rules::reference::BodyExtent, &rule, register);
+    let mut left = Observations::of_evaluation(&reference);
+    let mut right = Observations::of_evaluation(&template);
+    let axis = match rule.parameters.get("axis") {
+        Some(ParameterValue::String { value }) => value.clone(),
+        _ => String::new(),
+    };
+    if ["right", "forward", "up"].contains(&axis.as_str()) {
+        let walls: Vec<ObjectId> = model
+            .project()
+            .objects()
+            .map(|object| object.id.clone())
+            .collect();
+        for (wall, measured) in model.measure(&format!("body_extent;axis={axis}"), &walls, register)
+        {
+            right = right.with_value(wall, "extent", measured);
+        }
+        for wall in walls {
+            let measured = frames
+                .object_frame(&wall)
+                .ok()
+                .and_then(|frame| {
+                    let frame = frame.frame();
+                    let along = match axis.as_str() {
+                        "right" => frame.right(),
+                        "forward" => frame.forward(),
+                        _ => frame.up(),
+                    };
+                    boxes.measure_directional_extent(&wall, along).ok()
+                })
+                .map_or(Measure::NotEvaluated, |extent| {
+                    let (lower, upper) = extent.length_metres();
+                    Measure::interval(lower, upper, "m")
+                });
+            left = left.with_value(wall, "extent", measured);
+        }
+    }
+    let parity = Parity::contract()
+        .value("extent", 0.0)
+        .compare((ID, &left), ("template", &right));
+    assert!(parity.holds(), "{}", parity.diff());
+    assert!(
+        parity.values > 0
+            || axis.is_empty()
+            || !["right", "forward", "up"].contains(&axis.as_str()),
+        "no extent was compared"
+    );
+    template
 }
 
 /// Walls along x (`right` = x, so `forward` = y) and one along y.
@@ -217,13 +277,19 @@ fn a_body_thicker_or_thinner_than_its_layers_is_found() {
             ),
         ]
     );
-    // The frame, the measurement and the stated thickness are all cited.
+    // The measurement along the frame and the stated thickness are cited.
     let locators: Vec<&str> = evaluation.findings()[1]
         .evidence
         .iter()
         .map(|evidence| evidence.locator.as_str())
         .collect();
-    assert!(locators.contains(&"placement:thin") && locators.contains(&"extent:thin"));
+    assert!(
+        locators
+            .iter()
+            .any(|locator| locator.ends_with("extent:thin"))
+            && locators.len() >= 2,
+        "{locators:?}"
+    );
     assert!(evaluation.not_evaluated_outcomes().is_empty());
 }
 
@@ -724,6 +790,73 @@ mod as_expressions {
                 &at_most(mm(extent("right")), m(4.0)),
             );
         }
+    }
+
+    /// The rule forked from the template, an `expression` rule evaluated by
+    /// the expression capability, reaches the template's verdicts on every
+    /// fixture: the same values read through the same evaluator. Its
+    /// findings are worded as an expression rule's, so only outcomes are
+    /// compared.
+    #[test]
+    fn the_forked_rule_reaches_the_templates_verdicts() {
+        use axioval_rules::templates::{Fork, fork};
+        let target = || ("target_property", thickness());
+        let mut declarations: Vec<Vec<(&str, ParameterValue)>> = Vec::new();
+        for axis in ["forward", "right", "up"] {
+            declarations.push(vec![("axis", string(axis)), target()]);
+        }
+        for tolerance in [50.0, 10.0] {
+            declarations.push(vec![
+                ("axis", string("forward")),
+                target(),
+                ("tolerance", millimetres(tolerance)),
+            ]);
+        }
+        declarations.push(vec![
+            ("axis", string("forward")),
+            ("minimum", length(0.26)),
+            ("maximum", millimetres(400.0)),
+        ]);
+        declarations.push(vec![("axis", string("forward")), ("minimum", length(0.3))]);
+        declarations.push(vec![("axis", string("right")), ("maximum", length(4.0))]);
+        for fixture in [walls as Fixture, straddling, rounded, unreadable] {
+            for parameters in &declarations {
+                let bound = rule(ID, kind("wall"), parameters.clone());
+                let forked = fork(&BodyExtent, &bound).unwrap();
+                let mut expression_rule = bound.clone();
+                expression_rule.capability = Fork::CAPABILITY.into();
+                expression_rule.parameters = forked.parameters();
+                let (model, frames, boxes) = fixture();
+                let template = run(model, frames, boxes, parameters.clone());
+                let (model, _, _) = fixture();
+                let forked = model.evaluate_measured(
+                    &axioval_rules::ExpressionRequirement,
+                    &expression_rule,
+                    |services| {
+                        let (_, frames, boxes) = fixture();
+                        services
+                            .register(ObjectFrameServiceHandle::new(Arc::new(frames)))
+                            .unwrap();
+                        services
+                            .register(VerticalExtentServiceHandle::new(Arc::new(boxes)))
+                            .unwrap();
+                    },
+                );
+                let parity = axioval_rules::parity::compare_evaluations(
+                    ("template", &template),
+                    ("fork", &forked),
+                );
+                assert!(parity.holds(), "{parameters:?}\n{}", parity.diff());
+            }
+        }
+        // A declaration the template refuses forks into nothing.
+        let refused = rule(ID, kind("wall"), vec![("axis", string("forward"))]);
+        assert_eq!(
+            fork(&BodyExtent, &refused).unwrap_err().to_string(),
+            "body-extent: `target_property`, `minimum` or `maximum` is required"
+        );
+        // A capability implemented in code has nothing to fork.
+        assert!(fork(&axioval_rules::ExpressionRequirement, &refused).is_err());
     }
 
     /// Generated walls: boxes of random size turned to a random heading,

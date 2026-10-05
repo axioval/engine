@@ -82,6 +82,10 @@ class PublishWorkspaceTests(unittest.TestCase):
                 dependency_path = dependency.get("path")
                 if dependency_path and str(Path(dependency_path).resolve()) in by_path:
                     dependency_name = by_path[str(Path(dependency_path).resolve())]
+                    if dependency_name == package["name"]:
+                        # A dev-dependency on itself, for its own tests'
+                        # features: no publication order.
+                        continue
                     self.assertLess(
                         positions[dependency_name],
                         positions[package["name"]],

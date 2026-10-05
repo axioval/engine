@@ -1,0 +1,838 @@
+//! Built-in capabilities run as templates
+//! ([`axioval_engine::template`]): a rule bound to one is bound into its
+//! composition's plan (parameters folded in as constants, slots filled),
+//! its values are read for each selected object by the shared expression
+//! evaluator, exactly as an `expression` rule reads them, and its
+//! decision and messages keep the capability's outside contract.
+//!
+//! [`fork`] copies a rule bound to a template into the `expression` rule
+//! it composes: the starting point for a stricter or extended rule.
+
+use std::collections::BTreeMap;
+
+use axioval_engine::expression::{Evaluation, Reason, Value, evaluate};
+use axioval_engine::template::{
+    Check, Condition, Decision, End, Expect, Form, Operand, Sign, Template, TemplateValue, Term,
+};
+use axioval_engine::{
+    CapabilityEvaluation, CompiledRule, ParameterDescriptor, ParameterType, RuleCapability,
+    RuleContext,
+};
+use axioval_ir::contract::{Expression, ParameterValue, ScalarValue};
+use axioval_ir::{Evidence, NotEvaluatedReason, Object, PropertyValue, QuantityDimension};
+use serde_json::Value as Json;
+
+use crate::body_extent::rounding_slack;
+use crate::expression_leaves::ObjectLeaves;
+use crate::expression_requirement::reason_of;
+use crate::level_spacing::{metres, shown};
+use crate::plan_area::{Verdict, judge};
+use crate::selection::select_objects;
+use crate::support::{Parameters, Unavailable, display, finding, invalid};
+
+/// A built-in capability run as its template.
+pub struct Templated(Template);
+
+impl Templated {
+    /// The capability `template` describes.
+    #[must_use]
+    pub fn new(template: Template) -> Self {
+        Self(template)
+    }
+}
+
+impl RuleCapability for Templated {
+    fn id(&self) -> &'static str {
+        self.0.id
+    }
+
+    fn parameters(&self) -> Vec<ParameterDescriptor> {
+        self.0.parameters.clone()
+    }
+
+    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
+        run(&self.0, context, rule)
+    }
+
+    fn template(&self) -> Option<&Template> {
+        Some(&self.0)
+    }
+}
+
+/// A rule parameter folded into the plan as a constant.
+#[derive(Clone, Debug)]
+enum Constant {
+    /// A string, as stated.
+    Text(String),
+    /// A property reference.
+    Property { set: Option<String>, name: String },
+    /// A quantity in coherent SI units, converted as the capability always
+    /// converted it.
+    Quantity(f64, QuantityDimension),
+    /// Any other scalar, as stated.
+    Scalar(ScalarValue),
+}
+
+impl Constant {
+    /// The constant as a number, in coherent units.
+    fn number(&self) -> Option<f64> {
+        match self {
+            Self::Quantity(value, _) | Self::Scalar(ScalarValue::Number { value }) => Some(*value),
+            #[allow(clippy::cast_precision_loss)]
+            Self::Scalar(ScalarValue::Integer { value }) => Some(*value as f64),
+            _ => None,
+        }
+    }
+
+    /// The literal an expression reads in a `parameter` read's place.
+    fn literal(&self) -> Option<ScalarValue> {
+        match self {
+            Self::Text(value) => Some(ScalarValue::String {
+                value: value.clone(),
+            }),
+            Self::Quantity(value, dimension) => Some(ScalarValue::Quantity {
+                value: *value,
+                unit: dimension.unit_symbol().replace('²', "2").replace('³', "3"),
+            }),
+            Self::Scalar(scalar) => Some(scalar.clone()),
+            Self::Property { .. } => None,
+        }
+    }
+
+    /// The constant as a message shows it.
+    fn shown(&self) -> String {
+        match self {
+            Self::Text(value) => value.clone(),
+            Self::Property { set, name } => match set {
+                Some(set) => format!("{set}.{name}"),
+                None => name.clone(),
+            },
+            Self::Quantity(value, QuantityDimension::Length) => metres(*value),
+            Self::Quantity(value, dimension) => format!("{value} {}", dimension.unit_symbol()),
+            Self::Scalar(scalar) => axioval_engine::expression::Value::from_literal(scalar)
+                .map_or_else(|why| why, |value| value.to_string()),
+        }
+    }
+}
+
+/// A rule bound into one form of its template.
+struct Plan<'t> {
+    template: &'t Template,
+    form: &'t Form,
+    constants: BTreeMap<&'t str, Constant>,
+    /// Each value step with its expression, the rule's parameters bound in.
+    values: Vec<(&'t TemplateValue, Expression)>,
+}
+
+fn stated(rule: &CompiledRule, name: &str) -> bool {
+    rule.parameters.contains_key(name)
+}
+
+/// A length parameter in metres, as the capability read it.
+fn length(rule: &CompiledRule, name: &str) -> Result<Option<f64>, Unavailable> {
+    match Parameters(rule).quantity(name)? {
+        None => Ok(None),
+        Some((value, QuantityDimension::Length)) if value >= 0.0 => Ok(Some(value)),
+        Some((_, QuantityDimension::Length)) => Err(invalid(format!("`{name}` is negative"))),
+        Some(_) => Err(invalid(format!("`{name}` is not a length"))),
+    }
+}
+
+/// `a`, `b` or `c`, each in backquotes.
+fn alternatives(options: &[&str]) -> String {
+    let quoted: Vec<String> = options.iter().map(|option| format!("`{option}`")).collect();
+    match quoted.split_last() {
+        Some((last, rest)) if !rest.is_empty() => format!("{} or {last}", rest.join(", ")),
+        _ => quoted.concat(),
+    }
+}
+
+/// Runs `check` over the rule's parameters.
+fn check(check: &Check, rule: &CompiledRule, template: &Template) -> Result<(), Unavailable> {
+    let any = |names: &[&str]| names.iter().any(|name| stated(rule, name));
+    match check {
+        Check::Choice { parameter, options } => {
+            let required = template
+                .parameters
+                .iter()
+                .any(|descriptor| descriptor.name == *parameter && descriptor.required);
+            let value = if required {
+                Some(Parameters(rule).required_string(parameter)?)
+            } else {
+                Parameters(rule).string(parameter)?
+            };
+            match value {
+                Some(value) if !options.contains(&value) => Err(invalid(format!(
+                    "{parameter} `{value}` is unsupported; use {}",
+                    alternatives(options)
+                ))),
+                _ => Ok(()),
+            }
+        }
+        Check::Length { parameter } => length(rule, parameter).map(|_| ()),
+        Check::Exclusive {
+            one,
+            other,
+            message,
+        } => {
+            if any(one) && any(other) {
+                Err(invalid(*message))
+            } else {
+                Ok(())
+            }
+        }
+        Check::AnyOf {
+            parameters,
+            message,
+        } => {
+            if any(parameters) {
+                Ok(())
+            } else {
+                Err(invalid(*message))
+            }
+        }
+        Check::Requires {
+            parameter,
+            with,
+            message,
+        } => {
+            if stated(rule, parameter) && !any(with) {
+                Err(invalid(*message))
+            } else {
+                Ok(())
+            }
+        }
+        Check::Ordered { low, high, message } => {
+            let value = |name: &str| -> Result<Option<f64>, Unavailable> {
+                Ok(Parameters(rule).quantity(name)?.map(|(value, _)| value))
+            };
+            match (value(low)?, value(high)?) {
+                (Some(low), Some(high)) if low > high => Err(invalid(*message)),
+                _ => Ok(()),
+            }
+        }
+    }
+}
+
+/// The constant a parameter of `descriptor`'s type states.
+fn constant(
+    rule: &CompiledRule,
+    descriptor: &ParameterDescriptor,
+) -> Result<Option<Constant>, Unavailable> {
+    let parameters = Parameters(rule);
+    let name = descriptor.name.as_str();
+    Ok(match descriptor.parameter_type {
+        ParameterType::String => parameters
+            .string(name)?
+            .map(|value| Constant::Text(value.to_owned())),
+        ParameterType::PropertyReference => {
+            parameters
+                .property(name)?
+                .map(|property| Constant::Property {
+                    set: property.set.map(str::to_owned),
+                    name: property.name.to_owned(),
+                })
+        }
+        ParameterType::Quantity => parameters
+            .quantity(name)?
+            .map(|(value, dimension)| Constant::Quantity(value, dimension)),
+        _ => match rule.parameters.get(name).cloned() {
+            None => None,
+            Some(value) => Some(Constant::Scalar(
+                ScalarValue::try_from(value)
+                    .map_err(|_| invalid(format!("parameter `{name}` is no single value")))?,
+            )),
+        },
+    })
+}
+
+/// `expression` with the rule's parameters bound in: each `parameter` read
+/// of a constant replaced by its literal, and each slot in a string field
+/// (`{axis}`, `{target_property.set}`, `{target_property.name}`) filled.
+/// A field holding only the set slot of a reference without a set is
+/// dropped.
+fn bound(expression: &Expression, constants: &BTreeMap<&str, Constant>) -> Expression {
+    fn fill(json: &mut Json, constants: &BTreeMap<&str, Constant>) {
+        match json {
+            Json::Object(fields) => {
+                if fields.get("kind").and_then(Json::as_str) == Some("parameter")
+                    && let Some(literal) = fields
+                        .get("name")
+                        .and_then(Json::as_str)
+                        .and_then(|name| constants.get(name))
+                        .and_then(Constant::literal)
+                {
+                    let mut replaced = serde_json::Map::new();
+                    replaced.insert("kind".into(), "literal".into());
+                    replaced.insert(
+                        "value".into(),
+                        serde_json::to_value(literal).unwrap_or_default(),
+                    );
+                    if let Some(label) = fields.get("label") {
+                        replaced.insert("label".into(), label.clone());
+                    }
+                    *fields = replaced;
+                    return;
+                }
+                let mut dropped = Vec::new();
+                for (key, value) in fields.iter_mut() {
+                    if let Json::String(text) = value {
+                        match slot(text, constants) {
+                            Some(Slot::Filled(filled)) => *text = filled,
+                            Some(Slot::Dropped) => dropped.push(key.clone()),
+                            None => {}
+                        }
+                    } else {
+                        fill(value, constants);
+                    }
+                }
+                for key in dropped {
+                    fields.remove(&key);
+                }
+            }
+            Json::Array(items) => {
+                for item in items {
+                    fill(item, constants);
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut json = serde_json::to_value(expression).unwrap_or_default();
+    fill(&mut json, constants);
+    serde_json::from_value(json).unwrap_or_else(|_| expression.clone())
+}
+
+/// A string field with its slots filled.
+enum Slot {
+    /// The text, every slot filled.
+    Filled(String),
+    /// The field held only the set slot of a reference without a set.
+    Dropped,
+}
+
+/// `text` with its slots filled; `None` where it holds none.
+fn slot(text: &str, constants: &BTreeMap<&str, Constant>) -> Option<Slot> {
+    if !text.contains('{') {
+        return None;
+    }
+    let mut filled = String::new();
+    let mut rest = text;
+    let mut changed = false;
+    while let Some(open) = rest.find('{') {
+        let Some(close) = rest[open..].find('}') else {
+            break;
+        };
+        let key = &rest[open + 1..open + close];
+        let (name, part) = key.split_once('.').unwrap_or((key, ""));
+        let value = match (constants.get(name), part) {
+            (Some(Constant::Property { set, .. }), "set") => {
+                if key.len() + 2 == text.len() && set.is_none() {
+                    return Some(Slot::Dropped);
+                }
+                set.clone()
+            }
+            (Some(Constant::Property { name, .. }), "name") => Some(name.clone()),
+            (Some(constant @ (Constant::Text(_) | Constant::Scalar(_))), "") => {
+                Some(constant.shown())
+            }
+            _ => None,
+        };
+        filled.push_str(&rest[..open]);
+        match value {
+            Some(value) => {
+                filled.push_str(&value);
+                changed = true;
+            }
+            None => filled.push_str(&rest[open..=open + close]),
+        }
+        rest = &rest[open + close + 1..];
+    }
+    filled.push_str(rest);
+    changed.then_some(Slot::Filled(filled))
+}
+
+/// Binds `rule` into `template`: checks its declaration, folds its
+/// parameters into constants and chooses its form.
+fn bind<'t>(template: &'t Template, rule: &CompiledRule) -> Result<Plan<'t>, Unavailable> {
+    for each in &template.declaration {
+        check(each, rule, template)?;
+    }
+    let mut constants = BTreeMap::new();
+    for descriptor in &template.parameters {
+        if let Some(constant) = constant(rule, descriptor)? {
+            constants.insert(descriptor.name.as_str(), constant);
+        }
+    }
+    for default in &template.defaults {
+        if !constants.contains_key(default.parameter) {
+            let constant = match &default.value {
+                ScalarValue::Quantity { value, unit } => {
+                    let (value, dimension) = crate::support::si_quantity(*value, unit)?;
+                    Constant::Quantity(value, dimension)
+                }
+                other => Constant::Scalar(other.clone()),
+            };
+            constants.insert(default.parameter, constant);
+        }
+    }
+    let form = template
+        .forms
+        .iter()
+        .find(|form| form.when.iter().all(|name| stated(rule, name)))
+        .ok_or_else(|| invalid("no form of the template applies to the rule's parameters"))?;
+    let values = form
+        .values
+        .iter()
+        .map(|step| (step, bound(&step.expression, &constants)))
+        .collect();
+    Ok(Plan {
+        template,
+        form,
+        constants,
+        values,
+    })
+}
+
+/// The form's decision with a bound left out where it sums a parameter
+/// the rule leaves unstated.
+fn effective(plan: &Plan<'_>) -> Decision {
+    match &plan.form.decision {
+        Decision::Within {
+            value,
+            minimum,
+            maximum,
+            rounding,
+        } => {
+            let known = |terms: &Vec<Term>| {
+                terms.iter().all(|term| match term.operand {
+                    Operand::Parameter(name) => plan.constants.contains_key(name),
+                    Operand::Value(_) => true,
+                })
+            };
+            Decision::Within {
+                value,
+                minimum: minimum.clone().filter(known),
+                maximum: maximum.clone().filter(known),
+                rounding: rounding
+                    .iter()
+                    .copied()
+                    .filter(|magnitude| match magnitude.operand {
+                        Operand::Parameter(name) => plan.constants.contains_key(name),
+                        Operand::Value(_) => true,
+                    })
+                    .collect(),
+            }
+        }
+    }
+}
+
+/// What one object's values were read as.
+#[derive(Default)]
+struct Read {
+    values: BTreeMap<&'static str, Value>,
+    stated: BTreeMap<&'static str, Option<PropertyValue>>,
+    evidence: Vec<Evidence>,
+    bound: Option<String>,
+    why: Option<String>,
+}
+
+/// An interval of a value or a constant.
+fn interval(plan: &Plan<'_>, read: &Read, operand: Operand) -> Option<(f64, f64)> {
+    match operand {
+        Operand::Value(name) => match read.values.get(name) {
+            Some(Value::Number { value, .. }) => Some((value.lower, value.upper)),
+            _ => None,
+        },
+        Operand::Parameter(name) => plan
+            .constants
+            .get(name)
+            .and_then(Constant::number)
+            .map(|value| (value, value)),
+    }
+}
+
+/// `at least 0.24` as `at least 0.24 m`, rounded as lengths are shown.
+fn bound_text(bound: &str) -> String {
+    match bound.rsplit_once(' ') {
+        Some((words, value)) => match value.parse::<f64>() {
+            Ok(value) => format!("{words} {}", metres(value)),
+            Err(_) => bound.to_owned(),
+        },
+        None => bound.to_owned(),
+    }
+}
+
+/// The generic range judge over one object's values, in plain binary
+/// arithmetic as the capabilities judged: the verdict, or `None` where an
+/// operand is no number.
+fn within(plan: &Plan<'_>, read: &Read, decision: &Decision) -> Option<Verdict> {
+    let Decision::Within {
+        value,
+        minimum,
+        maximum,
+        rounding,
+    } = decision;
+    let (lower, upper) = interval(plan, read, Operand::Value(value))?;
+    let mut magnitudes = Vec::new();
+    for magnitude in rounding {
+        let (low, high) = interval(plan, read, magnitude.operand)?;
+        magnitudes.push(match magnitude.end {
+            End::Lower => low,
+            End::Upper => high,
+        });
+    }
+    let slack = rounding_slack(&magnitudes);
+    let sum = |terms: &[Term]| -> Option<f64> {
+        let mut total: Option<f64> = None;
+        for term in terms {
+            let (value, _) = interval(plan, read, term.operand)?;
+            total = Some(match (total, term.sign) {
+                (None, Sign::Plus) => value,
+                (None, Sign::Minus) => -value,
+                (Some(total), Sign::Plus) => total + value,
+                (Some(total), Sign::Minus) => total - value,
+            });
+        }
+        total
+    };
+    let minimum = match minimum {
+        Some(terms) => Some(sum(terms)? - slack),
+        None => None,
+    };
+    let maximum = match maximum {
+        Some(terms) => Some(sum(terms)? + slack),
+        None => None,
+    };
+    Some(judge(lower, upper, minimum, maximum))
+}
+
+/// Whether a value is of the kind `expect` names, judged on what the
+/// source states where it was read as stated.
+fn expected(expect: Expect, value: &Value, stated: Option<&Option<PropertyValue>>) -> bool {
+    match expect {
+        Expect::Length => match stated {
+            Some(Some(PropertyValue::Quantity {
+                value,
+                dimension: QuantityDimension::Length,
+            })) => value.is_finite(),
+            Some(Some(_)) => false,
+            _ => matches!(
+                value,
+                Value::Number { unit, .. }
+                    if *unit == axioval_engine::expression::Unit::of(Some(QuantityDimension::Length))
+            ),
+        },
+    }
+}
+
+/// The property a value step reads, when it reads one stated property.
+fn property_read(expression: &Expression) -> Option<(Option<&str>, &str)> {
+    match expression {
+        Expression::Property {
+            property_set,
+            property,
+            of: None,
+            ..
+        } => Some((property_set.as_deref(), property.as_str())),
+        _ => None,
+    }
+}
+
+/// A refusal as the measured value words it: without the property
+/// resolution's prefix and the call and object a measured value names.
+fn refusal(message: &str, expression: &Expression, object: &Object) -> String {
+    let Some((Some(axioval_ir::MEASURED_SET), call)) = property_read(expression) else {
+        return message.to_owned();
+    };
+    let name = call.split(';').next().unwrap_or(call);
+    let message = message
+        .strip_prefix("property evidence conflicts: ")
+        .unwrap_or(message);
+    message
+        .strip_prefix(&format!("`{name}` of {}: ", object.id))
+        .unwrap_or(message)
+        .to_owned()
+}
+
+/// `template` with its placeholders rendered.
+fn render(plan: &Plan<'_>, read: &Read, template: &str) -> String {
+    let mut out = String::new();
+    let mut rest = template;
+    while let Some(open) = rest.find('{') {
+        let Some(close) = rest[open..].find('}') else {
+            break;
+        };
+        out.push_str(&rest[..open]);
+        let key = &rest[open + 1..open + close];
+        match placeholder(plan, read, key) {
+            Some(text) => out.push_str(&text),
+            None => out.push_str(&rest[open..=open + close]),
+        }
+        rest = &rest[open + close + 1..];
+    }
+    out.push_str(rest);
+    out
+}
+
+fn placeholder(plan: &Plan<'_>, read: &Read, key: &str) -> Option<String> {
+    let (name, format) = key.split_once(':').unwrap_or((key, ""));
+    if format.is_empty() {
+        if let Some(text) = plan.template.texts.iter().find(|text| text.name == name) {
+            let holds = match text.when {
+                None => true,
+                Some(Condition::Positive { parameter }) => plan
+                    .constants
+                    .get(parameter)
+                    .and_then(Constant::number)
+                    .is_some_and(|value| value > 0.0),
+            };
+            return Some(if holds {
+                render(plan, read, text.text)
+            } else {
+                String::new()
+            });
+        }
+        match name {
+            "bound" => return read.bound.clone(),
+            "why" => return read.why.clone(),
+            _ => {}
+        }
+    }
+    match format {
+        "length" => {
+            if let Some(Value::Number { value, .. }) = read.values.get(name) {
+                return Some(shown(value.lower, value.upper));
+            }
+            plan.constants
+                .get(name)
+                .and_then(Constant::number)
+                .map(metres)
+        }
+        "stated" => read
+            .stated
+            .get(name)
+            .map(|value| display(value.as_ref()))
+            .or_else(|| read.values.get(name).map(ToString::to_string)),
+        "" => plan
+            .constants
+            .get(name)
+            .map(Constant::shown)
+            .or_else(|| read.values.get(name).map(ToString::to_string)),
+        _ => None,
+    }
+}
+
+fn evidence_of(evaluation: &Evaluation) -> impl Iterator<Item = Evidence> + '_ {
+    evaluation
+        .reads
+        .iter()
+        .flat_map(|read| read.leaf.evidence.iter().cloned())
+}
+
+/// What one object comes to.
+enum Outcome {
+    Passed,
+    Finding(String, Vec<Evidence>),
+    Open(NotEvaluatedReason, String),
+}
+
+/// A value not of the kind its step expects: invalid evidence.
+fn mismatch(plan: &Plan<'_>, read: &Read, step: &TemplateValue) -> Outcome {
+    let message = match step.mismatch {
+        Some(mismatch) => render(plan, read, mismatch),
+        None => format!("`{}` is not of the kind the check needs", step.name),
+    };
+    Outcome::Open(NotEvaluatedReason::InvalidEvidence, message)
+}
+
+/// Reads the plan's values for `object` and decides.
+fn judge_object(
+    plan: &Plan<'_>,
+    decision: &Decision,
+    context: &RuleContext<'_>,
+    rule: &CompiledRule,
+    object: &Object,
+) -> Outcome {
+    let mut leaves = ObjectLeaves::new(context, object, Some(&rule.parameters));
+    let mut read = Read::default();
+    for (step, expression) in &plan.values {
+        let evaluation = evaluate(expression, step.name, &mut leaves);
+        read.evidence.extend(evidence_of(&evaluation));
+        let stated = property_read(expression)
+            .and_then(|(set, name)| leaves.stated(set, name))
+            .map(|stated| stated.0);
+        if let Some(value) = &stated {
+            read.stated.insert(step.name, value.clone());
+        }
+        match evaluation.outcome {
+            Ok(Value::Null) => {
+                let message = step.absent.map_or_else(
+                    || format!("`{}` is stated absent", step.name),
+                    |absent| render(plan, &read, absent),
+                );
+                return Outcome::Finding(message, read.evidence);
+            }
+            Ok(value) => {
+                let mismatched = step
+                    .expect
+                    .is_some_and(|expect| !expected(expect, &value, stated.as_ref()));
+                read.values.insert(step.name, value);
+                if mismatched {
+                    return mismatch(plan, &read, step);
+                }
+            }
+            // Stated, but no single value of any kind: not the kind the
+            // step needs, worded as the source states it.
+            Err(_) if step.expect.is_some() && matches!(stated, Some(Some(_))) => {
+                return mismatch(plan, &read, step);
+            }
+            Err(why) => {
+                let reason = leaves
+                    .first_reason()
+                    .filter(|_| matches!(why.reason, Reason::Unreadable(_)))
+                    .unwrap_or_else(|| reason_of(&why));
+                read.why = Some(match &why.reason {
+                    Reason::Unreadable(message) => refusal(message, expression, object),
+                    other => other.to_string(),
+                });
+                return Outcome::Open(reason, read.why.clone().unwrap_or_default());
+            }
+        }
+    }
+    match within(plan, &read, decision) {
+        None => Outcome::Open(
+            NotEvaluatedReason::InvalidEvidence,
+            format!(
+                "{}: a value the decision reads is no number",
+                plan.template.name
+            ),
+        ),
+        Some(Verdict::Pass) => Outcome::Passed,
+        Some(Verdict::Fail(bound)) => {
+            read.bound = Some(bound_text(&bound));
+            Outcome::Finding(render(plan, &read, plan.form.fail), read.evidence)
+        }
+        Some(Verdict::Undecided(bound)) => {
+            read.bound = Some(bound_text(&bound));
+            Outcome::Open(
+                NotEvaluatedReason::IncompleteEvidence,
+                render(plan, &read, plan.form.undecided),
+            )
+        }
+    }
+}
+
+/// Runs `template` for `rule`.
+pub(crate) fn run(
+    template: &Template,
+    context: &RuleContext<'_>,
+    rule: &CompiledRule,
+) -> CapabilityEvaluation {
+    let plan = match bind(template, rule) {
+        Ok(plan) => plan,
+        Err((reason, message)) => {
+            return CapabilityEvaluation::not_evaluated(
+                reason,
+                format!("{}: {message}", template.name),
+            );
+        }
+    };
+    if let Some(services) = &template.services
+        && !services
+            .needs
+            .iter()
+            .all(|service| service.registered(context.services))
+    {
+        return CapabilityEvaluation::not_evaluated(
+            NotEvaluatedReason::MissingService,
+            services.message,
+        );
+    }
+    let decision = effective(&plan);
+    let (selected, mut evaluation) = select_objects(context, &rule.selector);
+    for object in selected {
+        match judge_object(&plan, &decision, context, rule, object) {
+            Outcome::Passed => {}
+            Outcome::Finding(message, evidence) => {
+                evaluation.push_finding(finding(rule, &object.id, message, evidence, vec![]));
+            }
+            Outcome::Open(reason, message) => {
+                evaluation.push_object_not_evaluated(object.id.clone(), reason, message);
+            }
+        }
+    }
+    evaluation
+}
+
+/// A rule bound to a template, copied into the `expression` rule it
+/// composes: a starting point for a stricter or extended rule.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Fork {
+    /// The requirement: the template's form with the rule's parameters
+    /// bound in, as a block editor shows it.
+    pub requirement: Expression,
+}
+
+impl Fork {
+    /// The capability a forked rule is bound to.
+    pub const CAPABILITY: &'static str = "axioval:capability.expression";
+
+    /// The forked rule's parameters.
+    #[must_use]
+    pub fn parameters(&self) -> BTreeMap<String, ParameterValue> {
+        BTreeMap::from([(
+            "requirement".to_owned(),
+            ParameterValue::Expression {
+                value: Box::new(self.requirement.clone()),
+            },
+        )])
+    }
+}
+
+/// Why a rule cannot be forked.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum ForkError {
+    /// The capability is implemented in code, not as a template.
+    #[error("capability `{0}` is not a template")]
+    NotATemplate(String),
+    /// The rule's parameters do not bind into the template.
+    #[error("{0}")]
+    Declaration(String),
+}
+
+/// `rule`, bound to the template `capability`, as the `expression` rule
+/// it composes. The form's decision becomes its expression form
+/// ([`Decision::expression`]), every value inlined and every parameter
+/// folded in, so the fork reads the same measured and stated values
+/// through the same evaluator. Its findings are worded as an `expression`
+/// rule's, and its bounds are decided by sound interval arithmetic, so it
+/// reaches the template's verdicts except where a value lies within a
+/// unit in the last place of a bound's rounding allowance.
+///
+/// # Errors
+///
+/// [`ForkError`] when `capability` is no template or `rule`'s parameters
+/// do not bind into it.
+pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork, ForkError> {
+    let template = capability
+        .template()
+        .ok_or_else(|| ForkError::NotATemplate(capability.id().to_owned()))?;
+    let plan = bind(template, rule)
+        .map_err(|(_, message)| ForkError::Declaration(format!("{}: {message}", template.name)))?;
+    let requirement = effective(&plan).expression(&|name| {
+        plan.values
+            .iter()
+            .find(|(step, _)| step.name == name)
+            .map_or_else(
+                || Expression::Derived {
+                    name: name.to_owned(),
+                    label: None,
+                },
+                |(_, expression)| expression.clone(),
+            )
+    });
+    Ok(Fork {
+        requirement: bound(&requirement, &plan.constants),
+    })
+}

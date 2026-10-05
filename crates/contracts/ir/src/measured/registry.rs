@@ -1288,6 +1288,57 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              projizierte Punkt.",
         ),
     },
+    MeasuredDescriptor {
+        name: "body_position",
+        parameters: &[
+            MeasuredParameter {
+                key: "axis",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["right", "forward", "up"],
+                },
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The placement's own axis, as for `body_extent`.",
+                    "Die eigene Achse der Platzierung, wie bei `body_extent`.",
+                ),
+            },
+            MeasuredParameter {
+                key: "end",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["low", "high"],
+                },
+                required: true,
+                default: None,
+                help: &en_de(
+                    "`low`, the body's lowest point projected onto the axis, or `high`, its \
+                     highest.",
+                    "`low`, der tiefste auf die Achse projizierte Punkt des Körpers, oder \
+                     `high`, der höchste.",
+                ),
+            },
+        ],
+        dimension: Some(QuantityDimension::Length),
+        services: FACES_AND_FRAMES,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[
+            NO_GEOMETRY,
+            "the object's placement is not stated or not readable",
+        ],
+        label: &en_de("Body position", "Körperlage"),
+        help: &en_de(
+            "Where the body begins or ends along one of its own placement axes: its lowest \
+             or highest point projected onto the axis, measured from the origin of the \
+             coordinates along it. `body_extent` is the high less the low end; the \
+             positions are the magnitudes the binary rounding of that difference scales \
+             with.",
+            "Wo der Körper entlang einer eigenen Achse seiner Platzierung beginnt oder endet: \
+             sein tiefster oder höchster auf die Achse projizierter Punkt, gemessen vom \
+             Ursprung der Koordinaten entlang der Achse. `body_extent` ist das hohe weniger \
+             das tiefe Ende; die Lagen sind die Größen, mit denen die binäre Rundung dieser \
+             Differenz wächst.",
+        ),
+    },
     plain!(
         MEASURED_BOTTOM,
         Some(QuantityDimension::Length),

@@ -113,3 +113,88 @@ fn the_german_catalogue_translates_every_built_in_entry() {
         CatalogueError::UnsupportedLocale("fr".into())
     );
 }
+
+/// A capability built as a template carries its composition: its forms as
+/// expressions with their block trees, which map back to the same
+/// expressions. A rule bound to it forks into an `expression` rule whose
+/// requirement is the form with the rule's parameters bound in, and whose
+/// block tree an editor opens as the starting point of a new rule.
+#[test]
+fn a_template_s_composition_expands_into_blocks_and_forks() {
+    use axioval_engine::CompiledRule;
+    use axioval_ir::RuleId;
+    use axioval_ir::blocks::{from_blocks, to_blocks};
+    use axioval_ir::contract::{Expression, ParameterValue, Selector, Severity};
+
+    let value: serde_json::Value = serde_json::from_str(&rendered(&[])).unwrap();
+    let capabilities = value["capabilities"].as_array().unwrap();
+    let templated: Vec<&str> = capabilities
+        .iter()
+        .filter(|capability| capability.get("template").is_some())
+        .map(|capability| capability["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(templated, ["axioval:capability.body-extent"]);
+    let template = &capabilities
+        .iter()
+        .find(|capability| capability["id"] == "axioval:capability.body-extent")
+        .unwrap()["template"];
+    assert_eq!(template["name"], "body-extent");
+    let requirements = template["requirements"].as_array().unwrap();
+    assert_eq!(
+        requirements.len(),
+        template["forms"].as_array().unwrap().len()
+    );
+    assert_eq!(
+        requirements[0]["when"],
+        serde_json::json!(["target_property"])
+    );
+    for requirement in requirements {
+        let expression: Expression =
+            serde_json::from_value(requirement["expression"].clone()).unwrap();
+        let blocks = serde_json::from_value(requirement["blocks"].clone()).unwrap();
+        assert_eq!(from_blocks(&blocks).unwrap(), expression);
+    }
+
+    let registry = built_ins();
+    let capability = registry.get("axioval:capability.body-extent").unwrap();
+    let rule = CompiledRule {
+        id: RuleId::new("wall-thickness").unwrap(),
+        capability: "axioval:capability.body-extent".into(),
+        severity: Severity::Error,
+        selector: Selector::All,
+        parameters: [
+            (
+                "axis".to_owned(),
+                ParameterValue::String {
+                    value: "forward".into(),
+                },
+            ),
+            (
+                "minimum".to_owned(),
+                ParameterValue::Quantity {
+                    value: 150.0,
+                    unit: "mm".into(),
+                },
+            ),
+        ]
+        .into(),
+    };
+    let fork = axioval_rules::templates::fork(capability.as_ref(), &rule).unwrap();
+    let text = serde_json::to_string(&fork.requirement).unwrap();
+    // Every slot is filled and every parameter folded in; the bound the
+    // rule leaves unstated is left out.
+    assert!(!text.contains("{axis}"), "{text}");
+    assert!(text.contains("body_extent;axis=forward"), "{text}");
+    assert!(
+        text.contains("body_position;axis=forward;end=low"),
+        "{text}"
+    );
+    assert!(!text.contains("\"parameter\""), "{text}");
+    assert!(!text.contains("at most the upper bound"), "{text}");
+    let blocks = to_blocks(&fork.requirement).unwrap();
+    assert_eq!(from_blocks(&blocks).unwrap(), fork.requirement);
+    // A measured read with its parameters bound is canonical: a
+    // `measured.` block with the axis as a field.
+    let blocks = serde_json::to_string(&blocks).unwrap();
+    assert!(blocks.contains("\"measured.body_extent\""), "{blocks}");
+}

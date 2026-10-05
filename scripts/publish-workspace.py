@@ -68,12 +68,14 @@ def publish_plan(data: dict) -> list[dict]:
     }
     dependencies: dict[str, set[str]] = {}
     for name, package in packages.items():
+        # A crate's dev-dependency on itself only turns a feature on for its
+        # own tests (`axioval-rules`' `parity-reference`); it orders nothing.
         dependencies[name] = {
             by_path[str(Path(dependency["path"]).resolve())]
             for dependency in package["dependencies"]
             if dependency.get("path")
             and str(Path(dependency["path"]).resolve()) in by_path
-        }
+        } - {name}
 
     order: list[str] = []
     remaining = {name: set(required) for name, required in dependencies.items()}

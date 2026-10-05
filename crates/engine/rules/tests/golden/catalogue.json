@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "1.1.0",
   "languages": [
     "en",
     "de"
@@ -2137,7 +2137,1064 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "body-extent",
+        "defaults": [
+          {
+            "parameter": "tolerance",
+            "value": {
+              "type": "quantity",
+              "value": 0.0,
+              "unit": "m"
+            }
+          }
+        ],
+        "declaration": [
+          {
+            "kind": "choice",
+            "parameter": "axis",
+            "options": [
+              "right",
+              "forward",
+              "up"
+            ]
+          },
+          {
+            "kind": "length",
+            "parameter": "tolerance"
+          },
+          {
+            "kind": "length",
+            "parameter": "minimum"
+          },
+          {
+            "kind": "length",
+            "parameter": "maximum"
+          },
+          {
+            "kind": "exclusive",
+            "one": [
+              "target_property"
+            ],
+            "other": [
+              "minimum",
+              "maximum"
+            ],
+            "message": "declare either `target_property` or `minimum`/`maximum`, not both"
+          },
+          {
+            "kind": "anyOf",
+            "parameters": [
+              "target_property",
+              "minimum",
+              "maximum"
+            ],
+            "message": "`target_property`, `minimum` or `maximum` is required"
+          },
+          {
+            "kind": "requires",
+            "parameter": "tolerance",
+            "with": [
+              "target_property"
+            ],
+            "message": "`tolerance` applies to `target_property` only"
+          },
+          {
+            "kind": "ordered",
+            "low": "minimum",
+            "high": "maximum",
+            "message": "`minimum` exceeds `maximum`"
+          }
+        ],
+        "services": {
+          "needs": [
+            "object-frame",
+            "vertical-extent"
+          ],
+          "message": "body-extent needs the object-frame and vertical-extent services"
+        },
+        "texts": [
+          {
+            "name": "measured",
+            "text": "body extent along `{axis}` is {extent:length}"
+          },
+          {
+            "name": "within",
+            "when": {
+              "kind": "positive",
+              "parameter": "tolerance"
+            },
+            "text": " within {tolerance:length}"
+          },
+          {
+            "name": "stated",
+            "text": "; `{target_property}` states {target:length}{within}"
+          }
+        ],
+        "forms": [
+          {
+            "when": [
+              "target_property"
+            ],
+            "values": [
+              {
+                "name": "extent",
+                "expression": {
+                  "kind": "property",
+                  "propertySet": "axioval:measured",
+                  "property": "body_extent;axis={axis}"
+                }
+              },
+              {
+                "name": "low",
+                "expression": {
+                  "kind": "property",
+                  "propertySet": "axioval:measured",
+                  "property": "body_position;axis={axis};end=low"
+                }
+              },
+              {
+                "name": "high",
+                "expression": {
+                  "kind": "property",
+                  "propertySet": "axioval:measured",
+                  "property": "body_position;axis={axis};end=high"
+                }
+              },
+              {
+                "name": "target",
+                "expression": {
+                  "kind": "property",
+                  "propertySet": "{target_property.set}",
+                  "property": "{target_property.name}"
+                },
+                "expect": "length",
+                "absent": "{measured}; `{target_property}` is absent",
+                "mismatch": "`{target_property}` is {target:stated}, not a length"
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "extent",
+              "minimum": [
+                {
+                  "sign": "plus",
+                  "operand": {
+                    "kind": "value",
+                    "name": "target"
+                  }
+                },
+                {
+                  "sign": "minus",
+                  "operand": {
+                    "kind": "parameter",
+                    "name": "tolerance"
+                  }
+                }
+              ],
+              "maximum": [
+                {
+                  "sign": "plus",
+                  "operand": {
+                    "kind": "value",
+                    "name": "target"
+                  }
+                },
+                {
+                  "sign": "plus",
+                  "operand": {
+                    "kind": "parameter",
+                    "name": "tolerance"
+                  }
+                }
+              ],
+              "rounding": [
+                {
+                  "end": "lower",
+                  "operand": {
+                    "kind": "value",
+                    "name": "low"
+                  }
+                },
+                {
+                  "end": "upper",
+                  "operand": {
+                    "kind": "value",
+                    "name": "high"
+                  }
+                },
+                {
+                  "end": "lower",
+                  "operand": {
+                    "kind": "value",
+                    "name": "target"
+                  }
+                },
+                {
+                  "end": "lower",
+                  "operand": {
+                    "kind": "parameter",
+                    "name": "tolerance"
+                  }
+                }
+              ]
+            },
+            "fail": "{measured}{stated}",
+            "undecided": "{measured}, which straddles the stated length{stated}"
+          },
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "extent",
+                "expression": {
+                  "kind": "property",
+                  "propertySet": "axioval:measured",
+                  "property": "body_extent;axis={axis}"
+                }
+              },
+              {
+                "name": "low",
+                "expression": {
+                  "kind": "property",
+                  "propertySet": "axioval:measured",
+                  "property": "body_position;axis={axis};end=low"
+                }
+              },
+              {
+                "name": "high",
+                "expression": {
+                  "kind": "property",
+                  "propertySet": "axioval:measured",
+                  "property": "body_position;axis={axis};end=high"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "extent",
+              "minimum": [
+                {
+                  "sign": "plus",
+                  "operand": {
+                    "kind": "parameter",
+                    "name": "minimum"
+                  }
+                }
+              ],
+              "maximum": [
+                {
+                  "sign": "plus",
+                  "operand": {
+                    "kind": "parameter",
+                    "name": "maximum"
+                  }
+                }
+              ],
+              "rounding": [
+                {
+                  "end": "lower",
+                  "operand": {
+                    "kind": "value",
+                    "name": "low"
+                  }
+                },
+                {
+                  "end": "upper",
+                  "operand": {
+                    "kind": "value",
+                    "name": "high"
+                  }
+                },
+                {
+                  "end": "upper",
+                  "operand": {
+                    "kind": "value",
+                    "name": "extent"
+                  }
+                }
+              ]
+            },
+            "fail": "{measured}; required {bound}",
+            "undecided": "{measured}, which straddles {bound}"
+          }
+        ],
+        "requirements": [
+          {
+            "when": [
+              "target_property"
+            ],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "compare",
+                  "operator": "greaterThanOrEquals",
+                  "left": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "body_extent;axis={axis}"
+                  },
+                  "right": {
+                    "kind": "subtract",
+                    "left": {
+                      "kind": "subtract",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "{target_property.set}",
+                        "property": "{target_property.name}"
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "tolerance"
+                      }
+                    },
+                    "right": {
+                      "kind": "multiply",
+                      "left": {
+                        "kind": "literal",
+                        "value": {
+                          "type": "number",
+                          "value": 8.881784197001252e-16
+                        }
+                      },
+                      "right": {
+                        "kind": "max",
+                        "operands": [
+                          {
+                            "kind": "abs",
+                            "operand": {
+                              "kind": "property",
+                              "propertySet": "axioval:measured",
+                              "property": "body_position;axis={axis};end=low"
+                            }
+                          },
+                          {
+                            "kind": "abs",
+                            "operand": {
+                              "kind": "property",
+                              "propertySet": "axioval:measured",
+                              "property": "body_position;axis={axis};end=high"
+                            }
+                          },
+                          {
+                            "kind": "abs",
+                            "operand": {
+                              "kind": "property",
+                              "propertySet": "{target_property.set}",
+                              "property": "{target_property.name}"
+                            }
+                          },
+                          {
+                            "kind": "abs",
+                            "operand": {
+                              "kind": "parameter",
+                              "name": "tolerance"
+                            }
+                          }
+                        ]
+                      },
+                      "label": "rounding allowance"
+                    }
+                  },
+                  "label": "at least the lower bound"
+                },
+                {
+                  "kind": "compare",
+                  "operator": "lessThanOrEquals",
+                  "left": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "body_extent;axis={axis}"
+                  },
+                  "right": {
+                    "kind": "add",
+                    "left": {
+                      "kind": "add",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "{target_property.set}",
+                        "property": "{target_property.name}"
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "tolerance"
+                      }
+                    },
+                    "right": {
+                      "kind": "multiply",
+                      "left": {
+                        "kind": "literal",
+                        "value": {
+                          "type": "number",
+                          "value": 8.881784197001252e-16
+                        }
+                      },
+                      "right": {
+                        "kind": "max",
+                        "operands": [
+                          {
+                            "kind": "abs",
+                            "operand": {
+                              "kind": "property",
+                              "propertySet": "axioval:measured",
+                              "property": "body_position;axis={axis};end=low"
+                            }
+                          },
+                          {
+                            "kind": "abs",
+                            "operand": {
+                              "kind": "property",
+                              "propertySet": "axioval:measured",
+                              "property": "body_position;axis={axis};end=high"
+                            }
+                          },
+                          {
+                            "kind": "abs",
+                            "operand": {
+                              "kind": "property",
+                              "propertySet": "{target_property.set}",
+                              "property": "{target_property.name}"
+                            }
+                          },
+                          {
+                            "kind": "abs",
+                            "operand": {
+                              "kind": "parameter",
+                              "name": "tolerance"
+                            }
+                          }
+                        ]
+                      },
+                      "label": "rounding allowance"
+                    }
+                  },
+                  "label": "at most the upper bound"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.compare",
+                      "label": "at least the lower bound",
+                      "fields": {
+                        "operator": "greaterThanOrEquals"
+                      },
+                      "inputs": {
+                        "left": {
+                          "block": {
+                            "type": "expression.property",
+                            "fields": {
+                              "property": "body_extent;axis={axis}",
+                              "propertySet": "axioval:measured"
+                            }
+                          }
+                        },
+                        "right": {
+                          "block": {
+                            "type": "expression.subtract",
+                            "inputs": {
+                              "left": {
+                                "block": {
+                                  "type": "expression.subtract",
+                                  "inputs": {
+                                    "left": {
+                                      "block": {
+                                        "type": "expression.property",
+                                        "fields": {
+                                          "property": "{target_property.name}",
+                                          "propertySet": "{target_property.set}"
+                                        }
+                                      }
+                                    },
+                                    "right": {
+                                      "block": {
+                                        "type": "expression.parameter",
+                                        "fields": {
+                                          "name": "tolerance"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              "right": {
+                                "block": {
+                                  "type": "expression.multiply",
+                                  "label": "rounding allowance",
+                                  "inputs": {
+                                    "left": {
+                                      "block": {
+                                        "type": "expression.literal",
+                                        "fields": {
+                                          "value": {
+                                            "type": "number",
+                                            "value": 8.881784197001252e-16
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "right": {
+                                      "block": {
+                                        "type": "expression.max",
+                                        "inputs": {
+                                          "operands": {
+                                            "blocks": [
+                                              {
+                                                "type": "expression.abs",
+                                                "inputs": {
+                                                  "operand": {
+                                                    "block": {
+                                                      "type": "expression.property",
+                                                      "fields": {
+                                                        "property": "body_position;axis={axis};end=low",
+                                                        "propertySet": "axioval:measured"
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              },
+                                              {
+                                                "type": "expression.abs",
+                                                "inputs": {
+                                                  "operand": {
+                                                    "block": {
+                                                      "type": "expression.property",
+                                                      "fields": {
+                                                        "property": "body_position;axis={axis};end=high",
+                                                        "propertySet": "axioval:measured"
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              },
+                                              {
+                                                "type": "expression.abs",
+                                                "inputs": {
+                                                  "operand": {
+                                                    "block": {
+                                                      "type": "expression.property",
+                                                      "fields": {
+                                                        "property": "{target_property.name}",
+                                                        "propertySet": "{target_property.set}"
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              },
+                                              {
+                                                "type": "expression.abs",
+                                                "inputs": {
+                                                  "operand": {
+                                                    "block": {
+                                                      "type": "expression.parameter",
+                                                      "fields": {
+                                                        "name": "tolerance"
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            ]
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.compare",
+                      "label": "at most the upper bound",
+                      "fields": {
+                        "operator": "lessThanOrEquals"
+                      },
+                      "inputs": {
+                        "left": {
+                          "block": {
+                            "type": "expression.property",
+                            "fields": {
+                              "property": "body_extent;axis={axis}",
+                              "propertySet": "axioval:measured"
+                            }
+                          }
+                        },
+                        "right": {
+                          "block": {
+                            "type": "expression.add",
+                            "inputs": {
+                              "left": {
+                                "block": {
+                                  "type": "expression.add",
+                                  "inputs": {
+                                    "left": {
+                                      "block": {
+                                        "type": "expression.property",
+                                        "fields": {
+                                          "property": "{target_property.name}",
+                                          "propertySet": "{target_property.set}"
+                                        }
+                                      }
+                                    },
+                                    "right": {
+                                      "block": {
+                                        "type": "expression.parameter",
+                                        "fields": {
+                                          "name": "tolerance"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              "right": {
+                                "block": {
+                                  "type": "expression.multiply",
+                                  "label": "rounding allowance",
+                                  "inputs": {
+                                    "left": {
+                                      "block": {
+                                        "type": "expression.literal",
+                                        "fields": {
+                                          "value": {
+                                            "type": "number",
+                                            "value": 8.881784197001252e-16
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "right": {
+                                      "block": {
+                                        "type": "expression.max",
+                                        "inputs": {
+                                          "operands": {
+                                            "blocks": [
+                                              {
+                                                "type": "expression.abs",
+                                                "inputs": {
+                                                  "operand": {
+                                                    "block": {
+                                                      "type": "expression.property",
+                                                      "fields": {
+                                                        "property": "body_position;axis={axis};end=low",
+                                                        "propertySet": "axioval:measured"
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              },
+                                              {
+                                                "type": "expression.abs",
+                                                "inputs": {
+                                                  "operand": {
+                                                    "block": {
+                                                      "type": "expression.property",
+                                                      "fields": {
+                                                        "property": "body_position;axis={axis};end=high",
+                                                        "propertySet": "axioval:measured"
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              },
+                                              {
+                                                "type": "expression.abs",
+                                                "inputs": {
+                                                  "operand": {
+                                                    "block": {
+                                                      "type": "expression.property",
+                                                      "fields": {
+                                                        "property": "{target_property.name}",
+                                                        "propertySet": "{target_property.set}"
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              },
+                                              {
+                                                "type": "expression.abs",
+                                                "inputs": {
+                                                  "operand": {
+                                                    "block": {
+                                                      "type": "expression.parameter",
+                                                      "fields": {
+                                                        "name": "tolerance"
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            ]
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "compare",
+                  "operator": "greaterThanOrEquals",
+                  "left": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "body_extent;axis={axis}"
+                  },
+                  "right": {
+                    "kind": "subtract",
+                    "left": {
+                      "kind": "parameter",
+                      "name": "minimum"
+                    },
+                    "right": {
+                      "kind": "multiply",
+                      "left": {
+                        "kind": "literal",
+                        "value": {
+                          "type": "number",
+                          "value": 8.881784197001252e-16
+                        }
+                      },
+                      "right": {
+                        "kind": "max",
+                        "operands": [
+                          {
+                            "kind": "abs",
+                            "operand": {
+                              "kind": "property",
+                              "propertySet": "axioval:measured",
+                              "property": "body_position;axis={axis};end=low"
+                            }
+                          },
+                          {
+                            "kind": "abs",
+                            "operand": {
+                              "kind": "property",
+                              "propertySet": "axioval:measured",
+                              "property": "body_position;axis={axis};end=high"
+                            }
+                          },
+                          {
+                            "kind": "abs",
+                            "operand": {
+                              "kind": "property",
+                              "propertySet": "axioval:measured",
+                              "property": "body_extent;axis={axis}"
+                            }
+                          }
+                        ]
+                      },
+                      "label": "rounding allowance"
+                    }
+                  },
+                  "label": "at least the lower bound"
+                },
+                {
+                  "kind": "compare",
+                  "operator": "lessThanOrEquals",
+                  "left": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "body_extent;axis={axis}"
+                  },
+                  "right": {
+                    "kind": "add",
+                    "left": {
+                      "kind": "parameter",
+                      "name": "maximum"
+                    },
+                    "right": {
+                      "kind": "multiply",
+                      "left": {
+                        "kind": "literal",
+                        "value": {
+                          "type": "number",
+                          "value": 8.881784197001252e-16
+                        }
+                      },
+                      "right": {
+                        "kind": "max",
+                        "operands": [
+                          {
+                            "kind": "abs",
+                            "operand": {
+                              "kind": "property",
+                              "propertySet": "axioval:measured",
+                              "property": "body_position;axis={axis};end=low"
+                            }
+                          },
+                          {
+                            "kind": "abs",
+                            "operand": {
+                              "kind": "property",
+                              "propertySet": "axioval:measured",
+                              "property": "body_position;axis={axis};end=high"
+                            }
+                          },
+                          {
+                            "kind": "abs",
+                            "operand": {
+                              "kind": "property",
+                              "propertySet": "axioval:measured",
+                              "property": "body_extent;axis={axis}"
+                            }
+                          }
+                        ]
+                      },
+                      "label": "rounding allowance"
+                    }
+                  },
+                  "label": "at most the upper bound"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.compare",
+                      "label": "at least the lower bound",
+                      "fields": {
+                        "operator": "greaterThanOrEquals"
+                      },
+                      "inputs": {
+                        "left": {
+                          "block": {
+                            "type": "expression.property",
+                            "fields": {
+                              "property": "body_extent;axis={axis}",
+                              "propertySet": "axioval:measured"
+                            }
+                          }
+                        },
+                        "right": {
+                          "block": {
+                            "type": "expression.subtract",
+                            "inputs": {
+                              "left": {
+                                "block": {
+                                  "type": "expression.parameter",
+                                  "fields": {
+                                    "name": "minimum"
+                                  }
+                                }
+                              },
+                              "right": {
+                                "block": {
+                                  "type": "expression.multiply",
+                                  "label": "rounding allowance",
+                                  "inputs": {
+                                    "left": {
+                                      "block": {
+                                        "type": "expression.literal",
+                                        "fields": {
+                                          "value": {
+                                            "type": "number",
+                                            "value": 8.881784197001252e-16
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "right": {
+                                      "block": {
+                                        "type": "expression.max",
+                                        "inputs": {
+                                          "operands": {
+                                            "blocks": [
+                                              {
+                                                "type": "expression.abs",
+                                                "inputs": {
+                                                  "operand": {
+                                                    "block": {
+                                                      "type": "expression.property",
+                                                      "fields": {
+                                                        "property": "body_position;axis={axis};end=low",
+                                                        "propertySet": "axioval:measured"
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              },
+                                              {
+                                                "type": "expression.abs",
+                                                "inputs": {
+                                                  "operand": {
+                                                    "block": {
+                                                      "type": "expression.property",
+                                                      "fields": {
+                                                        "property": "body_position;axis={axis};end=high",
+                                                        "propertySet": "axioval:measured"
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              },
+                                              {
+                                                "type": "expression.abs",
+                                                "inputs": {
+                                                  "operand": {
+                                                    "block": {
+                                                      "type": "expression.property",
+                                                      "fields": {
+                                                        "property": "body_extent;axis={axis}",
+                                                        "propertySet": "axioval:measured"
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            ]
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.compare",
+                      "label": "at most the upper bound",
+                      "fields": {
+                        "operator": "lessThanOrEquals"
+                      },
+                      "inputs": {
+                        "left": {
+                          "block": {
+                            "type": "expression.property",
+                            "fields": {
+                              "property": "body_extent;axis={axis}",
+                              "propertySet": "axioval:measured"
+                            }
+                          }
+                        },
+                        "right": {
+                          "block": {
+                            "type": "expression.add",
+                            "inputs": {
+                              "left": {
+                                "block": {
+                                  "type": "expression.parameter",
+                                  "fields": {
+                                    "name": "maximum"
+                                  }
+                                }
+                              },
+                              "right": {
+                                "block": {
+                                  "type": "expression.multiply",
+                                  "label": "rounding allowance",
+                                  "inputs": {
+                                    "left": {
+                                      "block": {
+                                        "type": "expression.literal",
+                                        "fields": {
+                                          "value": {
+                                            "type": "number",
+                                            "value": 8.881784197001252e-16
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "right": {
+                                      "block": {
+                                        "type": "expression.max",
+                                        "inputs": {
+                                          "operands": {
+                                            "blocks": [
+                                              {
+                                                "type": "expression.abs",
+                                                "inputs": {
+                                                  "operand": {
+                                                    "block": {
+                                                      "type": "expression.property",
+                                                      "fields": {
+                                                        "property": "body_position;axis={axis};end=low",
+                                                        "propertySet": "axioval:measured"
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              },
+                                              {
+                                                "type": "expression.abs",
+                                                "inputs": {
+                                                  "operand": {
+                                                    "block": {
+                                                      "type": "expression.property",
+                                                      "fields": {
+                                                        "property": "body_position;axis={axis};end=high",
+                                                        "propertySet": "axioval:measured"
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              },
+                                              {
+                                                "type": "expression.abs",
+                                                "inputs": {
+                                                  "operand": {
+                                                    "block": {
+                                                      "type": "expression.property",
+                                                      "fields": {
+                                                        "property": "body_extent;axis={axis}",
+                                                        "propertySet": "axioval:measured"
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            ]
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.centre-line-distance",
@@ -21312,6 +22369,86 @@
         {
           "language": "de",
           "text": "Die Tiefe des Körpers entlang einer eigenen Achse seiner Platzierung, wie `body-extent` sie misst: der höchste weniger der tiefste auf die Achse projizierte Punkt."
+        }
+      ],
+      "unit": "m",
+      "available": true
+    },
+    {
+      "name": "body_position",
+      "parameters": [
+        {
+          "key": "axis",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "right",
+              "forward",
+              "up"
+            ]
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The placement's own axis, as for `body_extent`."
+            },
+            {
+              "language": "de",
+              "text": "Die eigene Achse der Platzierung, wie bei `body_extent`."
+            }
+          ]
+        },
+        {
+          "key": "end",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "low",
+              "high"
+            ]
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "`low`, the body's lowest point projected onto the axis, or `high`, its highest."
+            },
+            {
+              "language": "de",
+              "text": "`low`, der tiefste auf die Achse projizierte Punkt des Körpers, oder `high`, der höchste."
+            }
+          ]
+        }
+      ],
+      "dimension": "length",
+      "services": [
+        "vertical-extent",
+        "object-frame"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "the object's placement is not stated or not readable"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Body position"
+        },
+        {
+          "language": "de",
+          "text": "Körperlage"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "Where the body begins or ends along one of its own placement axes: its lowest or highest point projected onto the axis, measured from the origin of the coordinates along it. `body_extent` is the high less the low end; the positions are the magnitudes the binary rounding of that difference scales with."
+        },
+        {
+          "language": "de",
+          "text": "Wo der Körper entlang einer eigenen Achse seiner Platzierung beginnt oder endet: sein tiefster oder höchster auf die Achse projizierter Punkt, gemessen vom Ursprung der Koordinaten entlang der Achse. `body_extent` ist das hohe weniger das tiefe Ende; die Lagen sind die Größen, mit denen die binäre Rundung dieser Differenz wächst."
         }
       ],
       "unit": "m",

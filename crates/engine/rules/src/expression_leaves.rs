@@ -20,6 +20,14 @@ use crate::selection::{Selection, object_by_id, selector_matches};
 use crate::support::table::{Matched, RowSelection, RowTest, TextPattern, match_rows};
 use crate::support::{PropertyRef, Resolved, Traversal, resolve};
 
+/// A stated property read: its set, its name and its value as stated.
+type StatedRead = (Option<String>, String, Option<axioval_ir::PropertyValue>);
+
+/// What the source states for a property: its value, or `None` where it
+/// states the property absent.
+#[derive(Clone, Debug)]
+pub(crate) struct Stated(pub(crate) Option<axioval_ir::PropertyValue>);
+
 /// A candidate member: the object, whether it surely belongs, and the
 /// evidence that reached it.
 type Candidate<'a> = (&'a Object, bool, Vec<Evidence>);
@@ -35,6 +43,10 @@ pub(crate) struct ObjectLeaves<'a> {
     parameters: Option<&'a BTreeMap<String, ParameterValue>>,
     /// Why each unreadable leaf was unreadable, in reading order.
     reasons: RefCell<Vec<NotEvaluatedReason>>,
+    /// Every stated property read, by set and name, as the source states
+    /// it (`None` where it states the property absent): a template words a
+    /// value that is not of the kind it needs as the source states it.
+    stated: RefCell<Vec<StatedRead>>,
     /// The measured member in scope, whose fields `axioval:member` reads.
     fields: Option<&'a MeasuredMember>,
     /// The evidence of the measured member list last listed.
@@ -54,6 +66,7 @@ impl<'a> ObjectLeaves<'a> {
             subject: object,
             parameters,
             reasons: RefCell::new(Vec::new()),
+            stated: RefCell::new(Vec::new()),
             fields: None,
             listed: Vec::new(),
         }
@@ -68,6 +81,7 @@ impl<'a> ObjectLeaves<'a> {
             subject: self.subject,
             parameters: self.parameters,
             reasons: RefCell::new(Vec::new()),
+            stated: RefCell::new(Vec::new()),
             fields: None,
             listed: Vec::new(),
         }
@@ -82,6 +96,7 @@ impl<'a> ObjectLeaves<'a> {
             subject: self.subject,
             parameters: self.parameters,
             reasons: RefCell::new(Vec::new()),
+            stated: RefCell::new(Vec::new()),
             fields: Some(member),
             listed: Vec::new(),
         }
@@ -295,6 +310,17 @@ impl<'a> ObjectLeaves<'a> {
         }
     }
 
+    /// What the source states for the property `set`/`name` of the object
+    /// in scope, as last read; `None` where it was not read or could not be.
+    pub(crate) fn stated(&self, set: Option<&str>, name: &str) -> Option<Stated> {
+        self.stated
+            .borrow()
+            .iter()
+            .rev()
+            .find(|(read_set, read_name, _)| read_set.as_deref() == set && read_name == name)
+            .map(|(_, _, value)| Stated(value.clone()))
+    }
+
     /// Why the first unreadable leaf was unreadable.
     pub(crate) fn first_reason(&self) -> Option<NotEvaluatedReason> {
         self.reasons.borrow().first().cloned()
@@ -336,6 +362,11 @@ impl ExpressionContext for ObjectLeaves<'_> {
         }
         match resolve(self.context, self.object, PropertyRef { set, name }) {
             Ok(resolved) => {
+                self.stated.borrow_mut().push((
+                    set.map(str::to_owned),
+                    name.to_owned(),
+                    resolved.value().cloned(),
+                ));
                 let evidence = resolved.evidence();
                 let value = match &resolved {
                     // A stated absence is `null`, never a value not read.

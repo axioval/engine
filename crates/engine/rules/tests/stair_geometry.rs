@@ -3797,6 +3797,88 @@ fn measured_clearances_reproduce_the_capabilities_measurements() {
     assert!(near(measured(narrowed, "gentle", &runs), 1.2));
 }
 
+/// A handrail that may reach over the middle or lie wholly in either half
+/// cannot be placed: its sides, its place among the pieces and the gap
+/// after it are undecided, never false or none. One surely over the middle
+/// runs along neither side.
+#[test]
+fn an_unplaceable_handrail_is_undecided() {
+    use axioval_engine::{CapabilityRegistry, MemberValue, ServiceRegistry, measured_members};
+    let project = model()
+        .object("middle_rail", "railing")
+        .object("wide_rail", "railing")
+        .project();
+    let interval = |(lower, upper): (f64, f64)| ElevationInterval::try_new(lower, upper).unwrap();
+    // The flight's sides lie at 0 and 1.2 m across, its middle at 0.6 m.
+    let across = |left: (f64, f64), right: (f64, f64)| {
+        RailMeasurement::try_new(
+            (point(0.0), point(0.84)),
+            (interval(left), interval(right)),
+            MeasuredInterval::try_new(0.9, 0.9).unwrap(),
+            MeasuredInterval::try_new(0.9, 0.9).unwrap(),
+        )
+        .unwrap()
+    };
+    let surfaces = stairs()
+        .rail(
+            "regular",
+            WalkingStretch::Flight,
+            "middle_rail",
+            across((0.5, 0.5), (0.55, 0.65)),
+        )
+        .rail(
+            "regular",
+            WalkingStretch::Flight,
+            "wide_rail",
+            across((0.4, 0.4), (0.8, 0.8)),
+        );
+    let mut services = ServiceRegistry::new();
+    services
+        .register(WalkingSurfaceServiceHandle::new(Arc::new(surfaces)))
+        .unwrap();
+    axioval_rules::register_builtins(CapabilityRegistry::new())
+        .unwrap()
+        .install_measured(&mut services, &project);
+    let members = measured_members(
+        &services,
+        &id("regular"),
+        "handrails;rails=railing;reach_across=0.2;reach_above=1.5",
+    )
+    .unwrap();
+    assert_eq!(members.len(), 2);
+    let placing = [
+        "left",
+        "right",
+        "first_on_side",
+        "last_on_side",
+        "gap_after",
+    ];
+    // `middle_rail` reaches from 0.5 m to somewhere between 0.55 and
+    // 0.65 m: perhaps wholly right of the middle, perhaps over it.
+    for field in placing {
+        assert!(
+            matches!(members[0].fields[field], MemberValue::Undecided { .. }),
+            "middle_rail {field}: {:?}",
+            members[0].fields[field]
+        );
+    }
+    // `wide_rail` surely spans the middle.
+    for field in &placing[..4] {
+        assert!(
+            matches!(
+                members[1].fields[field],
+                MemberValue::Truth { value: false, .. }
+            ),
+            "wide_rail {field}: {:?}",
+            members[1].fields[field]
+        );
+    }
+    assert!(matches!(
+        members[1].fields["gap_after"],
+        MemberValue::Measured(axioval_engine::Measurement::Absent { .. })
+    ));
+}
+
 /// Each `stair-geometry` and `ramp-geometry` check rewritten as an
 /// expression over the measured steps, runs, rise, width and landings
 /// flags and leaves open the same objects as the capability on its own

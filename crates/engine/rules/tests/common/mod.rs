@@ -689,6 +689,34 @@ pub fn measured(
     }
 }
 
+/// A measured interval and whether its evidence is exact.
+pub type Cited = ((f64, f64), bool);
+
+/// [`measured`], with whether the value's evidence is exact.
+#[allow(dead_code)]
+pub fn measured_cited(
+    services: &axioval_engine::ServiceRegistry,
+    project: &axioval_ir::Project,
+    object: &ObjectId,
+    name: &str,
+) -> Result<Option<Cited>, String> {
+    use axioval_engine::{CapabilityRegistry, PropertyResolution, measured_value};
+    let mut installed = services.clone();
+    axioval_rules::register_builtins(CapabilityRegistry::new())
+        .unwrap()
+        .install_measured(&mut installed, project);
+    let exact = match measured_value(&installed, project, object, name) {
+        Ok(PropertyResolution::Present(resolved)) => resolved
+            .property()
+            .evidence
+            .as_ref()
+            .is_some_and(|evidence| evidence.exact),
+        Ok(PropertyResolution::Absent(_)) => return Ok(None),
+        Err(error) => return Err(error.to_string()),
+    };
+    measured(services, project, object, name).map(|value| value.map(|value| (value, exact)))
+}
+
 /// Whether `value` is surely at least `bound` (`Some(true)`), surely below
 /// it (`Some(false)`), or straddles it (`None`).
 #[allow(dead_code)]

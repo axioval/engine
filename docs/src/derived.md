@@ -644,10 +644,19 @@ the family has no such dimension or the source leaves it unset. A profile
 table is therefore an expression: an `or` over its rows, each an `and` of
 the type, a `like` on the name and every dimension within the tolerance.
 
-`section_area` is defined for rectangles, hollow rectangles without
-fillets, circles, hollow circles, ellipses and I-sections without flange
-slopes (fillets counted); `section_modulus` for solid and hollow
-rectangles and circles. Any other family leaves it not evaluated.
+`section_area` is defined for rectangles, hollow rectangles (inner and
+outer fillets counted), circles, hollow circles, ellipses and I-sections
+with parallel flanges (fillets and flange edge radii counted);
+`section_modulus` for rectangles and solid and hollow circles. Any other
+family leaves it not evaluated. Both are computed over intervals rounded
+outward from the stated dimensions, so they hold the exact value and cite
+exact evidence. A radius the formula reads but the source leaves unset is
+unknown, never zero: the value widens over every radius the family
+allows (a fillet from none up to the smaller of the flange's outstand and
+half the web's clear height, a flange edge up to the outstand and the
+flange's thickness, a hollow rectangle's corners up to half its narrower
+side), and its evidence is no longer exact. An I-section stating no flange
+slope may taper, so its area is not evaluated.
 
 ### Areas, shares and coverage
 
@@ -933,6 +942,12 @@ final riser have none (`null`), which an expression guards with
 `isDefined` where it should skip them. A field the measurement cannot decide (an
 unmeasured winder angle, whether a riser is closed, the order of pieces
 lying beside one another) leaves an expression reading it not evaluated.
+So does a rail that may reach over the middle of the walking surface or lie
+wholly in either half: its `left`, `right`, `first_on_side`,
+`last_on_side` and `gap_after` are undecided, never false or none. Only a
+rail surely over the middle runs along neither side (`false`, and no gap).
+A `runs` list without `landing` kinds leaves every landing field
+undecided, its depth and width too.
 Built-in code registered beside the capabilities measures each list
 (`MeasuredProvider::member_lists`), never a package. An aggregate over a list cites the measurement the list comes from
 (`MeasuredProvider::members_cited`), even when it lists none. A member states

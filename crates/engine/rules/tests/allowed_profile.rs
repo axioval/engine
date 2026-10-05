@@ -588,13 +588,23 @@ fn section_values_follow_the_profile() {
         &[("XDim", 0.2), ("YDim", 0.4)],
     );
     let model = member(model, "rod", "circle", None, &[("Radius", 0.1)]);
-    let model = i_shape(model, "i", "HEA300", 0.3, 0.29);
+    // Parallel flanges with sharp edges, the fillet stated as none.
+    let model = i_shape(model, "i", "HEA300", 0.3, 0.29)
+        .value("i", BODY_SET, "Profile.FlangeSlope", angle(0.0))
+        .value("i", BODY_SET, "Profile.FlangeEdgeRadius", length(0.0))
+        .value("i", BODY_SET, "Profile.FilletRadius", length(0.0));
     let model = member(model, "angle", "l-shape", None, &[("Depth", 0.1)]);
     let (project, services) = model.services();
     let read =
         |object: &str, name: &str| common::measured(&services, &project, &common::id(object), name);
+    // Rounded outward, a value holds the exact one and is no wider than
+    // its arithmetic's rounding.
     let near = |value: Option<(f64, f64)>, expected: f64| {
-        value.is_some_and(|(lower, upper)| (lower - expected).abs() < 1e-12 && lower == upper)
+        value.is_some_and(|(lower, upper)| {
+            lower <= expected + 1e-15
+                && expected - 1e-15 <= upper
+                && upper - lower <= 1e-14 * expected.abs().max(1.0)
+        })
     };
     assert!(near(read("beam", "section_area").unwrap(), 0.08));
     assert!(near(
@@ -620,4 +630,43 @@ fn section_values_follow_the_profile() {
         0.0085
     ));
     assert_eq!(read("i", "profile_dimension;name=radius").unwrap(), None);
+}
+
+/// A radius the source leaves unset is unknown, never zero: an I-section
+/// without a fillet radius has every area its fillet may give it, from none
+/// up to the largest fillet beside the web, as an estimate. A flange slope
+/// left unset leaves the area not evaluated.
+#[test]
+fn an_unset_fillet_radius_widens_the_section_area() {
+    let flanged = |model: Model, local: &str| {
+        i_shape(model, local, "HEA300", 0.3, 0.29)
+            .value(local, BODY_SET, "Profile.FlangeSlope", angle(0.0))
+            .value(local, BODY_SET, "Profile.FlangeEdgeRadius", length(0.0))
+    };
+    let model = flanged(Model::default(), "unfilleted");
+    let model = flanged(model, "filleted").value(
+        "filleted",
+        BODY_SET,
+        "Profile.FilletRadius",
+        length(0.027),
+    );
+    let model = i_shape(model, "unsloped", "HEA300", 0.3, 0.29);
+    let (project, services) = model.services();
+    let read = |object: &str| {
+        common::measured_cited(&services, &project, &common::id(object), "section_area")
+    };
+    let sharp = 2.0 * 0.3 * 0.014 + 0.262 * 0.0085;
+    // Half the web's clear height, 0.131, bounds the fillet before the
+    // outstand (0.3 − 0.0085) / 2 does.
+    let widest = sharp + (4.0 - std::f64::consts::PI) * 0.131 * 0.131;
+    let ((lower, upper), exact) = read("unfilleted").unwrap().unwrap();
+    assert!(!exact, "an unset radius is an estimate");
+    assert!(lower <= sharp && sharp - lower < 1e-15, "{lower}");
+    assert!(widest <= upper && upper - widest < 1e-15, "{upper}");
+    let ((lower, upper), exact) = read("filleted").unwrap().unwrap();
+    let rounded = sharp + (4.0 - std::f64::consts::PI) * 0.027 * 0.027;
+    assert!(exact, "stated dimensions are exact");
+    assert!(lower <= rounded && rounded <= upper && upper - lower < 1e-15);
+    let refused = read("unsloped").unwrap_err();
+    assert!(refused.contains("states no flange_slope"), "{refused}");
 }

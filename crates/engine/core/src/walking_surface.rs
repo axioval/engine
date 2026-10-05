@@ -2290,6 +2290,18 @@ impl HandrailEvidence {
         }
     }
 
+    /// Whether a rail surely reaches over the middle of its part's walking
+    /// surface, so that it runs along neither side. A rail [`Self::side`]
+    /// places on no side but that may still lie wholly in one half is not:
+    /// its side is unknown, never none.
+    #[must_use]
+    pub fn over_middle(&self, rail: &RailMeasurement) -> bool {
+        let (left, right) = self.part(rail).sides;
+        let low = f64::midpoint(left.lower_metres(), right.lower_metres()).next_down();
+        let high = f64::midpoint(left.upper_metres(), right.upper_metres()).next_up();
+        rail.right.lower_metres() >= high && rail.left.upper_metres() <= low
+    }
+
     /// Reviewable provenance of the measurement.
     #[must_use]
     pub fn evidence(&self) -> &Evidence {

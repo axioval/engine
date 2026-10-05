@@ -193,6 +193,9 @@ fn section(
     };
     let face = crate::opening_zone::face::read_host(context, host)?;
     let mut evidence = Vec::new();
+    // `None` is an opening surely below the declared minimum, which takes
+    // nothing from the plane as `opening-area` counts it: a decided zero,
+    // not a missing area (an area that cannot be measured is an error).
     let area = crate::opening_area::opening_area(context, openings, &face, opening, &mut evidence)?
         .map_or(0.0, |(area, _)| area);
     Ok(Measurement::Value {

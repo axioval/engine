@@ -195,15 +195,26 @@ fn length(call: &MeasuredCall, key: &str) -> f64 {
     }
 }
 
+/// Why the side of `rail` is unknown: it may reach over the middle, or lie
+/// wholly in either half.
+fn unplaced(rail: &ObjectId) -> String {
+    format!("whether {rail} runs along a side or over the middle is undecided")
+}
+
 /// Where a rail lies among the pieces along its side, as its index and
-/// their number (`None` over the middle), and the gap to the next piece.
+/// their number (`None` surely over the middle), and the gap to the next
+/// piece. A rail that cannot be placed is undecided, never on no side.
 fn position(
     measured: &HandrailEvidence,
     (rail, measurement): (&ObjectId, &RailMeasurement),
     locator: &str,
 ) -> (Result<Option<(usize, usize)>, String>, MemberValue) {
     let Some(side) = measured.side(measurement) else {
-        return (Ok(None), number(None, LENGTH, locator.to_owned()));
+        if measured.over_middle(measurement) {
+            return (Ok(None), number(None, LENGTH, locator.to_owned()));
+        }
+        let why = unplaced(rail);
+        return (Err(why.clone()), MemberValue::Undecided { why });
     };
     let Ok(pieces) = measured.side_rail(side) else {
         let why = format!(
@@ -212,7 +223,8 @@ fn position(
         return (Err(why.clone()), MemberValue::Undecided { why });
     };
     let Some(index) = pieces.iter().position(|(piece, _)| piece == rail) else {
-        return (Ok(None), number(None, LENGTH, locator.to_owned()));
+        let why = format!("{rail} is not among the pieces along its own side");
+        return (Err(why.clone()), MemberValue::Undecided { why });
     };
     let gap = match pieces.get(index + 1) {
         None => number(None, LENGTH, locator.to_owned()),
@@ -236,13 +248,24 @@ fn rails_along(
     for (rail, measurement) in measured.rails() {
         let at = |field: &str| format!("handrails:{object}#{run}:{rail}:{field}");
         let side = measured.side(measurement);
+        let over_middle = side.is_none() && measured.over_middle(measurement);
         let truth = |value: bool, field: &str| MemberValue::Truth {
             value,
             locator: at(field),
         };
+        // A rail on a side is on that side only; one surely over the middle
+        // is on neither; any other is undecided, never on neither.
+        let on = |wanted: RailSide, field: &str| match side {
+            Some(side) => truth(side == wanted, field),
+            None if over_middle => truth(false, field),
+            None => MemberValue::Undecided {
+                why: unplaced(rail),
+            },
+        };
         let (place, gap) = position(measured, (rail, measurement), &at("gap_after"));
         let placed = |test: &dyn Fn(usize, usize) -> bool, field: &str| match &place {
             Ok(Some((index, total))) => truth(test(*index, *total), field),
+            // Surely over the middle: no piece of either side.
             Ok(None) => truth(false, field),
             Err(why) => MemberValue::Undecided { why: why.clone() },
         };
@@ -273,8 +296,8 @@ fn rails_along(
                     locator: at("run"),
                 }),
             ),
-            ("left", truth(side == Some(RailSide::Left), "left")),
-            ("right", truth(side == Some(RailSide::Right), "right")),
+            ("left", on(RailSide::Left, "left")),
+            ("right", on(RailSide::Right, "right")),
             (
                 "height_lowest",
                 number(Some(measurement.lowest()), LENGTH, at("height_lowest")),
@@ -716,15 +739,13 @@ impl MeasuredProvider for StairMeasures {
                     end_landing(&stairs, object, end, candidates.iter().cloned())
                 });
                 let [present, depth, width] = match landing {
+                    // Without landing kinds nothing is known of the landing:
+                    // neither whether there is one nor its size, never none.
                     None => {
-                        let none = || number(None, LENGTH, at(place));
-                        [
-                            MemberValue::Undecided {
-                                why: "the runs list states no `landing` kinds".into(),
-                            },
-                            none(),
-                            none(),
-                        ]
+                        let undecided = || MemberValue::Undecided {
+                            why: "the runs list states no `landing` kinds".into(),
+                        };
+                        [undecided(), undecided(), undecided()]
                     }
                     Some(Ok((fields, cited))) => {
                         exact &= cited;

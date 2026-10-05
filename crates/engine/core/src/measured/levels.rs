@@ -80,7 +80,13 @@ impl Measures {
             Some(MeasuredArgument::Length(datum)) => *datum,
             _ => 0.0,
         };
-        let kind = self.kinds.get(&level).cloned().unwrap_or_default();
+        let kind = self.kinds.get(&level).cloned().ok_or_else(|| {
+            Self::unavailable(
+                name,
+                object,
+                &format!("level {level} is not in the project"),
+            )
+        })?;
         let mut elevations = Vec::new();
         for (other, other_kind) in self.kinds.iter() {
             if *other_kind == kind && other.source == level.source {
@@ -109,10 +115,14 @@ impl Measures {
                 locator,
             ));
         }
+        // The level is among its own kind's levels; never count it as the
+        // ground level should it be missing.
         let own = elevations
             .iter()
             .position(|other| other.to_bits() == elevation.to_bits())
-            .unwrap_or(ground);
+            .ok_or_else(|| {
+                Self::unavailable(name, object, &format!("level {level} has no index"))
+            })?;
         #[allow(clippy::cast_precision_loss, clippy::cast_possible_wrap)]
         let index = (own as i64 - ground as i64) as f64;
         Ok(Answer::Number(index, index, locator))

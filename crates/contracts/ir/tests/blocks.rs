@@ -262,6 +262,30 @@ fn measured_parameter_keys_never_collide_with_the_scope_field() {
     }
 }
 
+/// A measured value naming a rule parameter (`@door_selector`) or the
+/// anchor keeps the reference as its field's text, both ways.
+#[test]
+fn a_measured_reference_is_a_field_as_written() {
+    let name = "shelf_length;depth=@shelf_depth_metres;horizontal=0.3;vertical=0.35;\
+                bottom=0.1;top=2;clearance=0.9;access=@access_path;doors=@door_selector;\
+                openings=@anchor";
+    let expression: Expression = serde_json::from_value(json!({
+        "kind": "property", "propertySet": "axioval:measured", "property": name,
+    }))
+    .unwrap();
+    let blocks = to_blocks(&expression).unwrap();
+    let json = serde_json::to_value(&blocks).unwrap();
+    assert_eq!(json["type"], "measured.shelf_length");
+    assert_eq!(json["fields"]["doors"], "@door_selector");
+    assert_eq!(json["fields"]["openings"], "@anchor");
+    assert_eq!(json["fields"]["depth"], "@shelf_depth_metres");
+    assert_eq!(from_blocks(&blocks).unwrap(), expression);
+    // A reference where the parameter takes none is refused.
+    let refused = refused(json!({"type": "measured.slope",
+        "fields": {"face": "facing", "direction": "@axis", "tolerance": "10"}}));
+    assert!(refused.to_string().contains("@axis"), "{refused}");
+}
+
 #[test]
 fn a_block_without_defaults_and_one_stating_them_read_alike() {
     let explicit: Block = serde_json::from_value(json!({

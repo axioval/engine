@@ -1606,6 +1606,9 @@ fn validate_signature(
                     | ParameterKind::Date
                     | ParameterKind::DateTime
                     | ParameterKind::StringList
+                    // What a measured value's `@name` binds (the objects it
+                    // picks); no expression reads it as a value.
+                    | ParameterKind::Selector
             );
             let table = parameter.kind == ParameterKind::Table;
             if !(scalar || table) {
@@ -1613,8 +1616,8 @@ fn validate_signature(
                     definition_id,
                     capability_id,
                     &format!(
-                        "authored parameter `{name}` must be a scalar value, a string list or a \
-                         table"
+                        "authored parameter `{name}` must be a scalar value, a string list, a \
+                         selector or a table"
                     ),
                 );
             }

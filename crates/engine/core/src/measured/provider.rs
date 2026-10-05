@@ -118,6 +118,18 @@ pub struct MeasuredMember {
     pub fields: BTreeMap<&'static str, MemberValue>,
 }
 
+/// What a measurement was made against, beside its value: the objects a
+/// finding on it relates (the doors a shelf length kept clear, the
+/// counterparts a distance was measured to), sorted by source-qualified
+/// identity, and the evidence that reached them.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Citation {
+    /// The objects measured against.
+    pub related: Vec<ObjectId>,
+    /// The evidence that reached them, beside the value's own.
+    pub evidence: Vec<Evidence>,
+}
+
 /// Trusted code measuring registered values.
 pub trait MeasuredProvider: Send + Sync + 'static {
     /// The registered names it measures.
@@ -161,6 +173,22 @@ pub trait MeasuredProvider: Send + Sync + 'static {
     ) -> Result<(Vec<MeasuredMember>, Vec<Evidence>), PropertyResolutionError> {
         self.members(call, object, context)
             .map(|members| (members, Vec::new()))
+    }
+
+    /// [`Self::measure`], with what the measurement was made against; by
+    /// default nothing.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::measure`].
+    fn measure_cited(
+        &self,
+        call: &MeasuredCall,
+        object: &ObjectId,
+        context: &RuleContext<'_>,
+    ) -> Result<(Measurement, Citation), PropertyResolutionError> {
+        self.measure(call, object, context)
+            .map(|measurement| (measurement, Citation::default()))
     }
 
     /// Measures `call` (one of [`Self::names`]) of `object`.

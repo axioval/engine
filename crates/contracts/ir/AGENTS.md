@@ -103,6 +103,12 @@ Keep this crate serializable and deterministic. It must not depend on a source f
   A `polygon` parameter (`lateral:up` vertices) is checked by
   `polygon_problem` when the name is parsed, so a self-crossing or
   arealess envelope fails compilation; the engine reuses the same check.
+  A parameter whose kind takes one (`MeasuredParameterKind::reference`)
+  may name the reading rule's parameter, `@name`, and an `objects`
+  parameter the anchor, `@anchor`; they parse as
+  `MeasuredArgument::Parameter`/`Anchor` and are bound by the rule
+  (`MeasuredCall::bind`, `MeasuredSelection` for objects), never here. A
+  member list takes none.
 - `RuleSetPackage::values` (`ValueDefinition`: localized name, optional
   description, expression) is omitted when empty so rulesets serialize as
   before; `VALUE_SET` is a derived set. The MCS ruleset schema must mirror

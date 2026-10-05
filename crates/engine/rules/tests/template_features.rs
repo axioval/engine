@@ -51,6 +51,7 @@ fn template() -> Template {
         .collect(),
         grades: false,
         name: "window-share",
+        refusals: axioval_engine::template::Refusals::Rule,
         defaults: Vec::new(),
         declaration: Vec::new(),
         services: None,
@@ -84,6 +85,8 @@ fn template() -> Template {
                 denominator: "walls",
                 zero: "the room has no wall {relation}",
             }],
+            related: None,
+            checks: Vec::new(),
         }],
     }
 }

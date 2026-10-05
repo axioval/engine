@@ -55,6 +55,8 @@ fn form() -> Form {
         table: None,
         scope: None,
         derived: Vec::new(),
+        related: None,
+        checks: Vec::new(),
     }
 }
 
@@ -112,6 +114,7 @@ pub(crate) fn template() -> Template {
         .collect(),
         grades: true,
         name: "related-count",
+        refusals: axioval_engine::template::Refusals::Rule,
         defaults: Vec::new(),
         declaration: declaration(),
         services: None,

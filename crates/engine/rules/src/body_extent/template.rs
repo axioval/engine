@@ -107,6 +107,8 @@ fn stated_form() -> Form {
         table: None,
         scope: None,
         derived: Vec::new(),
+        related: None,
+        checks: Vec::new(),
     }
 }
 
@@ -134,6 +136,8 @@ fn range_form() -> Form {
         table: None,
         scope: None,
         derived: Vec::new(),
+        related: None,
+        checks: Vec::new(),
     }
 }
 
@@ -211,6 +215,7 @@ pub(crate) fn template() -> Template {
         ],
         grades: false,
         name: "body-extent",
+        refusals: axioval_engine::template::Refusals::Rule,
         defaults: vec![ParameterDefault {
             parameter: "tolerance",
             value: ScalarValue::Quantity {

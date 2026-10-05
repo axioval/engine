@@ -411,7 +411,7 @@ ignoring ASCII case):
 | `prevailing_elevation;side=bottom\|top;spaces=<steps>[;kinds=<kinds>][;tolerance=<m>]` | the prevailing bottom or top elevation among the spaces of the space's level | built in, over `VerticalExtentService` |
 | `levels_above`, `levels_below` `;levels=<kinds>;path=<steps>` | how many storeys of the source lie above or below the object's one storey by their `Elevation` attribute | built in, over the property and relationship services |
 | `stack_distance;measure=top_to_top\|bottom_to_bottom\|top_to_bottom;slabs=<kinds>;ratio=<share>` | the distance to the next slab up in the slab's stack, none where none stacks above | built in, over `VerticalExtentService`, `PlanAreaService` |
-| `shelf_length`, `shelf_clear_height` `;depth=…;horizontal=…;vertical=…;bottom=…;top=…;clearance=…;access=<steps>[;doors=<kinds>][;openings=<kinds>]` | a space's running metres of shelving and its clear height, as `shelf-capacity` measures them | built in, over `LinearQuantityService` |
+| `shelf_length`, `shelf_clear_height` `;depth=…;horizontal=…;vertical=…;bottom=…;top=…;clearance=…;access=<steps>[;doors=<objects>][;openings=<objects>][;spaces=<objects>]` | a space's running metres of shelving and its clear height, as `shelf-capacity` measures them | built in, over `LinearQuantityService` |
 | `body_extent;axis=right\|forward\|up` | the body's depth along one of its own placement axes, as `body-extent` measures it | built in, over `ObjectFrameService`, `VerticalExtentService` |
 | `body_position;axis=right\|forward\|up;end=low\|high` | where the body begins or ends along one of its own placement axes, from the origin of the coordinates along it | built in, over `ObjectFrameService`, `VerticalExtentService` |
 | `triangle_count` | how many triangles the host's mesh of the body holds | built in, over `TriangleCountService` |
@@ -426,6 +426,62 @@ ignoring ASCII case):
 Several names take `;`-separated `key=value` parameters, part of the property
 name so that every selector, property reference and table key can carry
 them unchanged. Keys are matched ignoring ASCII case.
+
+### Rule parameters and the anchor as arguments
+
+A rule's expression may hand a measured value its own parameters instead
+of literals: `@name` in a parameter's place names the reading rule's
+parameter `name`, and `@anchor` the object the rule checks (the anchor
+whose members an aggregate reads a value on, otherwise the object itself).
+This is how a measurement receives what a selector picks, or is taken
+between two objects:
+
+```json
+{"kind": "property", "propertySet": "axioval:measured",
+ "property": "shelf_length;depth=@shelf_depth_metres;horizontal=0.3;vertical=0.35;bottom=0.1;top=2;clearance=0.9;access=@access_path;doors=@door_selector"}
+```
+
+Which parameters take a reference, and of which kind, is the registry's
+(`MeasuredParameterKind::reference`, listed in the catalogue as each
+parameter's `references`):
+
+| Measured parameter | `@name` names a rule parameter that is |
+| --- | --- |
+| `length` | a `number` or `integer` of metres, or a `quantity` of length, at least the parameter's minimum |
+| `path` | a `stringList` of steps |
+| `choice`, `text`, `sourceKind` | a `string` (a choice among its options) |
+| `objects` | a `selector`; or `@anchor` |
+
+A `vector`, `property` or `polygon` takes none, and only an `objects`
+parameter takes `@anchor`. An `objects` parameter (the objects a value is
+measured against) also still takes source kinds, `,`-separated, all of
+them surely picked.
+
+**Binding.** The compiler type-checks every reference against the rule's
+parameters (`EngineError::InvalidExpression` at the read: a parameter the
+rule does not state, or of another kind); a selector, a derived value and
+a member list name none. An expression rule declares the parameters its
+measured values read as authored parameters of its definition, a
+`selector` among them. When the rule runs, the reference is bound before
+anything is measured (`MeasuredCall::bind`): a selector to the objects it
+picks (`MeasuredSelection`: those surely picked and those it cannot
+decide, each sorted by source-qualified identity, read once per rule
+through the run's one selection), the anchor to itself, a length, path or
+text to the value stated. The provider receives the bound call, never the
+selector, and decides what undecided objects leave (`shelf_length` leaves a
+space open where an undecided door may reach it). A reference that cannot
+be bound (a parameter of another kind or not realisable, a selection whose
+objects cannot all be listed) leaves the value not evaluated for its
+reason, an invalid declaration for the parameter's own fault, never a
+default. Reads are memoized by object and name within a rule, which, the
+rule's parameters fixed, are the resolved arguments.
+
+**What it was measured against.** A provider may cite the objects a value
+was measured against and the evidence that reached them
+(`MeasuredProvider::measure_cited`, `Citation`); a value read with bound
+arguments (`axioval_engine::measured_bound`) carries them, so an
+expression rule's finding relates them and a template's `related` names
+them.
 
 ### The registry
 
@@ -1200,9 +1256,12 @@ capability.
 `shelf_length` and `shelf_clear_height` are the running metres of shelving
 the arrangement (`depth`, `horizontal`, `vertical`, `bottom`, `top`,
 `clearance`, in metres) fits into a space, and the space's clear height,
-from one request carrying the doors and openings of the kinds the `access`
-path reaches the space from, as `shelf-capacity` measures them; an element
-that may reach the space unreadably leaves both open. `shelf_clear_height`
+from one request carrying the doors and openings the `access` path reaches
+the space from among the `spaces` (every object without it), as
+`shelf-capacity` measures them. `doors`, `openings` and `spaces` are source
+kinds or a rule's selectors (`doors=@door_selector`); an element that may
+reach the space unreadably, or whose kind the selector cannot decide,
+leaves both open. Both cite the doors and openings sent. `shelf_clear_height`
 at least `top` and `shelf_length` at least the minimum reach the
 capability's verdicts on its fixtures.
 

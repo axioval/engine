@@ -71,6 +71,7 @@ pub(crate) fn template() -> Template {
         .collect(),
         grades: false,
         name: "unique-value",
+        refusals: axioval_engine::template::Refusals::Rule,
         defaults: vec![
             default("trim", true),
             default("case_sensitive", false),
@@ -105,6 +106,8 @@ pub(crate) fn template() -> Template {
             table: None,
             scope: None,
             derived: Vec::new(),
+            related: None,
+            checks: Vec::new(),
         }],
     }
 }

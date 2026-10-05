@@ -405,6 +405,7 @@ pub(crate) fn template() -> Template {
         .collect(),
         grades: false,
         name: "level-spacing",
+        refusals: axioval_engine::template::Refusals::Rule,
         defaults: vec![
             ParameterDefault {
                 parameter: "tolerance",
@@ -436,6 +437,8 @@ pub(crate) fn template() -> Template {
             table: None,
             scope: None,
             derived: Vec::new(),
+            related: None,
+            checks: Vec::new(),
         }],
     }
 }

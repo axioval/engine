@@ -101,6 +101,8 @@ fn members_form() -> Form {
         table: Some(areas()),
         scope: None,
         derived: Vec::new(),
+        related: None,
+        checks: Vec::new(),
     }
 }
 
@@ -116,6 +118,8 @@ fn own_form() -> Form {
         table: Some(areas()),
         scope: None,
         derived: Vec::new(),
+        related: None,
+        checks: Vec::new(),
     }
 }
 
@@ -199,6 +203,7 @@ pub(crate) fn template() -> Template {
         .collect(),
         grades: true,
         name: "plan-area",
+        refusals: axioval_engine::template::Refusals::Rule,
         defaults: vec![ParameterDefault {
             parameter: "measure",
             value: ScalarValue::String {

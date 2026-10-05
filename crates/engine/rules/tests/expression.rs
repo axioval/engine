@@ -1258,3 +1258,139 @@ fn a_sum_over_no_member_takes_its_members_declared_unit() {
         ["openings take 50000 cm2", "openings take 50000 cm2"]
     );
 }
+
+/// Answers every shelving request with 20 m less 10 m per door sent, and a
+/// clear height of 3 m.
+struct Shelves;
+
+impl axioval_engine::LinearQuantityService for Shelves {
+    fn measure_linear_quantity(
+        &self,
+        request: &axioval_engine::LinearQuantityRequest,
+    ) -> Result<axioval_engine::LinearQuantityEvidence, axioval_engine::LinearQuantityError> {
+        let doors = f64::from(u32::try_from(request.doors().len()).unwrap());
+        axioval_engine::LinearQuantityEvidence::try_new(
+            request.clone(),
+            axioval_engine::LinearInterval::exact(20.0 - 10.0 * doors)?,
+            Evidence::exact(source(), "shelf:run"),
+        )
+    }
+}
+
+/// A measured value names the rule's own parameters (`@door_selector`,
+/// `@depth`): the compiler checks each names a parameter the rule states,
+/// of the kind its measured parameter takes, and the run binds the
+/// selector to the objects it picks, the finding relating what the value
+/// was measured against.
+#[test]
+#[allow(clippy::too_many_lines)]
+fn a_measured_value_reads_the_rules_parameters() {
+    let registry = registry();
+    let mut package = definitions(
+        &registry,
+        &[EXPRESSION],
+        &["space", "door"],
+        &["Cover"],
+        &["Pset"],
+    );
+    let declare = |id: &str, kind: &str| -> ParameterDefinition {
+        serde_json::from_value(json!({"id": id, "name": text(id), "kind": kind, "required": false}))
+            .unwrap()
+    };
+    let expression = package
+        .definitions
+        .get_mut(&definition(EXPRESSION))
+        .unwrap();
+    for (id, kind) in [
+        ("door_selector", "selector"),
+        ("depth", "number"),
+        ("path", "stringList"),
+        ("label", "string"),
+    ] {
+        expression.parameters.insert(id.into(), declare(id, kind));
+    }
+    let shelving = |doors: &str, depth: &str| {
+        json!({"kind": "property", "propertySet": "axioval:measured", "property": format!(
+            "shelf_length;depth={depth};horizontal=0.3;vertical=0.35;bottom=0.1;top=2;\
+             clearance=0.9;access=@path;doors={doors}")})
+    };
+    let requirement = |doors: &str, depth: &str| {
+        json!({"kind": "compare", "operator": "greaterThanOrEquals",
+            "left": shelving(doors, depth),
+            "right": {"kind": "literal", "value": {"type": "quantity", "value": 10.0, "unit": "m"}}})
+    };
+    let parameters = |doors: &str, depth: &str| {
+        json!({
+            "requirement": {"type": "expression", "value": requirement(doors, depth)},
+            "door_selector": {"type": "selector", "value": entity("door")},
+            "depth": {"type": "number", "value": 0.4},
+            "path": {"type": "stringList", "value": ["bounds:forward"]},
+            "label": {"type": "string", "value": "shelving"},
+        })
+    };
+    let shelf = |doors: &str, depth: &str| {
+        rule(
+            "r",
+            EXPRESSION,
+            "error",
+            entity("space"),
+            parameters(doors, depth),
+            json!({}),
+        )
+    };
+    // A parameter the rule does not state, or of another kind, fails
+    // compilation at the read.
+    for (doors, depth, detail) in [
+        (
+            "@openings",
+            "@depth",
+            "names `@openings`, which the rule does not state",
+        ),
+        (
+            "@label",
+            "@depth",
+            "names `@label`, which is not a selector",
+        ),
+        (
+            "@door_selector",
+            "@label",
+            "names `@label`, which is not a number of metres",
+        ),
+    ] {
+        match plan(&registry, &package, vec![shelf(doors, depth)]) {
+            Err(EngineError::InvalidExpression { detail: found, .. }) => {
+                assert!(found.contains(detail), "{found}");
+            }
+            other => panic!("{doors}: {other:?}"),
+        }
+    }
+    // Only a rule's own expression binds one; a selector reads none.
+    let mut selected = shelf("@door_selector", "@depth");
+    selected["applicability"] = json!({"kind": "allOf", "operands": [entity("space"),
+        {"kind": "expression", "expression": requirement("@door_selector", "@depth")}]});
+    assert!(plan(&registry, &package, vec![selected]).is_err());
+
+    let model = Model::default()
+        .object("store", "space")
+        .object("hall", "space")
+        .object("d1", "door")
+        .object("d2", "door")
+        .edge("bounds", "d1", "store")
+        .edge("bounds", "d2", "store")
+        .edge("bounds", "d1", "hall");
+    let session = session(model)
+        .with_host_service(
+            axioval_engine::LinearQuantityServiceHandle::new(Arc::new(Shelves)),
+            &[snapshot()],
+        )
+        .unwrap();
+    let report = check(&package, vec![shelf("@door_selector", "@depth")], &session);
+    // Two doors leave the store 0 m, one the hall 10 m.
+    assert_eq!(subjects(&report, "r"), ["store"]);
+    assert_eq!(report.findings()[0].related, [id("d1"), id("d2")]);
+    assert!(
+        report.not_evaluated.is_empty(),
+        "{:?}",
+        report.not_evaluated
+    );
+}

@@ -23,6 +23,7 @@ pub(crate) fn template() -> Template {
         )],
         grades: false,
         name: "triangle-count",
+        refusals: axioval_engine::template::Refusals::Rule,
         defaults: Vec::new(),
         declaration: vec![Check::Count {
             parameter: "maximum",
@@ -63,6 +64,8 @@ pub(crate) fn template() -> Template {
             table: None,
             scope: None,
             derived: Vec::new(),
+            related: None,
+            checks: Vec::new(),
         }],
     }
 }

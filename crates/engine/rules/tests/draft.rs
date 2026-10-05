@@ -128,6 +128,33 @@ fn a_type_error_is_positioned_at_its_node() {
     );
 }
 
+/// A measured value naming a rule parameter the draft does not state is
+/// refused at the read, positioned there.
+#[test]
+fn a_measured_reference_to_an_unstated_parameter_is_positioned_at_its_read() {
+    let shelving = json!({"kind": "property", "propertySet": "axioval:measured", "property":
+        "shelf_length;depth=0.4;horizontal=0.3;vertical=0.35;bottom=0.1;top=2;clearance=0.9;\
+         access=bounds:forward;doors=@door_selector"});
+    let metres =
+        json!({"kind": "literal", "value": {"type": "quantity", "value": 10.0, "unit": "m"}});
+    let diagnostic = refused(&cover_rule("draft", at_least(shelving, metres)));
+    assert_eq!(diagnostic.code, "invalidExpression");
+    assert!(
+        diagnostic
+            .message
+            .contains("`@door_selector`, which the rule does not state"),
+        "{diagnostic:?}"
+    );
+    assert!(
+        diagnostic
+            .pointer
+            .as_deref()
+            .unwrap()
+            .starts_with("/parameters/requirement/value/left"),
+        "{diagnostic:?}"
+    );
+}
+
 #[test]
 fn a_unit_mismatch_names_the_comparison() {
     let area =

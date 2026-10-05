@@ -29700,7 +29700,8 @@
               "language": "de",
               "text": "Die Quellarten der Achse, durch `,` getrennt; Untertypen zählen mit. Das eine Objekt dieser Arten, das der Pfad erreicht, oder ohne Pfad das eine in der Quelle des Objekts."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "path",
@@ -29717,7 +29718,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Objekt zu seiner Achse; ohne sie ist jedes Objekt der Arten der Achse in der Quelle des Objekts ein Kandidat."
             }
-          ]
+          ],
+          "references": "stringList"
         }
       ],
       "dimension": "length",
@@ -29774,7 +29776,8 @@
               "language": "de",
               "text": "Die Quellarten der Achse, durch `,` getrennt; Untertypen zählen mit. Das eine Objekt dieser Arten, das der Pfad erreicht, oder ohne Pfad das eine in der Quelle des Objekts."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "path",
@@ -29791,7 +29794,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Objekt zu seiner Achse; ohne sie ist jedes Objekt der Arten der Achse in der Quelle des Objekts ein Kandidat."
             }
-          ]
+          ],
+          "references": "stringList"
         }
       ],
       "services": [
@@ -29847,7 +29851,8 @@
               "language": "de",
               "text": "Die Quellarten der Achse, durch `,` getrennt; Untertypen zählen mit. Das eine Objekt dieser Arten, das der Pfad erreicht, oder ohne Pfad das eine in der Quelle des Objekts."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "path",
@@ -29864,7 +29869,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Objekt zu seiner Achse; ohne sie ist jedes Objekt der Arten der Achse in der Quelle des Objekts ein Kandidat."
             }
-          ]
+          ],
+          "references": "stringList"
         }
       ],
       "services": [
@@ -29920,7 +29926,8 @@
               "language": "de",
               "text": "Die Quellarten der Achse, durch `,` getrennt; Untertypen zählen mit. Das eine Objekt dieser Arten, das der Pfad erreicht, oder ohne Pfad das eine in der Quelle des Objekts."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "path",
@@ -29937,7 +29944,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Objekt zu seiner Achse; ohne sie ist jedes Objekt der Arten der Achse in der Quelle des Objekts ein Kandidat."
             }
-          ]
+          ],
+          "references": "stringList"
         }
       ],
       "dimension": "length",
@@ -30000,7 +30008,8 @@
               "language": "de",
               "text": "`axis`: der spitze Winkel zwischen den Längsachsen der Grundrisse; `face_normal`: der Winkel zwischen den Normalen der Oberseiten."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "path",
@@ -30017,7 +30026,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Objekt zu den Objekten, gegen die gemessen wird; der Winkel ist die Hülle über alle erreichten, keiner, wenn keines erreicht wird."
             }
-          ]
+          ],
+          "references": "stringList"
         }
       ],
       "dimension": "plane_angle",
@@ -30107,7 +30117,8 @@
               "language": "de",
               "text": "Die Quellarten der gepaarten Bauteile, etwa Wände oder Träger, durch `,` getrennt."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "member_path",
@@ -30124,7 +30135,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Objekt zu seinen Bauteilen."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "angle_tolerance",
@@ -30142,7 +30154,8 @@
               "language": "de",
               "text": "Wie weit zwei Längsachsen von parallel abweichen dürfen, um ein Paar zu bilden, in Grad, unter 45."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "maximum",
@@ -30160,7 +30173,8 @@
               "language": "de",
               "text": "Der größte Abstand, mit dem ein paralleles Paar noch ein Band begrenzt, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "footprints",
@@ -30177,7 +30191,8 @@
               "language": "de",
               "text": "Die Quellarten der Grundrissobjekte, etwa Decken, durch `,` getrennt."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "footprint_path",
@@ -30194,7 +30209,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Objekt zu seinen Grundrissobjekten."
             }
-          ]
+          ],
+          "references": "stringList"
         }
       ],
       "dimension": "area",
@@ -30258,7 +30274,8 @@
               "language": "de",
               "text": "`own_x` oder `own_y` der Platzierung im Grundriss oder die `long` Längsachse des Grundrisses, die keine Richtung hat (in `[0, π)`)."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "reference",
@@ -30280,7 +30297,8 @@
               "language": "de",
               "text": "`project_north`, die y-Achse des Plans, oder `true_north`, wie die Quelle sie angibt."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "dimension": "plane_angle",
@@ -30342,7 +30360,8 @@
               "language": "de",
               "text": "Die eigene Achse der Platzierung: `right` (ihre erste), `forward` (ihre zweite, quer zu einer Wand, deren Schichten entlang der ersten laufen) oder `up`."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "dimension": "length",
@@ -30401,7 +30420,8 @@
               "language": "de",
               "text": "Die eigene Achse der Platzierung, wie bei `body_extent`."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "end",
@@ -30422,7 +30442,8 @@
               "language": "de",
               "text": "`low`, der tiefste auf die Achse projizierte Punkt des Körpers, oder `high`, der höchste."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "dimension": "length",
@@ -30510,7 +30531,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Objekt zu seinem Geschoss."
             }
-          ]
+          ],
+          "references": "stringList"
         }
       ],
       "dimension": "length",
@@ -30566,7 +30588,8 @@
               "language": "de",
               "text": "Die Art des begrenzenden Bauteils, Untertypen eingeschlossen."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "plane",
@@ -30585,7 +30608,8 @@
               "language": "de",
               "text": "Wie weit von den Flächenebenen des Körpers eine Begrenzung noch zählt, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "dimension": "area",
@@ -30642,7 +30666,8 @@
               "language": "de",
               "text": "Wie weit von den Flächenebenen des Körpers eine Begrenzung noch zählt, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "services": [
@@ -30693,7 +30718,8 @@
               "language": "de",
               "text": "Die Quellarten der berücksichtigten Bauteile, durch `,` getrennt; ohne sie die Vorgabe des Dienstes."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "at_least",
@@ -30712,7 +30738,8 @@
               "language": "de",
               "text": "Nur Lücken mindestens dieser Länge zählen, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "measure",
@@ -30734,7 +30761,8 @@
               "language": "de",
               "text": "Ihre Gesamtlänge (`total`) oder die längste (`longest`)."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "dimension": "length",
@@ -30788,7 +30816,8 @@
               "language": "de",
               "text": "Wie weit von den Flächenebenen des Körpers eine Begrenzung noch zählt, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "services": [
@@ -30841,7 +30870,8 @@
               "language": "de",
               "text": "Wie weit von den Flächenebenen des Körpers eine Begrenzung noch zählt, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "dimension": "area",
@@ -30895,7 +30925,8 @@
               "language": "de",
               "text": "Wie weit von den Flächenebenen des Körpers eine Begrenzung noch zählt, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "dimension": "area",
@@ -30951,7 +30982,8 @@
               "language": "de",
               "text": "Die obere oder untere Abdeckung."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "elements",
@@ -30968,7 +31000,8 @@
               "language": "de",
               "text": "Die Quellarten der berücksichtigten Bauteile, durch `,` getrennt; ohne sie die Vorgabe des Dienstes."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "services": [
@@ -31019,7 +31052,8 @@
               "language": "de",
               "text": "Die Quellarten der Wände daneben, durch `,` getrennt, Untertypen eingeschlossen."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "centre_line",
@@ -31041,7 +31075,8 @@
               "language": "de",
               "text": "Die Mittellinie des Grundrisses: entlang seiner langen oder kurzen Achse oder von der Wand, vor der es steht, zu seiner Vorderseite."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "side",
@@ -31063,7 +31098,8 @@
               "language": "de",
               "text": "Die nähere der Wände beider Seiten oder die fernere: jede Seite hat ihre Wand innerhalb des Abstands der ferneren."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "reach",
@@ -31081,7 +31117,8 @@
               "language": "de",
               "text": "Wie weit von der Mittellinie eine Wand gesucht wird."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "inset",
@@ -31100,7 +31137,8 @@
               "language": "de",
               "text": "Um wie viel der Streifen neben dem Grundriss an beiden Enden verkürzt wird."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "dimension": "length",
@@ -31189,7 +31227,8 @@
               "language": "de",
               "text": "Die Quellarten, die sie einengen, durch `,` getrennt, Untertypen eingeschlossen: Wände, Handläufe, alles daneben oder darüber."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "band_from",
@@ -31208,7 +31247,8 @@
               "language": "de",
               "text": "Die Unterkante des Bands über der Steigungslinie, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "band_to",
@@ -31226,7 +31266,8 @@
               "language": "de",
               "text": "Die Oberkante des Bands über der Steigungslinie, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "along",
@@ -31248,7 +31289,8 @@
               "language": "de",
               "text": "Ein Treppenlauf (`flight`) oder die Läufe einer Rampe (`runs`, der kleinste)."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "dimension": "length",
@@ -31302,7 +31344,8 @@
               "language": "de",
               "text": "Die Quellarten der Räume, deren Böden darunter liegen, durch `,` getrennt."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "dimension": "length",
@@ -31357,7 +31400,8 @@
               "language": "de",
               "text": "Die Quellarten der Objekte, die es berühren können, durch `,` getrennt."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "side",
@@ -31379,7 +31423,8 @@
               "language": "de",
               "text": "Die gemessene Fläche: die untere (`below`) oder obere (`above`)."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "gap",
@@ -31398,7 +31443,8 @@
               "language": "de",
               "text": "Der größte Spalt, der noch berührt, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "intersection",
@@ -31417,7 +31463,8 @@
               "language": "de",
               "text": "Die tiefste Durchdringung, die noch berührt, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "polygon",
@@ -31436,7 +31483,8 @@
               "language": "de",
               "text": "Das kleinste gezählte Kontaktpolygon, in Quadratmetern."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "dimension": "area",
@@ -31489,7 +31537,8 @@
               "language": "de",
               "text": "Die Quellarten der Objekte, die es berühren können, durch `,` getrennt."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "side",
@@ -31511,7 +31560,8 @@
               "language": "de",
               "text": "Die gemessene Fläche: die untere (`below`) oder obere (`above`)."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "gap",
@@ -31530,7 +31580,8 @@
               "language": "de",
               "text": "Der größte Spalt, der noch berührt, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "intersection",
@@ -31549,7 +31600,8 @@
               "language": "de",
               "text": "Die tiefste Durchdringung, die noch berührt, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "polygon",
@@ -31568,7 +31620,8 @@
               "language": "de",
               "text": "Das kleinste gezählte Kontaktpolygon, in Quadratmetern."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "dimension": "length",
@@ -31622,7 +31675,8 @@
               "language": "de",
               "text": "Die Quellarten der Objekte, die es berühren können, durch `,` getrennt."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "side",
@@ -31644,7 +31698,8 @@
               "language": "de",
               "text": "Die gemessene Fläche: die untere (`below`) oder obere (`above`)."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "gap",
@@ -31663,7 +31718,8 @@
               "language": "de",
               "text": "Der größte Spalt, der noch berührt, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "intersection",
@@ -31682,7 +31738,8 @@
               "language": "de",
               "text": "Die tiefste Durchdringung, die noch berührt, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "polygon",
@@ -31701,7 +31758,8 @@
               "language": "de",
               "text": "Das kleinste gezählte Kontaktpolygon, in Quadratmetern."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "services": [
@@ -31758,7 +31816,8 @@
               "language": "de",
               "text": "Der Ursprung des Weltrahmens, der Ursprung der Grundstücksplatzierung oder der Versatz der Kartenumrechnung in Metern."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "reference",
@@ -31775,7 +31834,8 @@
               "language": "de",
               "text": "Die Disziplin der einen Referenzquelle; ohne sie die erste Quelle in der Reihenfolge der Kennungen."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "dimension": "length",
@@ -31835,7 +31895,8 @@
               "language": "de",
               "text": "Die Achsen des Weltrahmens, die Achsen der Grundstücksplatzierung, geografisch Nord oder die Drehung der Kartenumrechnung."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "reference",
@@ -31852,7 +31913,8 @@
               "language": "de",
               "text": "Die Disziplin der einen Referenzquelle; ohne sie die erste Quelle in der Reihenfolge der Kennungen."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "dimension": "plane_angle",
@@ -31905,7 +31967,8 @@
               "language": "de",
               "text": "Die Quellarten der Gegenstücke, durch `,` getrennt, Untertypen eingeschlossen."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "radius",
@@ -31923,7 +31986,8 @@
               "language": "de",
               "text": "Der größte gezählte Abstand, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "from",
@@ -31942,7 +32006,8 @@
               "language": "de",
               "text": "Der kleinste gezählte Abstand, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "projection",
@@ -31966,7 +32031,8 @@
               "language": "de",
               "text": "Oberfläche zu Oberfläche im Raum, im Grundriss, vertikal oder als Überlappung im Grundriss."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "direction",
@@ -31988,7 +32054,8 @@
               "language": "de",
               "text": "Mit `vertical`: Gegenstücke darüber, darunter oder beides."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "services": [
@@ -32041,7 +32108,8 @@
               "language": "de",
               "text": "Die Quellarten der Gegenstücke, etwa tragende Wände und Stützen, durch `,` getrennt, Untertypen eingeschlossen."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "measure",
@@ -32064,7 +32132,8 @@
               "language": "de",
               "text": "Der Anteil der Grundfläche (`plan`), der Höhe (`height`) oder der Ansicht entlang der Längsachse des Grundrisses (`elevation`)."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "horizontal",
@@ -32083,7 +32152,8 @@
               "language": "de",
               "text": "Wie weit jedes Gegenstück im Grundriss wächst, in der Ansicht entlang der Achse, in Metern; für `height`, wie weit es wächst, um im Grundriss zu überlappen."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "vertical",
@@ -32102,7 +32172,8 @@
               "language": "de",
               "text": "Wie weit jedes Gegenstück in der Höhe wächst, in Metern; im Grundriss ungenutzt."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "axis_tolerance",
@@ -32120,7 +32191,8 @@
               "language": "de",
               "text": "Nur Gegenstücke, deren Längsachse höchstens so viele Grad von parallel abweicht, zählen, unter 45; ohne Angabe jeder Winkel."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "frame",
@@ -32137,7 +32209,8 @@
               "language": "de",
               "text": "Die Quellarten der Rahmenbauteile, deren Ausfachung ebenfalls bedeckt, nur in der Ansicht, durch `,` getrennt."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "infill_above",
@@ -32156,7 +32229,8 @@
               "language": "de",
               "text": "Der Anteil, unter 1, ab dem die Ausfachung des Rahmens bedeckt."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "services": [
@@ -32219,7 +32293,8 @@
               "language": "de",
               "text": "Die Grundrissachse, quer zu der das Gefälle gelesen wird: `x` oder `y` der Welt oder die eigene `own_x` oder `own_y` im Grundriss."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "face",
@@ -32242,7 +32317,8 @@
               "language": "de",
               "text": "Die gelesene Fläche: `top`, nach oben, oder `bottom`, nach unten (eine offene Fläche ist beides), oder `facing`, die Teile eines geschlossenen Körpers, deren äußere Normale höchstens `tolerance` von `direction` abweicht."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "direction",
@@ -32277,7 +32353,8 @@
               "language": "de",
               "text": "Mit `face=facing`: wie weit die äußere Normale eines Teils von `direction` abweichen darf, in Grad, höchstens 180."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "dimension": "plane_angle",
@@ -32333,7 +32410,8 @@
               "language": "de",
               "text": "Die Quellarten der Gegenstücke, durch `,` getrennt, Untertypen eingeschlossen."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "mode",
@@ -32355,7 +32433,8 @@
               "language": "de",
               "text": "Das nächste oder das fernste Gegenstück."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "projection",
@@ -32379,7 +32458,8 @@
               "language": "de",
               "text": "Oberfläche zu Oberfläche im Raum, im Grundriss, vertikal oder als Überlappung im Grundriss."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "direction",
@@ -32401,7 +32481,8 @@
               "language": "de",
               "text": "Mit `vertical`: Gegenstücke darüber, darunter oder beides."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "subject_surface",
@@ -32422,7 +32503,8 @@
               "language": "de",
               "text": "Mit `vertical`: von Ober- oder Unterseite des Objekts; mit `counterpart_surface`."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "counterpart_surface",
@@ -32444,7 +32526,8 @@
               "language": "de",
               "text": "Mit `vertical`: zur Ober- oder Unterseite des Gegenstücks oder der Fläche direkt darüber oder darunter."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "within",
@@ -32463,7 +32546,8 @@
               "language": "de",
               "text": "Wie weit nach Gegenstücken gesucht wird, in Metern; keines darin ist kein Abstand."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "dimension": "length",
@@ -32644,7 +32728,8 @@
               "language": "de",
               "text": "Aus den Flügeln ableiten: der ganze Durchgang (`passage`) oder der breiteste Flügel (`widest-leaf`)."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "overall",
@@ -32679,7 +32764,8 @@
               "language": "de",
               "text": "Der Abzug von der Gesamtbreite, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "dimension": "length",
@@ -32766,7 +32852,8 @@
               "language": "de",
               "text": "Die Quellarten, deren Wirkbereiche bedecken, durch `,` getrennt."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "blockers",
@@ -32783,7 +32870,8 @@
               "language": "de",
               "text": "Die Quellarten, die eine Wirkung abschirmen, durch `,` getrennt."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "reach",
@@ -32806,7 +32894,8 @@
               "language": "de",
               "text": "Der Grundriss der Quelle um die Reichweite vergrößert (`grown`) oder der freie Bereich in Reichweite auf dem Weg (`travel`) oder in Sicht (`visible`)."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "range",
@@ -32825,7 +32914,8 @@
               "language": "de",
               "text": "Die Reichweite der Wirkung, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "dimension": "area",
@@ -32878,7 +32968,8 @@
               "language": "de",
               "text": "Die Quellarten, deren Wirkbereiche bedecken, durch `,` getrennt."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "blockers",
@@ -32895,7 +32986,8 @@
               "language": "de",
               "text": "Die Quellarten, die eine Wirkung abschirmen, durch `,` getrennt."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "reach",
@@ -32918,7 +33010,8 @@
               "language": "de",
               "text": "Der Grundriss der Quelle um die Reichweite vergrößert (`grown`) oder der freie Bereich in Reichweite auf dem Weg (`travel`) oder in Sicht (`visible`)."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "range",
@@ -32937,7 +33030,8 @@
               "language": "de",
               "text": "Die Reichweite der Wirkung, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "services": [
@@ -32993,7 +33087,8 @@
               "language": "de",
               "text": "Welches Ende: Fuß oder Kopf eines Laufs, Fuß des untersten oder Kopf des obersten Rampenlaufs."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "dimension": "length",
@@ -33047,7 +33142,8 @@
               "language": "de",
               "text": "Die Quellarten der gegen die Umgrenzung geprüften Körper, durch `,` getrennt; Untertypen zählen mit. Jedes Objekt dieser Arten in der Quelle der Achse."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "envelope",
@@ -33082,7 +33178,8 @@
               "language": "de",
               "text": "Die Station, an der der geprüfte Bereich beginnt, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "to",
@@ -33100,7 +33197,8 @@
               "language": "de",
               "text": "Die Station, an der der geprüfte Bereich endet, in Metern; nicht vor `from`."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "step",
@@ -33118,7 +33216,8 @@
               "language": "de",
               "text": "Der Abstand der geprüften Schnitte im Lageplan, in Metern. Zwischen zwei Schnitten wird die Prüfung abgeschätzt, nie interpoliert; ein zu grober Schritt lässt den Wert unentschieden."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "services": [
@@ -33180,7 +33279,8 @@
               "language": "de",
               "text": "Eine eigene Achse der Platzierung (`own_x`, `own_y`, `own_z`) oder eine Weltachse (`x`, `y`, `z`); dies oder `direction`."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "direction",
@@ -33498,7 +33598,8 @@
               "language": "de",
               "text": "Die gelesene Fläche: `top`, nach oben, oder `bottom`, nach unten (eine offene Fläche ist beides), oder `facing`, die Teile eines geschlossenen Körpers, deren äußere Normale höchstens `tolerance` von `direction` abweicht."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "direction",
@@ -33533,7 +33634,8 @@
               "language": "de",
               "text": "Mit `face=facing`: wie weit die äußere Normale eines Teils von `direction` abweichen darf, in Grad, höchstens 180."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "dimension": "plane_angle",
@@ -33590,7 +33692,8 @@
               "language": "de",
               "text": "Die Quellarten, die Handläufe sein können, durch `,` getrennt, Untertypen eingeschlossen."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "reach_across",
@@ -33608,7 +33711,8 @@
               "language": "de",
               "text": "Wie weit außerhalb der Seiten der Lauffläche ein Handlauf liegen darf."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "reach_above",
@@ -33626,7 +33730,8 @@
               "language": "de",
               "text": "Wie weit über der Steigungslinie ein Handlauf liegen darf."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "of",
@@ -33648,7 +33753,8 @@
               "language": "de",
               "text": "Ob das Objekt ein Treppenlauf oder eine Rampe ist."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "stair",
@@ -33665,7 +33771,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte von einer ganzen Treppe zu ihren Teilen; das Objekt ist dann eine Treppe."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "flights",
@@ -33682,7 +33789,8 @@
               "language": "de",
               "text": "Die Quellarten der Läufe unter den Teilen der Treppe."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "break_doors",
@@ -33699,7 +33807,8 @@
               "language": "de",
               "text": "Die Quellarten der Türen, an denen ein Handlauf enden darf."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "landing",
@@ -33716,7 +33825,8 @@
               "language": "de",
               "text": "Die Quellarten, die ein Podest tragen können, für `break_doors`."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "height",
@@ -33734,7 +33844,8 @@
               "language": "de",
               "text": "Wie hoch über einem Podest eine Unterbrechungstür steht, für `break_doors`."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "tolerance",
@@ -33752,7 +33863,8 @@
               "language": "de",
               "text": "Die Lücke, die der Handlauf einer Rampe über einem Podest lassen darf."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "services": [
@@ -33807,7 +33919,8 @@
               "language": "de",
               "text": "Die Quellarten, die darüber stehen können, durch `,` getrennt, Untertypen eingeschlossen."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "dimension": "length",
@@ -33862,7 +33975,8 @@
               "language": "de",
               "text": "Die Quellarten der Achse, durch `,` getrennt; Untertypen zählen mit. Das eine Objekt dieser Arten, das der Pfad erreicht, oder ohne Pfad das eine in der Quelle des Objekts."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "path",
@@ -33879,7 +33993,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Objekt zu seiner Achse; ohne sie ist jedes Objekt der Arten der Achse in der Quelle des Objekts ein Kandidat."
             }
-          ]
+          ],
+          "references": "stringList"
         }
       ],
       "dimension": "length",
@@ -33935,7 +34050,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Objekt zu seinem Geschoss; ohne sie ist das Objekt das Geschoss."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "datum",
@@ -33954,7 +34070,8 @@
               "language": "de",
               "text": "Die Höhe, auf oder über der das Erdgeschoss liegt, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "dimension": "length",
@@ -34013,7 +34130,8 @@
               "language": "de",
               "text": "Die eigene Achse des Objekts: `own_z` wird von der Senkrechten gemessen, `own_x` und `own_y` von der Waagerechten."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "dimension": "plane_angle",
@@ -34065,7 +34183,8 @@
               "language": "de",
               "text": "Die Quellarten der berücksichtigten Bauteile, durch `,` getrennt; ohne sie die Vorgabe des Dienstes."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "tolerance",
@@ -34084,7 +34203,8 @@
               "language": "de",
               "text": "Eine Teilüberlappung, die nicht höher ist, ist keine Durchdringung, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "services": [
@@ -34135,7 +34255,8 @@
               "language": "de",
               "text": "Die Quellarten, die ein Podest tragen können, durch `,` getrennt, Untertypen eingeschlossen."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "end",
@@ -34156,7 +34277,8 @@
               "language": "de",
               "text": "Welches Ende: Fuß oder Kopf eines Laufs, Fuß des untersten oder Kopf des obersten Rampenlaufs."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "obstacles",
@@ -34173,7 +34295,8 @@
               "language": "de",
               "text": "Die Quellarten, die sie einengen, durch `,` getrennt, Untertypen eingeschlossen."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "band_from",
@@ -34191,7 +34314,8 @@
               "language": "de",
               "text": "Die Unterkante des Bands über der Podesthöhe."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "band_to",
@@ -34209,7 +34333,8 @@
               "language": "de",
               "text": "Die Oberkante des Bands über der Podesthöhe."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "dimension": "length",
@@ -34263,7 +34388,8 @@
               "language": "de",
               "text": "Die Quellarten, die ein Podest tragen können, durch `,` getrennt, Untertypen eingeschlossen."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "end",
@@ -34284,7 +34410,8 @@
               "language": "de",
               "text": "Welches Ende: Fuß oder Kopf eines Laufs, Fuß des untersten oder Kopf des obersten Rampenlaufs."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "of",
@@ -34306,7 +34433,8 @@
               "language": "de",
               "text": "Ob das Objekt ein Treppenlauf oder eine Rampe ist."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "services": [
@@ -34359,7 +34487,8 @@
               "language": "de",
               "text": "Die Quellarten, die ein Podest tragen können, durch `,` getrennt, Untertypen eingeschlossen."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "end",
@@ -34380,7 +34509,8 @@
               "language": "de",
               "text": "Welches Ende: Fuß oder Kopf eines Laufs, Fuß des untersten oder Kopf des obersten Rampenlaufs."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "of",
@@ -34402,7 +34532,8 @@
               "language": "de",
               "text": "Ob das Objekt ein Treppenlauf oder eine Rampe ist."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "dimension": "length",
@@ -34457,7 +34588,8 @@
               "language": "de",
               "text": "Die Quellarten, die ein Podest tragen können, durch `,` getrennt, Untertypen eingeschlossen."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "doors",
@@ -34474,7 +34606,8 @@
               "language": "de",
               "text": "Die Quellarten der Türen, durch `,` getrennt."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "height",
@@ -34492,7 +34625,8 @@
               "language": "de",
               "text": "Wie hoch die Säule über jedem Podest reicht."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "swing",
@@ -34514,7 +34648,8 @@
               "language": "de",
               "text": "Ob auch eine über ein Podest aufschlagende Tür zählt."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "of",
@@ -34536,7 +34671,8 @@
               "language": "de",
               "text": "Ob das Objekt ein Treppenlauf oder eine Rampe ist."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "services": [
@@ -34591,7 +34727,8 @@
               "language": "de",
               "text": "Die Quellarten, die ein Podest tragen können, durch `,` getrennt, Untertypen eingeschlossen."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "end",
@@ -34612,7 +34749,8 @@
               "language": "de",
               "text": "Welches Ende: Fuß oder Kopf eines Laufs, Fuß des untersten oder Kopf des obersten Rampenlaufs."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "of",
@@ -34634,7 +34772,8 @@
               "language": "de",
               "text": "Ob das Objekt ein Treppenlauf oder eine Rampe ist."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "dimension": "length",
@@ -34762,7 +34901,8 @@
               "language": "de",
               "text": "Der breiteste Flügel (`widest`), der schmalste (`narrowest`) oder ihre Summe (`total`)."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "dimension": "length",
@@ -34820,7 +34960,8 @@
               "language": "de",
               "text": "Die eigene Achse, entlang der das Bauteil verläuft: `own_x` für einen Träger, `own_z` für eine Stütze."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "dimension": "length",
@@ -34874,7 +35015,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Objekt zu seinem Geschoss; ohne sie ist das Objekt das Geschoss."
             }
-          ]
+          ],
+          "references": "stringList"
         }
       ],
       "dimension": "length",
@@ -34962,7 +35104,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Objekt zu seinem Geschoss; ohne sie ist das Objekt das Geschoss."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "datum",
@@ -34981,7 +35124,8 @@
               "language": "de",
               "text": "Die Höhe, auf oder über der das Erdgeschoss liegt, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "services": [
@@ -35034,7 +35178,8 @@
               "language": "de",
               "text": "Die Quellarten der Geschosse, durch `,` getrennt, etwa Geschosse eines Gebäudes."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "order",
@@ -35068,7 +35213,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte von einem Anker (einem Gebäude) zu seinen Geschossen, vom Geschoss zurück gegangen; ohne sie alle Geschosse der Quelle."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "path",
@@ -35085,7 +35231,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Objekt zu seinem Geschoss; ohne sie ist das Objekt das Geschoss."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "lowest",
@@ -35107,7 +35254,8 @@
               "language": "de",
               "text": "Ob das unterste Geschoss geprüft (`checked`) oder übergangen (`ignored`, ein Keller) wird: ein übergangenes Geschoss hat keine Steighöhe."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "highest",
@@ -35129,7 +35277,8 @@
               "language": "de",
               "text": "Das höchste Geschoss, ohne Geschoss darüber: unentschieden (`undecided`), sofern nicht aus seinem Inhalt gemessen, oder übergangen (`ignored`), ohne Steighöhe."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "contents",
@@ -35146,7 +35295,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom höchsten Geschoss zu seinem Inhalt, dessen höchste Oberkante weniger seiner Höhenlage seine Steighöhe ist."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "content_kinds",
@@ -35163,7 +35313,8 @@
               "language": "de",
               "text": "Die Quellarten des berücksichtigten Inhalts, durch `,` getrennt; ohne sie jedes erreichte Objekt."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "dimension": "length",
@@ -35218,7 +35369,8 @@
               "language": "de",
               "text": "Die Quellarten der Geschosse, durch `,` getrennt."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "path",
@@ -35235,7 +35387,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Objekt zu seinem einen Geschoss."
             }
-          ]
+          ],
+          "references": "stringList"
         }
       ],
       "services": [
@@ -35287,7 +35440,8 @@
               "language": "de",
               "text": "Die Quellarten der Geschosse, durch `,` getrennt."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "path",
@@ -35304,7 +35458,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Objekt zu seinem einen Geschoss."
             }
-          ]
+          ],
+          "references": "stringList"
         }
       ],
       "services": [
@@ -35361,7 +35516,8 @@
               "language": "de",
               "text": "Die eigene Quelle des Objekts oder die Referenzquelle."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "reference",
@@ -35378,7 +35534,8 @@
               "language": "de",
               "text": "Die Disziplin der einen Referenzquelle; ohne sie die erste Quelle in der Reihenfolge der Kennungen."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "services": [
@@ -35429,7 +35586,8 @@
               "language": "de",
               "text": "Die Disziplin der einen Referenzquelle; ohne sie die erste Quelle in der Reihenfolge der Kennungen."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "services": [
@@ -35481,7 +35639,8 @@
               "language": "de",
               "text": "Die Disziplin der einen Referenzquelle; ohne sie die erste Quelle in der Reihenfolge der Kennungen."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "services": [
@@ -35539,7 +35698,8 @@
               "language": "de",
               "text": "Die Achse des Wirts entlang seiner Länge."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "height_axis",
@@ -35562,7 +35722,8 @@
               "language": "de",
               "text": "Die Achse des Wirts entlang seiner Höhe."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "dimension": "area",
@@ -35615,7 +35776,8 @@
               "language": "de",
               "text": "Die Quellarten, die taktile Flächen sein können."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "offset",
@@ -35633,7 +35795,8 @@
               "language": "de",
               "text": "Wie weit vor der ersten und hinter der letzten Steigung der Streifen liegt."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "depth",
@@ -35651,7 +35814,8 @@
               "language": "de",
               "text": "Wie tief der Streifen ist."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "intermediate",
@@ -35673,7 +35837,8 @@
               "language": "de",
               "text": "Ob auch die Podeste zwischen den Läufen einer Treppe Streifen brauchen."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "stair",
@@ -35690,7 +35855,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte von einer ganzen Treppe zu ihren Teilen; das Objekt ist dann eine Treppe."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "flights",
@@ -35707,7 +35873,8 @@
               "language": "de",
               "text": "Die Quellarten der Läufe unter den Teilen der Treppe."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "within",
@@ -35724,7 +35891,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte von einem Lauf zu den ganzen Treppen, zu denen er gehört: die Prüfung läuft auf ihnen, mit `stair` und `flights`, und zählt, was sie über den Lauf meldet."
             }
-          ]
+          ],
+          "references": "stringList"
         }
       ],
       "services": [
@@ -35779,7 +35947,8 @@
               "language": "de",
               "text": "Die Quellarten, die einen Freiraum am Ende verstellen."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "depth",
@@ -35797,7 +35966,8 @@
               "language": "de",
               "text": "Wie tief der Freiraum vor dem Ende ist."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "width",
@@ -35815,7 +35985,8 @@
               "language": "de",
               "text": "Wie breit der Freiraum ist."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "height",
@@ -35833,7 +36004,8 @@
               "language": "de",
               "text": "Wie hoch der Freiraum ist."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "of",
@@ -35855,7 +36027,8 @@
               "language": "de",
               "text": "Ob das Objekt ein Treppenlauf oder eine Rampe ist."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "services": [
@@ -35910,7 +36083,8 @@
               "language": "de",
               "text": "Die Quellarten, die versperren können, durch `,` getrennt."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "reach",
@@ -35928,7 +36102,8 @@
               "language": "de",
               "text": "Wie weit vom Grundriss entfernt ein Hindernis zählt, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "at",
@@ -35950,7 +36125,8 @@
               "language": "de",
               "text": "Wie viele der zwei Enden (`ends`, quer zur Längsachse) oder der zwei Seiten (`sides`, entlang) versperrt sind, oder wie viele Hindernisse innerhalb (`within`) des Rechtecks stehen."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "side_zone",
@@ -35968,7 +36144,8 @@
               "language": "de",
               "text": "Die Länge des mittleren Abschnitts einer Seite, den ein Hindernis überdecken muss, in Metern; ohne sie die ganze Seite."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "services": [
@@ -36024,7 +36201,8 @@
               "language": "de",
               "text": "Die Quellarten der Achse, durch `,` getrennt; Untertypen zählen mit. Das eine Objekt dieser Arten, das der Pfad erreicht, oder ohne Pfad das eine in der Quelle des Objekts."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "path",
@@ -36041,7 +36219,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Objekt zu seiner Achse; ohne sie ist jedes Objekt der Arten der Achse in der Quelle des Objekts ein Kandidat."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "side",
@@ -36063,7 +36242,8 @@
               "language": "de",
               "text": "Die positiv gezählte Seite, in Stationierungsrichtung gesehen."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "dimension": "length",
@@ -36119,7 +36299,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Wirt zu seinen Öffnungen."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "length_axis",
@@ -36142,7 +36323,8 @@
               "language": "de",
               "text": "Die Achse des Wirts entlang seiner Länge."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "height_axis",
@@ -36165,7 +36347,8 @@
               "language": "de",
               "text": "Die Achse des Wirts entlang seiner Höhe."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "minimum",
@@ -36183,7 +36366,8 @@
               "language": "de",
               "text": "Öffnungen kleiner als so viele Quadratmeter werden nicht gezählt."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "dimension": "area",
@@ -36237,7 +36421,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Wirt zu seinen Öffnungen."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "length_axis",
@@ -36260,7 +36445,8 @@
               "language": "de",
               "text": "Die Achse des Wirts entlang seiner Länge."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "height_axis",
@@ -36283,7 +36469,8 @@
               "language": "de",
               "text": "Die Achse des Wirts entlang seiner Höhe."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "minimum",
@@ -36301,7 +36488,8 @@
               "language": "de",
               "text": "Öffnungen kleiner als so viele Quadratmeter werden nicht gezählt."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "services": [
@@ -36354,7 +36542,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte von der Öffnung zu ihrem einen Wirt."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "length_axis",
@@ -36377,7 +36566,8 @@
               "language": "de",
               "text": "Die Achse des Wirts entlang seiner Länge."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "height_axis",
@@ -36400,7 +36590,8 @@
               "language": "de",
               "text": "Die Achse des Wirts entlang seiner Höhe."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "dimension": "area",
@@ -36493,7 +36684,8 @@
               "language": "de",
               "text": "Der Grundriss (`footprint`) oder die nach außen weisende Fassadenfläche (`facade`)."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "dimension": "area",
@@ -36581,7 +36773,8 @@
               "language": "de",
               "text": "Die überlappten Quellarten, durch `,` getrennt."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "measure",
@@ -36603,7 +36796,8 @@
               "language": "de",
               "text": "Die größte Überlappung mit einem (`largest`) oder ihre Summe (`total`)."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "dimension": "area",
@@ -36660,7 +36854,8 @@
               "language": "de",
               "text": "Die Unterkante (`bottom`) oder Oberkante (`top`) der Räume."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "spaces",
@@ -36677,7 +36872,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte von einem Geschoss zu seinen Räumen; das Geschoss des Raums ist das, das sie von ihm zurück erreichen."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "kinds",
@@ -36694,7 +36890,8 @@
               "language": "de",
               "text": "Die Quellarten der verglichenen Räume, durch `,` getrennt; ohne sie jedes erreichte Objekt."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "tolerance",
@@ -36713,7 +36910,8 @@
               "language": "de",
               "text": "Innerhalb wie vieler Meter Höhen bei der Wahl der vorherrschenden als eine zählen."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "dimension": "length",
@@ -36767,7 +36965,8 @@
               "language": "de",
               "text": "Die Quellarten der Geschosse, durch `,` getrennt, etwa Geschosse eines Gebäudes."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "order",
@@ -36801,7 +37000,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte von einem Anker (einem Gebäude) zu seinen Geschossen, vom Geschoss zurück gegangen; ohne sie alle Geschosse der Quelle."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "path",
@@ -36818,7 +37018,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Objekt zu seinem Geschoss; ohne sie ist das Objekt das Geschoss."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "lowest",
@@ -36840,7 +37041,8 @@
               "language": "de",
               "text": "Ob das unterste Geschoss geprüft (`checked`) oder übergangen (`ignored`, ein Keller) wird: ein übergangenes Geschoss hat keine Steighöhe."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "highest",
@@ -36862,7 +37064,8 @@
               "language": "de",
               "text": "Das höchste Geschoss, ohne Geschoss darüber: unentschieden (`undecided`), sofern nicht aus seinem Inhalt gemessen, oder übergangen (`ignored`), ohne Steighöhe."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "contents",
@@ -36879,7 +37082,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom höchsten Geschoss zu seinem Inhalt, dessen höchste Oberkante weniger seiner Höhenlage seine Steighöhe ist."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "content_kinds",
@@ -36896,7 +37100,8 @@
               "language": "de",
               "text": "Die Quellarten des berücksichtigten Inhalts, durch `,` getrennt; ohne sie jedes erreichte Objekt."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "tolerance",
@@ -36915,7 +37120,8 @@
               "language": "de",
               "text": "Innerhalb wie vieler Meter Steighöhen bei der Wahl der vorherrschenden als eine zählen."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "dimension": "length",
@@ -36990,7 +37196,8 @@
               "language": "de",
               "text": "Die Abmessung, für jede Profilfamilie gleich benannt wie in `allowed-profile`."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "dimension": "length",
@@ -37048,7 +37255,8 @@
               "language": "de",
               "text": "Die Neigung, wie `allowed-profile` sie benennt."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "dimension": "plane_angle",
@@ -37100,7 +37308,8 @@
               "language": "de",
               "text": "Die Quellarten, die Handläufe sein können, durch `,` getrennt, Untertypen eingeschlossen."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "reach_across",
@@ -37118,7 +37327,8 @@
               "language": "de",
               "text": "Wie weit außerhalb der Seiten der Lauffläche ein Handlauf liegen darf."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "reach_above",
@@ -37136,7 +37346,8 @@
               "language": "de",
               "text": "Wie weit über der Steigungslinie ein Handlauf liegen darf."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "surfaces",
@@ -37153,7 +37364,8 @@
               "language": "de",
               "text": "Die Quellarten der barrierefreien Flächen."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "of",
@@ -37174,7 +37386,8 @@
               "language": "de",
               "text": "Eine Rampe."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "services": [
@@ -37233,7 +37446,8 @@
               "language": "de",
               "text": "Die kürzere Seite (`width`) oder die längere (`length`)."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "dimension": "length",
@@ -37326,7 +37540,8 @@
               "language": "de",
               "text": "Um die starke (`strong`) oder schwache (`weak`) Achse."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "dimension": "volume",
@@ -37380,7 +37595,8 @@
               "language": "de",
               "text": "Die Tiefe der Regale, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "horizontal",
@@ -37398,7 +37614,8 @@
               "language": "de",
               "text": "Der waagerechte Abstand zwischen Regalreihen, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "vertical",
@@ -37416,7 +37633,8 @@
               "language": "de",
               "text": "Der senkrechte Abstand zwischen Regalböden, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "bottom",
@@ -37434,7 +37652,8 @@
               "language": "de",
               "text": "Die Höhe des untersten Bodens über dem Fußboden, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "top",
@@ -37452,7 +37671,8 @@
               "language": "de",
               "text": "Die Oberkante der Regale über dem Fußboden, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "clearance",
@@ -37470,7 +37690,8 @@
               "language": "de",
               "text": "Der vor jeder Tür oder Öffnung frei gehaltene Abstand, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "access",
@@ -37487,41 +37708,62 @@
               "language": "de",
               "text": "Die Beziehungsschritte von einer Tür oder Öffnung zu den Räumen, die sie erreicht."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "doors",
           "kind": {
-            "type": "sourceKind"
+            "type": "objects"
           },
           "required": false,
           "help": [
             {
               "language": "en",
-              "text": "The source kinds of the doors, `,`-separated."
+              "text": "The doors: their source kinds, `,`-separated, or `@` a selector parameter of the rule."
             },
             {
               "language": "de",
-              "text": "Die Quellarten der Türen, durch `,` getrennt."
+              "text": "Die Türen: ihre Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel."
             }
-          ]
+          ],
+          "references": "selector"
         },
         {
           "key": "openings",
           "kind": {
-            "type": "sourceKind"
+            "type": "objects"
           },
           "required": false,
           "help": [
             {
               "language": "en",
-              "text": "The source kinds of the openings, `,`-separated."
+              "text": "The openings: their source kinds, `,`-separated, or `@` a selector parameter of the rule."
             },
             {
               "language": "de",
-              "text": "Die Quellarten der Öffnungen, durch `,` getrennt."
+              "text": "Die Öffnungen: ihre Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel."
             }
-          ]
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "spaces",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The spaces a door or opening may reach: their source kinds, `,`-separated, or `@` a selector parameter of the rule; without it, every object."
+            },
+            {
+              "language": "de",
+              "text": "Die Räume, die eine Tür oder Öffnung erreichen kann: ihre Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel; ohne sie jedes Objekt."
+            }
+          ],
+          "references": "selector"
         }
       ],
       "dimension": "length",
@@ -37533,6 +37775,7 @@
       "notEvaluated": [
         "the linear-quantity service cannot measure the space",
         "an element that may reach the space has unreadable spaces or an undecided kind",
+        "a selector parameter it names picks objects it cannot list",
         "the service did not measure the clear height"
       ],
       "label": [
@@ -37577,7 +37820,8 @@
               "language": "de",
               "text": "Die Tiefe der Regale, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "horizontal",
@@ -37595,7 +37839,8 @@
               "language": "de",
               "text": "Der waagerechte Abstand zwischen Regalreihen, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "vertical",
@@ -37613,7 +37858,8 @@
               "language": "de",
               "text": "Der senkrechte Abstand zwischen Regalböden, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "bottom",
@@ -37631,7 +37877,8 @@
               "language": "de",
               "text": "Die Höhe des untersten Bodens über dem Fußboden, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "top",
@@ -37649,7 +37896,8 @@
               "language": "de",
               "text": "Die Oberkante der Regale über dem Fußboden, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "clearance",
@@ -37667,7 +37915,8 @@
               "language": "de",
               "text": "Der vor jeder Tür oder Öffnung frei gehaltene Abstand, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "access",
@@ -37684,41 +37933,62 @@
               "language": "de",
               "text": "Die Beziehungsschritte von einer Tür oder Öffnung zu den Räumen, die sie erreicht."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "doors",
           "kind": {
-            "type": "sourceKind"
+            "type": "objects"
           },
           "required": false,
           "help": [
             {
               "language": "en",
-              "text": "The source kinds of the doors, `,`-separated."
+              "text": "The doors: their source kinds, `,`-separated, or `@` a selector parameter of the rule."
             },
             {
               "language": "de",
-              "text": "Die Quellarten der Türen, durch `,` getrennt."
+              "text": "Die Türen: ihre Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel."
             }
-          ]
+          ],
+          "references": "selector"
         },
         {
           "key": "openings",
           "kind": {
-            "type": "sourceKind"
+            "type": "objects"
           },
           "required": false,
           "help": [
             {
               "language": "en",
-              "text": "The source kinds of the openings, `,`-separated."
+              "text": "The openings: their source kinds, `,`-separated, or `@` a selector parameter of the rule."
             },
             {
               "language": "de",
-              "text": "Die Quellarten der Öffnungen, durch `,` getrennt."
+              "text": "Die Öffnungen: ihre Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel."
             }
-          ]
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "spaces",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The spaces a door or opening may reach: their source kinds, `,`-separated, or `@` a selector parameter of the rule; without it, every object."
+            },
+            {
+              "language": "de",
+              "text": "Die Räume, die eine Tür oder Öffnung erreichen kann: ihre Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel; ohne sie jedes Objekt."
+            }
+          ],
+          "references": "selector"
         }
       ],
       "dimension": "length",
@@ -37729,7 +37999,8 @@
       "exactness": "measured",
       "notEvaluated": [
         "the linear-quantity service cannot measure the space",
-        "an element that may reach the space has unreadable spaces or an undecided kind"
+        "an element that may reach the space has unreadable spaces or an undecided kind",
+        "a selector parameter it names picks objects it cannot list"
       ],
       "label": [
         {
@@ -37772,7 +38043,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Objekt zu den Räumen, deren Böden zählen."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "measure",
@@ -37794,7 +38066,8 @@
               "language": "de",
               "text": "Über die erreichten Böden: der größte (`greatest`) oder kleinste (`least`)."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "dimension": "length",
@@ -37848,7 +38121,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Objekt zu den Objekten, gegen die gemessen wird; der Winkel ist die Hülle über alle erreichten, keiner, wenn keines erreicht wird."
             }
-          ]
+          ],
+          "references": "stringList"
         }
       ],
       "dimension": "plane_angle",
@@ -37908,7 +38182,8 @@
               "language": "de",
               "text": "Die gelesene Fläche: `top`, nach oben, oder `bottom`, nach unten (eine offene Fläche ist beides), oder `facing`, die Teile eines geschlossenen Körpers, deren äußere Normale höchstens `tolerance` von `direction` abweicht."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "direction",
@@ -37943,7 +38218,8 @@
               "language": "de",
               "text": "Mit `face=facing`: wie weit die äußere Normale eines Teils von `direction` abweichen darf, in Grad, höchstens 180."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "dimension": "plane_angle",
@@ -38004,7 +38280,8 @@
               "language": "de",
               "text": "Die Grundrissrichtung: `x` oder `y` der Welt oder die eigene `own_x` oder `own_y` im Grundriss."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "face",
@@ -38026,7 +38303,8 @@
               "language": "de",
               "text": "Die gelesene Fläche: `top`, nach oben, oder `bottom`, nach unten. Eine offene Fläche ist beides."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "dimension": "plane_angle",
@@ -38086,7 +38364,8 @@
               "language": "de",
               "text": "Der Anstieg von Oberkante zu Oberkante, von Unterkante zu Unterkante oder der lichte Abstand von der Oberkante dieser Platte zur Unterseite der nächsten."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "slabs",
@@ -38103,7 +38382,8 @@
               "language": "de",
               "text": "Die Quellarten der gestapelten Platten, durch `,` getrennt."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "ratio",
@@ -38121,7 +38401,8 @@
               "language": "de",
               "text": "Der kleinste Anteil des kleineren Grundrisses, um den sich zwei Platten überlappen, um übereinander zu liegen, über 0 und höchstens 1."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "dimension": "length",
@@ -38177,7 +38458,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte von der Treppe zu ihren Teilen."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "flights",
@@ -38194,7 +38476,8 @@
               "language": "de",
               "text": "Die Quellarten ihrer Läufe unter ihren Teilen."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "dimension": "length",
@@ -38248,7 +38531,8 @@
               "language": "de",
               "text": "Die Quellarten der Achse, durch `,` getrennt; Untertypen zählen mit. Das eine Objekt dieser Arten, das der Pfad erreicht, oder ohne Pfad das eine in der Quelle des Objekts."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "path",
@@ -38265,7 +38549,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Objekt zu seiner Achse; ohne sie ist jedes Objekt der Arten der Achse in der Quelle des Objekts ein Kandidat."
             }
-          ]
+          ],
+          "references": "stringList"
         }
       ],
       "dimension": "length",
@@ -38321,7 +38606,8 @@
               "language": "de",
               "text": "Die Quellarten der Achse, durch `,` getrennt; Untertypen zählen mit. Das eine Objekt dieser Arten, das der Pfad erreicht, oder ohne Pfad das eine in der Quelle des Objekts."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "path",
@@ -38338,7 +38624,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Objekt zu seiner Achse; ohne sie ist jedes Objekt der Arten der Achse in der Quelle des Objekts ein Kandidat."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "station",
@@ -38356,7 +38643,8 @@
               "language": "de",
               "text": "Die Station des Schnitts, in Metern, wie die Achse sie über ihre Stationsgleichungen bezeichnet."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "dimension": "area",
@@ -38412,7 +38700,8 @@
               "language": "de",
               "text": "Die Quellarten der Achse, durch `,` getrennt; Untertypen zählen mit. Das eine Objekt dieser Arten, das der Pfad erreicht, oder ohne Pfad das eine in der Quelle des Objekts."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "path",
@@ -38429,7 +38718,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Objekt zu seiner Achse; ohne sie ist jedes Objekt der Arten der Achse in der Quelle des Objekts ein Kandidat."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "station",
@@ -38447,7 +38737,8 @@
               "language": "de",
               "text": "Die Station des Schnitts, in Metern, wie die Achse sie über ihre Stationsgleichungen bezeichnet."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "direction",
@@ -38469,7 +38760,8 @@
               "language": "de",
               "text": "Quer durch den Schnitt waagerecht (`lateral`) oder lotrecht (`up`)."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "dimension": "length",
@@ -38530,7 +38822,8 @@
               "language": "de",
               "text": "Die Decken (`slabs`) oder die Dächer (`roofs`) zählen."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "services": [
@@ -38616,7 +38909,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte von der Tür zu den Räumen daneben."
             }
-          ]
+          ],
+          "references": "stringList"
         }
       ],
       "services": [
@@ -38678,7 +38972,8 @@
               "language": "de",
               "text": "Die Achse, entlang der die Dicke gemessen wird; dies oder `face`."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "face",
@@ -38699,7 +38994,8 @@
               "language": "de",
               "text": "Rechtwinklig zu dieser ebenen Fläche messen; dies oder `direction`."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "dimension": "length",
@@ -38754,7 +39050,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Objekt zu den Räumen, deren Böden zählen."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "threshold",
@@ -38793,7 +39090,8 @@
               "language": "de",
               "text": "Über die erreichten Böden: der größte (`greatest`) oder kleinste (`least`)."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "ramps",
@@ -38810,7 +39108,8 @@
               "language": "de",
               "text": "Die Quellarten der Rampen, durch `,` getrennt, Untertypen eingeschlossen: eine Rampe innerhalb von `ramp_reach` der Tür über einem Raum ist der Boden dieser Seite, an ihrer Oberkante gemessen."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "ramp_reach",
@@ -38828,7 +39127,8 @@
               "language": "de",
               "text": "Mit `ramps`, wie weit eine Rampe im Grundriss von der Tür liegen darf, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "dimension": "length",
@@ -38918,7 +39218,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Raum zu seinen Ausgängen."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "kinds",
@@ -38935,7 +39236,8 @@
               "language": "de",
               "text": "Die Quellarten der Ausgänge, durch `,` getrennt, Untertypen eingeschlossen."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "start",
@@ -38957,7 +39259,8 @@
               "language": "de",
               "text": "Wo der Weg beginnt: an jedem Punkt der begehbaren Fläche des Raums oder an jeder seiner Türen."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "doors",
@@ -38974,7 +39277,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Raum zu seinen Türen, für `start=door`."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "door_kinds",
@@ -38991,7 +39295,8 @@
               "language": "de",
               "text": "Die Quellarten der Türen, durch `,` getrennt."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "walking_height",
@@ -39009,7 +39314,8 @@
               "language": "de",
               "text": "Die lichte Höhe, die ein Gehender über dem Boden braucht."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "walking_step",
@@ -39027,7 +39333,8 @@
               "language": "de",
               "text": "Die höchste Stufe, die ein Gehender nimmt."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "dimension": "length",
@@ -39152,7 +39459,8 @@
               "language": "de",
               "text": "Die bedeckenden Quellarten, durch `,` getrennt."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "growth",
@@ -39171,7 +39479,8 @@
               "language": "de",
               "text": "Um wie viel jede Bedeckung im Grundriss zuvor vergrößert wird, in Metern."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "dimension": "area",
@@ -39293,7 +39602,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Schacht zu seinen gestapelten Räumen."
             }
-          ]
+          ],
+          "references": "stringList"
         }
       ],
       "dimension": "length",
@@ -39346,7 +39656,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Schacht zu seinen gestapelten Räumen."
             }
-          ]
+          ],
+          "references": "stringList"
         }
       ],
       "dimension": "length",
@@ -39399,7 +39710,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Schacht zu seinen gestapelten Räumen."
             }
-          ]
+          ],
+          "references": "stringList"
         }
       ],
       "dimension": "area",
@@ -39452,7 +39764,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Schacht zu seinen gestapelten Räumen."
             }
-          ]
+          ],
+          "references": "stringList"
         }
       ],
       "dimension": "length",
@@ -39610,7 +39923,8 @@
               "language": "de",
               "text": "Die Quellarten der Objekte, gegen die gemessen wird, etwa Fahrgassen, durch `,` getrennt."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "reach",
@@ -39629,7 +39943,8 @@
               "language": "de",
               "text": "Wie weit vom Grundriss entfernt ein Objekt zählt, in Metern; 0, die Vorgabe, ist berührend."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "services": [
@@ -39738,7 +40053,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte von der Öffnung zu ihren Fluren."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "kinds",
@@ -39755,7 +40071,8 @@
               "language": "de",
               "text": "Die Quellarten, von denen die Flure sein müssen, durch `,` getrennt; ohne Angabe jede."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "services": [
@@ -39862,7 +40179,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Raum zu seinen Ausgängen."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "kinds",
@@ -39879,7 +40197,8 @@
               "language": "de",
               "text": "Die Quellarten, von denen die Ausgänge sein müssen, durch `,` getrennt; ohne Angabe jede."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "between",
@@ -39902,7 +40221,8 @@
               "language": "de",
               "text": "Zwischen den nächsten Punkten, Mittelpunkten oder fernsten Punkten der Ausgänge im Grundriss."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "services": [
@@ -39989,7 +40309,8 @@
               "language": "de",
               "text": "Die gelesene Fläche: `top`, nach oben, oder `bottom`, nach unten (eine offene Fläche ist beides), oder `facing`, die Teile eines geschlossenen Körpers, deren äußere Normale höchstens `tolerance` von `direction` abweicht."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "direction",
@@ -40024,7 +40345,8 @@
               "language": "de",
               "text": "Mit `face=facing`: wie weit die äußere Normale eines Teils von `direction` abweichen darf, in Grad, höchstens 180."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "services": [
@@ -40163,7 +40485,8 @@
               "language": "de",
               "text": "Die platzierte Form: ein Kreis mit `diameter` oder ein Rechteck `width` mal `length` in beliebiger Ausrichtung, jeweils `height` hoch."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "diameter",
@@ -40181,7 +40504,8 @@
               "language": "de",
               "text": "Der Durchmesser des Kreises."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "width",
@@ -40199,7 +40523,8 @@
               "language": "de",
               "text": "Die Breite des Rechtecks."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "length",
@@ -40217,7 +40542,8 @@
               "language": "de",
               "text": "Die Länge des Rechtecks."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "height",
@@ -40235,7 +40561,8 @@
               "language": "de",
               "text": "Die Höhe der Form."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "obstacles",
@@ -40252,7 +40579,8 @@
               "language": "de",
               "text": "Die Quellarten, die den Boden verstellen; ohne Angabe jedes andere Objekt."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "band_from",
@@ -40270,7 +40598,8 @@
               "language": "de",
               "text": "Ab welcher Höhe über dem Boden Hindernisse zählen."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "band_to",
@@ -40288,7 +40617,8 @@
               "language": "de",
               "text": "Bis zu welcher Höhe über dem Boden Hindernisse zählen."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "merge",
@@ -40305,7 +40635,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte zu den mitdurchsuchten Räumen."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "swings",
@@ -40322,7 +40653,8 @@
               "language": "de",
               "text": "Die Quellarten der Türen, deren Aufschlag den Boden verstellt."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "entrance_width",
@@ -40340,7 +40672,8 @@
               "language": "de",
               "text": "Wie breit ein Weg von einem Zugang die Form erreichen muss."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "access",
@@ -40357,7 +40690,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Raum zu seinen Zugängen."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "doors",
@@ -40374,7 +40708,8 @@
               "language": "de",
               "text": "Die Quellarten der Zugangstüren."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "openings",
@@ -40391,7 +40726,8 @@
               "language": "de",
               "text": "Die Quellarten der Zugangsöffnungen."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "services": [
@@ -40444,7 +40780,8 @@
               "language": "de",
               "text": "Die größte Lücke zwischen Absturzsicherungen, die die Kante noch sichert."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "platform_gap",
@@ -40462,7 +40799,8 @@
               "language": "de",
               "text": "Wie weit von der Kante eine Absturzsicherung stehen darf."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "landing_gap",
@@ -40480,7 +40818,8 @@
               "language": "de",
               "text": "Wie weit von der Kante eine tiefere Auftrittsfläche liegen darf."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "landing_width",
@@ -40498,7 +40837,8 @@
               "language": "de",
               "text": "Wie breit eine tiefere Auftrittsfläche sein muss, um darauf zu stehen."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "climb_distance",
@@ -40516,7 +40856,8 @@
               "language": "de",
               "text": "Wie nah an einer Absturzsicherung ein Objekt beklettert werden kann."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "climb_side",
@@ -40534,7 +40875,8 @@
               "language": "de",
               "text": "Wie lang die kürzeste Seite eines Objekts sein muss, um darauf zu stehen."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "measure_from",
@@ -40556,7 +40898,8 @@
               "language": "de",
               "text": "Ob eine Absturzsicherung auf einer Aufkantung vom Boden oder von der Aufkantung gemessen wird."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "barriers",
@@ -40573,7 +40916,8 @@
               "language": "de",
               "text": "Die Quellarten, die Absturzsicherungen sein können; ohne Angabe jeder nahe Körper."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "landings",
@@ -40590,7 +40934,8 @@
               "language": "de",
               "text": "Die Quellarten, die tiefere Auftrittsflächen sein können; ohne Angabe jede."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "climbables",
@@ -40607,7 +40952,8 @@
               "language": "de",
               "text": "Die Quellarten, die beklettert werden können; ohne Angabe jede."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "services": [
@@ -40795,7 +41141,8 @@
               "language": "de",
               "text": "Die Quellarten, die Handläufe sein können, durch `,` getrennt, Untertypen eingeschlossen."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "reach_across",
@@ -40813,7 +41160,8 @@
               "language": "de",
               "text": "Wie weit außerhalb der Seiten der Lauffläche ein Handlauf liegen darf."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "reach_above",
@@ -40831,7 +41179,8 @@
               "language": "de",
               "text": "Wie weit über der Steigungslinie ein Handlauf liegen darf."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "level_over",
@@ -40850,7 +41199,8 @@
               "language": "de",
               "text": "Die Verlängerung, über die der Anstieg eines Handlaufs an jedem Ende gemessen wird."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "from",
@@ -40872,7 +41222,8 @@
               "language": "de",
               "text": "Ob die Verlängerungen eines Laufs von der ersten und letzten Stufenvorderkante oder Steigung gemessen werden."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "of",
@@ -40894,7 +41245,8 @@
               "language": "de",
               "text": "Ob das Objekt ein Treppenlauf oder eine Rampe ist, deren Läufe nacheinander genommen werden."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "services": [
@@ -41266,7 +41618,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte von der Öffnung zu ihren Wirten."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "hosts",
@@ -41283,7 +41636,8 @@
               "language": "de",
               "text": "Die Quellarten der Wirte, durch `,` getrennt, Untertypen eingeschlossen; ohne Angabe jedes erreichte Objekt."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "length_axis",
@@ -41306,7 +41660,8 @@
               "language": "de",
               "text": "Die Achse des Wirts entlang seiner Länge."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "height_axis",
@@ -41329,7 +41684,8 @@
               "language": "de",
               "text": "Die Achse des Wirts entlang seiner Höhe."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "zone",
@@ -41351,7 +41707,8 @@
               "language": "de",
               "text": "Ob Randabstände zu den Rändern des Wirts oder zu seinen Flanschen (`web`, quer zu `profile-y`) gemessen werden."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "minimum",
@@ -41369,7 +41726,8 @@
               "language": "de",
               "text": "Öffnungen kleiner als so viele Quadratmeter werden nicht gezählt."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "services": [
@@ -41557,7 +41915,8 @@
               "language": "de",
               "text": "Die Quellarten der gepaarten Bauteile, etwa Wände oder Träger, durch `,` getrennt."
             }
-          ]
+          ],
+          "references": "string"
         },
         {
           "key": "member_path",
@@ -41574,7 +41933,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte vom Objekt zu seinen Bauteilen."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "angle_tolerance",
@@ -41592,7 +41952,8 @@
               "language": "de",
               "text": "Wie weit zwei Längsachsen von parallel abweichen dürfen, um ein Paar zu bilden, in Grad, unter 45."
             }
-          ]
+          ],
+          "references": "length"
         },
         {
           "key": "reach",
@@ -41610,7 +41971,8 @@
               "language": "de",
               "text": "Bis zu welchem Abstand im Grundriss ein Paar aufgeführt wird, in Metern: mindestens der größte geprüfte Abstand."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "services": [
@@ -41782,7 +42144,8 @@
               "language": "de",
               "text": "Die Quellarten, die ein Podest an den Enden eines Laufs tragen können; ohne Angabe sind die Podestfelder unentschieden."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "services": [
@@ -42128,7 +42491,8 @@
               "language": "de",
               "text": "Wo ein gewendelter Lauf begangen wird: so weit von der Seite, zu der er sich wendet; ohne Angabe mittig über die Stufen."
             }
-          ]
+          ],
+          "references": "length"
         }
       ],
       "services": [
@@ -42341,7 +42705,8 @@
               "language": "de",
               "text": "Die Beziehungsschritte von der Tür zu den Räumen, zu denen sie sich öffnet."
             }
-          ]
+          ],
+          "references": "stringList"
         },
         {
           "key": "kinds",
@@ -42358,7 +42723,8 @@
               "language": "de",
               "text": "Die Quellarten der aufgeführten Räume, durch `,` getrennt, Untertypen eingeschlossen; ohne Angabe jeder erreichte Raum."
             }
-          ]
+          ],
+          "references": "string"
         }
       ],
       "services": [

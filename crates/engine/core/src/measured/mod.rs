@@ -141,9 +141,24 @@ pub(crate) fn measured_by_core(name: &str) -> bool {
 }
 
 /// Parses a name in the measured set through the registry
-/// ([`axioval_ir::measured`]), or says why it is none.
+/// ([`axioval_ir::measured`]), or says why it is none. A name naming a rule
+/// parameter or the anchor (`@name`) is none here: only the rule reading
+/// it binds one ([`MeasuredValues::read_bound_batch`]).
 pub(crate) fn parse(name: &str) -> Result<MeasuredName, String> {
     let call = axioval_ir::measured::parse(name).map_err(|error| error.to_string())?;
+    if let Some((key, argument)) = call.references().next() {
+        return Err(format!(
+            "`{}` parameter `{key}`: `{}` names a rule parameter, which only a rule's own \
+             expression binds",
+            call.name(),
+            argument.written().unwrap_or_default()
+        ));
+    }
+    of_call(call)
+}
+
+/// The engine's form of a call whose every argument is bound.
+fn of_call(call: MeasuredCall) -> Result<MeasuredName, String> {
     Ok(match call.descriptor.name {
         MEASURED_BOTTOM_ABOVE_LEVEL => {
             let Some(MeasuredArgument::Path(steps)) = call.argument("path") else {
@@ -309,7 +324,30 @@ impl MeasuredValues {
     ) -> Vec<Result<MeasuredRead, PropertyResolutionError>> {
         self.0.read_batch(name, objects)
     }
+
+    /// The measured value `call` of each of `objects`, its every argument
+    /// bound from the reading rule's parameters ([`MeasuredCall::bind`]),
+    /// as `written` by the rule (`shelf_length;doors=@door_selector`), the
+    /// name its evidence carries: one answer per object in order, each the
+    /// value and evidence a read of `written` would answer with those
+    /// arguments, and what the measurement was made against
+    /// ([`provider::Citation`]). Each is measured once per run for the
+    /// object, the name and the bound arguments
+    /// ([`MeasuredMemo`](provider::MeasuredMemo)).
+    #[must_use]
+    pub fn read_bound_batch(
+        &self,
+        written: &str,
+        call: &MeasuredCall,
+        objects: &[&ObjectId],
+    ) -> Vec<Result<BoundRead, PropertyResolutionError>> {
+        self.0.read_bound_batch(written, call, objects)
+    }
 }
+
+/// A measured value read with arguments bound from a rule: the value and
+/// what it was measured against.
+pub type BoundRead = (MeasuredRead, provider::Citation);
 
 /// The answer a provider's measurement is. The provider states
 /// exactness by the variant it answers; a `Value` states none, so it is
@@ -593,6 +631,75 @@ impl Measures {
             .zip(answers)
             .map(|(object, answer)| Self::read(object, name, answer))
             .collect()
+    }
+
+    /// The measured value `call`, bound, of each of `objects`
+    /// ([`MeasuredValues::read_bound_batch`]).
+    fn read_bound_batch(
+        &self,
+        written: &str,
+        call: &MeasuredCall,
+        objects: &[&ObjectId],
+    ) -> Vec<Result<BoundRead, PropertyResolutionError>> {
+        if let Some((key, argument)) = call.references().next() {
+            let error = PropertyResolutionError::InvalidArgument(format!(
+                "`{}` parameter `{key}`: `{}` is not bound",
+                call.name(),
+                argument.written().unwrap_or_default()
+            ));
+            return objects.iter().map(|_| Err(error.clone())).collect();
+        }
+        let name = match of_call(call.clone()) {
+            Ok(name) => name,
+            Err(error) => {
+                let error = PropertyResolutionError::InvalidArgument(error);
+                return objects.iter().map(|_| Err(error.clone())).collect();
+            }
+        };
+        // The bound arguments, in a form a memo keys by: every argument's
+        // key and value, in key order, selections sorted.
+        let arguments = format!("{:?}", call.arguments);
+        let measure = |object: &ObjectId| -> Result<BoundRead, PropertyResolutionError> {
+            let (answer, citation) = match &name {
+                MeasuredName::Provided(call) => self.provided_cited(call, object)?,
+                name => (self.measure(name, object)?, provider::Citation::default()),
+            };
+            Ok((Self::read(object, written, Ok(answer))?, citation))
+        };
+        objects
+            .iter()
+            .map(|object| match &self.providers {
+                Some((_, services)) => provider::MeasuredMemo::of(
+                    services,
+                    ((*object).clone(), written.to_owned(), arguments.clone()),
+                    || measure(object),
+                ),
+                None => measure(object),
+            })
+            .collect()
+    }
+
+    /// What the provider registered for `call`'s name measures of `object`,
+    /// with what it cites it measured against.
+    fn provided_cited(
+        &self,
+        call: &MeasuredCall,
+        object: &ObjectId,
+    ) -> Result<(Answer, provider::Citation), PropertyResolutionError> {
+        let name = call.name();
+        let Some((providers, services)) = &self.providers else {
+            return Err(Self::missing(name, "built-in measurement"));
+        };
+        let provider = providers
+            .of(name)
+            .ok_or_else(|| Self::missing(name, "built-in measurement"))?;
+        let context = crate::RuleContext {
+            project: &providers.project,
+            services,
+        };
+        provider
+            .measure_cited(call, object, &context)
+            .map(|(measurement, citation)| (answer_of(measurement), citation))
     }
 
     fn missing(name: &str, service: &str) -> PropertyResolutionError {

@@ -64,8 +64,10 @@ impl RuleCapability for ExpressionRequirement {
             );
         };
         let (selected, mut evaluation) = select_objects(context, &rule.selector);
+        let arguments = crate::measured_arguments::Arguments::default();
         for object in selected {
-            let mut leaves = ObjectLeaves::new(context, object, Some(&rule.parameters));
+            let mut leaves = ObjectLeaves::new(context, object, Some(&rule.parameters))
+                .with_arguments(&arguments);
             let result = evaluate(requirement, REQUIREMENT, &mut leaves);
             if let Some(traces) = context.services.get::<ExpressionTraces>() {
                 traces.record(ObjectTrace {
@@ -113,7 +115,12 @@ impl RuleCapability for ExpressionRequirement {
                             read_values(&result)
                         ),
                     };
-                    let mut found = finding(rule, &object.id, message, cited, vec![]);
+                    // What the measured values bound from the rule were
+                    // measured against, as their providers cite it.
+                    let mut related = leaves.take_related();
+                    related.sort();
+                    related.dedup();
+                    let mut found = finding(rule, &object.id, message, cited, related);
                     found.explanation = Some(result.explain(&deciding));
                     evaluation.push_finding_deviating(found, deviation);
                 }

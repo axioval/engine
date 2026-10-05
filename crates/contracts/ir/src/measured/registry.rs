@@ -354,6 +354,22 @@ const fn objects(
     }
 }
 
+/// Objects measured against, by source kind or through a selector
+/// parameter or the anchor of the rule reading the value.
+const fn selected(
+    key: &'static str,
+    required: bool,
+    help: &'static [LocalizedText],
+) -> MeasuredParameter {
+    MeasuredParameter {
+        key,
+        kind: MeasuredParameterKind::Objects,
+        required,
+        default: None,
+        help,
+    }
+}
+
 const fn metres(
     key: &'static str,
     default: &'static str,
@@ -709,7 +725,7 @@ const fn shelf_length(key: &'static str, help: &'static [LocalizedText]) -> Meas
 
 /// The shelving arrangement and the doors it keeps clear, as
 /// `shelf-capacity` declares them.
-const SHELVING: [MeasuredParameter; 9] = [
+const SHELVING: [MeasuredParameter; 10] = [
     shelf_length(
         "depth",
         &en_de(
@@ -763,20 +779,35 @@ const SHELVING: [MeasuredParameter; 9] = [
              erreicht.",
         ),
     },
-    objects(
+    selected(
         "doors",
         false,
         &en_de(
-            "The source kinds of the doors, `,`-separated.",
-            "Die Quellarten der Türen, durch `,` getrennt.",
+            "The doors: their source kinds, `,`-separated, or `@` a selector parameter \
+             of the rule.",
+            "Die Türen: ihre Quellarten, durch `,` getrennt, oder mit `@` ein \
+             Selektorparameter der Regel.",
         ),
     ),
-    objects(
+    selected(
         "openings",
         false,
         &en_de(
-            "The source kinds of the openings, `,`-separated.",
-            "Die Quellarten der Öffnungen, durch `,` getrennt.",
+            "The openings: their source kinds, `,`-separated, or `@` a selector \
+             parameter of the rule.",
+            "Die Öffnungen: ihre Quellarten, durch `,` getrennt, oder mit `@` ein \
+             Selektorparameter der Regel.",
+        ),
+    ),
+    selected(
+        "spaces",
+        false,
+        &en_de(
+            "The spaces a door or opening may reach: their source kinds, `,`-separated, \
+             or `@` a selector parameter of the rule; without it, every object.",
+            "Die Räume, die eine Tür oder Öffnung erreichen kann: ihre Quellarten, durch \
+             `,` getrennt, oder mit `@` ein Selektorparameter der Regel; ohne sie jedes \
+             Objekt.",
         ),
     ),
 ];
@@ -784,6 +815,7 @@ const SHELVING: [MeasuredParameter; 9] = [
 const SHELVING_UNMEASURED: &[&str] = &[
     "the linear-quantity service cannot measure the space",
     "an element that may reach the space has unreadable spaces or an undecided kind",
+    "a selector parameter it names picks objects it cannot list",
 ];
 
 /// The storeys `slab-contact` orders by their `Elevation` attribute, and the
@@ -3626,6 +3658,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         not_evaluated: &[
             SHELVING_UNMEASURED[0],
             SHELVING_UNMEASURED[1],
+            SHELVING_UNMEASURED[2],
             "the service did not measure the clear height",
         ],
         label: &en_de("Shelving clear height", "Lichte Höhe für Regale"),

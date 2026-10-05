@@ -59,6 +59,10 @@ pub struct Template {
     /// How messages about the rule as a whole name the capability, such as
     /// `body-extent` in the message ``body-extent: `minimum` exceeds `maximum` ``.
     pub name: &'static str,
+    /// Where a declaration the template refuses, or a host missing its
+    /// services, is reported: the rule as a whole, or each selected object.
+    #[serde(skip_serializing_if = "Refusals::is_rule")]
+    pub refusals: Refusals,
     /// Values an optional parameter takes when a rule leaves it unstated,
     /// applied after the declaration checks.
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -78,6 +82,29 @@ pub struct Template {
     /// The compositions, the first whose `when` parameters are all stated
     /// applying.
     pub forms: Vec<Form>,
+}
+
+/// Where a template reports a declaration it refuses and a host missing
+/// its services.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Refusals {
+    /// Once, for the rule as a whole, before anything is selected, worded
+    /// after the template's name (`body-extent: …`).
+    #[default]
+    Rule,
+    /// For each selected object, after the selection, worded as the check
+    /// states it: as capabilities that judged the declaration per object
+    /// reported it.
+    Objects,
+}
+
+impl Refusals {
+    /// Whether refusals are the rule's.
+    #[must_use]
+    pub fn is_rule(&self) -> bool {
+        *self == Self::Rule
+    }
 }
 
 /// A value an optional parameter takes when unstated.
@@ -145,6 +172,23 @@ pub enum Check {
     },
     /// Where both are stated, `low` is at most `high`.
     Ordered {
+        low: &'static str,
+        high: &'static str,
+        message: &'static str,
+    },
+    /// Every one of `parameters` is stated as a finite `number` (no other
+    /// kind of value), above `above` and at least `at_least` where given:
+    /// otherwise `message`.
+    Finite {
+        parameters: &'static [&'static str],
+        #[serde(skip_serializing_if = "Option::is_none")]
+        above: Option<f64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        at_least: Option<f64>,
+        message: &'static str,
+    },
+    /// Both stated as numbers, `low` is below `high`: otherwise `message`.
+    Increasing {
         low: &'static str,
         high: &'static str,
         message: &'static str,
@@ -297,6 +341,37 @@ pub struct Form {
     /// decision, in order.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub derived: Vec<Derived>,
+    /// The value whose measured reads' cited objects ([`Citation`]) a
+    /// finding relates (the doors a shelf length was measured with); none
+    /// relates the decided members, if any.
+    ///
+    /// [`Citation`]: crate::Citation
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub related: Option<&'static str>,
+    /// Further decisions, each judged on its own once `values` are read
+    /// and before the form's own decision, each its own finding or
+    /// not-evaluated outcome: a capability reporting one per failed check.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub checks: Vec<FormCheck>,
+}
+
+/// A further decision of a [`Form`]: its own values, read after the form's
+/// (one that cannot be read leaves only this check open, worded as it was
+/// refused), its decision over them and the form's, and its messages.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FormCheck {
+    /// The values read for this check, in order.
+    pub values: Vec<TemplateValue>,
+    /// How it decides.
+    pub decision: Decision,
+    /// The finding's message where it fails.
+    pub fail: &'static str,
+    /// The not-evaluated message where it cannot decide.
+    pub undecided: &'static str,
+    /// The value whose measured reads' cited objects its finding relates.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub related: Option<&'static str>,
 }
 
 /// A value derived from values already read, in plain binary arithmetic
@@ -957,23 +1032,46 @@ pub enum End {
 
 impl Form {
     /// The form as one truth expression: the decision's expression form
-    /// with each value's expression in place of its name. It still holds
-    /// the template's slots (`{axis}`) and `parameter` reads until a rule's
+    /// with each value's expression in place of its name, and with its
+    /// checks' before it, all of them required. It still holds the
+    /// template's slots (`{axis}`) and `parameter` reads until a rule's
     /// parameters are bound into it.
     #[must_use]
     pub fn requirement(&self) -> Expression {
-        self.decision.expression(&|name| {
-            self.values
-                .iter()
-                .find(|value| value.name == name)
-                .map_or_else(
-                    || Expression::Derived {
-                        name: name.to_owned(),
-                        label: None,
-                    },
-                    |value| value.expression.clone(),
-                )
-        })
+        self.requirement_with(&|_, expression| expression.clone())
+    }
+
+    /// [`Self::requirement`], each value's expression passed through
+    /// `value` (its name and expression) first.
+    #[must_use]
+    pub fn requirement_with(&self, value: &dyn Fn(&str, &Expression) -> Expression) -> Expression {
+        let inline = |values: &[&TemplateValue], name: &str| {
+            values.iter().find(|step| step.name == name).map_or_else(
+                || Expression::Derived {
+                    name: name.to_owned(),
+                    label: None,
+                },
+                |step| value(step.name, &step.expression),
+            )
+        };
+        let own: Vec<&TemplateValue> = self.values.iter().collect();
+        let decided = self.decision.expression(&|name| inline(&own, name));
+        if self.checks.is_empty() {
+            return decided;
+        }
+        let mut operands: Vec<Expression> = self
+            .checks
+            .iter()
+            .map(|check| {
+                let values: Vec<&TemplateValue> = self.values.iter().chain(&check.values).collect();
+                check.decision.expression(&|name| inline(&values, name))
+            })
+            .collect();
+        operands.push(decided);
+        Expression::And {
+            operands,
+            label: None,
+        }
     }
 }
 
@@ -1318,6 +1416,55 @@ mod tests {
             maximum: Some(vec![Term::plus(Operand::Parameter("maximum"))]),
             rounding,
         }
+    }
+
+    /// A form's checks are required beside its own decision, each reading
+    /// the form's values and its own.
+    #[test]
+    fn a_form_with_checks_requires_them_all() {
+        let value = |name: &'static str| TemplateValue {
+            name,
+            expression: Expression::Parameter {
+                name: format!("read_{name}"),
+                label: None,
+            },
+            expect: None,
+            absent: None,
+            mismatch: None,
+        };
+        let form = Form {
+            when: &[],
+            values: vec![value("count")],
+            decision: within(Vec::new()),
+            fail: "",
+            undecided: "",
+            members: None,
+            table: None,
+            scope: None,
+            derived: Vec::new(),
+            related: Some("count"),
+            checks: vec![FormCheck {
+                values: vec![value("height")],
+                decision: Decision::Within {
+                    value: "height",
+                    minimum: Some(vec![Term::plus(Operand::Value("count"))]),
+                    maximum: None,
+                    rounding: Vec::new(),
+                },
+                fail: "",
+                undecided: "",
+                related: None,
+            }],
+        };
+        let Expression::And { operands, .. } = form.requirement() else {
+            panic!("an `and` of the checks and the form's decision");
+        };
+        assert_eq!(operands.len(), 2);
+        let check = serde_json::to_string(&operands[0]).unwrap();
+        assert!(
+            check.contains("read_height") && check.contains("read_count"),
+            "{check}"
+        );
     }
 
     /// Without a magnitude to scale with, a bound is compared as it is;

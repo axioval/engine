@@ -60,6 +60,39 @@ pub(crate) fn every_object_of_kinds(
     Ok(found)
 }
 
+/// The objects the [`Objects`](axioval_ir::measured::MeasuredParameterKind::Objects)
+/// argument `key` names, `None` where the call states none: the objects
+/// a rule's selector picked (or the anchor), as bound into the call, or
+/// those of the source kinds it names, all surely picked and `leave_out`
+/// left out.
+///
+/// # Errors
+///
+/// A kind whose objects cannot be told, or an argument of another kind.
+pub(crate) fn selection(
+    context: &RuleContext<'_>,
+    call: &MeasuredCall,
+    key: &str,
+    leave_out: Option<&ObjectId>,
+) -> Result<Option<axioval_ir::measured::MeasuredSelection>, PropertyResolutionError> {
+    Ok(match call.argument(key) {
+        None => None,
+        Some(MeasuredArgument::Objects(selection)) => Some(selection.clone()),
+        Some(MeasuredArgument::SourceKind(_)) => {
+            let mut matched = every_object_of_kinds(context, call, key)?;
+            if let Some(object) = leave_out {
+                matched.remove(object);
+            }
+            Some(axioval_ir::measured::MeasuredSelection {
+                parameter: key.to_owned(),
+                matched,
+                undecided: BTreeSet::new(),
+            })
+        }
+        Some(_) => return Err(PropertyResolutionError::InvalidRequest),
+    })
+}
+
 /// [`objects_of_kinds`], `object` included when it is of the kinds too.
 pub(crate) fn objects_of_kinds_including(
     context: &RuleContext<'_>,
@@ -108,6 +141,7 @@ pub(crate) fn resolution_error(
         NotEvaluatedReason::MissingService => PropertyResolutionError::MissingService(message),
         NotEvaluatedReason::NotRecorded => PropertyResolutionError::NotRecorded(message),
         NotEvaluatedReason::InvalidEvidence => PropertyResolutionError::Conflicting(message),
+        NotEvaluatedReason::InvalidDeclaration => PropertyResolutionError::InvalidArgument(message),
         _ => PropertyResolutionError::Unavailable(message),
     }
 }

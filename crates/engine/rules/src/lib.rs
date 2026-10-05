@@ -51,6 +51,7 @@ mod light_well;
 mod local_circulation;
 mod location;
 mod manual_issue;
+mod measured_arguments;
 mod measured_kinds;
 mod measured_openings;
 mod measured_plan;

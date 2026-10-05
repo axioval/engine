@@ -16,7 +16,9 @@ use axioval_engine::{
 use axioval_ir::contract::{
     AggregateSource, Expression, ParameterValue, ScalarValue, Selector, TableRow,
 };
-use axioval_ir::{Evidence, NotEvaluatedReason, Object};
+use axioval_ir::{Evidence, NotEvaluatedReason, Object, ObjectId};
+
+use crate::measured_arguments::{Arguments, bind};
 
 use crate::selection::{Selection, object_by_id, selector_matches};
 use crate::support::table::{Matched, RowSelection, RowTest, TextPattern, match_rows};
@@ -50,6 +52,13 @@ pub(crate) type Prefetched = (
 /// An object's values read ahead, kept inline: a form reads a handful.
 pub(crate) type Prefetch = smallvec::SmallVec<[Prefetched; 4]>;
 
+/// A measured value naming the rule's parameters, read ahead with its
+/// arguments bound, by its name as written.
+pub(crate) type BoundPrefetched = (
+    Arc<str>,
+    Result<axioval_engine::BoundRead, (NotEvaluatedReason, String)>,
+);
+
 /// Answers an expression's leaves for one selected object.
 pub(crate) struct ObjectLeaves<'a> {
     context: &'a RuleContext<'a>,
@@ -71,6 +80,13 @@ pub(crate) struct ObjectLeaves<'a> {
     listed: Vec<Evidence>,
     /// Properties of the object resolved ahead in a batch, each read once.
     prefetched: Prefetch,
+    /// Measured values naming the rule's parameters, read ahead in a batch.
+    bound: Vec<BoundPrefetched>,
+    /// What the rule's measured values bind, read once per rule.
+    arguments: Option<&'a Arguments>,
+    /// The objects measured values bound from the rule were measured
+    /// against, as their providers cite them, in reading order.
+    related: RefCell<Vec<ObjectId>>,
     /// Members the caller states for one aggregate source in place of
     /// reaching them: a template's members of an anchor, or the objects
     /// selected in a scope.
@@ -95,6 +111,9 @@ impl<'a> ObjectLeaves<'a> {
             listed: Vec::new(),
             prefetched: Prefetch::new(),
             supplied: Vec::new(),
+            bound: Vec::new(),
+            arguments: None,
+            related: RefCell::new(Vec::new()),
         }
     }
 
@@ -120,6 +139,9 @@ impl<'a> ObjectLeaves<'a> {
             listed: Vec::new(),
             prefetched: Prefetch::new(),
             supplied: Vec::new(),
+            bound: Vec::new(),
+            arguments: self.arguments,
+            related: RefCell::new(Vec::new()),
         }
     }
 
@@ -137,6 +159,9 @@ impl<'a> ObjectLeaves<'a> {
             listed: Vec::new(),
             prefetched: Prefetch::new(),
             supplied: Vec::new(),
+            bound: Vec::new(),
+            arguments: self.arguments,
+            related: RefCell::new(Vec::new()),
         }
     }
 
@@ -146,6 +171,105 @@ impl<'a> ObjectLeaves<'a> {
     pub(crate) fn with_prefetched(mut self, prefetched: Prefetch) -> Self {
         self.prefetched = prefetched;
         self
+    }
+
+    /// The same leaves, measured values naming the rule's parameters read
+    /// ahead in a batch.
+    pub(crate) fn with_bound(mut self, bound: Vec<BoundPrefetched>) -> Self {
+        self.bound = bound;
+        self
+    }
+
+    /// The same leaves, binding measured values' references through
+    /// `arguments`, read once per rule.
+    pub(crate) fn with_arguments(mut self, arguments: &'a Arguments) -> Self {
+        self.arguments = Some(arguments);
+        self
+    }
+
+    /// The objects the measured values read since the last call were
+    /// measured against, as their providers cite them.
+    pub(crate) fn take_related(&self) -> Vec<ObjectId> {
+        std::mem::take(&mut *self.related.borrow_mut())
+    }
+
+    /// The measured value `name` as `call` names it, its references bound
+    /// and read now, through the run's measured values.
+    fn read_bound(
+        &self,
+        name: &str,
+        call: &mut axioval_ir::measured::MeasuredCall,
+    ) -> Result<axioval_engine::BoundRead, (NotEvaluatedReason, String)> {
+        if let Err((reason, why)) = bind(
+            self.context,
+            self.parameters,
+            self.arguments,
+            &self.subject.id,
+            call,
+        ) {
+            return Err((
+                reason,
+                format!("`{}` of {}: {why}", call.name(), self.object.id),
+            ));
+        }
+        let measure = |values: &axioval_engine::MeasuredValues| {
+            values
+                .read_bound_batch(name, call, &[&self.object.id])
+                .pop()
+                .unwrap_or(Err(axioval_engine::PropertyResolutionError::InvalidRequest))
+        };
+        let read = match self
+            .context
+            .services
+            .get::<axioval_engine::MeasuredValues>()
+        {
+            Some(values) => measure(values),
+            None => measure(&axioval_engine::MeasuredValues::of(
+                self.context.services,
+                self.context.project,
+            )),
+        };
+        read.map_err(crate::selection::property_error)
+    }
+
+    /// The measured value `name`, its references bound to the rule's
+    /// parameters and the anchor (the rule's checked object) before it is
+    /// measured through the run's measured values; one that cannot be
+    /// bound leaves it unread for its reason.
+    fn bound_measured(&mut self, name: &str, mut call: axioval_ir::measured::MeasuredCall) -> Leaf {
+        let read = match self.bound.iter().position(|(read, _)| &**read == name) {
+            Some(index) => self.bound.swap_remove(index).1,
+            None => self.read_bound(name, &mut call),
+        };
+        let ((read, citation), name) = match read {
+            Ok(read) => (read, name),
+            Err((reason, message)) => {
+                self.reasons.borrow_mut().push(reason);
+                return Leaf::unreadable(message);
+            }
+        };
+        let (stated, mut evidence): (_, Vec<Evidence>) = match read {
+            MeasuredRead::Value(value, evidence) => (Some(value), evidence.into_iter().collect()),
+            MeasuredRead::Absent(evidence) => (None, vec![evidence]),
+        };
+        evidence.extend(citation.evidence);
+        self.related.borrow_mut().extend(citation.related);
+        let value = match &stated {
+            // A stated absence is `null`, never a value not read.
+            None => Ok(Value::Null),
+            Some(value) => Value::from_property(value),
+        };
+        self.stated.borrow_mut().push((
+            Some(Arc::from(axioval_ir::MEASURED_SET)),
+            Arc::from(name),
+            stated,
+        ));
+        if value.is_err() {
+            self.reasons
+                .borrow_mut()
+                .push(NotEvaluatedReason::InvalidEvidence);
+        }
+        Leaf { value, evidence }
     }
 
     /// The field `name` of the measured member in scope.
@@ -408,6 +532,15 @@ impl ExpressionContext for ObjectLeaves<'_> {
         }
         if set == Some(axioval_ir::VALUE_SET) {
             return self.derived(name);
+        }
+        // Only a name naming a reference (`@`) is bound; every other is
+        // read as it is, unparsed here.
+        if set == Some(axioval_ir::MEASURED_SET)
+            && name.contains('@')
+            && let Ok(call) = axioval_ir::measured::parse(name)
+            && !call.is_bound()
+        {
+            return self.bound_measured(name, call);
         }
         // The value as the source states it (`None`: stated absent) and
         // the evidence cited, read ahead in a batch or resolved now.

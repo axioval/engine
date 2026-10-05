@@ -20,8 +20,8 @@ use axioval_engine::expression::{
     Evaluation, ExpressionContext, NotEvaluated, Reason, Value, evaluate_untraced,
 };
 use axioval_engine::template::{
-    Check, Condition, Decision, Derived, End, Expect, Form, Members, Operand, Sign, Template,
-    TemplateValue, Term, UndecidedMembers,
+    Check, Condition, Decision, Derived, End, Expect, Form, Members, Operand, Refusals, Sign,
+    Template, TemplateValue, Term, UndecidedMembers,
 };
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, Deviation, MeasuredValues, ParameterDescriptor,
@@ -36,9 +36,10 @@ use serde_json::Value as Json;
 
 use crate::body_extent::rounding_slack;
 use crate::counts::{Population, Tally, relation_text, same_ends, tally};
-use crate::expression_leaves::{Candidate, ObjectLeaves, Prefetch};
+use crate::expression_leaves::{BoundPrefetched, Candidate, ObjectLeaves, Prefetch};
 use crate::expression_requirement::reason_of;
 use crate::level_spacing::{metres, shown};
+use crate::measured_arguments::Arguments;
 use crate::plan_area::{Verdict, deviation, judge};
 use crate::selection::{bound_property_request, property_error, select_objects};
 use crate::support::{Parameters, Traversal, Unavailable, display, finding, invalid};
@@ -157,6 +158,8 @@ struct Bound {
     /// A [`Decision::Each`]'s member values' expressions, then each
     /// nested population's, the rule's parameters bound in.
     each: Vec<Vec<Expression>>,
+    /// Each of the form's checks' value expressions, bound likewise.
+    checks: Vec<Vec<Expression>>,
 }
 
 impl std::ops::Deref for Plan<'_> {
@@ -171,6 +174,14 @@ impl Plan<'_> {
     /// Each value step with its expression, the rule's parameters bound in.
     fn values(&self) -> impl Iterator<Item = (&TemplateValue, &Expression)> {
         self.form.values.iter().zip(&self.bound.expressions)
+    }
+
+    /// Each value step of the form's check `index`, bound.
+    fn check_values(&self, index: usize) -> impl Iterator<Item = (&TemplateValue, &Expression)> {
+        self.form.checks[index]
+            .values
+            .iter()
+            .zip(&self.bound.checks[index])
     }
 }
 
@@ -449,7 +460,45 @@ fn check(check: &Check, rule: &CompiledRule, template: &Template) -> Result<(), 
                 .map_err(|error| invalid(error.to_string())),
             None => Ok(()),
         },
+        Check::Finite {
+            parameters,
+            above,
+            at_least,
+            message,
+        } => finite(rule, parameters, (*above, *at_least), message),
+        Check::Increasing { low, high, message } => {
+            match (stated_number(rule, low), stated_number(rule, high)) {
+                (Some(low), Some(high)) if low < high => Ok(()),
+                _ => Err(invalid(*message)),
+            }
+        }
     }
+}
+
+/// The parameter `name` where stated as a `number`.
+fn stated_number(rule: &CompiledRule, name: &str) -> Option<f64> {
+    match rule.parameters.get(name) {
+        Some(ParameterValue::Number { value }) => Some(*value),
+        _ => None,
+    }
+}
+
+/// Every one of `parameters` stated as a finite `number`, above and at
+/// least the bounds given: otherwise `message`.
+fn finite(
+    rule: &CompiledRule,
+    parameters: &[&str],
+    (above, at_least): (Option<f64>, Option<f64>),
+    message: &str,
+) -> Result<(), Unavailable> {
+    let fits = parameters.iter().all(|name| {
+        stated_number(rule, name).is_some_and(|value| {
+            value.is_finite()
+                && above.is_none_or(|above| value > above)
+                && at_least.is_none_or(|least| value >= least)
+        })
+    });
+    if fits { Ok(()) } else { Err(invalid(message)) }
 }
 
 /// The bounds a range states, as a requirement reads them: `between 1 and
@@ -581,6 +630,11 @@ fn bound_read(
         Some(None) => return Some(expression.clone()),
         None => property.clone(),
     };
+    let property = if property_set.as_deref() == Some(axioval_ir::MEASURED_SET) {
+        unstated_dropped(&property, constants)
+    } else {
+        property
+    };
     Some(Expression::Property {
         property_set: optional(property_set),
         property,
@@ -595,6 +649,13 @@ fn bound_read(
 fn fill(json: &mut Json, constants: &BTreeMap<String, Constant>) {
     match json {
         Json::Object(fields) => {
+            if fields.get("kind").and_then(Json::as_str) == Some("property")
+                && fields.get("propertySet").and_then(Json::as_str)
+                    == Some(axioval_ir::MEASURED_SET)
+                && let Some(Json::String(name)) = fields.get_mut("property")
+            {
+                *name = unstated_dropped(name, constants);
+            }
             if fields.get("kind").and_then(Json::as_str) == Some("parameter")
                 && let Some(literal) = fields
                     .get("name")
@@ -637,6 +698,48 @@ fn fill(json: &mut Json, constants: &BTreeMap<String, Constant>) {
         }
         _ => {}
     }
+}
+
+/// The measured name `name` without the arguments naming an optional
+/// rule parameter the rule leaves unstated, where its measured parameter is
+/// optional too and has no default: the value measured as if the argument
+/// were not written. Any other reference stays, and binding it fails
+/// closed.
+fn unstated_dropped(name: &str, constants: &BTreeMap<String, Constant>) -> String {
+    use axioval_ir::measured::MeasuredArgument;
+    if !name.contains('@') {
+        return name.to_owned();
+    }
+    let Ok(call) = axioval_ir::measured::parse(name) else {
+        return name.to_owned();
+    };
+    let dropped: Vec<&str> = call
+        .references()
+        .filter_map(|(key, argument)| match argument {
+            MeasuredArgument::Parameter(parameter)
+                if !constants.contains_key(parameter.as_str())
+                    && call.parameter(key).is_some_and(|declared| {
+                        !declared.required && declared.default.is_none()
+                    }) =>
+            {
+                Some(key)
+            }
+            _ => None,
+        })
+        .collect();
+    if dropped.is_empty() {
+        return name.to_owned();
+    }
+    name.split(';')
+        .filter(|part| {
+            part.split_once('=').is_none_or(|(key, _)| {
+                !dropped
+                    .iter()
+                    .any(|dropped| key.trim().eq_ignore_ascii_case(dropped))
+            })
+        })
+        .collect::<Vec<_>>()
+        .join(";")
 }
 
 /// A string field with its slots filled.
@@ -740,12 +843,24 @@ fn bind(template: &Template, rule: &CompiledRule) -> Result<Bound, Unavailable> 
             .collect(),
         _ => Vec::new(),
     };
+    let checks = form
+        .checks
+        .iter()
+        .map(|check| {
+            check
+                .values
+                .iter()
+                .map(|step| bound(&step.expression, &constants))
+                .collect()
+        })
+        .collect();
     Ok(Bound {
         form: index,
         constants,
         expressions,
         comparison,
         each,
+        checks,
     })
 }
 
@@ -790,7 +905,7 @@ fn effective_of(plan: &Plan<'_>, decision: &Decision) -> Decision {
 }
 
 /// What one object's values were read as.
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct Read {
     values: Named<Value>,
     stated: Named<Option<PropertyValue>>,
@@ -809,6 +924,9 @@ struct Read {
     outer: Named<Value>,
     /// The declared minimum and maximum a range judge read (`{required}`).
     bounds: Option<(Option<f64>, Option<f64>)>,
+    /// The objects each value's measured reads were measured against, as
+    /// their providers cite them.
+    related: Vec<(&'static str, Vec<ObjectId>)>,
 }
 
 /// The few values of one object a form names, in reading order: a list
@@ -1117,6 +1235,30 @@ fn placeholder(plan: &Plan<'_>, read: &Read, key: &str) -> Option<String> {
                 .and_then(Constant::number)
                 .map(metres)
         }
+        // A number with three decimals: a constant, or a value known as one
+        // point.
+        "fixed3" => match read.values.get(name) {
+            Some(Value::Number { value, .. }) if value.lower.to_bits() == value.upper.to_bits() => {
+                Some(format!("{:.3}", value.upper))
+            }
+            Some(_) => None,
+            None => plan
+                .constants
+                .get(name)
+                .and_then(Constant::number)
+                .map(|value| format!("{value:.3}")),
+        },
+        // A value's upper end, or a constant, with three decimals: what a
+        // value surely below a minimum is shown as.
+        "upper3" => match read.values.get(name) {
+            Some(Value::Number { value, .. }) => Some(format!("{:.3}", value.upper)),
+            Some(_) => None,
+            None => plan
+                .constants
+                .get(name)
+                .and_then(Constant::number)
+                .map(|value| format!("{value:.3}")),
+        },
         "stated" => read
             .stated
             .get(name)
@@ -1330,12 +1472,93 @@ fn over_members(expression: &Expression, selector: &str, retarget: Retarget<'_>)
 struct Judgement {
     outcome: Outcome,
     row: Option<Vec<ReportValue>>,
+    /// Each of the form's checks' outcomes, in order, before `outcome`.
+    checks: Vec<Outcome>,
 }
 
 impl From<Outcome> for Judgement {
     fn from(outcome: Outcome) -> Self {
-        Self { outcome, row: None }
+        Self {
+            outcome,
+            row: None,
+            checks: Vec::new(),
+        }
     }
+}
+
+/// The objects the measured reads of the value `name` were measured
+/// against, in the order cited, each once.
+fn cited(read: &Read, name: &str) -> Vec<ObjectId> {
+    let mut related: Vec<ObjectId> = Vec::new();
+    let cited = read
+        .related
+        .iter()
+        .filter(|(read, _)| *read == name)
+        .flat_map(|(_, objects)| objects);
+    for object in cited {
+        if !related.contains(object) {
+            related.push(object.clone());
+        }
+    }
+    related
+}
+
+/// What an object's values were read ahead as.
+struct Ahead {
+    prefetched: Prefetch,
+    bound: Vec<BoundPrefetched>,
+}
+
+/// Each of the form's checks judged on its own over `read` and its own
+/// values: an outcome per check, in order. A check's value that cannot be
+/// read leaves only that check open.
+fn judge_checks(
+    plan: &Plan<'_>,
+    read: &Read,
+    context: &RuleContext<'_>,
+    object: &Object,
+    leaves: &mut ObjectLeaves<'_>,
+) -> Vec<Outcome> {
+    let mut outcomes = Vec::new();
+    for (index, check) in plan.form.checks.iter().enumerate() {
+        let mut checked = read.clone();
+        if let Some(outcome) = read_values(
+            plan,
+            plan.check_values(index),
+            &|_| false,
+            context,
+            object,
+            leaves,
+            &mut checked,
+        ) {
+            outcomes.push(outcome);
+            continue;
+        }
+        let decision = effective_of(plan, &check.decision);
+        let Some(judged) = within(plan, &checked, &decision) else {
+            outcomes.push(Outcome::Open(
+                NotEvaluatedReason::InvalidEvidence,
+                format!(
+                    "{}: a value the decision reads is no number",
+                    plan.template.name
+                ),
+            ));
+            continue;
+        };
+        checked.bounds = Some((judged.minimum, judged.maximum));
+        let related = check
+            .related
+            .map(|value| cited(&checked, value))
+            .unwrap_or_default();
+        outcomes.push(ranged_as(
+            plan,
+            checked,
+            &judged,
+            related,
+            (check.fail, check.undecided),
+        ));
+    }
+    outcomes
 }
 
 /// The candidates an aggregate over a form's members reads: `sure` and
@@ -1372,6 +1595,10 @@ fn read_values<'v>(
 ) -> Option<Outcome> {
     for (step, expression) in values {
         let (outcome, evidence) = read_step(expression, step.name, leaves);
+        let cited = leaves.take_related();
+        if !cited.is_empty() {
+            read.related.push((step.name, cited));
+        }
         let before = read.evidence.len();
         read.evidence.extend(evidence);
         if read.evidence[before..]
@@ -1525,13 +1752,15 @@ fn judges_stated(decision: &Decision, name: &str) -> bool {
 #[allow(clippy::too_many_lines)]
 fn judge_object(
     (plan, decision, scope): (&Plan<'_>, &Decision, Option<&Scope<'_>>),
-    context: &RuleContext<'_>,
+    (context, arguments): (&RuleContext<'_>, &Arguments),
     rule: &CompiledRule,
     object: &Object,
-    prefetched: Prefetch,
+    ahead: Ahead,
 ) -> Judgement {
-    let mut leaves =
-        ObjectLeaves::new(context, object, Some(&rule.parameters)).with_prefetched(prefetched);
+    let mut leaves = ObjectLeaves::new(context, object, Some(&rule.parameters))
+        .with_prefetched(ahead.prefetched)
+        .with_bound(ahead.bound)
+        .with_arguments(arguments);
     let mut read = Read::default();
     let mut members = None;
     if let Some(scope) = scope {
@@ -1596,10 +1825,13 @@ fn judge_object(
         return outcome.into();
     }
     let undecided = members.as_ref().map_or(0, |members| members.undecided);
-    let related = members
-        .as_ref()
-        .map(|members| members.decided.clone())
-        .unwrap_or_default();
+    let related = match plan.form.related {
+        Some(value) => cited(&read, value),
+        None => members
+            .as_ref()
+            .map(|members| members.decided.clone())
+            .unwrap_or_default(),
+    };
     if let Some(members) = &members {
         read.evidence.extend(members.evidence.iter().cloned());
     }
@@ -1621,6 +1853,7 @@ fn judge_object(
                 })
                 .collect()
         });
+    let checks = judge_checks(plan, &read, context, object, &mut leaves);
     if let (Decision::Compare { value, .. }, Some(comparison)) = (decision, &plan.comparison) {
         let stated = read.stated.get(value).cloned().flatten();
         let outcome = match comparison.holds(stated.as_ref()) {
@@ -1628,7 +1861,11 @@ fn judge_object(
             Ok(false) => Outcome::finding(render(plan, &read, plan.form.fail), read.evidence),
             Err(why) => Outcome::Open(NotEvaluatedReason::InvalidEvidence, why),
         };
-        return Judgement { outcome, row };
+        return Judgement {
+            outcome,
+            row,
+            checks,
+        };
     }
     let Some(judged) = within(plan, &read, decision) else {
         return Judgement {
@@ -1640,6 +1877,7 @@ fn judge_object(
                 ),
             ),
             row,
+            checks,
         };
     };
     read.bounds = Some((judged.minimum, judged.maximum));
@@ -1655,23 +1893,45 @@ fn judge_object(
                     render(plan, &read, message),
                 ),
                 row,
+                checks,
             };
         }
     }
     let outcome = ranged(plan, read, &judged, related);
-    Judgement { outcome, row }
+    Judgement {
+        outcome,
+        row,
+        checks,
+    }
 }
 
 /// What a range judge's verdict comes to, worded with the form's
 /// messages: a finding relating `related` (graded where the template
 /// grades), or the object open naming the bound it straddles.
-fn ranged(plan: &Plan<'_>, mut read: Read, judged: &Judged, related: Vec<ObjectId>) -> Outcome {
+fn ranged(plan: &Plan<'_>, read: Read, judged: &Judged, related: Vec<ObjectId>) -> Outcome {
+    ranged_as(
+        plan,
+        read,
+        judged,
+        related,
+        (plan.form.fail, plan.form.undecided),
+    )
+}
+
+/// [`ranged`], worded with `fail` and `undecided`.
+fn ranged_as(
+    plan: &Plan<'_>,
+    mut read: Read,
+    judged: &Judged,
+    related: Vec<ObjectId>,
+    (fail, undecided): (&str, &str),
+) -> Outcome {
     match &judged.verdict {
         Verdict::Pass => Outcome::Passed,
         Verdict::Fail(bound) => {
             read.bound = Some(bound.clone());
             Outcome::Finding {
-                message: render(plan, &read, plan.form.fail),
+                message: render(plan, &read, fail),
                 evidence: read.evidence,
                 related,
                 deviation: if plan.template.grades {
@@ -1685,7 +1945,7 @@ fn ranged(plan: &Plan<'_>, mut read: Read, judged: &Judged, related: Vec<ObjectI
             read.bound = Some(bound.clone());
             Outcome::Open(
                 NotEvaluatedReason::IncompleteEvidence,
-                render(plan, &read, plan.form.undecided),
+                render(plan, &read, undecided),
             )
         }
     }
@@ -1704,6 +1964,58 @@ fn report_table(plan: &Plan<'_>, rule: &CompiledRule) -> Option<ReportTable> {
     ReportTable::new(rule.id.clone(), table.name, columns).ok()
 }
 
+/// A refusal of the rule's declaration or of the host's services, reported
+/// where the template says: for the rule as a whole, or for each selected
+/// object.
+fn refused(
+    template: &Template,
+    context: &RuleContext<'_>,
+    rule: &CompiledRule,
+    reason: NotEvaluatedReason,
+    message: String,
+) -> CapabilityEvaluation {
+    match template.refusals {
+        Refusals::Rule => CapabilityEvaluation::not_evaluated(reason, message),
+        Refusals::Objects => {
+            let (selected, mut evaluation) = select_objects(context, &rule.selector);
+            for object in selected {
+                evaluation.push_object_not_evaluated(
+                    object.id.clone(),
+                    reason.clone(),
+                    message.clone(),
+                );
+            }
+            evaluation
+        }
+    }
+}
+
+/// Pushes one outcome about `object` into `evaluation`.
+fn push(
+    evaluation: &mut CapabilityEvaluation,
+    rule: &CompiledRule,
+    object: &Object,
+    outcome: Outcome,
+) {
+    match outcome {
+        Outcome::Passed => {}
+        Outcome::Finding {
+            message,
+            evidence,
+            related,
+            deviation,
+        } => {
+            evaluation.push_finding_deviating(
+                finding(rule, &object.id, message, evidence, related),
+                deviation,
+            );
+        }
+        Outcome::Open(reason, message) => {
+            evaluation.push_object_not_evaluated(object.id.clone(), reason, message);
+        }
+    }
+}
+
 /// Runs `template` for `rule`.
 pub(crate) fn run(
     (template, plans): (&Template, &Plans),
@@ -1713,10 +2025,13 @@ pub(crate) fn run(
     let plan = match plan(template, plans, rule) {
         Ok(plan) => plan,
         Err((reason, message)) => {
-            return CapabilityEvaluation::not_evaluated(
-                reason,
-                format!("{}: {message}", template.name),
-            );
+            // A rule-scoped refusal names the capability; one reported per
+            // object is worded as the check states it.
+            let message = match template.refusals {
+                Refusals::Rule => format!("{}: {message}", template.name),
+                Refusals::Objects => message,
+            };
+            return refused(template, context, rule, reason, message);
         }
     };
     if let Some(services) = &template.services
@@ -1725,9 +2040,12 @@ pub(crate) fn run(
             .iter()
             .all(|service| service.registered(context.services))
     {
-        return CapabilityEvaluation::not_evaluated(
+        return refused(
+            template,
+            context,
+            rule,
             NotEvaluatedReason::MissingService,
-            services.message,
+            services.message.to_owned(),
         );
     }
     if let Decision::Each(each) = &plan.form.decision {
@@ -1749,6 +2067,7 @@ pub(crate) fn run(
         }
     };
     let decision = effective(&plan);
+    let arguments = Arguments::default();
     let mut table = report_table(&plan, rule);
     let (selected, mut evaluation) = select_objects(context, &rule.selector);
     let batched = batched(
@@ -1756,36 +2075,28 @@ pub(crate) fn run(
         context,
         selected.first().copied(),
     );
+    let bound = bound_batched(&plan, context, rule, &arguments);
     for chunk in selected.chunks(BATCH) {
         let prefetched = prefetch(context, &batched, chunk);
-        for (object, prefetched) in chunk.iter().zip(prefetched) {
-            let Judgement { outcome, row } = judge_object(
+        let bound_reads = prefetch_bound(context, &bound, chunk);
+        for ((object, prefetched), bound) in chunk.iter().zip(prefetched).zip(bound_reads) {
+            let Judgement {
+                outcome,
+                row,
+                checks,
+            } = judge_object(
                 (&plan, &decision, scope.as_ref()),
-                context,
+                (context, &arguments),
                 rule,
                 object,
-                prefetched,
+                Ahead { prefetched, bound },
             );
             if let (Some(table), Some(row)) = (&mut table, row) {
                 // Selected objects are distinct, so rows never collide.
                 let _ = table.push_row(object.id.clone(), row);
             }
-            match outcome {
-                Outcome::Passed => {}
-                Outcome::Finding {
-                    message,
-                    evidence,
-                    related,
-                    deviation,
-                } => {
-                    evaluation.push_finding_deviating(
-                        finding(rule, &object.id, message, evidence, related),
-                        deviation,
-                    );
-                }
-                Outcome::Open(reason, message) => {
-                    evaluation.push_object_not_evaluated(object.id.clone(), reason, message);
-                }
+            for outcome in checks.into_iter().chain([outcome]) {
+                push(&mut evaluation, rule, object, outcome);
             }
         }
     }
@@ -1817,6 +2128,7 @@ fn batched<'e>(
         .filter_map(|expression| match property_read(expression) {
             Some((Some(set), name))
                 if set == axioval_ir::MEASURED_SET
+                    && !name.contains('@')
                     && bound_property_request(context, first, Some(set), name).is_ok() =>
             {
                 Some((Some(Arc::from(set)), Arc::from(name)))
@@ -1828,6 +2140,90 @@ fn batched<'e>(
 
 /// The measured values read for many objects together, as `(set, name)`.
 type Batched = Vec<(Option<Arc<str>>, Arc<str>)>;
+
+/// The measured values naming the rule's parameters (not the anchor) that
+/// the plan's form and checks read directly, each bound once for the rule:
+/// they are read for a chunk of objects together. One naming the anchor,
+/// or one that does not bind, is read as it is read (and refused there).
+fn bound_batched(
+    plan: &Plan<'_>,
+    context: &RuleContext<'_>,
+    rule: &CompiledRule,
+    arguments: &Arguments,
+) -> Vec<(Arc<str>, axioval_ir::measured::MeasuredCall)> {
+    let mut bound: Vec<(Arc<str>, axioval_ir::measured::MeasuredCall)> = Vec::new();
+    let reads = plan
+        .values()
+        .chain((0..plan.form.checks.len()).flat_map(|index| plan.check_values(index)));
+    for (_, expression) in reads {
+        let Some((Some(set), name)) = property_read(expression) else {
+            continue;
+        };
+        if set != axioval_ir::MEASURED_SET
+            || !name.contains('@')
+            || bound.iter().any(|(read, _)| &**read == name)
+        {
+            continue;
+        }
+        let Ok(mut call) = axioval_ir::measured::parse(name) else {
+            continue;
+        };
+        if call
+            .references()
+            .any(|(_, argument)| *argument == axioval_ir::measured::MeasuredArgument::Anchor)
+        {
+            continue;
+        }
+        // No anchor named: the same arguments for every object.
+        let Some(anchor) = context.project.objects().next() else {
+            continue;
+        };
+        if crate::measured_arguments::bind(
+            context,
+            Some(&rule.parameters),
+            Some(arguments),
+            &anchor.id,
+            &mut call,
+        )
+        .is_ok()
+        {
+            bound.push((Arc::from(name), call));
+        }
+    }
+    bound
+}
+
+/// Each of `bound` measured for every object of `chunk` together, as each
+/// object's bound reads, in `chunk`'s order.
+fn prefetch_bound(
+    context: &RuleContext<'_>,
+    bound: &[(Arc<str>, axioval_ir::measured::MeasuredCall)],
+    chunk: &[&Object],
+) -> Vec<Vec<BoundPrefetched>> {
+    let ids: Vec<&ObjectId> = chunk.iter().map(|object| &object.id).collect();
+    let mut columns: Vec<_> = match context.services.get::<MeasuredValues>() {
+        Some(values) => bound
+            .iter()
+            .map(|(name, call)| {
+                values
+                    .read_bound_batch(name, call, &ids)
+                    .into_iter()
+                    .map(|read| read.map_err(property_error))
+            })
+            .collect(),
+        None => Vec::new(),
+    };
+    chunk
+        .iter()
+        .map(|_| {
+            bound
+                .iter()
+                .zip(columns.iter_mut())
+                .filter_map(|((name, _), column)| column.next().map(|read| (name.clone(), read)))
+                .collect()
+        })
+        .collect()
+}
 
 /// Each of `batched` measured for every object of `chunk` together, as
 /// each object's prefetched reads, in `chunk`'s order: an object reads
@@ -1903,6 +2299,10 @@ pub struct Fork {
     /// The requirement: the template's form with the rule's parameters
     /// bound in, as a block editor shows it.
     pub requirement: Expression,
+    /// The rule's parameters the requirement's measured values name
+    /// (`@door_selector`), carried into the forked rule as they are, so it
+    /// binds them as the template did.
+    pub carried: BTreeMap<String, ParameterValue>,
 }
 
 impl Fork {
@@ -1912,12 +2312,14 @@ impl Fork {
     /// The forked rule's parameters.
     #[must_use]
     pub fn parameters(&self) -> BTreeMap<String, ParameterValue> {
-        BTreeMap::from([(
+        let mut parameters = self.carried.clone();
+        parameters.insert(
             "requirement".to_owned(),
             ParameterValue::Expression {
                 value: Box::new(self.requirement.clone()),
             },
-        )])
+        );
+        parameters
     }
 }
 
@@ -2060,8 +2462,10 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
         let requirement = comparison
             .expression(value)
             .map_err(ForkError::Inexpressible)?;
+        let requirement = bound(&requirement, &plan.constants);
         return Ok(Fork {
-            requirement: bound(&requirement, &plan.constants),
+            carried: carried(&requirement, rule),
+            requirement,
         });
     }
     let values = match &plan.form.members {
@@ -2112,7 +2516,7 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
                 .collect()
         }
     };
-    let requirement = effective(&plan).expression(&|name| {
+    let inline = |values: &[(&TemplateValue, Expression)], name: &str| {
         values
             .iter()
             .find(|(step, _)| step.name == name)
@@ -2123,8 +2527,78 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
                 },
                 |(_, expression)| expression.clone(),
             )
-    });
+    };
+    let own = effective(&plan).expression(&|name| inline(&values, name));
+    // Every check is required beside the form's own decision, as the
+    // template finds each on its own.
+    let requirement = if plan.form.checks.is_empty() {
+        own
+    } else {
+        let mut operands: Vec<Expression> = plan
+            .form
+            .checks
+            .iter()
+            .enumerate()
+            .map(|(index, check)| {
+                let read: Vec<(&TemplateValue, Expression)> = values
+                    .iter()
+                    .cloned()
+                    .chain(
+                        plan.check_values(index)
+                            .map(|(step, expression)| (step, expression.clone())),
+                    )
+                    .collect();
+                effective_of(&plan, &check.decision).expression(&|name| inline(&read, name))
+            })
+            .collect();
+        operands.push(own);
+        Expression::And {
+            operands,
+            label: None,
+        }
+    };
+    let requirement = bound(&requirement, &plan.constants);
     Ok(Fork {
-        requirement: bound(&requirement, &plan.constants),
+        carried: carried(&requirement, rule),
+        requirement,
     })
+}
+
+/// The parameters of `rule` the measured values `requirement` reads name.
+fn carried(requirement: &Expression, rule: &CompiledRule) -> BTreeMap<String, ParameterValue> {
+    measured_references(requirement)
+        .into_iter()
+        .filter_map(|name| {
+            rule.parameters
+                .get(&name)
+                .map(|value| (name.clone(), value.clone()))
+        })
+        .collect()
+}
+
+/// Every rule parameter the measured values `expression` reads name
+/// (`@name`), sorted.
+fn measured_references(expression: &Expression) -> std::collections::BTreeSet<String> {
+    use axioval_ir::measured::MeasuredArgument;
+    let mut names = std::collections::BTreeSet::new();
+    let mut pending = vec![expression];
+    while let Some(node) = pending.pop() {
+        if let Expression::Property {
+            property_set: Some(set),
+            property,
+            ..
+        } = node
+            && set == axioval_ir::MEASURED_SET
+            && property.contains('@')
+            && let Ok(call) = axioval_ir::measured::parse(property)
+        {
+            for (_, argument) in call.references() {
+                if let MeasuredArgument::Parameter(name) = argument {
+                    names.insert(name.clone());
+                }
+            }
+        }
+        pending.extend(node.children());
+    }
+    names
 }

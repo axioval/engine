@@ -94,6 +94,8 @@ fn form(when: &'static [&'static str], existence: bool) -> Form {
         table: None,
         scope: Some(scopes()),
         derived: Vec::new(),
+        related: None,
+        checks: Vec::new(),
     }
 }
 
@@ -141,6 +143,7 @@ pub(crate) fn template() -> Template {
         ],
         grades: false,
         name: "object-count",
+        refusals: axioval_engine::template::Refusals::Rule,
         defaults: Vec::new(),
         declaration: declaration(),
         services: None,

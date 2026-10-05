@@ -50,6 +50,12 @@ pub enum PropertyResolutionError {
     /// on presence alone is decided; the value is not.
     #[error("{}", .0.reason())]
     UnreadableValue(Box<UnreadableValue>),
+    /// A measured value's argument, bound from a rule's parameter, is not
+    /// one it can measure with (a parameter the rule does not state, of
+    /// another kind, or not realisable): the rule's declaration is invalid,
+    /// whatever the object.
+    #[error("{0}")]
+    InvalidArgument(String),
 }
 
 /// A present property whose declared type is known exactly and whose

@@ -28,7 +28,9 @@ struct RuleEnvironment<'a> {
 impl TypeEnvironment for RuleEnvironment<'_> {
     fn property(&self, set: Option<&str>, name: &str) -> Result<Type, String> {
         if set == Some(axioval_ir::MEASURED_SET) {
-            return measured_type(name);
+            let found = measured_type(name)?;
+            references(name, self.parameters)?;
+            return Ok(found);
         }
         if set == Some(axioval_ir::VALUE_SET) {
             return self.derived(name);
@@ -80,6 +82,58 @@ impl TypeEnvironment for RuleEnvironment<'_> {
             .ok_or_else(|| format!("table `{table}` has no column `{column}`"))?;
         Ok((columns, result))
     }
+}
+
+/// Checks that every rule parameter the measured name `name` names
+/// (`@name`) is one the rule states, of the kind its measured parameter
+/// takes ([`axioval_ir::measured::ParameterReference`]). The anchor is
+/// always bound.
+fn references(name: &str, parameters: &BTreeMap<String, ParameterValue>) -> Result<(), String> {
+    use axioval_ir::measured::{MeasuredArgument, ParameterReference};
+    let call = axioval_ir::measured::parse(name).map_err(|error| error.to_string())?;
+    for (key, argument) in call.references() {
+        let MeasuredArgument::Parameter(parameter) = argument else {
+            continue;
+        };
+        let Some(reference) = call
+            .parameter(key)
+            .and_then(|declared| declared.kind.reference())
+        else {
+            continue;
+        };
+        let stated = || format!("`{}` parameter `{key}` names `@{parameter}`", call.name());
+        let value = parameters
+            .get(parameter)
+            .ok_or_else(|| format!("{}, which the rule does not state", stated()))?;
+        let length = Unit::of(Some(QuantityDimension::Length));
+        let (fits, what) = match reference {
+            ParameterReference::Length => (
+                match value {
+                    ParameterValue::Number { .. } | ParameterValue::Integer { .. } => true,
+                    ParameterValue::Quantity { unit, .. } => {
+                        parse_unit(unit).is_ok_and(|(_, unit)| unit == length)
+                    }
+                    _ => false,
+                },
+                "a number of metres or a length",
+            ),
+            ParameterReference::StringList => (
+                matches!(value, ParameterValue::StringList { .. }),
+                "a string list",
+            ),
+            ParameterReference::String => {
+                (matches!(value, ParameterValue::String { .. }), "a string")
+            }
+            ParameterReference::Selector => (
+                matches!(value, ParameterValue::Selector { .. }),
+                "a selector",
+            ),
+        };
+        if !fits {
+            return Err(format!("{}, which is not {what}", stated()));
+        }
+    }
+    Ok(())
 }
 
 /// The unit a declared `unitDimension` names (`length`, `area`, `volume`,

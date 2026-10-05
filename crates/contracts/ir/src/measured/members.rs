@@ -1410,11 +1410,24 @@ pub fn member_descriptor(name: &str) -> Option<&'static MemberDescriptor> {
 /// As [`super::parse`]: an unknown list, or a parameter it does not take
 /// or of the wrong kind.
 pub fn parse_members(text: &str) -> Result<MeasuredCall, MeasuredError> {
-    super::parse_in(
+    let call = super::parse_in(
         text,
         MEASURED_MEMBERS.iter().map(|descriptor| &descriptor.list),
         "measured member list",
-    )
+    )?;
+    // Only a measured value binds a rule parameter; a member list is
+    // listed by name.
+    if let Some((key, argument)) = call.references().next() {
+        return Err(MeasuredError::Invalid {
+            name: call.name().to_owned(),
+            key: key.to_owned(),
+            detail: format!(
+                "`{}` names a rule parameter, which a member list never takes",
+                argument.written().unwrap_or_default()
+            ),
+        });
+    }
+    Ok(call)
 }
 
 /// The member list `call` was parsed from.

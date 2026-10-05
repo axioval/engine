@@ -9,9 +9,21 @@
 //!
 //! A name is written `name[;key=value…]`, matched ignoring ASCII case, its
 //! parameter keys too.
-use std::collections::BTreeMap;
+//!
+//! A parameter whose kind takes one ([`MeasuredParameterKind::reference`](crate::measured::MeasuredParameterKind::reference))
+//! may instead name a parameter of the rule reading the value, written
+//! `@name` (`shelf_length;doors=@door_selector`), and an
+//! [`Objects`](crate::measured::MeasuredParameterKind::Objects) parameter the anchor,
+//! `@anchor`: the object the rule checks, whose members a value may be
+//! read on. The registry parses a reference as written
+//! ([`Parameter`](crate::measured::MeasuredArgument::Parameter), [`Anchor`](crate::measured::MeasuredArgument::Anchor)); the
+//! rule reading the value binds it ([`MeasuredCall::bind`](crate::measured::MeasuredCall::bind)) before
+//! anything is measured, and a reference it cannot bind leaves the value
+//! not evaluated, never a default.
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
+use serde::ser::SerializeStruct;
 
 mod members;
 mod registry;
@@ -119,17 +131,52 @@ pub struct LocalizedText {
 }
 
 /// One parameter of a measured value.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
+///
+/// Serialized with `references`, the kind of rule parameter `@name` may
+/// name in its place, where its kind takes one.
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MeasuredParameter {
     pub key: &'static str,
     pub kind: MeasuredParameterKind,
     /// Whether the name must state it.
     pub required: bool,
     /// The value an optional parameter takes when not stated, as written.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub default: Option<&'static str>,
     pub help: &'static [LocalizedText],
+}
+
+impl Serialize for MeasuredParameter {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let reference = self.kind.reference();
+        let fields = 4 + usize::from(self.default.is_some()) + usize::from(reference.is_some());
+        let mut state = serializer.serialize_struct("MeasuredParameter", fields)?;
+        state.serialize_field("key", self.key)?;
+        state.serialize_field("kind", &self.kind)?;
+        state.serialize_field("required", &self.required)?;
+        if let Some(default) = self.default {
+            state.serialize_field("default", default)?;
+        }
+        state.serialize_field("help", self.help)?;
+        if let Some(reference) = reference {
+            state.serialize_field("references", &reference)?;
+        }
+        state.end()
+    }
+}
+
+/// The rule parameter a measured parameter's `@name` may name: what the
+/// compiler requires the rule to state, and what the rule's value binds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ParameterReference {
+    /// A `number` or `integer` of metres, or a `quantity` of length.
+    Length,
+    /// A `stringList` of relationship steps.
+    StringList,
+    /// A `string`.
+    String,
+    /// A `selector`, bound to the objects it picks; or `@anchor`.
+    Selector,
 }
 
 /// What a measured parameter's value is.
@@ -156,7 +203,30 @@ pub enum MeasuredParameterKind {
     /// vertices in metres, `,`-separated, enclosing an area and never
     /// crossing or touching itself.
     Polygon,
+    /// The objects measured against: source kinds, `,`-separated (subtypes
+    /// match), the objects a selector parameter of the rule picks
+    /// (`@name`), or the anchor the rule checks (`@anchor`).
+    Objects,
 }
+
+impl MeasuredParameterKind {
+    /// The rule parameter `@name` may name in place of a value of this
+    /// kind; `None` where a value must be written.
+    #[must_use]
+    pub const fn reference(self) -> Option<ParameterReference> {
+        match self {
+            Self::Length { .. } => Some(ParameterReference::Length),
+            Self::Path => Some(ParameterReference::StringList),
+            Self::Choice { .. } | Self::Text | Self::SourceKind => Some(ParameterReference::String),
+            Self::Objects => Some(ParameterReference::Selector),
+            Self::Vector | Self::Property | Self::Polygon => None,
+        }
+    }
+}
+
+/// The reference naming the anchor in an
+/// [`Objects`](MeasuredParameterKind::Objects) parameter, `@anchor`.
+pub const ANCHOR: &str = "anchor";
 
 /// How exact a measured value can be.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -200,6 +270,99 @@ impl MeasuredCall {
     pub fn name(&self) -> &'static str {
         self.descriptor.name
     }
+
+    /// Every argument still naming a rule parameter or the anchor, by key,
+    /// in key order.
+    pub fn references(&self) -> impl Iterator<Item = (&'static str, &MeasuredArgument)> {
+        self.arguments
+            .iter()
+            .filter(|(_, argument)| argument.is_reference())
+            .map(|(key, argument)| (*key, argument))
+    }
+
+    /// Whether every reference is bound.
+    #[must_use]
+    pub fn is_bound(&self) -> bool {
+        self.references().next().is_none()
+    }
+
+    /// Binds the reference of `key` to `argument`, a value of the
+    /// parameter's kind: what the rule's parameter (or anchor) states.
+    ///
+    /// # Errors
+    ///
+    /// `key` is no reference of the call, or `argument` is a reference or
+    /// not of the parameter's kind.
+    pub fn bind(&mut self, key: &str, argument: MeasuredArgument) -> Result<(), MeasuredError> {
+        let invalid = |detail: &str| MeasuredError::Invalid {
+            name: self.descriptor.name.to_owned(),
+            key: key.to_owned(),
+            detail: detail.to_owned(),
+        };
+        let Some(parameter) = self.descriptor.parameter(key) else {
+            return Err(invalid("the value takes no such parameter"));
+        };
+        if !self
+            .arguments
+            .get(parameter.key)
+            .is_some_and(MeasuredArgument::is_reference)
+        {
+            return Err(invalid("it names no rule parameter to bind"));
+        }
+        let fits = matches!(
+            (parameter.kind, &argument),
+            (
+                MeasuredParameterKind::Length { .. },
+                MeasuredArgument::Length(_)
+            ) | (MeasuredParameterKind::Path, MeasuredArgument::Path(_))
+                | (
+                    MeasuredParameterKind::Choice { .. },
+                    MeasuredArgument::Choice(_)
+                )
+                | (MeasuredParameterKind::Text, MeasuredArgument::Text(_))
+                | (
+                    MeasuredParameterKind::SourceKind | MeasuredParameterKind::Objects,
+                    MeasuredArgument::SourceKind(_)
+                )
+                | (MeasuredParameterKind::Objects, MeasuredArgument::Objects(_))
+        );
+        if !fits {
+            return Err(invalid("the bound value is not of the parameter's kind"));
+        }
+        self.arguments.insert(parameter.key, argument);
+        Ok(())
+    }
+
+    /// The parameter `key` declares.
+    #[must_use]
+    pub fn parameter(&self, key: &str) -> Option<&'static MeasuredParameter> {
+        self.descriptor.parameter(key)
+    }
+}
+
+/// The objects a reference picked, bound into a measured call: the objects
+/// a rule's selector parameter surely picks and those it cannot decide,
+/// each sorted by source-qualified identity.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MeasuredSelection {
+    /// The rule parameter it was bound from, or [`ANCHOR`].
+    pub parameter: String,
+    /// The objects surely picked.
+    pub matched: BTreeSet<crate::ObjectId>,
+    /// The objects that may or may not be picked.
+    pub undecided: BTreeSet<crate::ObjectId>,
+}
+
+impl MeasuredSelection {
+    /// The anchor alone, surely picked.
+    #[must_use]
+    pub fn anchor(anchor: crate::ObjectId) -> Self {
+        Self {
+            parameter: ANCHOR.to_owned(),
+            matched: BTreeSet::from([anchor]),
+            undecided: BTreeSet::new(),
+        }
+    }
 }
 
 /// One parsed argument of a measured name.
@@ -226,6 +389,30 @@ pub enum MeasuredArgument {
     },
     /// A simple polygon's `(lateral, up)` vertices, as written.
     Polygon(Vec<[f64; 2]>),
+    /// A rule parameter named in the value's place, `@name`, not yet bound.
+    Parameter(String),
+    /// The anchor, `@anchor`, not yet bound.
+    Anchor,
+    /// The objects a reference picked, bound.
+    Objects(MeasuredSelection),
+}
+
+impl MeasuredArgument {
+    /// Whether it still names a rule parameter or the anchor.
+    #[must_use]
+    pub fn is_reference(&self) -> bool {
+        matches!(self, Self::Parameter(_) | Self::Anchor)
+    }
+
+    /// The reference as written, `@name` or `@anchor`.
+    #[must_use]
+    pub fn written(&self) -> Option<String> {
+        match self {
+            Self::Parameter(name) => Some(format!("@{name}")),
+            Self::Anchor => Some(format!("@{ANCHOR}")),
+            _ => None,
+        }
+    }
 }
 
 /// Why a name is no measured value.
@@ -405,9 +592,42 @@ fn facing(
     Ok(())
 }
 
+/// The reference `value` (`@name`) states for a parameter of `kind`: the
+/// anchor, or the rule parameter `name`, or why it is none.
+fn reference(
+    kind: MeasuredParameterKind,
+    value: &str,
+    name: &str,
+) -> Result<MeasuredArgument, String> {
+    if name == ANCHOR {
+        if kind == MeasuredParameterKind::Objects {
+            return Ok(MeasuredArgument::Anchor);
+        }
+        return Err(format!(
+            "`{value}` names the anchor, which only objects measured against take"
+        ));
+    }
+    if kind.reference().is_none() {
+        return Err(format!(
+            "`{value}` names a rule parameter, which it never takes"
+        ));
+    }
+    if name.is_empty()
+        || !name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+    {
+        return Err(format!("`{value}` names no rule parameter"));
+    }
+    Ok(MeasuredArgument::Parameter(name.to_owned()))
+}
+
 /// The argument `value` states for a parameter of `kind`, or why it is
 /// none.
 fn argument(kind: MeasuredParameterKind, value: &str) -> Result<MeasuredArgument, String> {
+    if let Some(name) = value.strip_prefix('@') {
+        return reference(kind, value, name.trim());
+    }
     Ok(match kind {
         MeasuredParameterKind::Path => {
             let steps: Vec<String> = value
@@ -419,7 +639,7 @@ fn argument(kind: MeasuredParameterKind, value: &str) -> Result<MeasuredArgument
             }
             MeasuredArgument::Path(steps)
         }
-        MeasuredParameterKind::SourceKind => {
+        MeasuredParameterKind::SourceKind | MeasuredParameterKind::Objects => {
             if value.is_empty() {
                 return Err("it is empty".into());
             }
@@ -660,6 +880,100 @@ mod tests {
             let error = parse(name).unwrap_err().to_string();
             assert!(error.starts_with(message), "{name}: {error}");
         }
+    }
+
+    const SHELVING: &str = "shelf_length;depth=0.4;horizontal=0.3;vertical=0.35;bottom=0.1;\
+                            top=2;clearance=0.9;access=bounds:forward";
+
+    #[test]
+    fn a_parameter_named_with_at_is_a_reference_the_rule_binds() {
+        let mut call = parse(&format!(
+            "{SHELVING};doors=@door_selector;openings=@anchor;spaces=@space_selector"
+        ))
+        .unwrap();
+        assert_eq!(
+            call.argument("doors"),
+            Some(&MeasuredArgument::Parameter("door_selector".into()))
+        );
+        assert_eq!(call.argument("openings"), Some(&MeasuredArgument::Anchor));
+        assert_eq!(
+            call.references().map(|(key, _)| key).collect::<Vec<_>>(),
+            ["doors", "openings", "spaces"]
+        );
+        assert!(!call.is_bound());
+        // Bound only to a value of the parameter's kind.
+        assert!(
+            call.bind("doors", MeasuredArgument::Text("x".into()))
+                .is_err()
+        );
+        assert!(call.bind("access", MeasuredArgument::Length(1.0)).is_err());
+        call.bind("spaces", MeasuredArgument::SourceKind("IfcSpace".into()))
+            .unwrap();
+        let depth = parse(&format!("{SHELVING};depth=@depth_metres"));
+        assert!(depth.is_err(), "`depth` is stated twice");
+        let door = crate::ObjectId::new(crate::SourceId::new("a", "b").unwrap(), "d").unwrap();
+        for key in ["doors", "openings"] {
+            call.bind(
+                key,
+                MeasuredArgument::Objects(MeasuredSelection::anchor(door.clone())),
+            )
+            .unwrap();
+        }
+        assert!(call.is_bound());
+        // Literal source kinds still read as kinds.
+        let call = parse(&format!("{SHELVING};doors=IfcDoor")).unwrap();
+        assert_eq!(
+            call.argument("doors"),
+            Some(&MeasuredArgument::SourceKind("IfcDoor".into()))
+        );
+    }
+
+    #[test]
+    fn a_reference_is_refused_where_its_kind_takes_none() {
+        for (name, message) in [
+            (
+                "slope;face=facing;direction=@axis;tolerance=10".to_owned(),
+                "`slope` parameter `direction`: `@axis` names a rule parameter",
+            ),
+            (
+                format!("{SHELVING};doors=@"),
+                "`shelf_length` parameter `doors`: `@` names no rule parameter",
+            ),
+            (
+                "contact_area;with=IfcSlab;gap=@anchor".to_owned(),
+                "`contact_area` parameter `gap`: `@anchor` names the anchor",
+            ),
+            (
+                "face_pieces;face=@face".to_owned(),
+                "`face_pieces` parameter `face`: `@face` names a rule parameter, which a \
+                 member list never takes",
+            ),
+        ] {
+            let error = if name.starts_with(FACE_PIECES) {
+                parse_members(&name)
+            } else {
+                parse(&name)
+            };
+            let error = error.map(|call| call.arguments).unwrap_err().to_string();
+            assert!(error.starts_with(message), "{name}: {error}");
+        }
+    }
+
+    #[test]
+    fn a_parameter_lists_the_reference_it_takes() {
+        let call = parse(SHELVING).unwrap();
+        let json = |key: &str| serde_json::to_value(call.parameter(key).unwrap()).unwrap();
+        assert_eq!(json("doors")["references"], "selector");
+        assert_eq!(json("doors")["kind"]["type"], "objects");
+        assert_eq!(json("depth")["references"], "length");
+        assert_eq!(json("access")["references"], "stringList");
+        let direction = parse("slope;face=facing;direction=1,0,0;tolerance=10").unwrap();
+        assert!(
+            serde_json::to_value(direction.parameter("direction").unwrap())
+                .unwrap()
+                .get("references")
+                .is_none()
+        );
     }
 
     #[test]

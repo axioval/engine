@@ -1,21 +1,22 @@
 //! A space's shelving as values, measured exactly as `shelf-capacity`
 //! measures it: the running metres of the declared arrangement and the
 //! space's clear height, from one linear-quantity request carrying the
-//! doors and openings that reach the space.
-
-use std::collections::{BTreeMap, BTreeSet};
+//! doors and openings that reach the space. The doors, openings and spaces
+//! are named by source kind or bound from the reading rule's selectors
+//! (`doors=@door_selector`), and the doors sent are cited as what the
+//! value was measured against.
 
 use axioval_engine::{
-    CompiledRule, LinearInterval, LinearQuantityServiceHandle, MeasuredProvider, Measurement,
-    NotEvaluatedReason, PropertyResolutionError, RuleContext,
+    Citation, LinearInterval, LinearQuantityServiceHandle, MeasuredProvider, Measurement,
+    NotEvaluatedReason, PropertyResolutionError, RuleContext, ShelfGeometry,
 };
-use axioval_ir::contract::{ParameterValue, Selector, Severity};
-use axioval_ir::measured::{MeasuredArgument, MeasuredCall};
-use axioval_ir::{ObjectId, QuantityDimension, RuleId};
+use axioval_ir::measured::{MeasuredArgument, MeasuredCall, MeasuredSelection};
+use axioval_ir::{ObjectId, QuantityDimension};
 
-use super::{declaration, measure};
-use crate::measured_kinds::{interval, objects_of_kinds, refused};
-use crate::support::{Parameters, Unavailable};
+use super::measure;
+use crate::measured_kinds::{interval, refused, selection};
+use crate::space_access::{AccessDeclaration, Pick};
+use crate::support::{Unavailable, invalid};
 
 /// Measures `shelf_length` and `shelf_clear_height`.
 pub(crate) struct ShelfMeasures;
@@ -23,60 +24,25 @@ pub(crate) struct ShelfMeasures;
 const SHELF_LENGTH: &str = "shelf_length";
 const SHELF_CLEAR_HEIGHT: &str = "shelf_clear_height";
 
-/// The arrangement's lengths, by measured key and declaration parameter.
-const LENGTHS: [(&str, &str); 6] = [
-    ("depth", "shelf_depth_metres"),
-    ("horizontal", "horizontal_spacing_metres"),
-    ("vertical", "vertical_spacing_metres"),
-    ("bottom", "bottom_elevation_metres"),
-    ("top", "top_elevation_metres"),
-    ("clearance", "door_clearance_metres"),
-];
+/// The objects of each element and space argument, by key.
+struct Picked {
+    doors: Option<MeasuredSelection>,
+    openings: Option<MeasuredSelection>,
+    spaces: Option<MeasuredSelection>,
+}
 
-/// The `shelf-capacity` declaration `call` stands for.
-fn rule(
-    call: &MeasuredCall,
-    object: &ObjectId,
-    context: &RuleContext<'_>,
-) -> Result<CompiledRule, PropertyResolutionError> {
-    let mut parameters = BTreeMap::from([(
-        "minimum_running_metres".to_owned(),
-        ParameterValue::Number { value: 0.0 },
-    )]);
-    for (key, name) in LENGTHS {
-        if let Some(MeasuredArgument::Length(value)) = call.argument(key) {
-            parameters.insert(name.to_owned(), ParameterValue::Number { value: *value });
-        }
+impl Picked {
+    fn of(
+        call: &MeasuredCall,
+        object: &ObjectId,
+        context: &RuleContext<'_>,
+    ) -> Result<Self, PropertyResolutionError> {
+        Ok(Self {
+            doors: selection(context, call, "doors", Some(object))?,
+            openings: selection(context, call, "openings", Some(object))?,
+            spaces: selection(context, call, "spaces", None)?,
+        })
     }
-    if let Some(MeasuredArgument::Path(steps)) = call.argument("access") {
-        parameters.insert(
-            "access_path".to_owned(),
-            ParameterValue::StringList {
-                value: steps.clone(),
-            },
-        );
-    }
-    for (key, name) in [("doors", "door_selector"), ("openings", "opening_selector")] {
-        if call.argument(key).is_some() {
-            parameters.insert(
-                name.to_owned(),
-                ParameterValue::Selector {
-                    value: Box::new(Selector::Objects {
-                        objects: objects_of_kinds(context, call, key, object)?,
-                    }),
-                },
-            );
-        }
-    }
-    Ok(CompiledRule {
-        id: RuleId::new("axioval-measured-shelving").expect("a valid rule id"),
-        capability: "axioval:capability.shelf-capacity".into(),
-        severity: Severity::Info,
-        selector: Selector::Objects {
-            objects: BTreeSet::from([object.clone()]),
-        },
-        parameters,
-    })
 }
 
 fn length(value: LinearInterval, exact: bool, locator: String) -> Measurement {
@@ -88,13 +54,44 @@ fn length(value: LinearInterval, exact: bool, locator: String) -> Measurement {
     )
 }
 
+/// The arrangement the call states, refused as `shelf-capacity` refused an
+/// impossible one.
+fn geometry(call: &MeasuredCall) -> Result<ShelfGeometry, Unavailable> {
+    let metres = |key: &str| match call.argument(key) {
+        Some(MeasuredArgument::Length(value)) => Some(*value),
+        _ => None,
+    };
+    let refused = || invalid("shelf geometry parameters are missing or not physically realisable");
+    ShelfGeometry::try_new(
+        metres("depth").ok_or_else(refused)?,
+        metres("horizontal").ok_or_else(refused)?,
+        metres("vertical").ok_or_else(refused)?,
+        metres("bottom").ok_or_else(refused)?,
+        metres("top").ok_or_else(refused)?,
+        metres("clearance").ok_or_else(refused)?,
+    )
+    .map_err(|_| refused())
+}
+
 fn shelving(
     call: &MeasuredCall,
     object: &ObjectId,
     context: &RuleContext<'_>,
-    rule: &CompiledRule,
-) -> Result<Measurement, Unavailable> {
-    let (_, geometry, access) = declaration(rule, &Parameters(rule))?;
+    picked: &Picked,
+) -> Result<(Measurement, Citation), Unavailable> {
+    let geometry = geometry(call)?;
+    let Some(MeasuredArgument::Path(steps)) = call.argument("access") else {
+        return Err(invalid(
+            "shelf-capacity: parameter `access_path` is required",
+        ));
+    };
+    let access = AccessDeclaration::of(
+        steps,
+        picked.doors.as_ref().map(Pick::Selected),
+        picked.openings.as_ref().map(Pick::Selected),
+        picked.spaces.as_ref().map(Pick::Selected),
+    )
+    .map_err(|(reason, message)| (reason, format!("shelf-capacity: {message}")))?;
     let service = context
         .services
         .get::<LinearQuantityServiceHandle>()
@@ -107,11 +104,20 @@ fn shelving(
     let shelving = measure(service, &access.index(context), geometry, object)?;
     let exact = shelving.evidence.iter().all(|evidence| evidence.exact);
     let locator = shelving.measured.evidence().locator.clone();
+    // What the length was measured against: the doors and openings sent,
+    // with the evidence that reached them.
+    let citation = Citation {
+        related: shelving.doors.clone(),
+        evidence: shelving.evidence[1..].to_vec(),
+    };
     if call.name() == SHELF_LENGTH {
-        return Ok(length(shelving.measured.measured(), exact, locator));
+        return Ok((
+            length(shelving.measured.measured(), exact, locator),
+            citation,
+        ));
     }
     match shelving.measured.clear_height() {
-        Some(height) => Ok(length(height, exact, locator)),
+        Some(height) => Ok((length(height, exact, locator), citation)),
         None => Err((
             NotEvaluatedReason::IncompleteEvidence,
             "the clear height of the space was not measured".into(),
@@ -130,7 +136,17 @@ impl MeasuredProvider for ShelfMeasures {
         object: &ObjectId,
         context: &RuleContext<'_>,
     ) -> Result<Measurement, PropertyResolutionError> {
-        let rule = rule(call, object, context)?;
-        shelving(call, object, context, &rule).map_err(refused(call.name(), object))
+        self.measure_cited(call, object, context)
+            .map(|(measurement, _)| measurement)
+    }
+
+    fn measure_cited(
+        &self,
+        call: &MeasuredCall,
+        object: &ObjectId,
+        context: &RuleContext<'_>,
+    ) -> Result<(Measurement, Citation), PropertyResolutionError> {
+        let picked = Picked::of(call, object, context)?;
+        shelving(call, object, context, &picked).map_err(refused(call.name(), object))
     }
 }

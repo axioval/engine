@@ -20,6 +20,7 @@ use std::collections::BTreeMap;
 
 use axioval_engine::{AdjacentSide, NotEvaluatedReason, RuleContext, TraversalDirection};
 use axioval_ir::contract::Selector;
+use axioval_ir::measured::MeasuredSelection;
 use axioval_ir::{Evidence, Object, ObjectId};
 
 use crate::counts::Population;
@@ -184,12 +185,53 @@ pub(crate) struct AccessIndex {
     pub(crate) relationship: String,
 }
 
+/// What picks the doors, openings or spaces of a declaration: a rule's
+/// selector, evaluated per object, or the objects a measured value's
+/// argument bound from one (or named by kind), each surely picked or not
+/// decided.
+#[derive(Clone, Copy)]
+pub(crate) enum Pick<'a> {
+    Selector(&'a Selector),
+    Selected(&'a MeasuredSelection),
+}
+
+impl Pick<'_> {
+    /// Whether `object` is picked.
+    fn member(self, context: &RuleContext<'_>, object: &Object) -> Member {
+        match self {
+            Self::Selector(selector) => Member::of(&selector_matches(
+                context,
+                selector,
+                object,
+                &mut Vec::new(),
+            )),
+            Self::Selected(selected) if selected.matched.contains(&object.id) => Member::Yes,
+            Self::Selected(selected) if selected.undecided.contains(&object.id) => {
+                Member::Undecided
+            }
+            Self::Selected(_) => Member::No,
+        }
+    }
+
+    /// Every object it may pick.
+    fn population(self, context: &RuleContext<'_>) -> Population {
+        match self {
+            Self::Selector(selector) => Population::of(context, selector),
+            Self::Selected(selected) => Population {
+                matched: selected.matched.clone(),
+                undecided: selected.undecided.clone(),
+                first: None,
+            },
+        }
+    }
+}
+
 /// The declaration an access index is built from.
 pub(crate) struct AccessDeclaration<'a> {
     path: Traversal,
-    doors: Option<&'a Selector>,
-    openings: Option<&'a Selector>,
-    spaces: &'a Selector,
+    doors: Option<Pick<'a>>,
+    openings: Option<Pick<'a>>,
+    spaces: Pick<'a>,
     pub(crate) sided: bool,
 }
 
@@ -208,6 +250,24 @@ impl<'a> AccessDeclaration<'a> {
             }
             return Ok(None);
         };
+        Self::of(
+            path,
+            doors.map(Pick::Selector),
+            openings.map(Pick::Selector),
+            spaces.map(Pick::Selector),
+        )
+        .map(Some)
+    }
+
+    /// The declaration of the access path `path` from the elements `doors`
+    /// and `openings` pick to the spaces `spaces` picks (every object
+    /// without it).
+    pub(crate) fn of(
+        path: &[String],
+        doors: Option<Pick<'a>>,
+        openings: Option<Pick<'a>>,
+        spaces: Option<Pick<'a>>,
+    ) -> Result<Self, Unavailable> {
         if doors.is_none() && openings.is_none() {
             return Err(invalid(
                 "`access_path` needs `door_selector`, `opening_selector` or both",
@@ -236,13 +296,13 @@ impl<'a> AccessDeclaration<'a> {
                  so the faces it records are the element's",
             ));
         }
-        Ok(Some(Self {
+        Ok(Self {
             path,
             doors,
             openings,
-            spaces: spaces.unwrap_or(&Selector::All),
+            spaces: spaces.unwrap_or(Pick::Selector(&Selector::All)),
             sided,
-        }))
+        })
     }
 
     /// Checks that `access` can be told apart with the declared selectors.
@@ -260,21 +320,14 @@ impl<'a> AccessDeclaration<'a> {
 
     /// Reads every door and opening of the project and what it connects.
     pub(crate) fn index(&self, context: &RuleContext<'_>) -> AccessIndex {
-        let population = Population::of(context, self.spaces);
+        let population = self.spaces.population(context);
         let universe: Vec<&Object> = context
             .project
             .objects()
             .filter(|object| population.contains(&object.id))
             .collect();
-        let member = |selector: Option<&Selector>, object: &Object| {
-            selector.map_or(Member::No, |selector| {
-                Member::of(&selector_matches(
-                    context,
-                    selector,
-                    object,
-                    &mut Vec::new(),
-                ))
-            })
+        let member = |pick: Option<Pick<'_>>, object: &Object| {
+            pick.map_or(Member::No, |pick| pick.member(context, object))
         };
         let mut elements = Vec::new();
         for object in context.project.objects() {

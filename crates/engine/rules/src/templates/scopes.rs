@@ -338,6 +338,7 @@ mod tests {
             ],
             grades: false,
             name: "scoped",
+            refusals: axioval_engine::template::Refusals::Rule,
             defaults: Vec::new(),
             declaration: Vec::new(),
             services: None,
@@ -382,6 +383,8 @@ mod tests {
                     },
                 }),
                 derived: Vec::new(),
+                related: None,
+                checks: Vec::new(),
             }],
         }
     }

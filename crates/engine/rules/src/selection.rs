@@ -986,6 +986,9 @@ pub(crate) fn property_error(error: PropertyResolutionError) -> (NotEvaluatedRea
             (NotEvaluatedReason::IncompleteEvidence, message)
         }
         PropertyResolutionError::NotRecorded(message) => (NotEvaluatedReason::NotRecorded, message),
+        PropertyResolutionError::InvalidArgument(message) => {
+            (NotEvaluatedReason::InvalidDeclaration, message)
+        }
         PropertyResolutionError::MissingService(message) => {
             (NotEvaluatedReason::MissingService, message)
         }

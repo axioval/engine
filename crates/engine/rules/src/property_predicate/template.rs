@@ -153,6 +153,7 @@ pub(crate) fn template() -> Template {
         .collect(),
         grades: false,
         name: "property-predicate",
+        refusals: axioval_engine::template::Refusals::Rule,
         defaults: Vec::new(),
         declaration: Vec::new(),
         services: None,
@@ -177,6 +178,8 @@ pub(crate) fn template() -> Template {
             table: None,
             scope: None,
             derived: Vec::new(),
+            related: None,
+            checks: Vec::new(),
         }],
     }
 }

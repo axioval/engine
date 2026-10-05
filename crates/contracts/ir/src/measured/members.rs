@@ -195,18 +195,41 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
                  unentschiedenes Element.",
             ),
         },
-        fields: &[field(
-            "angle",
-            ANGLE,
-            &en_de("Angle", "Winkel"),
-            &en_de(
-                "The acute angle between the long axes of both footprints' least-area \
-                 rectangles, in `[0, π/2]`; undecided where either has no long axis.",
-                "Der spitze Winkel zwischen den Längsachsen der flächenkleinsten \
-                 Rechtecke beider Grundrisse, in `[0, π/2]`; unentschieden, wo eines \
-                 keine Längsachse hat.",
+        fields: &[
+            field(
+                "angle",
+                ANGLE,
+                &en_de("Angle", "Winkel"),
+                &en_de(
+                    "The acute angle between the long axes of both footprints' least-area \
+                     rectangles, in `[0, π/2]`, as `parking-bay` reads a bay's orientation \
+                     to an aisle and whether a neighbour is parallel to it; undecided where \
+                     either has no long axis.",
+                    "Der spitze Winkel zwischen den Längsachsen der flächenkleinsten \
+                     Rechtecke beider Grundrisse, in `[0, π/2]`, wie `parking-bay` die \
+                     Ausrichtung zur Fahrgasse liest und ob ein Nachbar parallel steht; \
+                     unentschieden, wo eines keine Längsachse hat.",
+                ),
             ),
-        )],
+            field(
+                "centre_angle",
+                ANGLE,
+                &en_de("Angle to the centre", "Winkel zur Mitte"),
+                &en_de(
+                    "The acute angle between the footprint's long axis and the direction \
+                     from its centre to the member's centre, in `[0, π/2]`: about `π/2` for \
+                     a neighbour beside it, about `0` for one end to end with it, as \
+                     `parking-bay` infers a bay's orientation from its neighbours; \
+                     undecided where it has no long axis or the centres are too close.",
+                    "Der spitze Winkel zwischen der Längsachse des Grundrisses und der \
+                     Richtung von seiner Mitte zur Mitte des Elements, in `[0, π/2]`: etwa \
+                     `π/2` für einen Nachbarn daneben, etwa `0` für einen dahinter, wie \
+                     `parking-bay` die Ausrichtung einer Stellfläche aus ihren Nachbarn \
+                     ableitet; unentschieden, wo sie keine Längsachse hat oder die Mitten \
+                     zu nah beieinander liegen.",
+                ),
+            ),
+        ],
     },
     MemberDescriptor {
         list: MeasuredDescriptor {

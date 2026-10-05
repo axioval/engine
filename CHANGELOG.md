@@ -1129,6 +1129,12 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Fixed
 
+- `axes_within` members state `centre_angle`, the angle between a bay's
+  long axis and the direction to the member's centre, which `parking-bay`
+  infers a bay's orientation from its neighbours by (#273). The long-axis
+  `angle` alone cannot tell a neighbour beside the bay from one end to end
+  with it; both read the one shared computation.
+
 - A faceted B-rep or polygon face set whose authored faces leave their
   plane by more than the 1 mm tolerance is no longer declared exact (#213).
   With `--geometry` such a body is tessellated and declared within the

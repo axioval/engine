@@ -887,7 +887,7 @@ and declare their parameters and typed fields:
 | `exit_pairs` (`exits`, `kinds`, `between`) | every pair of a space's exits | `separation` |
 | `free_placements` (`shape`, `diameter`, `width`, `length`, `height`, `obstacles`, `band_from`, `band_to`, `merge`, `swings`, `entrance_width`, `access`, `doors`, `openings`) | a placement of the shape on a space's free floor: one found, none possible, or one undecided | none |
 | `guard_edges` (`barrier_gap`, `platform_gap`, `landing_gap`, `landing_width`, `climb_distance`, `climb_side`, `measure_from`, `barriers`, `landings`, `climbables`) | the exposed edges of a walking surface, as the guard service samples them | `guarded_height`, `tallest_barrier`, `barrier_share`, `landing_fall`, `climbable_height` |
-| `axes_within` (`of`, `reach`) | the objects of the kinds named within reach of the footprint in plan | `angle` |
+| `axes_within` (`of`, `reach`) | the objects of the kinds named within reach of the footprint in plan | `angle`, `centre_angle` |
 | `parallel_pairs` (`members`, `member_path`, `angle_tolerance`, `reach`) | the parallel pairs of members the object reaches, as `wall-spacing` pairs them | `distance` |
 | `swing_spaces` (`path`, `kinds`) | the spaces a door opens onto, probed as `door-swing` probes them | `into`, `away` |
 | `opening_placements` (`host_path`, `hosts`, `length_axis`, `height_axis`, `zone`, `minimum`) | an opening's placement in each host its path reaches, as `opening-zone` places it | `inside`, `end_distance`, `edge_distance`, `bottom_distance`, `top_distance` |
@@ -972,9 +972,11 @@ values and the capability never disagree:
   (a square) has no ends or sides once an obstacle is near.
 - `axes_within;of=<kinds>[;reach=<m>]` lists the objects of the kinds within
   `reach` of the footprint in plan (default 0, meeting it), each with the
-  acute `angle` between the long axes, an angle in `[0, π/2]`; one only
-  possibly within reach is an undecided member, and one without a readable
-  extent or long axis has an undecided angle.
+  acute `angle` between the long axes and the `centre_angle` between the
+  footprint's long axis and the direction to the member's centre, both in
+  `[0, π/2]`; one only possibly within reach is an undecided member, one
+  without a readable extent or long axis has undecided angles, and centres
+  too close to tell a direction leave `centre_angle` undecided.
 
 The orientation to an aisle is then an expression with a tolerance:
 "perpendicular to an aisle" is `any` over `axes_within;of=aisle` of
@@ -985,7 +987,13 @@ verdicts on its fixtures, check by check: width, length and height bounds,
 the orientation to the aisle within a reach, obstructed ends and sides
 with and without a side zone, an obstacle within a bay, and size bounds
 filtered by orientation or obstructed sides. A bay's orientation inferred
-from neighbouring bays (`neighbour_reach`) has no value.
+from neighbouring bays (`neighbour_reach`) reads both angles, as
+`parking-bay` does: a neighbour counts when its long axis is parallel
+(`angle ≤ 5°`), and its `centre_angle` gives the state, perpendicular for a
+neighbour beside the bay (`≥ 85°`), parallel for one end to end (`≤ 5°`);
+the bay is in a state when some counted neighbour gives it and none gives
+another. The long-axis `angle` cannot tell the two apart, since both
+neighbours of a row and of a line are parallel to the bay.
 
 ### Parallel members
 

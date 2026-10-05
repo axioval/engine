@@ -1437,6 +1437,27 @@ fn beside(
     theirs: &PlanRectangle,
     tolerance: f64,
 ) -> Result<BTreeMap<State, Tri>, String> {
+    let interval = centre_angle(own, theirs)?;
+    Ok(ALIGNMENTS
+        .into_iter()
+        .map(|alignment| (State::of(alignment), alignment.holds(interval, tolerance)))
+        .collect())
+}
+
+/// The acute angle, in degrees, between `own`'s long axis and the
+/// direction from its centre to `theirs`' centre: about 90 for a bay
+/// beside it, about 0 for one end to end with it. The interval holds the
+/// exact angle: widened by how far either centre and `own`'s axis may be
+/// off, and by the rounding of the arctangent.
+///
+/// # Errors
+///
+/// Why it cannot be told: `own` has no long axis, or the centres are too
+/// close for a direction between them.
+pub(crate) fn centre_angle(
+    own: &PlanRectangle,
+    theirs: &PlanRectangle,
+) -> Result<(f64, f64), String> {
     let long = own.long_axis()?;
     let axes = own.axes();
     let (along_axis, across_axis) = (axes[long], axes[1 - long]);
@@ -1458,11 +1479,7 @@ fn beside(
     // the axis by its error; plus the rounding of the arctangent.
     let slack =
         (error / distance).asin().to_degrees() + own.axis_error_radians().to_degrees() + 1e-9;
-    let interval = ((angle - slack).max(0.0), (angle + slack).min(90.0));
-    Ok(ALIGNMENTS
-        .into_iter()
-        .map(|alignment| (State::of(alignment), alignment.holds(interval, tolerance)))
-        .collect())
+    Ok(((angle - slack).max(0.0), (angle + slack).min(90.0)))
 }
 
 /// The central stretch `length` long of a side spanning `side` (its lowest

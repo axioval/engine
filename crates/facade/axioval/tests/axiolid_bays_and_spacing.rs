@@ -792,6 +792,69 @@ mod as_expressions {
         json!({"kind": "implies", "antecedent": antecedent, "consequent": consequent})
     }
 
+    const NEIGHBOURS: &str = "axes_within;of=bay;reach=0.05";
+
+    /// Whether every neighbour parallel to the bay (its long axis within 5
+    /// degrees) lies at `alignment` from it, judged by the direction to its
+    /// centre, and one does: the state `parking-bay` infers from them.
+    fn inferred(alignment: &str) -> Value {
+        let parallel = compare("lessThanOrEquals", field("angle"), literal(5.0, "deg"));
+        let centre = field("centre_angle");
+        let at = match alignment {
+            "perpendicular" => compare("greaterThanOrEquals", centre, literal(85.0, "deg")),
+            "parallel" => compare("lessThanOrEquals", centre, literal(5.0, "deg")),
+            _ => and(vec![
+                compare("greaterThan", centre.clone(), literal(5.0, "deg")),
+                compare("lessThan", centre, literal(85.0, "deg")),
+            ]),
+        };
+        and(vec![
+            over("any", NEIGHBOURS, and(vec![parallel.clone(), at.clone()])),
+            over(
+                "none",
+                NEIGHBOURS,
+                and(vec![parallel, json!({"kind": "not", "operand": at})]),
+            ),
+        ])
+    }
+
+    /// Two bays end to end.
+    fn end_to_end() -> Scene {
+        Scene::default()
+            .body("e1", "bay", &rect(0.0, 0.0, 4.8, 2.4), 0.0, 2.2)
+            .body("e2", "bay", &rect(4.8, 0.0, 9.6, 2.4), 0.0, 2.2)
+    }
+
+    #[test]
+    fn the_orientation_inferred_from_neighbours_reaches_the_verdicts() {
+        for (scene, alignment, flagged) in [
+            (
+                mixed_bays as fn() -> Scene,
+                "perpendicular",
+                &["p1", "p2", "p3"][..],
+            ),
+            (mixed_bays, "parallel", &[]),
+            (end_to_end, "parallel", &["e1", "e2"]),
+            (end_to_end, "perpendicular", &[]),
+        ] {
+            bay(
+                scene,
+                vec![
+                    ("min_length", metres(5.0)),
+                    ("applies_when", text("filter")),
+                    ("orientations", path(&[alignment])),
+                    ("neighbour_reach", metres(0.05)),
+                    ("angle_tolerance", quantity(5.0, "deg")),
+                ],
+                &implies(
+                    inferred(alignment),
+                    compare("greaterThanOrEquals", side("length"), metre(5.0)),
+                ),
+                (flagged, &[]),
+            );
+        }
+    }
+
     fn over(function: &str, list: &str, value: Value) -> Value {
         json!({"kind": "aggregate", "function": function,
             "over": {"kind": "measured", "name": list}, "value": value})

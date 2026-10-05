@@ -175,7 +175,10 @@ impl BayMeasures {
         let undecided = |why: String| MeasuredMember {
             certain: false,
             exact: false,
-            fields: BTreeMap::from([("angle", MemberValue::Undecided { why })]),
+            fields: BTreeMap::from([
+                ("angle", MemberValue::Undecided { why: why.clone() }),
+                ("centre_angle", MemberValue::Undecided { why }),
+            ]),
         };
         let mut members: Vec<MeasuredMember> = near
             .blind
@@ -195,42 +198,55 @@ impl BayMeasures {
             if within == Tri::No {
                 continue;
             }
-            let (angle, exact) = angle(&own, rectangles, other);
+            let (angle, centre_angle, exact) = angles(&own, rectangles, other);
             members.push(MeasuredMember {
                 certain: within == Tri::Yes,
                 exact,
-                fields: BTreeMap::from([("angle", angle)]),
+                fields: BTreeMap::from([("angle", angle), ("centre_angle", centre_angle)]),
             });
         }
         Ok(members)
     }
 }
 
-/// The acute angle between the long axes of `own` and `other`.
-/// The angle between both long axes, and whether both rectangles are exact.
-fn angle(
+/// The angle between both long axes, the angle between `own`'s long axis
+/// and the direction to `other`'s centre (as `parking-bay` infers a bay's
+/// orientation from its neighbours, `super::centre_angle`), and whether
+/// both rectangles are exact.
+fn angles(
     own: &PlanRectangle,
     rectangles: &PlanSpanServiceHandle,
     other: &ObjectId,
-) -> (MemberValue, bool) {
+) -> (MemberValue, MemberValue, bool) {
     let theirs = match rectangle_of(rectangles, other) {
         Ok(theirs) => theirs,
-        Err(why) => return (MemberValue::Undecided { why }, false),
+        Err(why) => {
+            return (
+                MemberValue::Undecided { why: why.clone() },
+                MemberValue::Undecided { why },
+                false,
+            );
+        }
     };
     let exact = own.is_exact() && theirs.is_exact();
-    let value = match own.long_axis_angle(&theirs) {
+    let locator = format!("{}; {}", own.evidence().locator, theirs.evidence().locator);
+    let value = |degrees: Result<(f64, f64), String>| match degrees {
         Ok(degrees) => {
             let (lower, upper) = radians(degrees);
             MemberValue::Measured(Measurement::Value {
                 lower,
                 upper,
                 dimension: Some(QuantityDimension::PlaneAngle),
-                locator: format!("{}; {}", own.evidence().locator, theirs.evidence().locator),
+                locator: locator.clone(),
             })
         }
         Err(why) => MemberValue::Undecided { why },
     };
-    (value, exact)
+    (
+        value(own.long_axis_angle(&theirs)),
+        value(super::centre_angle(own, &theirs)),
+        exact,
+    )
 }
 
 fn bay<'a>(

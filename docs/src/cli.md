@@ -1204,6 +1204,40 @@ elevation law (polynomials and circular arcs), and the cant from the
 `IfcAlignmentCant` segments, whose transition shapes are all monotone
 along a segment. A sinusoidal spiral, a cubic parabola given as a
 parametric plan piece and another elevation law are refused by name.
+
+The same service cuts sections and sweeps clearance envelopes (see
+[Sections and clearance envelopes](./derived.md#sections-and-clearance-envelopes))
+over the bodies the bridge meshed, along the same centreline: an alignment
+placed off the identity is refused by name for them too
+(openbimrs/ifc#357). The section at plan distance `d` is the vertical plane
+through `C(d)` normal to the plan tangent, `lateral` its horizontal left
+normal `L(d)` and `up` `+Z`. A body's mesh is cut only when it is closed
+(every directed edge matched by its reverse): every triangle crossing the
+plane gives one oriented segment, from a vertex classification shared by
+every triangle and a cut point computed once per edge in a canonical order,
+so the segments close exactly. The band is every triangle clipped to the
+slab within the radius of the plane and projected onto it; the radius is
+the body's certified deviation plus the frame's numerical error (the
+reference evaluator's accuracy and rounding, scaled by the body's reach and
+the curve's derivative bounds).
+
+For a clearance envelope every step `[a, b]` of the range is bounded: a
+point `P(s; u, v) = C(s) + u L(s) + v Z` moves at most
+`|C'| + |u| |L'|` per metre, and `|L'|` is at most the plan curvature, so
+over the step every point lies within `D = h (B1 + |u|max B2 / speed)` of
+its place in the section at the step's middle, `h` the half-width and `B1`,
+`B2` the certified derivative bounds of `axiolid-evaluate` over the step
+(split at continuity breaks). Each triangle of a body is clipped to the
+slab within `D` plus the deviation and the frame's error around that
+section, projected, and tested against the envelope grown by the same
+amount; when no triangle comes that near, the envelope placed there lies
+wholly inside or outside the body and its winding number in the mesh says
+which. A body near the envelope is decided by sections: a point surely in
+both the body's section region and the envelope, at a station of the
+range, is a sure intrusion. Otherwise the step is halved, at most ten times
+and within 20 000 stretches per body, and a stretch still undecided leaves
+the body possible with that stretch named. A range holding more than
+100 000 steps is refused.
 The bridge reads
 the bytes with the session's own STEP reader (`read_ifc_step`), so a REAL
 written without its decimal point is measured too and reported once, as an

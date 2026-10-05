@@ -912,6 +912,7 @@ mod relations;
 mod relationships;
 mod resources;
 mod rule_outcomes;
+mod section;
 mod services;
 mod side_distance;
 mod sight;
@@ -1065,6 +1066,10 @@ pub use resources::{
     ResourceServiceHandle,
 };
 pub use rule_outcomes::{ObjectVerdict, RuleOutcomes, RuleRecord, RuleVerdict, SelectorVerdict};
+pub use section::{
+    BodySection, EnvelopeRequest, EnvelopeSweep, Intrusion, Section, SectionAxis, SectionPolygon,
+    SectionRequest,
+};
 pub use services::{ServiceRegistry, ServiceRegistryError};
 pub use session::{
     EvidenceSession, EvidenceSessionError, SessionSources, SnapshotBoundService, SourceDisciplines,

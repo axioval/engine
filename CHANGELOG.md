@@ -12,6 +12,30 @@ All notable changes are documented here. This project follows Semantic Versionin
   expression-text flags and table columns, and whether it grades
   deviations or takes authored parameters (#278). A capability rebuilt on
   shared parts must keep it unchanged.
+- Sections and clearance envelopes along alignments (#253). The new
+  measured values `station_section_area` and
+  `station_section_thickness[;direction=up|lateral]`
+  (`;alignment=<kinds>[;path=<steps>];station=<m>`) measure the object's own
+  body in the vertical section normal to an alignment at a station, as
+  intervals derived in the engine from the section's interval region
+  (`BodySection`: the mesh's oriented cut, the band of mesh pieces within
+  the deviation and the frame's error of the plane, and that radius).
+  `envelope_intrusions;bodies=<kinds>;envelope=<lateral:up,…>;from=<m>;to=<m>;step=<m>`,
+  measured on an alignment, counts the bodies reaching into a clearance
+  envelope swept along a station range, from the sure to the possible
+  intrusions. The sweep is sound between its samples: each step bounds how
+  far the envelope moves from the centreline's certified derivative bounds
+  and tests the meshes in 3D against the envelope grown by that bound, so a
+  body crossing the envelope between two samples is found or left possible
+  with the reason, never passed. They are answered through the new
+  `AlignmentService::measure_section` and `measure_envelope`
+  (`SectionRequest`, `Section`, `BodySection`, `SectionAxis`,
+  `SectionPolygon`, `EnvelopeRequest`, `EnvelopeSweep`, `Intrusion`), which
+  refuse by default. Measured parameters gain the `polygon` kind. With
+  `--geometry` the CLI cuts the bridge's closed meshes; an unmeasured or
+  open body, a body measured through its parts (for a section) and an
+  alignment placed off the identity (openbimrs/ifc#357) are refused by name.
+
 - Stations, offsets and heights along alignments (#252). The new
   measured values `station`, `offset[;side=left|right]` and
   `height_above_gradient` (`;alignment=<kinds>[;path=<steps>]`) locate an

@@ -2217,6 +2217,93 @@ fn with_geometry_products_are_judged_by_their_station_and_offset_along_an_alignm
     assert_eq!(open, ["#133", "#153", "#203"], "{result:#}");
 }
 
+/// engine#253 end to end: an `expression` rule on the alignment over the
+/// number of proxies reaching into a clearance envelope swept along it, and
+/// one on each proxy over its section area at station 5. Of the cubes
+/// along the alignment (#252) the one on the curve at station 5 (#163) and
+/// the one at station 3, 1 m to the right (#183, reaching from 1.5 m to
+/// 0.5 m right), intrude a 2 m wide envelope from station 0 to 15; none
+/// does from station 8 on. Two proxies whose placements are refused and a
+/// proxy without a body are unmeasured: with them selected the count is
+/// not evaluated, naming one.
+#[test]
+fn with_geometry_a_clearance_envelope_and_sections_are_judged_along_an_alignment() {
+    let case = Case::new("geometry-alignment-envelope");
+    let measured = cubes_along_an_alignment();
+    let model: String = measured
+        .lines()
+        .filter(|line| {
+            !["#30=", "#133=", "#153="]
+                .iter()
+                .any(|id| line.starts_with(id))
+        })
+        .flat_map(|line| [line, "\n"])
+        .collect();
+    let rule = |model: &str, kind: &str, name: &str, operator: &str, value: Value| {
+        case.geometry_rule(
+            model,
+            &[
+                ("proxy", "IfcBuildingElementProxy"),
+                ("alignment", "IfcAlignment"),
+            ],
+            "axioval:capability.expression",
+            &registry_signature("axioval:capability.expression"),
+            entity(kind),
+            json!({"requirement": {"type": "expression", "value": {
+                "kind": "compare", "operator": operator, "label": "value",
+                "left": {"kind": "property", "propertySet": "axioval:measured", "property": name},
+                "right": {"kind": "literal", "value": value}}}}),
+        )
+    };
+    let objects = |result: &Value, key: &str| -> Vec<String> {
+        let mut objects: Vec<String> = result["report"][key]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|entry| entry["object_id"]["local_id"].as_str())
+            .map(str::to_owned)
+            .collect();
+        objects.sort();
+        objects
+    };
+    let none = json!({"type": "integer", "value": 0});
+    let envelope = |from: u32| {
+        format!(
+            "envelope_intrusions;bodies=IfcBuildingElementProxy;envelope=-1:0,1:0,1:3,-1:3;\
+             from={from};to=15;step=5"
+        )
+    };
+
+    let (output, result) = rule(&model, "alignment", &envelope(0), "equals", none.clone());
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(objects(&result, "findings"), ["#175"], "{result:#}");
+    let finding = result["report"]["findings"][0].to_string();
+    assert!(finding.contains('2'), "{finding}");
+
+    let (output, result) = rule(&model, "alignment", &envelope(8), "equals", none.clone());
+    assert_eq!(output.status.code(), Some(0), "{result:#}");
+    assert!(objects(&result, "findings").is_empty(), "{result:#}");
+
+    // With the unmeasured proxies selected, no count is given.
+    let (output, result) = rule(&measured, "alignment", &envelope(8), "equals", none);
+    assert_eq!(output.status.code(), Some(4), "{result:#}");
+    assert_eq!(objects(&result, "not_evaluated"), ["#175"], "{result:#}");
+    let reason = result["report"]["not_evaluated"][0].to_string();
+    assert!(reason.contains("unmeasured"), "{reason}");
+
+    // The section area at station 5: the cubes cut there are 1 m².
+    let (output, result) = rule(
+        &model,
+        "proxy",
+        "station_section_area;alignment=IfcAlignment;station=5",
+        "greaterThanOrEquals",
+        json!({"type": "quantity", "value": 0.9, "unit": "m2"}),
+    );
+    assert_eq!(output.status.code(), Some(3), "{}", stderr(&output));
+    assert_eq!(objects(&result, "findings"), ["#183", "#203"], "{result:#}");
+    assert!(objects(&result, "not_evaluated").is_empty(), "{result:#}");
+}
+
 /// The crossing walls with an `IfcOpeningElement` (#208) voiding the first
 /// wall (#16) where the second crosses it: a 1 m square prism from below
 /// the floor to above the walls, under the representation `identifier`, or

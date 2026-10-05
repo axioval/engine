@@ -30,6 +30,7 @@ mod areas;
 mod clearance;
 mod levels;
 pub(crate) mod provider;
+mod section;
 mod space;
 mod surface;
 
@@ -86,6 +87,9 @@ pub(crate) enum MeasuredName {
     Dimension(MeasuredCall),
     /// A position along an alignment, or a parameter of it there.
     Alignment(MeasuredCall),
+    /// A section across an alignment, or a clearance envelope swept along
+    /// it.
+    Section(MeasuredCall),
     /// A value a registered provider measures.
     Provided(MeasuredCall),
 }
@@ -130,6 +134,7 @@ pub(crate) fn measured_by_core(name: &str) -> bool {
         || levels::NAMES.contains(&name)
         || areas::NAMES.contains(&name)
         || alignment::NAMES.contains(&name)
+        || section::NAMES.contains(&name)
 }
 
 /// Parses a name in the measured set through the registry
@@ -183,6 +188,7 @@ pub(crate) fn parse(name: &str) -> Result<MeasuredName, String> {
         name if levels::NAMES.contains(&name) => MeasuredName::Level(call),
         name if areas::NAMES.contains(&name) => MeasuredName::Area(call),
         name if alignment::NAMES.contains(&name) => MeasuredName::Alignment(call),
+        name if section::NAMES.contains(&name) => MeasuredName::Section(call),
         ANGLE_TO | BEARING | SKEW => {
             let steps = match call.argument("path") {
                 Some(MeasuredArgument::Path(steps)) => steps
@@ -413,6 +419,7 @@ impl Measures {
             MeasuredName::Level(call) => self.level_measure(call, object),
             MeasuredName::Area(call) => self.area_measure(call, object),
             MeasuredName::Alignment(call) => self.along_alignment(call, object),
+            MeasuredName::Section(call) => self.along_section(call, object),
             MeasuredName::Provided(call) => self.provided(call, object),
         }
     }

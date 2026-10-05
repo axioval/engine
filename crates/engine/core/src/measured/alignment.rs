@@ -40,7 +40,7 @@ pub(super) const NAMES: &[&str] = &[CANT, CURVATURE, GRADIENT, RADIUS, HEIGHT, O
 impl Measures {
     /// The one alignment `call` selects for `object`, `None` when none is
     /// selected.
-    fn alignment_of(
+    pub(super) fn alignment_of(
         &self,
         call: &MeasuredCall,
         object: &ObjectId,

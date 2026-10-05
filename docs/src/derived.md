@@ -417,6 +417,8 @@ ignoring ASCII case):
 | `coordinate_shift;of=world\|site\|map`, `coordinate_turn;of=world\|site\|north\|map`, `map_scale_change`, `map_target_change`, `map_conversion[;of=own\|reference]` `[;reference=<discipline>]` | how the object's source's coordinate system departs from the reference source's | built in, over `CoordinateSystemService` |
 | `station`, `offset[;side=left\|right]`, `height_above_gradient` `;alignment=<kinds>[;path=<steps>]` | the reference point's station along an alignment, its signed plan offset from it and its height above the gradient line, each a length | `AlignmentService::measure_alignment_position`, `TypeHierarchyService`, `RelationshipSelectionService` for a path |
 | `alignment_curvature`, `alignment_radius`, `alignment_gradient`, `alignment_cant` `;alignment=<kinds>[;path=<steps>]` | the alignment's plan curvature (per metre) and radius, gradient and cant at the reference point's station | `AlignmentService::measure_alignment_parameter` |
+| `station_section_area`, `station_section_thickness[;direction=lateral\|up]` `;alignment=<kinds>[;path=<steps>];station=<m>` | the area and the vertical or horizontal reach of the object's own body in the section normal to the alignment at a station | `AlignmentService::measure_section` |
+| `envelope_intrusions;bodies=<kinds>;envelope=<lateral:up,…>;from=<m>;to=<m>;step=<m>` | of an alignment: how many bodies of the kinds reach into a clearance envelope swept along it, a count from the sure to the possible intrusions | `AlignmentService::measure_envelope`, `TypeHierarchyService` |
 
 ### Names with parameters
 
@@ -429,7 +431,9 @@ them unchanged. Keys are matched ignoring ASCII case.
 Every measured name is declared once, in `axioval_ir::measured`
 (`MEASURED_VALUES`, sorted by name). A descriptor states the name, its
 typed parameters (`path`, a `sourceKind`, a `length` with a minimum, a
-`choice`, a `vector`, a `property` or a `text`, such as a discipline;
+`choice`, a `vector`, a `property`, a `text`, such as a discipline, or a
+`polygon` of `lateral:up` vertices, `,`-separated, at least three and never
+crossing or touching itself;
 required or with a default), the dimension and SI unit of the value, the
 services a run needs, its exactness (`stated` or `measured`), what leaves
 it not evaluated, and an English and German label and help text. Editors
@@ -1179,6 +1183,76 @@ evaluated with the service's reason when:
 Without an alignment service the values are a missing service, reported
 once per rule and source. The CLI's IFC implementation is described under
 [Geometry](./cli.md#geometry).
+
+#### Sections and clearance envelopes
+
+Clearance profiles, member thickness at a station and cover in a section
+are checked in the plane normal to an alignment. The **section** at a
+station is the vertical plane through the centreline point normal to the
+alignment's plan there; its coordinates are `lateral`, horizontal and
+positive to the left of the direction of travel, and `up`, vertical, from
+the gradient line, so a point of the section at `(lateral, up)` has that
+`offset` and that `height_above_gradient`. Cant does not turn the frame:
+an envelope that tilts with the cant is stated tilted.
+
+`AlignmentServiceHandle::measure_section` answers a `SectionRequest` (the
+alignment, a station, the bodies, never the alignment itself) with one
+`BodySection` per body, an **interval region**: the oriented segments of
+the body's mesh cut by the computed plane (the region to their left), the
+band of every piece of the mesh within `radius` of the plane projected onto
+it, and that `radius`, which covers the mesh's certified deviation and the
+plane's numerical error. A point lies **surely** in the section when it is
+in the cut and farther than the radius from the band, **possibly** when it
+is in the cut or within the radius of the band. The engine derives the
+area (`area`: the cut's area less or plus the band grown by the radius)
+and the reach along `lateral` or `up` (`extent`: from the spread of points
+proven inside to the spread of everything possibly inside) from that
+region, never accepted from an adapter; a plane missing the body surely has
+no extent. Evidence is exact exactly when every radius is zero.
+
+- `station_section_area;alignment=<kinds>[;path=<steps>];station=<m>` is
+  the area of the object's own body in the section at the station (an
+  area; zero where the plane misses it);
+- `station_section_thickness;…;station=<m>[;direction=up|lateral]` is how
+  far that section reaches vertically (the default) or horizontally; none
+  where the plane misses the body.
+
+The station is the alignment's label; the service carries it to a plan
+distance through the station equations, and a station no stretch or
+several stretches carry is refused, as is one before the start or beyond
+the end. A body that is unmeasured, whose mesh is no closed solid, or that
+is measured through its parts (whose overlaps a cut would count twice) is
+refused with the reason.
+
+`envelope_intrusions;bodies=<kinds>;envelope=<polygon>;from=<m>;to=<m>;step=<m>`
+is measured on an alignment. The **clearance envelope** is a simple
+polygon in section coordinates (`SectionPolygon`), for example
+`envelope=-2:0,2:0,2:5,-2:5`, and swept from station `from` to station
+`to` it is the volume of every point at `(lateral, up)` in it in the
+section at any distance in between. The bodies are the objects of the
+`bodies` kinds in the alignment's source (subtypes match).
+`AlignmentServiceHandle::measure_envelope` answers an `EnvelopeRequest`
+with one `Intrusion` per body: `Sure` with the distance where a point of
+the body was proven inside the envelope, `Clear` when the body was proven
+out of the whole swept volume, `Possible` with the stretch and reason
+otherwise. The value is the count from the sure to the possible
+intrusions, so a rule `envelope_intrusions… = 0` fails on a sure intrusion,
+is not evaluated while one is only possible, and passes only when every
+body is proven clear. The evidence names the intruding and the undecided
+bodies (the first five of each). No body of the kinds is a count of zero; an
+unmeasured body or one that is no closed solid refuses the value with the
+reason, since it could hide an intrusion.
+
+The sweep is sound between its samples: `step` is the declared plan
+distance between sampled sections, but between two of them the service
+bounds how far any point of the envelope can move and tests the body's
+mesh in 3D against the envelope grown by that bound over the step, so a
+body crossing the envelope between two samples, however thin, is found or
+left possible, never passed. A step too coarse to decide is halved a
+bounded number of times; what stays undecided leaves the body possible with
+the reason. The trait's `measure_section` and `measure_envelope` refuse by
+default, so a service that cuts nothing never answers with empty sections
+or clear envelopes.
 
 ### Stated rather than measured
 

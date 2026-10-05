@@ -840,8 +840,13 @@ pub fn attach(
     );
     let routes = route_services(&geometry, &source, &kinds, &is_a, &voids);
     let derived = derived_service(&geometry, &parsed, &kinds, &is_a, voids);
-    let alignments =
-        alignment::alignment_service(&parsed, &kinds.keys().cloned().collect::<Vec<_>>());
+    // Sections cut, and envelopes are swept past, the same bodies every
+    // other service measures.
+    let alignments = alignment::alignment_service(
+        &parsed,
+        &kinds.keys().cloned().collect::<Vec<_>>(),
+        geometry.clone(),
+    );
     let facade = facade_service(&geometry, &kinds, &is_a);
     let session = register(session, &snapshots, geometry, space, envelope, routes)?
         .with_host_service(FacadeAreaServiceHandle::new(Arc::new(facade)), &snapshots)?

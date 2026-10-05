@@ -72,6 +72,8 @@ use ifc_model::{EntityId, Model};
 
 use super::{PRODUCT_REPRESENTATION, Parsed, context_frame, entity_id, session, world_transform};
 
+mod section;
+
 /// Width, in metres of plan distance, below which a bracket is no longer
 /// split.
 const RESOLUTION: f64 = 1e-7;
@@ -95,12 +97,16 @@ fn slack(scale: f64) -> f64 {
 pub(super) struct IfcAlignmentService {
     points: BTreeMap<ObjectId, Result<[f64; 3], String>>,
     alignments: BTreeMap<ObjectId, Result<Centreline, String>>,
+    /// The bodies sections cut and envelopes are swept past.
+    geometry: axioval::axiolid::AxiolidGeometry,
 }
 
-/// The service over `objects`, read from `parsed`.
+/// The service over `objects`, read from `parsed`, cutting the bodies of
+/// `geometry`.
 pub(super) fn alignment_service(
     parsed: &BTreeMap<SourceId, Parsed>,
     objects: &[ObjectId],
+    geometry: axioval::axiolid::AxiolidGeometry,
 ) -> IfcAlignmentService {
     let mut alignments = BTreeMap::new();
     for id in objects {
@@ -132,7 +138,11 @@ pub(super) fn alignment_service(
         };
         points.insert(id.clone(), point);
     }
-    IfcAlignmentService { points, alignments }
+    IfcAlignmentService {
+        points,
+        alignments,
+        geometry,
+    }
 }
 
 /// An alignment's 3D centreline and what labels and cants it.
@@ -1026,6 +1036,20 @@ impl AlignmentService for IfcAlignmentService {
             evidence(&alignment.source, locator, exact),
         )
     }
+
+    fn measure_section(
+        &self,
+        request: &axioval::engine::SectionRequest,
+    ) -> Result<axioval::engine::Section, AlignmentError> {
+        self.section(request)
+    }
+
+    fn measure_envelope(
+        &self,
+        request: &axioval::engine::EnvelopeRequest,
+    ) -> Result<axioval::engine::EnvelopeSweep, AlignmentError> {
+        self.envelope(request)
+    }
 }
 
 #[cfg(test)]
@@ -1046,7 +1070,7 @@ mod tests {
 
     /// A centreline starting at the origin heading `+X`: `law` over
     /// `length` in plan, rising at `grade`.
-    fn centreline(law: CurvatureLaw, length: f64, grade: f64) -> Centreline {
+    pub(super) fn centreline(law: CurvatureLaw, length: f64, grade: f64) -> Centreline {
         let plan = Curve2::Intrinsic(Intrinsic2::new(
             Frame2 {
                 origin: Point2::new(0.0, 0.0),

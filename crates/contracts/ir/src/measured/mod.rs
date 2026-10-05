@@ -148,6 +148,10 @@ pub enum MeasuredParameterKind {
     /// A word naming something the source declares, such as a discipline,
     /// as written.
     Text,
+    /// A simple polygon in a section plane: at least three `lateral:up`
+    /// vertices in metres, `,`-separated, enclosing an area and never
+    /// crossing or touching itself.
+    Polygon,
 }
 
 /// How exact a measured value can be.
@@ -216,6 +220,8 @@ pub enum MeasuredArgument {
         /// The property's name.
         name: String,
     },
+    /// A simple polygon's `(lateral, up)` vertices, as written.
+    Polygon(Vec<[f64; 2]>),
 }
 
 /// Why a name is no measured value.
@@ -411,7 +417,110 @@ fn argument(kind: MeasuredParameterKind, value: &str) -> Result<MeasuredArgument
                 _ => return Err(format!("`{value}` is no `x,y,z` direction")),
             }
         }
+        MeasuredParameterKind::Polygon => {
+            let vertices: Vec<[f64; 2]> = value
+                .split(',')
+                .map(|vertex| {
+                    let (lateral, up) = vertex.split_once(':')?;
+                    let lateral = lateral.trim().parse::<f64>().ok()?;
+                    let up = up.trim().parse::<f64>().ok()?;
+                    Some([lateral, up])
+                })
+                .collect::<Option<_>>()
+                .ok_or_else(|| {
+                    format!("`{value}` is no polygon of `lateral:up` vertices, `,`-separated")
+                })?;
+            if let Some(problem) = polygon_problem(&vertices) {
+                return Err(format!("`{value}` is no simple polygon: {problem}"));
+            }
+            MeasuredArgument::Polygon(vertices)
+        }
     })
+}
+
+/// Why `vertices` is no simple polygon (at least three finite vertices,
+/// enclosing an area, no edge crossing or touching another but its two
+/// neighbours at their shared vertex), or `None` when it is one.
+#[must_use]
+pub fn polygon_problem(vertices: &[[f64; 2]]) -> Option<String> {
+    let count = vertices.len();
+    if count < 3 {
+        return Some(format!("it has {count} vertices, fewer than three"));
+    }
+    if vertices.iter().flatten().any(|value| !value.is_finite()) {
+        return Some("a coordinate is not finite".into());
+    }
+    let twice_area: f64 = (0..count)
+        .map(|i| {
+            let ([ax, ay], [bx, by]) = (vertices[i], vertices[(i + 1) % count]);
+            ax * by - bx * ay
+        })
+        .sum();
+    if twice_area == 0.0 || !twice_area.is_finite() {
+        return Some("it encloses no area".into());
+    }
+    let edge = |i: usize| (vertices[i], vertices[(i + 1) % count]);
+    for i in 0..count {
+        let (a, b) = edge(i);
+        if a[0].to_bits() == b[0].to_bits() && a[1].to_bits() == b[1].to_bits() {
+            return Some(format!(
+                "vertex {} repeats the one before it",
+                (i + 1) % count + 1
+            ));
+        }
+        for j in i + 1..count {
+            let adjacent = j == i + 1 || (i == 0 && j == count - 1);
+            let (c, d) = edge(j);
+            if adjacent {
+                // Neighbours share one vertex; they may not fold back
+                // onto each other.
+                let (shared, other_a, other_b) = if j == i + 1 { (b, a, d) } else { (a, b, c) };
+                let cross = (other_a[0] - shared[0]) * (other_b[1] - shared[1])
+                    - (other_a[1] - shared[1]) * (other_b[0] - shared[0]);
+                let dot = (other_a[0] - shared[0]) * (other_b[0] - shared[0])
+                    + (other_a[1] - shared[1]) * (other_b[1] - shared[1]);
+                if cross == 0.0 && dot > 0.0 {
+                    return Some(format!("edges {} and {} overlap", i + 1, j + 1));
+                }
+            } else if segments_meet(a, b, c, d) {
+                return Some(format!("edges {} and {} cross or touch", i + 1, j + 1));
+            }
+        }
+    }
+    None
+}
+
+/// Whether the closed segments `ab` and `cd` share a point.
+fn segments_meet(a: [f64; 2], b: [f64; 2], c: [f64; 2], d: [f64; 2]) -> bool {
+    let orient = |p: [f64; 2], q: [f64; 2], r: [f64; 2]| {
+        let value = (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+        if value > 0.0 {
+            1
+        } else if value < 0.0 {
+            -1
+        } else {
+            0
+        }
+    };
+    let within = |p: [f64; 2], q: [f64; 2], r: [f64; 2]| {
+        r[0] >= p[0].min(q[0])
+            && r[0] <= p[0].max(q[0])
+            && r[1] >= p[1].min(q[1])
+            && r[1] <= p[1].max(q[1])
+    };
+    let (o1, o2, o3, o4) = (
+        orient(a, b, c),
+        orient(a, b, d),
+        orient(c, d, a),
+        orient(c, d, b),
+    );
+    if o1 * o2 < 0 && o3 * o4 < 0 {
+        return true;
+    }
+    (o1 == 0 && within(a, b, c))
+        || (o2 == 0 && within(a, b, d))
+        || (o3 == 0 && within(c, d, a))
+        || (o4 == 0 && within(c, d, b))
 }
 
 /// Whether `set` and `name` read a measured value the registry accepts.
@@ -498,5 +607,43 @@ mod tests {
             let error = parse(name).unwrap_err().to_string();
             assert!(error.starts_with(message), "{name}: {error}");
         }
+    }
+
+    #[test]
+    fn a_clearance_envelope_is_a_simple_polygon_of_lateral_up_vertices() {
+        let call = parse(
+            "envelope_intrusions;bodies=IfcWall;envelope=-2:0, 2:0,2:5,-2:5;from=0;to=10;step=1",
+        )
+        .unwrap();
+        assert_eq!(
+            call.argument("envelope"),
+            Some(&MeasuredArgument::Polygon(vec![
+                [-2.0, 0.0],
+                [2.0, 0.0],
+                [2.0, 5.0],
+                [-2.0, 5.0]
+            ]))
+        );
+        for (envelope, reason) in [
+            ("0:0,1:0", "fewer than three"),
+            ("0:0,1:0,2:0", "encloses no area"),
+            ("0:0,3:2,3:0,0:3", "cross or touch"),
+            ("0:0,1:0,1:1,1:0.5", "overlap"),
+            ("0:0;1:0,1:1", "not `key=value`"),
+            ("0:0,1,1:1", "no polygon"),
+            ("0:0,1:0,inf:1", "not finite"),
+        ] {
+            let name = format!(
+                "envelope_intrusions;bodies=IfcWall;envelope={envelope};from=0;to=1;step=1"
+            );
+            let error = parse(&name).unwrap_err().to_string();
+            assert!(error.contains(reason), "{envelope}: {error}");
+        }
+        assert!(polygon_problem(&[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]).is_none());
+        // A step of zero is refused when the name is read.
+        assert!(
+            parse("envelope_intrusions;bodies=IfcWall;envelope=0:0,1:0,1:1;from=0;to=1;step=0")
+                .is_err()
+        );
     }
 }

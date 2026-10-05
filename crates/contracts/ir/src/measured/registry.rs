@@ -894,6 +894,89 @@ const PARAMETER_UNBOUNDED: &str = "a segment of the alignment follows a law the 
 /// The three positions along an alignment take the same parameters.
 const ALONG: &[MeasuredParameter] = &[ALIGNMENT, ALIGNMENT_PATH];
 
+const STATION: MeasuredParameter = MeasuredParameter {
+    key: "station",
+    kind: MeasuredParameterKind::Length { minimum: -1.0e6 },
+    required: true,
+    default: None,
+    help: &en_de(
+        "The station of the section, in metres, as the alignment labels it through its \
+         station equations.",
+        "Die Station des Schnitts, in Metern, wie die Achse sie über ihre \
+         Stationsgleichungen bezeichnet.",
+    ),
+};
+
+const SECTION_SERVICES: &[&str] = &["alignment", "type-hierarchy", "relationship-selection"];
+const SECTION_UNREAD: &str = "the alignment cannot be read as a centreline, not exactly one \
+     alignment is selected, or no station or several distances along it carry the station";
+const SECTION_BODY: &str = "the object's body is unmeasured, is no closed solid, or is measured \
+     through parts whose overlaps a cut cannot tell apart";
+const STATION_OFF_RANGE: &str = "the station lies before the alignment's start or beyond its end";
+
+const ENVELOPE_PARAMETERS: &[MeasuredParameter] = &[
+    MeasuredParameter {
+        key: "bodies",
+        kind: MeasuredParameterKind::SourceKind,
+        required: true,
+        default: None,
+        help: &en_de(
+            "The source kinds of the bodies checked against the envelope, `,`-separated; \
+             subtypes match. Every object of these kinds in the alignment's source.",
+            "Die Quellarten der gegen die Umgrenzung geprüften Körper, durch `,` getrennt; \
+             Untertypen zählen mit. Jedes Objekt dieser Arten in der Quelle der Achse.",
+        ),
+    },
+    MeasuredParameter {
+        key: "envelope",
+        kind: MeasuredParameterKind::Polygon,
+        required: true,
+        default: None,
+        help: &en_de(
+            "The clearance envelope in the section, `lateral:up` vertices in metres, \
+             `,`-separated: lateral horizontal, positive to the left of the direction of \
+             travel, up vertical above the gradient line.",
+            "Die Lichtraumumgrenzung im Schnitt, Eckpunkte `seitlich:oben` in Metern, durch \
+             `,` getrennt: seitlich waagerecht, positiv links der Stationierungsrichtung, \
+             oben lotrecht über der Gradiente.",
+        ),
+    },
+    MeasuredParameter {
+        key: "from",
+        kind: MeasuredParameterKind::Length { minimum: -1.0e6 },
+        required: true,
+        default: None,
+        help: &en_de(
+            "The station the checked range starts at, in metres.",
+            "Die Station, an der der geprüfte Bereich beginnt, in Metern.",
+        ),
+    },
+    MeasuredParameter {
+        key: "to",
+        kind: MeasuredParameterKind::Length { minimum: -1.0e6 },
+        required: true,
+        default: None,
+        help: &en_de(
+            "The station the checked range ends at, in metres; not before `from`.",
+            "Die Station, an der der geprüfte Bereich endet, in Metern; nicht vor `from`.",
+        ),
+    },
+    MeasuredParameter {
+        key: "step",
+        kind: MeasuredParameterKind::Length { minimum: 0.001 },
+        required: true,
+        default: None,
+        help: &en_de(
+            "The plan distance between sampled sections, in metres. Between two samples the \
+             check is bounded, never interpolated; a step too coarse to decide leaves the \
+             value undecided.",
+            "Der Abstand der geprüften Schnitte im Lageplan, in Metern. Zwischen zwei \
+             Schnitten wird die Prüfung abgeschätzt, nie interpoliert; ein zu grober Schritt \
+             lässt den Wert unentschieden.",
+        ),
+    },
+];
+
 /// Every measured value, sorted by name.
 pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
     MeasuredDescriptor {
@@ -2052,6 +2135,35 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              a turning flight's tread meeting it.",
             "Die Breite, mit der ein Podest an einem Ende eines Laufs verglichen wird: die \
              des Laufs oder bei einem gewendelten Lauf die der angrenzenden Stufe.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "envelope_intrusions",
+        parameters: ENVELOPE_PARAMETERS,
+        dimension: None,
+        services: &["alignment", "type-hierarchy"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[
+            "the object is no alignment the service can read as a centreline, or a station \
+             of the range is carried by no distance or by several",
+            "the range lies partly before the alignment's start or beyond its end",
+            "a selected body is unmeasured or is no closed solid",
+        ],
+        label: &en_de(
+            "Clearance envelope intrusions",
+            "Eingriffe in die Lichtraumumgrenzung",
+        ),
+        help: &en_de(
+            "How many of the selected bodies reach into the clearance envelope swept along \
+             the alignment from `from` to `to`, measured on the alignment: the bodies surely \
+             intruding to those that may. Between sampled sections the envelope is grown by \
+             how far it can move, so a body crossing it between two samples is never missed; \
+             one that cannot be decided widens the count.",
+            "Wie viele der ausgewählten Körper in die längs der Achse von `from` bis `to` \
+             geführte Lichtraumumgrenzung hineinragen, gemessen an der Achse: von den sicher \
+             hineinragenden bis zu denen, die hineinragen können. Zwischen den Schnitten wird \
+             die Umgrenzung um ihre mögliche Bewegung vergrößert, sodass ein Körper zwischen \
+             zwei Schnitten nie übersehen wird; ein unentscheidbarer verbreitert die Anzahl.",
         ),
     },
     MeasuredDescriptor {
@@ -3613,6 +3725,60 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              the start, labelled through the station equations the alignment states.",
             "Die Station des Lotfußpunkts des Bezugspunkts auf der Achse: sein Abstand vom Anfang \
              im Lageplan, bezeichnet über die Stationsgleichungen der Achse.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "station_section_area",
+        parameters: &[ALIGNMENT, ALIGNMENT_PATH, STATION],
+        dimension: Some(QuantityDimension::Area),
+        services: SECTION_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[SECTION_UNREAD, STATION_OFF_RANGE, SECTION_BODY],
+        label: &en_de(
+            "Section area at a station",
+            "Schnittfläche an einer Station",
+        ),
+        help: &en_de(
+            "The area of the object's body cut by the vertical plane normal to the alignment \
+             at the station; zero where the plane misses it.",
+            "Die Fläche des Körpers des Objekts im lotrechten Schnitt normal zur Achse an der \
+             Station; null, wo der Schnitt ihn verfehlt.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "station_section_thickness",
+        parameters: &[
+            ALIGNMENT,
+            ALIGNMENT_PATH,
+            STATION,
+            MeasuredParameter {
+                key: "direction",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["lateral", "up"],
+                },
+                required: false,
+                default: Some("up"),
+                help: &en_de(
+                    "Across the section horizontally (`lateral`) or vertically (`up`).",
+                    "Quer durch den Schnitt waagerecht (`lateral`) oder lotrecht (`up`).",
+                ),
+            },
+        ],
+        dimension: Some(QuantityDimension::Length),
+        services: SECTION_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[SECTION_UNREAD, STATION_OFF_RANGE, SECTION_BODY],
+        label: &en_de(
+            "Section thickness at a station",
+            "Schnittdicke an einer Station",
+        ),
+        help: &en_de(
+            "How far the object's section at the station reaches across the direction: from \
+             its lowest to its highest point vertically, or from its rightmost to its leftmost \
+             horizontally; none where the plane misses it.",
+            "Wie weit der Schnitt des Objekts an der Station in der Richtung reicht: lotrecht \
+             vom tiefsten zum höchsten Punkt, waagerecht vom rechten zum linken Rand; keine, \
+             wo der Schnitt ihn verfehlt.",
         ),
     },
     MeasuredDescriptor {

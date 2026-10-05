@@ -38,6 +38,8 @@ use std::sync::Arc;
 use axioval_ir::{Evidence, ObjectId};
 use thiserror::Error;
 
+use crate::section::{EnvelopeRequest, EnvelopeSweep, Section, SectionRequest};
+
 /// Failure to locate a point along an alignment or read its parameters.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum AlignmentError {
@@ -355,6 +357,29 @@ pub trait AlignmentService: Send + Sync + 'static {
             "this alignment service reads no alignment parameters".into(),
         ))
     }
+
+    /// The sections of bodies at a station ([`Section`]).
+    ///
+    /// The default refuses, so a service that cuts no bodies fails closed
+    /// rather than answering with empty sections.
+    fn measure_section(&self, request: &SectionRequest) -> Result<Section, AlignmentError> {
+        let _ = request;
+        Err(AlignmentError::Unavailable(
+            "this alignment service cuts no sections".into(),
+        ))
+    }
+
+    /// Which bodies reach into a clearance envelope swept along a range
+    /// ([`EnvelopeSweep`]).
+    ///
+    /// The default refuses, so a service that sweeps no envelope fails
+    /// closed rather than answering that every body is clear.
+    fn measure_envelope(&self, request: &EnvelopeRequest) -> Result<EnvelopeSweep, AlignmentError> {
+        let _ = request;
+        Err(AlignmentError::Unavailable(
+            "this alignment service sweeps no clearance envelope".into(),
+        ))
+    }
 }
 
 /// Registry handle for an [`AlignmentService`].
@@ -392,6 +417,29 @@ impl AlignmentServiceHandle {
             return Err(AlignmentError::InvalidMeasurement);
         }
         Ok(value)
+    }
+
+    /// The sections of bodies at a station. An answer about another
+    /// request is refused.
+    pub fn measure_section(&self, request: &SectionRequest) -> Result<Section, AlignmentError> {
+        let section = self.0.measure_section(request)?;
+        if section.request() != request {
+            return Err(AlignmentError::InvalidMeasurement);
+        }
+        Ok(section)
+    }
+
+    /// Which bodies reach into a clearance envelope swept along a range.
+    /// An answer about another request is refused.
+    pub fn measure_envelope(
+        &self,
+        request: &EnvelopeRequest,
+    ) -> Result<EnvelopeSweep, AlignmentError> {
+        let sweep = self.0.measure_envelope(request)?;
+        if sweep.request() != request {
+            return Err(AlignmentError::InvalidMeasurement);
+        }
+        Ok(sweep)
     }
 }
 

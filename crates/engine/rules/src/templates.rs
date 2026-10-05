@@ -10,6 +10,8 @@
 
 use std::collections::BTreeMap;
 
+mod compare;
+
 use axioval_engine::expression::{Evaluation, Reason, Value, evaluate};
 use axioval_engine::template::{
     Check, Condition, Decision, End, Expect, Form, Members, Operand, Sign, Template, TemplateValue,
@@ -135,6 +137,8 @@ struct Plan<'t> {
     constants: BTreeMap<&'t str, Constant>,
     /// Each value step with its expression, the rule's parameters bound in.
     values: Vec<(&'t TemplateValue, Expression)>,
+    /// The comparison a [`Decision::Compare`] judges, bound.
+    comparison: Option<compare::Bound>,
 }
 
 fn stated(rule: &CompiledRule, name: &str) -> bool {
@@ -490,11 +494,16 @@ fn bind<'t>(template: &'t Template, rule: &CompiledRule) -> Result<Plan<'t>, Una
         .iter()
         .map(|step| (step, bound(&step.expression, &constants)))
         .collect();
+    let comparison = match &form.decision {
+        Decision::Compare { comparison, .. } => Some(compare::bind(rule, comparison)?),
+        Decision::Within { .. } => None,
+    };
     Ok(Plan {
         template,
         form,
         constants,
         values,
+        comparison,
     })
 }
 
@@ -528,6 +537,7 @@ fn effective(plan: &Plan<'_>) -> Decision {
                     .collect(),
             }
         }
+        decision @ Decision::Compare { .. } => decision.clone(),
     }
 }
 
@@ -595,7 +605,10 @@ fn within(plan: &Plan<'_>, read: &Read, decision: &Decision) -> Option<Judged> {
         minimum,
         maximum,
         rounding,
-    } = decision;
+    } = decision
+    else {
+        return None;
+    };
     let (lower, upper) = interval(plan, read, Operand::Value(value))?;
     let mut magnitudes = Vec::new();
     for magnitude in rounding {
@@ -756,11 +769,20 @@ fn placeholder(plan: &Plan<'_>, read: &Read, key: &str) -> Option<String> {
         match name {
             "bound" => return read.bound.as_deref().map(bound_text),
             "why" => return read.why.clone(),
+            "target" if plan.comparison.is_some() => {
+                return plan.comparison.as_ref().map(|bound| bound.target.clone());
+            }
             _ => {}
         }
         if let Some(text) = read.named.get(name) {
             return Some(text.clone());
         }
+    }
+    if let ("tolerance", "suffix") = (name, format) {
+        return plan
+            .comparison
+            .as_ref()
+            .map(compare::Bound::tolerance_suffix);
     }
     match format {
         // The bound as the judge words it, its number as declared.
@@ -995,6 +1017,30 @@ fn judge_object(
         if let Some(value) = &stated {
             read.stated.insert(step.name, value.clone());
         }
+        // The value a comparison judges is judged as the source states it:
+        // an absence, `null` and a value of any kind reach the comparison.
+        if matches!(decision, Decision::Compare { value, .. } if *value == step.name) {
+            if stated.is_some() {
+                continue;
+            }
+            // A reserved set the evaluator reads apart (`axioval:value`):
+            // judge what the property resolution states for it.
+            if let Some((set, name)) = property_read(&expression) {
+                match crate::support::resolve(
+                    context,
+                    object,
+                    crate::support::PropertyRef { set, name },
+                ) {
+                    Ok(resolved) => {
+                        read.evidence.truncate(before);
+                        read.evidence.extend(resolved.evidence());
+                        read.stated.insert(step.name, resolved.value().cloned());
+                        continue;
+                    }
+                    Err((reason, message)) => return Outcome::Open(reason, message).into(),
+                }
+            }
+        }
         match evaluation.outcome {
             Ok(Value::Null) => {
                 let message = step.absent.map_or_else(
@@ -1056,6 +1102,15 @@ fn judge_object(
                 })
                 .collect()
         });
+    if let (Decision::Compare { value, .. }, Some(comparison)) = (decision, &plan.comparison) {
+        let stated = read.stated.get(value).cloned().flatten();
+        let outcome = match comparison.holds(stated.as_ref()) {
+            Ok(true) => Outcome::Passed,
+            Ok(false) => Outcome::finding(render(plan, &read, plan.form.fail), read.evidence),
+            Err(why) => Outcome::Open(NotEvaluatedReason::InvalidEvidence, why),
+        };
+        return Judgement { outcome, row };
+    }
     let Some(judged) = within(plan, &read, decision) else {
         return Judgement {
             outcome: Outcome::Open(
@@ -1310,6 +1365,27 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
         .ok_or_else(|| ForkError::NotATemplate(capability.id().to_owned()))?;
     let plan = bind(template, rule)
         .map_err(|(_, message)| ForkError::Declaration(format!("{}: {message}", template.name)))?;
+    if let (Decision::Compare { value: subject, .. }, Some(comparison)) =
+        (&plan.form.decision, &plan.comparison)
+    {
+        let value = plan
+            .values
+            .iter()
+            .find(|(step, _)| step.name == *subject)
+            .map_or_else(
+                || Expression::Derived {
+                    name: (*subject).to_owned(),
+                    label: None,
+                },
+                |(_, expression)| expression.clone(),
+            );
+        let requirement = comparison
+            .expression(value)
+            .map_err(ForkError::Inexpressible)?;
+        return Ok(Fork {
+            requirement: bound(&requirement, &plan.constants),
+        });
+    }
     let values = match &plan.form.members {
         None => plan.values.clone(),
         Some(members) => {

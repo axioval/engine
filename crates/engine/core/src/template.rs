@@ -348,6 +348,142 @@ pub enum Decision {
         maximum: Option<Vec<Term>>,
         rounding: Vec<Magnitude>,
     },
+    /// The generic comparison judge: the stated value `value` against the
+    /// target a rule states, by the operator it names ([`Comparison`]),
+    /// decided by the one comparison every rule uses
+    /// ([`crate::comparison`]).
+    Compare {
+        value: &'static str,
+        comparison: Comparison,
+    },
+}
+
+/// A comparison a rule states as an operator word and at most one target
+/// parameter: what [`Decision::Compare`] judges.
+///
+/// Binding checks the statement in the order of `targets`: the operator
+/// (`operator`) takes exactly one stated target, none for a `presence`
+/// word (``operator `x` takes 1 target value(s); 0 given``); the stated
+/// target's kind admits the operator (``operator `x` does not apply to a
+/// number``); `precision` (read before the first target that is not a
+/// number) applies to a date or date-time target only; a `matches`
+/// pattern compiles; and a declared tolerance (`tolerance`,
+/// `relative_tolerance` or `decimals`, where `tolerance` holds) applies
+/// to a numeric target only.
+///
+/// The judge compares what the source states. A comparison presupposes a
+/// value: an absent property, `null` or a value of another kind than the
+/// target fails every operator but a presence test, which reads blank
+/// text as undefined. A quantity is compared only with a quantity target
+/// of its dimension: against a unit-less target, or a unit-less number
+/// against a quantity target, it leaves the object not evaluated, as an
+/// integer beyond 2^53 compared under a tolerance does.
+///
+/// Messages read `{target}`, the stated target as the rule declares it
+/// after a space (nothing for a presence test), and `{tolerance:suffix}`,
+/// the declared tolerance (`within tolerance 0.01` in parentheses, nothing
+/// when exact).
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Comparison {
+    /// The string parameter naming the operator.
+    pub operator: &'static str,
+    /// The operator words that test presence and take no target.
+    pub presence: &'static [Presence],
+    /// The target parameters, in the order a statement is checked.
+    pub targets: Vec<ComparisonTarget>,
+    /// The boolean parameter that, `false`, folds the case of text.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub case_sensitive: Option<&'static str>,
+    /// The string parameter stating a date comparison's precision (`day`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub precision: Option<&'static str>,
+    /// Whether the rule's tolerance parameters apply to numeric targets.
+    pub tolerance: bool,
+}
+
+/// An operator word testing presence: whether the value must be defined.
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Presence {
+    pub word: &'static str,
+    pub defined: bool,
+}
+
+/// A parameter a comparison may take its target from, its kind and the
+/// operator words that apply to it.
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ComparisonTarget {
+    pub parameter: &'static str,
+    pub kind: TargetKind,
+    pub operators: &'static [Operation],
+}
+
+/// The kind of value a comparison target states.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TargetKind {
+    Integer,
+    Number,
+    Quantity,
+    Date,
+    DateTime,
+    Boolean,
+    Texts,
+    Text,
+}
+
+impl TargetKind {
+    /// How a message names the kind: `operator `x` does not apply to …`.
+    #[must_use]
+    pub fn noun(self) -> &'static str {
+        match self {
+            Self::Integer => "an integer",
+            Self::Number => "a number",
+            Self::Quantity => "a quantity",
+            Self::Date | Self::DateTime => "a date",
+            Self::Boolean => "a boolean",
+            Self::Texts => "a text list",
+            Self::Text => "text",
+        }
+    }
+
+    /// Whether a tolerance applies to the kind.
+    #[must_use]
+    pub fn is_numeric(self) -> bool {
+        matches!(self, Self::Integer | Self::Number | Self::Quantity)
+    }
+
+    /// Whether a precision applies to the kind.
+    #[must_use]
+    pub fn is_temporal(self) -> bool {
+        matches!(self, Self::Date | Self::DateTime)
+    }
+}
+
+/// An operator word and the test it names.
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Operation {
+    pub word: &'static str,
+    pub test: Test,
+}
+
+/// What an operator tests of a value against its target.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", content = "order", rename_all = "camelCase")]
+pub enum Test {
+    /// An order or equality.
+    Order(crate::comparison::Order),
+    /// The text contains the target.
+    Contains,
+    /// The whole text matches the target regular expression.
+    Matches,
+    /// The text is one of the target list.
+    OneOf,
+    /// The text is none of the target list.
+    NoneOf,
 }
 
 /// One term of a bound: an operand added or subtracted, left to right.
@@ -444,6 +580,7 @@ impl Decision {
     /// verdicts except where a value lies within a unit in the last place
     /// of the widened bound, which the expression leaves undecided.
     #[must_use]
+    #[allow(clippy::too_many_lines)]
     pub fn expression(&self, value: &dyn Fn(&str) -> Expression) -> Expression {
         match self {
             Self::Within {
@@ -544,6 +681,130 @@ impl Decision {
                     label: None,
                 }
             }
+            Self::Compare {
+                value: subject,
+                comparison,
+            } => comparison.expression(&value(subject)),
+        }
+    }
+}
+
+impl Test {
+    /// The expression operator of a test that compares two operands.
+    fn operator(self) -> Option<ExpressionComparison> {
+        use crate::comparison::Order;
+        Some(match self {
+            Self::Order(Order::Equal) => ExpressionComparison::Equals,
+            Self::Order(Order::NotEqual) => ExpressionComparison::NotEquals,
+            Self::Order(Order::Less) => ExpressionComparison::LessThan,
+            Self::Order(Order::LessOrEqual) => ExpressionComparison::LessThanOrEquals,
+            Self::Order(Order::Greater) => ExpressionComparison::GreaterThan,
+            Self::Order(Order::GreaterOrEqual) => ExpressionComparison::GreaterThanOrEquals,
+            Self::Contains => ExpressionComparison::Contains,
+            Self::Matches => ExpressionComparison::Matches,
+            Self::OneOf | Self::NoneOf => return None,
+        })
+    }
+
+    /// `subject` tested against `target`.
+    #[must_use]
+    pub fn expression(
+        self,
+        subject: Expression,
+        target: Expression,
+        case_sensitive: bool,
+    ) -> Expression {
+        match self.operator() {
+            Some(operator) => Expression::Compare {
+                operator,
+                left: boxed(subject),
+                right: boxed(target),
+                case_sensitive,
+                label: None,
+            },
+            None if self == Self::OneOf => Expression::OneOf {
+                operand: boxed(subject),
+                values: vec![target],
+                case_sensitive,
+                label: None,
+            },
+            None => Expression::NoneOf {
+                operand: boxed(subject),
+                values: vec![target],
+                case_sensitive,
+                label: None,
+            },
+        }
+    }
+}
+
+impl Comparison {
+    /// The comparison as one expression over `subject`, for a block editor:
+    /// an `if` choosing, by the operator word and the stated target, the
+    /// test it names (`isDefined`, `isUndefined`, `compare`, `oneOf`,
+    /// `noneOf`), each reading the target as a `parameter`. A rule forked
+    /// from the template states only its own test, its target a literal.
+    #[must_use]
+    pub fn expression(&self, subject: &Expression) -> Expression {
+        let parameter = |name: &str| Expression::Parameter {
+            name: name.to_owned(),
+            label: None,
+        };
+        let names = |word: &str| Expression::Compare {
+            operator: ExpressionComparison::Equals,
+            left: boxed(parameter(self.operator)),
+            right: boxed(Expression::Literal {
+                value: ScalarValue::String {
+                    value: word.to_owned(),
+                },
+                label: None,
+            }),
+            case_sensitive: true,
+            label: Some(format!("`{}` is `{word}`", self.operator)),
+        };
+        let mut branches: Vec<axioval_ir::contract::Branch> = self
+            .presence
+            .iter()
+            .map(|presence| axioval_ir::contract::Branch {
+                when: names(presence.word),
+                then: if presence.defined {
+                    Expression::IsDefined {
+                        operand: boxed(subject.clone()),
+                        label: None,
+                    }
+                } else {
+                    Expression::IsUndefined {
+                        operand: boxed(subject.clone()),
+                        label: None,
+                    }
+                },
+            })
+            .collect();
+        for target in &self.targets {
+            for operation in target.operators {
+                branches.push(axioval_ir::contract::Branch {
+                    when: Expression::And {
+                        operands: vec![
+                            Expression::IsDefined {
+                                operand: boxed(parameter(target.parameter)),
+                                label: Some(format!("`{}` is stated", target.parameter)),
+                            },
+                            names(operation.word),
+                        ],
+                        label: None,
+                    },
+                    then: operation.test.expression(
+                        subject.clone(),
+                        parameter(target.parameter),
+                        true,
+                    ),
+                });
+            }
+        }
+        Expression::If {
+            branches,
+            otherwise: boxed(Expression::Null { label: None }),
+            label: None,
         }
     }
 }

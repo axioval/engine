@@ -7,7 +7,7 @@ mod common;
 use axioval_engine::CapabilityEvaluation;
 use axioval_ir::contract::{ComparisonOperator, ParameterValue, Quantifier, Selector};
 use axioval_ir::{NotEvaluatedReason, PropertyValue, TemporalPrecision};
-use axioval_rules::{ManualIssue, PropertyComparison, PropertyPredicate, PropertyValueConstraint};
+use axioval_rules::{ManualIssue, PropertyComparison, PropertyValueConstraint};
 use common::{Model, findings, flagged, number, property, rule, string, strings, unevaluated};
 
 const SET: &str = "Pset";
@@ -71,8 +71,8 @@ fn predicate(operator: &str, target: Vec<(&str, ParameterValue)>) -> CapabilityE
         ("operator", string(operator)),
     ];
     parameters.extend(target);
-    model().evaluate(
-        &PropertyPredicate,
+    common::predicate(
+        model(),
         &rule(
             "axioval:capability.property-predicate",
             Selector::All,
@@ -722,8 +722,8 @@ fn a_zoned_date_equals_no_unzoned_date() {
 #[test]
 fn zoned_dates_compare_as_xml_schema_orders_them_in_every_capability() {
     let predicate = |operator: &str| {
-        zoned_model().evaluate(
-            &PropertyPredicate,
+        common::predicate(
+            zoned_model(),
             &rule(
                 "axioval:capability.property-predicate",
                 Selector::All,

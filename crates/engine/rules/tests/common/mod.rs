@@ -24,6 +24,34 @@ pub fn source() -> SourceId {
     SourceId::new("test", "model").unwrap()
 }
 
+/// Holds a capability rebuilt as a template to the implementation it
+/// replaced under the whole outside contract (`Parity::contract()`): the
+/// same findings word for word, counts, evidence exactness, related
+/// objects and not-evaluated outcomes.
+pub fn hold_to_reference(
+    capability: &str,
+    reference: &CapabilityEvaluation,
+    template: &CapabilityEvaluation,
+) {
+    use axioval_rules::parity::{Observations, Parity};
+    let parity = Parity::contract().compare(
+        (capability, &Observations::of_evaluation(reference)),
+        ("template", &Observations::of_evaluation(template)),
+    );
+    assert!(parity.holds(), "{}", parity.diff());
+}
+
+/// Evaluates `rule` with `property-predicate`, which runs as a template,
+/// holding it to the implementation it replaced (`hold_to_reference`).
+pub fn predicate(model: Model, rule: &CompiledRule) -> CapabilityEvaluation {
+    let template = model
+        .clone()
+        .evaluate(&axioval_rules::PropertyPredicate, rule);
+    let reference = model.evaluate(&axioval_rules::reference::PropertyPredicate, rule);
+    hold_to_reference("property-predicate", &reference, &template);
+    template
+}
+
 pub fn id(local: &str) -> ObjectId {
     ObjectId::new(source(), local).unwrap()
 }

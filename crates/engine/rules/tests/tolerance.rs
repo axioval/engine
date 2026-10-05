@@ -6,7 +6,7 @@ mod common;
 use axioval_engine::CapabilityEvaluation;
 use axioval_ir::contract::ParameterValue;
 use axioval_ir::{NotEvaluatedReason, PropertyValue, QuantityDimension};
-use axioval_rules::{PropertyComparison, PropertyPredicate, UniqueValue};
+use axioval_rules::{PropertyComparison, UniqueValue};
 use common::{
     Model, findings, flagged, integer, kind, number, property, rule, selector, string, unevaluated,
 };
@@ -196,8 +196,8 @@ mod property_predicate {
             ("operator", string(operator)),
         ];
         parameters.extend(extra);
-        model.evaluate(
-            &PropertyPredicate,
+        common::predicate(
+            model,
             &rule(
                 "axioval:capability.property-predicate",
                 kind("slab"),

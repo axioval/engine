@@ -7,8 +7,7 @@ mod common;
 use axioval_engine::{CapabilityEvaluation, RuleCapability};
 use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector};
 use axioval_rules::{
-    ManualIssue, PropertyDataType, PropertyExists, PropertyPredicate, PropertyRequired,
-    PropertyValueConstraint,
+    ManualIssue, PropertyDataType, PropertyExists, PropertyRequired, PropertyValueConstraint,
 };
 use common::{Model, boolean, flagged, property, rule, string, strings, unevaluated};
 
@@ -126,8 +125,8 @@ fn its_value_is_never_compared() {
 
 #[test]
 fn a_predicate_or_selector_on_it_is_not_evaluated() {
-    let predicate = model().evaluate(
-        &PropertyPredicate,
+    let predicate = common::predicate(
+        model(),
         &rule(
             "axioval:capability.property-predicate",
             Selector::All,

@@ -9,7 +9,7 @@ use axioval_ir::PropertyValue;
 use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector};
 use axioval_rules::{
     BooleanPropertyEquals, ManualIssue, PropertyComparison, PropertyDataType, PropertyExists,
-    PropertyPredicate, PropertyRequired, PropertyValueConstraint,
+    PropertyRequired, PropertyValueConstraint,
 };
 use common::{Model, boolean, findings, flagged, kind, number, property, rule, selector, string};
 
@@ -113,8 +113,8 @@ fn no_predicate_passes() {
         ("not_equal", ("number", number(42.0))),
         ("equal", ("text", string("Foo"))),
     ] {
-        let predicate = model().evaluate(
-            &PropertyPredicate,
+        let predicate = common::predicate(
+            model(),
             &rule(
                 "axioval:capability.property-predicate",
                 kind("wall"),

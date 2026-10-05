@@ -5,7 +5,7 @@ mod common;
 
 use axioval_ir::contract::{ParameterValue, Selector};
 use axioval_ir::{NotEvaluatedReason, PropertyValue, QuantityDimension};
-use axioval_rules::{PropertyComparison, PropertyPredicate};
+use axioval_rules::PropertyComparison;
 use common::{Model, findings, flagged, kind, number, property, selector, string, unevaluated};
 
 fn length(value: f64) -> PropertyValue {
@@ -30,8 +30,8 @@ fn slab_depth(target: ParameterValue) -> axioval_engine::CapabilityEvaluation {
         .value("thin", "Pset", "Depth", length(0.18))
         .value("thick", "Pset", "Depth", length(0.3))
         .value("plain", "Pset", "Depth", PropertyValue::Decimal(0.3));
-    model.evaluate(
-        &PropertyPredicate,
+    common::predicate(
+        model,
         &common::rule(
             "axioval:capability.property-predicate",
             Selector::All,

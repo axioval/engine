@@ -136,12 +136,26 @@ fn a_template_s_composition_expands_into_blocks_and_forks() {
     for id in [
         "axioval:capability.body-extent",
         "axioval:capability.plan-area",
+        "axioval:capability.property-predicate",
         "axioval:capability.triangle-count",
     ] {
         assert!(
             templated.contains(&id),
             "{id} is no template: {templated:?}"
         );
+    }
+    // Every template's forms expand into blocks that map back to them.
+    for capability in capabilities
+        .iter()
+        .filter(|capability| capability.get("template").is_some())
+    {
+        for requirement in capability["template"]["requirements"].as_array().unwrap() {
+            let expression: Expression =
+                serde_json::from_value(requirement["expression"].clone()).unwrap();
+            expression.validate().unwrap();
+            let blocks = serde_json::from_value(requirement["blocks"].clone()).unwrap();
+            assert_eq!(from_blocks(&blocks).unwrap(), expression);
+        }
     }
     let template = &capabilities
         .iter()

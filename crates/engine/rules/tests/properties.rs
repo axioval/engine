@@ -433,13 +433,26 @@ fn predicate(actual: i64, operator: &str, expected: i64) -> axioval_engine::Capa
             ("value".into(), ParameterValue::Integer { value: expected }),
         ]),
     };
-    PropertyPredicate.evaluate(
-        &RuleContext {
-            project: &project,
-            services: &services,
-        },
-        &rule,
-    )
+    let context = RuleContext {
+        project: &project,
+        services: &services,
+    };
+    let template = PropertyPredicate.evaluate(&context, &rule);
+    let reference = axioval_rules::reference::PropertyPredicate.evaluate(&context, &rule);
+    // `property-predicate` runs as a template: hold it to the
+    // implementation it replaced under the whole outside contract.
+    let parity = axioval_rules::parity::Parity::contract().compare(
+        (
+            "property-predicate",
+            &axioval_rules::parity::Observations::of_evaluation(&reference),
+        ),
+        (
+            "template",
+            &axioval_rules::parity::Observations::of_evaluation(&template),
+        ),
+    );
+    assert!(parity.holds(), "{}", parity.diff());
+    template
 }
 
 #[test]

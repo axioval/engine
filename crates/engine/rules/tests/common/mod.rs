@@ -41,6 +41,41 @@ pub fn hold_to_reference(
     assert!(parity.holds(), "{}", parity.diff());
 }
 
+/// A capability that runs as a template, held to the implementation it
+/// replaced on every evaluation: both run on the same context, are held to
+/// each other under `Parity::contract()` (`hold_to_reference`), and the
+/// template's evaluation is returned. Tests evaluate it in the template's
+/// place, so every fixture of the capability is a parity check.
+pub struct Held(
+    pub &'static (dyn RuleCapability + Sync),
+    pub &'static (dyn RuleCapability + Sync),
+);
+
+impl RuleCapability for Held {
+    fn id(&self) -> &'static str {
+        self.0.id()
+    }
+
+    fn parameters(&self) -> Vec<axioval_engine::ParameterDescriptor> {
+        self.0.parameters()
+    }
+
+    fn grades_deviation(&self) -> bool {
+        self.0.grades_deviation()
+    }
+
+    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
+        let template = self.0.evaluate(context, rule);
+        let reference = self.1.evaluate(context, rule);
+        hold_to_reference(self.0.id(), &reference, &template);
+        template
+    }
+
+    fn template(&self) -> Option<&axioval_engine::template::Template> {
+        self.0.template()
+    }
+}
+
 /// Evaluates `rule` with `property-predicate`, which runs as a template,
 /// holding it to the implementation it replaced (`hold_to_reference`).
 pub fn predicate(model: Model, rule: &CompiledRule) -> CapabilityEvaluation {

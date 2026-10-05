@@ -12052,7 +12052,704 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "object-count",
+        "declaration": [
+          {
+            "kind": "kind",
+            "parameter": "minimum"
+          },
+          {
+            "kind": "kind",
+            "parameter": "maximum"
+          },
+          {
+            "kind": "nonNegative",
+            "parameters": [
+              "minimum"
+            ],
+            "message": "minimum is negative"
+          },
+          {
+            "kind": "nonNegative",
+            "parameters": [
+              "maximum"
+            ],
+            "message": "maximum is negative"
+          },
+          {
+            "kind": "ordered",
+            "low": "minimum",
+            "high": "maximum",
+            "message": "minimum exceeds maximum"
+          },
+          {
+            "kind": "disciplines",
+            "parameter": "disciplines"
+          },
+          {
+            "kind": "kind",
+            "parameter": "across_sources"
+          }
+        ],
+        "texts": [
+          {
+            "name": "matched",
+            "when": {
+              "kind": "zero",
+              "value": "count"
+            },
+            "text": "no object matches the selection {place}"
+          },
+          {
+            "name": "matched",
+            "text": "{count:least} object(s) match the selection {place}"
+          }
+        ],
+        "forms": [
+          {
+            "when": [
+              "minimum"
+            ],
+            "values": [
+              {
+                "name": "count",
+                "expression": {
+                  "kind": "aggregate",
+                  "function": "count",
+                  "over": {
+                    "kind": "selector",
+                    "selector": {
+                      "kind": "expression",
+                      "expression": {
+                        "kind": "parameter",
+                        "name": "selection",
+                        "label": "the objects the rule selects in the scope"
+                      }
+                    }
+                  },
+                  "label": "objects selected in the scope"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "count",
+              "minimum": [
+                {
+                  "sign": "plus",
+                  "operand": {
+                    "kind": "parameter",
+                    "name": "minimum"
+                  }
+                }
+              ],
+              "maximum": [
+                {
+                  "sign": "plus",
+                  "operand": {
+                    "kind": "parameter",
+                    "name": "maximum"
+                  }
+                }
+              ],
+              "rounding": []
+            },
+            "fail": "{matched}; required {required:exactly}",
+            "undecided": "object-count: {count:least} object(s) match the selection {place} and {undecided} more may; required {required:exactly}",
+            "scope": {
+              "across": "across_sources",
+              "disciplines": "disciplines",
+              "messages": {
+                "source": "in source `{source}`",
+                "project": "in the project",
+                "noSource": "object-count: the project has no source to count in",
+                "noDiscipline": "object-count: no source plays {disciplines}, so there is no source to count in",
+                "undeclared": "object-count: source `{source}` declares no discipline, so whether it is counted is unknown",
+                "undeclaredMember": "source `{source}` declares no discipline, so whether this object is counted is unknown",
+                "unlisted": "object-count: its resource objects cannot be listed: {why}",
+                "noDisciplines": "object-count: source disciplines are not available outside an evidence session"
+              }
+            }
+          },
+          {
+            "when": [
+              "maximum"
+            ],
+            "values": [
+              {
+                "name": "count",
+                "expression": {
+                  "kind": "aggregate",
+                  "function": "count",
+                  "over": {
+                    "kind": "selector",
+                    "selector": {
+                      "kind": "expression",
+                      "expression": {
+                        "kind": "parameter",
+                        "name": "selection",
+                        "label": "the objects the rule selects in the scope"
+                      }
+                    }
+                  },
+                  "label": "objects selected in the scope"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "count",
+              "minimum": [
+                {
+                  "sign": "plus",
+                  "operand": {
+                    "kind": "parameter",
+                    "name": "minimum"
+                  }
+                }
+              ],
+              "maximum": [
+                {
+                  "sign": "plus",
+                  "operand": {
+                    "kind": "parameter",
+                    "name": "maximum"
+                  }
+                }
+              ],
+              "rounding": []
+            },
+            "fail": "{matched}; required {required:exactly}",
+            "undecided": "object-count: {count:least} object(s) match the selection {place} and {undecided} more may; required {required:exactly}",
+            "scope": {
+              "across": "across_sources",
+              "disciplines": "disciplines",
+              "messages": {
+                "source": "in source `{source}`",
+                "project": "in the project",
+                "noSource": "object-count: the project has no source to count in",
+                "noDiscipline": "object-count: no source plays {disciplines}, so there is no source to count in",
+                "undeclared": "object-count: source `{source}` declares no discipline, so whether it is counted is unknown",
+                "undeclaredMember": "source `{source}` declares no discipline, so whether this object is counted is unknown",
+                "unlisted": "object-count: its resource objects cannot be listed: {why}",
+                "noDisciplines": "object-count: source disciplines are not available outside an evidence session"
+              }
+            }
+          },
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "count",
+                "expression": {
+                  "kind": "aggregate",
+                  "function": "count",
+                  "over": {
+                    "kind": "selector",
+                    "selector": {
+                      "kind": "expression",
+                      "expression": {
+                        "kind": "parameter",
+                        "name": "selection",
+                        "label": "the objects the rule selects in the scope"
+                      }
+                    }
+                  },
+                  "label": "objects selected in the scope"
+                }
+              },
+              {
+                "name": "one",
+                "expression": {
+                  "kind": "literal",
+                  "value": {
+                    "type": "integer",
+                    "value": 1
+                  },
+                  "label": "an existence check"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "count",
+              "minimum": [
+                {
+                  "sign": "plus",
+                  "operand": {
+                    "kind": "value",
+                    "name": "one"
+                  }
+                }
+              ],
+              "rounding": []
+            },
+            "fail": "{matched}; required {required:exactly}",
+            "undecided": "object-count: {count:least} object(s) match the selection {place} and {undecided} more may; required {required:exactly}",
+            "scope": {
+              "across": "across_sources",
+              "disciplines": "disciplines",
+              "messages": {
+                "source": "in source `{source}`",
+                "project": "in the project",
+                "noSource": "object-count: the project has no source to count in",
+                "noDiscipline": "object-count: no source plays {disciplines}, so there is no source to count in",
+                "undeclared": "object-count: source `{source}` declares no discipline, so whether it is counted is unknown",
+                "undeclaredMember": "source `{source}` declares no discipline, so whether this object is counted is unknown",
+                "unlisted": "object-count: its resource objects cannot be listed: {why}",
+                "noDisciplines": "object-count: source disciplines are not available outside an evidence session"
+              }
+            }
+          }
+        ],
+        "requirements": [
+          {
+            "when": [
+              "minimum"
+            ],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "compare",
+                  "operator": "greaterThanOrEquals",
+                  "left": {
+                    "kind": "aggregate",
+                    "function": "count",
+                    "over": {
+                      "kind": "selector",
+                      "selector": {
+                        "kind": "expression",
+                        "expression": {
+                          "kind": "parameter",
+                          "name": "selection",
+                          "label": "the objects the rule selects in the scope"
+                        }
+                      }
+                    },
+                    "label": "objects selected in the scope"
+                  },
+                  "right": {
+                    "kind": "parameter",
+                    "name": "minimum"
+                  },
+                  "label": "at least the lower bound"
+                },
+                {
+                  "kind": "compare",
+                  "operator": "lessThanOrEquals",
+                  "left": {
+                    "kind": "aggregate",
+                    "function": "count",
+                    "over": {
+                      "kind": "selector",
+                      "selector": {
+                        "kind": "expression",
+                        "expression": {
+                          "kind": "parameter",
+                          "name": "selection",
+                          "label": "the objects the rule selects in the scope"
+                        }
+                      }
+                    },
+                    "label": "objects selected in the scope"
+                  },
+                  "right": {
+                    "kind": "parameter",
+                    "name": "maximum"
+                  },
+                  "label": "at most the upper bound"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.compare",
+                      "label": "at least the lower bound",
+                      "fields": {
+                        "operator": "greaterThanOrEquals"
+                      },
+                      "inputs": {
+                        "left": {
+                          "block": {
+                            "type": "expression.aggregate",
+                            "label": "objects selected in the scope",
+                            "fields": {
+                              "function": "count"
+                            },
+                            "inputs": {
+                              "over": {
+                                "block": {
+                                  "type": "source.selector",
+                                  "inputs": {
+                                    "selector": {
+                                      "block": {
+                                        "type": "selector.expression",
+                                        "inputs": {
+                                          "expression": {
+                                            "block": {
+                                              "type": "expression.parameter",
+                                              "label": "the objects the rule selects in the scope",
+                                              "fields": {
+                                                "name": "selection"
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "right": {
+                          "block": {
+                            "type": "expression.parameter",
+                            "fields": {
+                              "name": "minimum"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.compare",
+                      "label": "at most the upper bound",
+                      "fields": {
+                        "operator": "lessThanOrEquals"
+                      },
+                      "inputs": {
+                        "left": {
+                          "block": {
+                            "type": "expression.aggregate",
+                            "label": "objects selected in the scope",
+                            "fields": {
+                              "function": "count"
+                            },
+                            "inputs": {
+                              "over": {
+                                "block": {
+                                  "type": "source.selector",
+                                  "inputs": {
+                                    "selector": {
+                                      "block": {
+                                        "type": "selector.expression",
+                                        "inputs": {
+                                          "expression": {
+                                            "block": {
+                                              "type": "expression.parameter",
+                                              "label": "the objects the rule selects in the scope",
+                                              "fields": {
+                                                "name": "selection"
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "right": {
+                          "block": {
+                            "type": "expression.parameter",
+                            "fields": {
+                              "name": "maximum"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "when": [
+              "maximum"
+            ],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "compare",
+                  "operator": "greaterThanOrEquals",
+                  "left": {
+                    "kind": "aggregate",
+                    "function": "count",
+                    "over": {
+                      "kind": "selector",
+                      "selector": {
+                        "kind": "expression",
+                        "expression": {
+                          "kind": "parameter",
+                          "name": "selection",
+                          "label": "the objects the rule selects in the scope"
+                        }
+                      }
+                    },
+                    "label": "objects selected in the scope"
+                  },
+                  "right": {
+                    "kind": "parameter",
+                    "name": "minimum"
+                  },
+                  "label": "at least the lower bound"
+                },
+                {
+                  "kind": "compare",
+                  "operator": "lessThanOrEquals",
+                  "left": {
+                    "kind": "aggregate",
+                    "function": "count",
+                    "over": {
+                      "kind": "selector",
+                      "selector": {
+                        "kind": "expression",
+                        "expression": {
+                          "kind": "parameter",
+                          "name": "selection",
+                          "label": "the objects the rule selects in the scope"
+                        }
+                      }
+                    },
+                    "label": "objects selected in the scope"
+                  },
+                  "right": {
+                    "kind": "parameter",
+                    "name": "maximum"
+                  },
+                  "label": "at most the upper bound"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.compare",
+                      "label": "at least the lower bound",
+                      "fields": {
+                        "operator": "greaterThanOrEquals"
+                      },
+                      "inputs": {
+                        "left": {
+                          "block": {
+                            "type": "expression.aggregate",
+                            "label": "objects selected in the scope",
+                            "fields": {
+                              "function": "count"
+                            },
+                            "inputs": {
+                              "over": {
+                                "block": {
+                                  "type": "source.selector",
+                                  "inputs": {
+                                    "selector": {
+                                      "block": {
+                                        "type": "selector.expression",
+                                        "inputs": {
+                                          "expression": {
+                                            "block": {
+                                              "type": "expression.parameter",
+                                              "label": "the objects the rule selects in the scope",
+                                              "fields": {
+                                                "name": "selection"
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "right": {
+                          "block": {
+                            "type": "expression.parameter",
+                            "fields": {
+                              "name": "minimum"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.compare",
+                      "label": "at most the upper bound",
+                      "fields": {
+                        "operator": "lessThanOrEquals"
+                      },
+                      "inputs": {
+                        "left": {
+                          "block": {
+                            "type": "expression.aggregate",
+                            "label": "objects selected in the scope",
+                            "fields": {
+                              "function": "count"
+                            },
+                            "inputs": {
+                              "over": {
+                                "block": {
+                                  "type": "source.selector",
+                                  "inputs": {
+                                    "selector": {
+                                      "block": {
+                                        "type": "selector.expression",
+                                        "inputs": {
+                                          "expression": {
+                                            "block": {
+                                              "type": "expression.parameter",
+                                              "label": "the objects the rule selects in the scope",
+                                              "fields": {
+                                                "name": "selection"
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "right": {
+                          "block": {
+                            "type": "expression.parameter",
+                            "fields": {
+                              "name": "maximum"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "compare",
+                  "operator": "greaterThanOrEquals",
+                  "left": {
+                    "kind": "aggregate",
+                    "function": "count",
+                    "over": {
+                      "kind": "selector",
+                      "selector": {
+                        "kind": "expression",
+                        "expression": {
+                          "kind": "parameter",
+                          "name": "selection",
+                          "label": "the objects the rule selects in the scope"
+                        }
+                      }
+                    },
+                    "label": "objects selected in the scope"
+                  },
+                  "right": {
+                    "kind": "literal",
+                    "value": {
+                      "type": "integer",
+                      "value": 1
+                    },
+                    "label": "an existence check"
+                  },
+                  "label": "at least the lower bound"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.compare",
+                      "label": "at least the lower bound",
+                      "fields": {
+                        "operator": "greaterThanOrEquals"
+                      },
+                      "inputs": {
+                        "left": {
+                          "block": {
+                            "type": "expression.aggregate",
+                            "label": "objects selected in the scope",
+                            "fields": {
+                              "function": "count"
+                            },
+                            "inputs": {
+                              "over": {
+                                "block": {
+                                  "type": "source.selector",
+                                  "inputs": {
+                                    "selector": {
+                                      "block": {
+                                        "type": "selector.expression",
+                                        "inputs": {
+                                          "expression": {
+                                            "block": {
+                                              "type": "expression.parameter",
+                                              "label": "the objects the rule selects in the scope",
+                                              "fields": {
+                                                "name": "selection"
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "right": {
+                          "block": {
+                            "type": "expression.literal",
+                            "label": "an existence check",
+                            "fields": {
+                              "value": {
+                                "type": "integer",
+                                "value": 1
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.opening-area",

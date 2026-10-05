@@ -7,10 +7,16 @@ mod common;
 use axioval_engine::SessionSources;
 use axioval_ir::contract::{ComparisonOperator, Selector};
 use axioval_ir::{Discipline, NotEvaluatedReason, Scope, SourceId};
-use axioval_rules::{ObjectCount, register_builtins};
+use axioval_rules::register_builtins;
 use common::{Model, boolean, findings, integer, kind, rule, source, strings};
 
 const ID: &str = "axioval:capability.object-count";
+
+/// `object-count`, held to the implementation it replaced on every fixture.
+const OBJECT_COUNT: common::Held = common::Held(
+    &axioval_rules::ObjectCount,
+    &axioval_rules::reference::ObjectCount,
+);
 
 fn other() -> SourceId {
     SourceId::new("test", "other").unwrap()
@@ -27,7 +33,7 @@ fn model() -> Model {
 
 #[test]
 fn an_empty_selection_is_reported_none_found_instead_of_passing() {
-    let evaluation = model().evaluate(&ObjectCount, &rule(ID, kind("building"), vec![]));
+    let evaluation = model().evaluate(&OBJECT_COUNT, &rule(ID, kind("building"), vec![]));
     assert_eq!(
         findings(&evaluation),
         [
@@ -55,7 +61,7 @@ fn an_empty_selection_is_reported_none_found_instead_of_passing() {
 #[test]
 fn across_sources_the_project_is_one_scope() {
     let evaluation = model().evaluate(
-        &ObjectCount,
+        &OBJECT_COUNT,
         &rule(
             ID,
             kind("building"),
@@ -74,7 +80,7 @@ fn across_sources_the_project_is_one_scope() {
     // Three walls in the project satisfy "at least 3" even though no
     // single source has three.
     let evaluation = model().evaluate(
-        &ObjectCount,
+        &OBJECT_COUNT,
         &rule(
             ID,
             kind("wall"),
@@ -88,7 +94,7 @@ fn across_sources_the_project_is_one_scope() {
 #[test]
 fn bounds_are_inclusive_and_name_what_was_found() {
     let evaluation = model().evaluate(
-        &ObjectCount,
+        &OBJECT_COUNT,
         &rule(
             ID,
             kind("wall"),
@@ -110,14 +116,14 @@ fn bounds_are_inclusive_and_name_what_was_found() {
     assert_eq!(related, ["w1", "w2"]);
 
     let evaluation = model().evaluate(
-        &ObjectCount,
+        &OBJECT_COUNT,
         &rule(ID, kind("wall"), vec![("maximum", integer(0))]),
     );
     assert_eq!(evaluation.findings().len(), 2);
 
     // A maximum alone allows an empty selection.
     let evaluation = model().evaluate(
-        &ObjectCount,
+        &OBJECT_COUNT,
         &rule(ID, kind("building"), vec![("maximum", integer(1))]),
     );
     assert!(evaluation.findings().is_empty());
@@ -149,13 +155,13 @@ fn undecided_objects_leave_the_scope_not_evaluated_only_when_they_matter() {
     };
 
     // One fire-rated wall is found; the unreadable one cannot matter.
-    let evaluation = walls().evaluate(&ObjectCount, &rule(ID, fire_rated.clone(), vec![]));
+    let evaluation = walls().evaluate(&OBJECT_COUNT, &rule(ID, fire_rated.clone(), vec![]));
     assert!(evaluation.findings().is_empty());
     assert!(evaluation.not_evaluated_outcomes().is_empty());
 
     // For "at least 2" it can: the source and the wall are not evaluated.
     let evaluation = walls().evaluate(
-        &ObjectCount,
+        &OBJECT_COUNT,
         &rule(ID, fire_rated, vec![("minimum", integer(2))]),
     );
     assert!(evaluation.findings().is_empty());
@@ -194,7 +200,7 @@ fn a_count_finding_cites_the_facts_that_selected_its_objects() {
             axioval_ir::PropertyValue::Boolean(false),
         )
         .evaluate(
-            &ObjectCount,
+            &OBJECT_COUNT,
             &rule(ID, fire_rated, vec![("minimum", integer(2))]),
         );
     let finding = &evaluation.findings()[0];
@@ -210,7 +216,7 @@ fn a_count_finding_cites_the_facts_that_selected_its_objects() {
 
 #[test]
 fn per_source_over_an_empty_project_is_not_evaluated() {
-    let evaluation = Model::default().evaluate(&ObjectCount, &rule(ID, kind("building"), vec![]));
+    let evaluation = Model::default().evaluate(&OBJECT_COUNT, &rule(ID, kind("building"), vec![]));
     assert!(evaluation.findings().is_empty());
     let outcome = &evaluation.not_evaluated_outcomes()[0];
     assert_eq!(outcome.scope(), &Scope::Project);
@@ -222,7 +228,7 @@ fn a_source_without_objects_is_counted_and_reported() {
     // `other` is in the session but contributes no object: an empty model.
     let sources = SessionSources::new([source(), other()]);
     let evaluation = Model::default().object("w1", "wall").evaluate_with(
-        &ObjectCount,
+        &OBJECT_COUNT,
         &rule(ID, kind("wall"), vec![]),
         |services| services.register(sources.clone()).unwrap(),
     );
@@ -238,7 +244,7 @@ fn a_source_without_objects_is_counted_and_reported() {
 
     // A maximum alone holds in the empty source too.
     let evaluation = Model::default().object("w1", "wall").evaluate_with(
-        &ObjectCount,
+        &OBJECT_COUNT,
         &rule(ID, kind("wall"), vec![("maximum", integer(1))]),
         |services| services.register(sources).unwrap(),
     );
@@ -249,7 +255,7 @@ fn a_source_without_objects_is_counted_and_reported() {
 #[test]
 fn a_project_of_only_empty_sources_is_judged_per_source() {
     let evaluation = Model::default().evaluate_with(
-        &ObjectCount,
+        &OBJECT_COUNT,
         &rule(ID, kind("building"), vec![]),
         |services| services.register(SessionSources::new([other()])).unwrap(),
     );
@@ -270,7 +276,7 @@ fn contradictory_bounds_are_a_declaration_error() {
         vec![("minimum", integer(-1))],
         vec![("maximum", integer(-1))],
     ] {
-        let evaluation = model().evaluate(&ObjectCount, &rule(ID, kind("wall"), parameters));
+        let evaluation = model().evaluate(&OBJECT_COUNT, &rule(ID, kind("wall"), parameters));
         assert_eq!(
             evaluation.not_evaluated_outcomes()[0].reason(),
             &NotEvaluatedReason::InvalidDeclaration
@@ -309,7 +315,7 @@ fn count_ducts(
     disciplines: Option<axioval_engine::SourceDisciplines>,
 ) -> axioval_engine::CapabilityEvaluation {
     disciplined().evaluate_with(
-        &ObjectCount,
+        &OBJECT_COUNT,
         &rule(ID, kind("duct"), parameters),
         |services| {
             if let Some(disciplines) = disciplines {
@@ -420,4 +426,120 @@ fn a_discipline_list_needs_valid_names_and_session_disciplines() {
 fn object_count_is_a_builtin() {
     let registry = register_builtins(axioval_engine::CapabilityRegistry::new()).unwrap();
     assert!(registry.get(ID).is_some());
+}
+
+/// A count of a source or the project has no `expression` form: an
+/// expression rule judges objects.
+#[test]
+fn a_count_per_scope_is_not_forked() {
+    use axioval_rules::templates::{ForkError, fork};
+    let refused = fork(
+        &axioval_rules::ObjectCount,
+        &rule(ID, kind("wall"), vec![("maximum", integer(1))]),
+    );
+    assert!(
+        matches!(refused, Err(ForkError::Inexpressible(_))),
+        "{refused:?}"
+    );
+}
+
+/// Generated projects: sources of walls and slabs, some declaring a
+/// discipline, some fire-rated walls, some whose rating cannot be read,
+/// counted by kind or by rating, per source or across sources, with or
+/// without bounds and disciplines. The template is held to the
+/// implementation it replaced on each (`OBJECT_COUNT`).
+mod generated {
+    use super::*;
+    use axioval_ir::contract::ParameterValue;
+    use axioval_ir::{ObjectId, PropertyValue};
+    use proptest::prelude::*;
+
+    /// One object: its source (0 the default), whether it is a wall, and
+    /// its rating (none, rated, not rated, unreadable).
+    type Generated = (usize, bool, u8);
+
+    const DOCUMENTS: [&str; 3] = ["model", "arch", "mep"];
+
+    fn project(objects: &[Generated]) -> Model {
+        objects.iter().enumerate().fold(
+            Model::default(),
+            |model, (index, (source, wall, rating))| {
+                let local = format!("o{index}");
+                let kind = if *wall { "wall" } else { "slab" };
+                let model = model.object_in(DOCUMENTS[*source], &local, kind);
+                let object = ObjectId::new(document(DOCUMENTS[*source]), &local).unwrap();
+                match (rating, *source) {
+                    (1 | 2, 0) => model.value(
+                        &local,
+                        "Pset",
+                        "FireRated",
+                        PropertyValue::Boolean(*rating == 1),
+                    ),
+                    (3, _) => model.unreadable_object(object),
+                    _ => model,
+                }
+            },
+        )
+    }
+
+    fn disciplines(declared: &[Option<&'static str>]) -> axioval_engine::SourceDisciplines {
+        axioval_engine::SourceDisciplines::new(
+            DOCUMENTS
+                .iter()
+                .zip(declared)
+                .filter_map(|(source, discipline)| {
+                    discipline
+                        .map(|discipline| (document(source), Discipline::new(discipline).unwrap()))
+                })
+                .collect::<Vec<_>>(),
+        )
+    }
+
+    fn discipline() -> impl Strategy<Value = Option<&'static str>> {
+        proptest::option::of(prop_oneof![Just("architecture"), Just("mep")])
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(128))]
+
+        #[test]
+        fn generated_counts_hold_parity(
+            objects in proptest::collection::vec((0usize..3, any::<bool>(), 0u8..4), 0..8),
+            rated in any::<bool>(),
+            minimum in proptest::option::of(0i64..4),
+            maximum in proptest::option::of(0i64..4),
+            across in proptest::option::of(any::<bool>()),
+            listed in proptest::option::of(prop_oneof![
+                Just(vec!["mep"]),
+                Just(vec!["architecture", "mep"]),
+            ]),
+            declared in [discipline(), discipline(), discipline()],
+        ) {
+            let mut parameters: Vec<(&str, ParameterValue)> = Vec::new();
+            if let Some(minimum) = minimum {
+                parameters.push(("minimum", integer(minimum)));
+            }
+            if let Some(maximum) = maximum {
+                parameters.push(("maximum", integer(maximum)));
+            }
+            if let Some(across) = across {
+                parameters.push(("across_sources", boolean(across)));
+            }
+            if let Some(listed) = &listed {
+                parameters.push(("disciplines", strings(listed)));
+            }
+            let selector = if rated { fire_rated() } else { kind("wall") };
+            let declared = disciplines(&declared);
+            project(&objects).evaluate_with(
+                &OBJECT_COUNT,
+                &rule(ID, selector, parameters),
+                |services| {
+                    services.register(declared).unwrap();
+                    services
+                        .register(SessionSources::new(DOCUMENTS.iter().map(|name| document(name))))
+                        .unwrap();
+                },
+            );
+        }
+    }
 }

@@ -19,7 +19,9 @@ like an expression.
 ([#278](https://github.com/axioval/engine/issues/278)); `triangle-count`
 and `plan-area` follow ([#282](https://github.com/axioval/engine/issues/282)),
 and `property-predicate` is the first of the generic judges
-([#287](https://github.com/axioval/engine/issues/287)).
+([#287](https://github.com/axioval/engine/issues/287)); `object-count`
+is the first deciding per source or for the project
+([#290](https://github.com/axioval/engine/issues/290)).
 
 ## The outside contract
 
@@ -138,6 +140,26 @@ states, through the one comparison: an absence, `null` and a value of
 another kind fail every operator but a presence test (which reads blank
 text as undefined), a quantity against a unit-less target (or the
 reverse) is not evaluated.
+
+### `object-count`
+
+| Form | When | Values | Decision |
+| --- | --- | --- | --- |
+| bounded | `minimum` | `count` = the count of the scope's `selection` | `count` within `minimum` and `maximum`, no rounding |
+| at most | `maximum` | `count` | `count` within `maximum` |
+| existence | always | `count`, `one` = 1 | `count` at least `one` |
+
+Each form decides per source, or for the project with `across_sources`,
+over the sources playing `disciplines` where stated (`Scopes`). The
+declaration checks both bounds' kinds, that neither is negative, their
+order, `disciplines` and `across_sources`, in the capability's order. The
+finding reads `{matched}; required {required:exactly}`, the text
+`matched` being `no object matches the selection {place}` where nothing
+surely counts (`Condition::Zero`) and `{count:least} object(s) match the
+selection {place}` otherwise; a straddled bound leaves the scope open
+with `object-count: {count:least} object(s) match the selection {place}
+and {undecided} more may; required {required:exactly}`, each undecided
+object open for its own reason.
 
 ### `property-predicate`
 
@@ -361,6 +383,16 @@ tolerance and precision against values of every kind, absent, `null`,
 lists, measured intervals and complex properties included) do too; the
 `elements` case records `wall-width` and `slab-depth` on every public
 model; and its fork reaches its verdicts on values of the target's kind.
+
+`object-count` is held to `object_count/reference.rs`
+(`axioval_rules::reference::ObjectCount`) by every fixture of
+`tests/object_count.rs` and `tests/resources.rs`, which evaluate
+`common::Held`, a capability running the template and the reference on
+one context under `Parity::contract()`; by generated projects of sources,
+kinds, readable and unreadable ratings and declared disciplines, counted
+by kind or rating, per source or across sources, with or without bounds;
+and by the `counts` case, whose `object-count` rules were recorded before
+the switch. It is never forked.
 
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the

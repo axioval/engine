@@ -11,7 +11,7 @@ use axioval_engine::{
     ResourceObjects, ResourceRequest, ResourceService, ResourceServiceHandle, SourceSnapshot,
 };
 use axioval_ir::{NotEvaluatedReason, Object, PropertyValue, Report, Scope};
-use axioval_rules::{ObjectCount, PropertyRequired, register_builtins};
+use axioval_rules::{PropertyRequired, register_builtins};
 use common::runtime::{definitions, entity, plan, rule, run, session, snapshot};
 use common::{Model, findings, id, kind, property, rule as compiled, source};
 use serde_json::{Value, json};
@@ -190,7 +190,10 @@ fn a_count_of_a_resource_class_counts_resource_objects() {
     let resources = ResourceObjects::new().with_class(source(), "material", false, Ok(materials()));
     let count = |population: ResourceObjects| {
         model().evaluate_with(
-            &ObjectCount,
+            &common::Held(
+                &axioval_rules::ObjectCount,
+                &axioval_rules::reference::ObjectCount,
+            ),
             &compiled(
                 COUNT,
                 kind("material"),

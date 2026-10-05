@@ -16,7 +16,8 @@ and nothing in a template runs package code: it is data the engine reads,
 like an expression.
 
 `body-extent` is the first capability that runs as a template
-([#278](https://github.com/axioval/engine/issues/278)).
+([#278](https://github.com/axioval/engine/issues/278)); `triangle-count`
+follows ([#282](https://github.com/axioval/engine/issues/282)).
 
 ## The outside contract
 
@@ -43,9 +44,9 @@ rules crate (`body_extent/template.rs`):
 | `id`, `parameters` | The capability's id and descriptor, unchanged. |
 | `name` | How rule-scoped messages name the capability (`body-extent: …`). |
 | `defaults` | Values optional parameters take when unstated (`tolerance` 0 m). |
-| `declaration` | `Check`s over the rule's parameters, in order: `choice` (a string among options), `length` (a non-negative length), `exclusive`, `anyOf`, `requires`, `ordered`. The first failing check leaves the rule not evaluated as an invalid declaration, worded as the capability worded it. |
-| `services` | The host services the values need (`Service`), and the message leaving the whole rule open without them, before anything is selected. |
-| `texts` | Named message parts, optionally conditional (`Condition::Positive`). |
+| `declaration` | `Check`s over the rule's parameters, in order: `choice` (a string among options), `length` (a non-negative length), `count` (an integer of at least zero, stated where the descriptor requires it), `exclusive`, `anyOf`, `requires`, `ordered`. The first failing check leaves the rule not evaluated as an invalid declaration, worded as the capability worded it. |
+| `services` | The host services the values need (`Service`: `object-frame`, `vertical-extent`, `triangle-count`), and the message leaving the whole rule open without them, before anything is selected. |
+| `texts` | Named message parts, optionally conditional: `Condition::Positive` (a parameter above zero), `Condition::Inexact` (a value read from evidence that is not exact, such as a count of a tessellation). |
 | `forms` | The compositions. The first form whose `when` parameters are all stated applies. |
 
 A `Form` holds:
@@ -61,7 +62,8 @@ A `Form` holds:
 and a maximum, each a left-to-right sum of values and parameters
 (`Term`), widened by `ROUNDING_ULPS` (four units in the last place) of the
 largest `rounding` magnitude, an end of a value's or a parameter's
-interval (`Magnitude`). It decides in plain binary arithmetic, as the
+interval (`Magnitude`); without a magnitude (a count) the bounds are not
+widened, and the expression form compares with them as they are. It decides in plain binary arithmetic, as the
 capabilities judged: a verdict needs the whole interval on one side of a
 bound, a straddling one is undecided naming the bound.
 
@@ -77,6 +79,20 @@ ends along its axis, the magnitudes the binary rounding of the extent
 scales with. The capability allowed that rounding all along; the template
 states it, so a wall exactly at a bound far from the origin is judged as
 before.
+
+### `triangle-count`
+
+| Form | When | Values | Decision |
+| --- | --- | --- | --- |
+| maximum | always | `count` = `triangle_count` | `count` within no minimum and `maximum`, no rounding |
+
+The declaration is one `count` check (`maximum` stated, at least zero);
+the service is `triangle-count`. The finding's message appends the text
+`tessellated` (the count depends on the host's tessellation) where the
+count's evidence is not exact (`Condition::Inexact`), as the capability
+said so on a tessellation of curved faces. The finding cites the measured
+`triangle_count`, whose evidence carries the host's count locator and its
+exactness.
 
 ## Binding and running a rule
 
@@ -166,6 +182,14 @@ rounding allowance). `crates/packages/ids/tests/export.rs` pins both.
   The template reproduces the rule-scoped outcome without geometry (D4,
   D18).
 - **The fork.** The forked rule reaches the template's verdicts.
+
+`triangle-count` is held the same way: every fixture of
+`crates/engine/rules/tests/triangle_count.rs` and generated meshes of
+random count and exactness against
+`axioval_rules::reference::TriangleCountLimit` under `Parity::contract()`,
+each object's count compared exactly; the `element-triangles` rules of
+the cases `elements` and `unmeshed` recorded before the switch (the
+rule-scoped outcome without the service, D4); and the fork.
 
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the

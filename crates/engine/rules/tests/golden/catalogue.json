@@ -21219,7 +21219,118 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "triangle-count",
+        "declaration": [
+          {
+            "kind": "count",
+            "parameter": "maximum"
+          }
+        ],
+        "services": {
+          "needs": [
+            "triangle-count"
+          ],
+          "message": "triangle-count service is not registered"
+        },
+        "texts": [
+          {
+            "name": "tessellated",
+            "when": {
+              "kind": "inexact",
+              "value": "count"
+            },
+            "text": "; the mesh tessellates curved faces, so the count depends on the host's tessellation"
+          }
+        ],
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "count",
+                "expression": {
+                  "kind": "property",
+                  "propertySet": "axioval:measured",
+                  "property": "triangle_count"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "count",
+              "maximum": [
+                {
+                  "sign": "plus",
+                  "operand": {
+                    "kind": "parameter",
+                    "name": "maximum"
+                  }
+                }
+              ],
+              "rounding": []
+            },
+            "fail": "mesh has {count} triangles; at most {maximum} allowed{tessellated}",
+            "undecided": "mesh has {count} triangles, which straddles at most {maximum}{tessellated}"
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "compare",
+                  "operator": "lessThanOrEquals",
+                  "left": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "triangle_count"
+                  },
+                  "right": {
+                    "kind": "parameter",
+                    "name": "maximum"
+                  },
+                  "label": "at most the upper bound"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.compare",
+                      "label": "at most the upper bound",
+                      "fields": {
+                        "operator": "lessThanOrEquals"
+                      },
+                      "inputs": {
+                        "left": {
+                          "block": {
+                            "type": "measured.triangle_count"
+                          }
+                        },
+                        "right": {
+                          "block": {
+                            "type": "expression.parameter",
+                            "fields": {
+                              "name": "maximum"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.unclassified-object",

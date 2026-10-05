@@ -179,6 +179,7 @@ pub use wall_spacing::WallSpacing;
 #[cfg(feature = "parity-reference")]
 pub mod reference {
     pub use crate::body_extent::reference::BodyExtent;
+    pub use crate::triangle_count::reference::TriangleCountLimit;
 }
 /// XML Schema patterns (as IDS and `property-value` write them) in `regex`
 /// syntax, for a property selector's `matches` operator.

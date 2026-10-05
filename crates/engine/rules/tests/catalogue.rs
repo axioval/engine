@@ -133,7 +133,15 @@ fn a_template_s_composition_expands_into_blocks_and_forks() {
         .filter(|capability| capability.get("template").is_some())
         .map(|capability| capability["id"].as_str().unwrap())
         .collect();
-    assert_eq!(templated, ["axioval:capability.body-extent"]);
+    for id in [
+        "axioval:capability.body-extent",
+        "axioval:capability.triangle-count",
+    ] {
+        assert!(
+            templated.contains(&id),
+            "{id} is no template: {templated:?}"
+        );
+    }
     let template = &capabilities
         .iter()
         .find(|capability| capability["id"] == "axioval:capability.body-extent")

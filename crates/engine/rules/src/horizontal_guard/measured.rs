@@ -11,13 +11,16 @@
 use std::collections::BTreeMap;
 
 use axioval_engine::{
-    GuardCandidate, GuardEdge, GuardSearch, GuardServiceHandle, MeasuredMember, MeasuredProvider,
-    Measurement, MemberValue, PropertyResolutionError, RuleContext,
+    GuardCandidate, GuardEdge, GuardServiceHandle, MeasuredMember, MeasuredProvider, Measurement,
+    MemberValue, PropertyResolutionError, RuleContext,
 };
 use axioval_ir::measured::{MeasuredArgument, MeasuredCall};
 use axioval_ir::{ObjectId, QuantityDimension};
 
-use super::{REQUIRED_COVERAGE, unmeasured_reason};
+use super::{
+    REQUIRED_COVERAGE, barrier_height, coverage_gap, guard_search, may_climb, reaching_barriers,
+    unmeasured_reason, wide_enough,
+};
 
 /// Measures the exposed edges of walking surfaces.
 pub(crate) struct GuardMeasures;
@@ -29,19 +32,18 @@ fn length(call: &MeasuredCall, key: &str) -> f64 {
     }
 }
 
-/// The least (or greatest) `key` at which the candidates `key` admits
+/// The least (or greatest) `key` at which the candidates within `gap`
 /// cover the whole edge: candidates are taken in order of `key` until
-/// their union covers it.
+/// their union covers it. `GuardEdge::covered_fraction` leaves out the
+/// candidates beyond `gap`, so coverage only grows at a level one within
+/// it holds, and only such a level is answered.
 fn covering(
     candidates: &[GuardCandidate],
     gap: f64,
     key: impl Fn(&GuardCandidate) -> f64,
     descending: bool,
 ) -> Option<f64> {
-    let mut sorted: Vec<&GuardCandidate> = candidates
-        .iter()
-        .filter(|candidate| candidate.horizontal_gap_metres() <= gap)
-        .collect();
+    let mut sorted: Vec<&GuardCandidate> = candidates.iter().collect();
     sorted.sort_by(|a, b| {
         let order = key(a).total_cmp(&key(b));
         if descending { order.reverse() } else { order }
@@ -87,38 +89,29 @@ fn edge_member(
     edge: &GuardEdge,
     at: &dyn Fn(&str) -> String,
 ) -> MeasuredMember {
+    // Every filter is the capability's own, under the gaps the list states.
     let (barrier_gap, platform_gap) = (length(call, "barrier_gap"), length(call, "platform_gap"));
+    let gap = coverage_gap(barrier_gap, platform_gap);
     let from_curb = call.choice("measure_from") == Some("curb");
-    let height = |barrier: &GuardCandidate| match (from_curb, barrier.curb_top_offset_metres()) {
-        (true, Some(curb)) => barrier.top_offset_metres() - curb,
-        _ => barrier.top_offset_metres(),
-    };
+    let height = |barrier: &GuardCandidate| barrier_height(barrier, from_curb);
     let (landing_width, climb_side) = (length(call, "landing_width"), length(call, "climb_side"));
     let climb_distance = length(call, "climb_distance");
-    let reaching: Vec<GuardCandidate> = edge
-        .barriers()
-        .iter()
-        .filter(|barrier| barrier.horizontal_gap_metres() <= platform_gap + super::EPSILON_M)
-        .cloned()
-        .collect();
+    let reaching = reaching_barriers(edge, platform_gap);
     let tallest = reaching.iter().map(height).reduce(f64::max);
-    let share = GuardEdge::covered_fraction(&reaching, barrier_gap.max(platform_gap));
+    let share = GuardEdge::covered_fraction(&reaching, gap);
     let wide: Vec<GuardCandidate> = edge
         .landings()
         .iter()
-        .filter(|landing| landing.landing_width_metres() + super::EPSILON_M >= landing_width)
+        .filter(|landing| wide_enough(landing, landing_width))
         .cloned()
         .collect();
     let climbable = edge
         .climbables()
         .iter()
-        .filter(|climbable| {
-            climbable.distance_to_barrier_metres() <= climb_distance + super::EPSILON_M
-                && climbable.minimum_side_length_metres() + super::EPSILON_M >= climb_side
-        })
+        .filter(|climbable| may_climb(climbable, climb_distance, climb_side))
         .map(axioval_engine::ClimbableCandidate::top_offset_metres)
         .reduce(f64::min);
-    let guarded = covering(edge.barriers(), barrier_gap.max(platform_gap), height, true);
+    let guarded = covering(edge.barriers(), gap, height, true);
     let fall = covering(
         &wide,
         length(call, "landing_gap"),
@@ -201,19 +194,14 @@ impl MeasuredProvider for GuardMeasures {
             (length(call, "barrier_gap"), length(call, "platform_gap"));
         let landing_gap = length(call, "landing_gap");
         let climb_distance = length(call, "climb_distance");
-        let radius = barrier_gap
-            .max(platform_gap)
-            .max(landing_gap)
-            .max(climb_distance);
-        let spacing = (0.5 * barrier_gap.min(platform_gap)).max(0.1);
         let refused = |why: String| {
             crate::measured_kinds::resolution_error((
                 axioval_engine::NotEvaluatedReason::InvalidDeclaration,
                 format!("`{name}` of {object}: {why}"),
             ))
         };
-        let mut search = GuardSearch::try_new(radius, spacing)
-            .map_err(|_| refused("the gaps define no usable search".into()))?
+        let mut search = guard_search([barrier_gap, platform_gap, landing_gap, climb_distance])
+            .ok_or_else(|| refused("the gaps define no usable search".into()))?
             .with_surfaces(vec![object.clone()]);
         if let Some(barriers) = Self::role(context, call, "barriers", object)? {
             search = search.with_barrier_candidates(barriers);

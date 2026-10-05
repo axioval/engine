@@ -109,19 +109,16 @@ impl RuleCapability for HorizontalGuard {
             return evaluation;
         };
 
-        // The search must reach at least as far as any threshold the policy
-        // compares against, or a candidate that would have passed is never
-        // measured and the edge is wrongly reported unguarded.
-        let radius = policy
-            .maximum_barrier_gap_metres
-            .max(policy.maximum_platform_gap_metres)
-            .max(policy.maximum_landing_gap_metres)
-            .max(policy.climbable_barrier_distance_metres);
         // The selection is the walking-surface profile: the ruleset, not the
         // host, says which edges are checked for fall protection.
         let surfaces: BTreeSet<ObjectId> =
             selected.iter().map(|object| object.id.clone()).collect();
-        let Ok(search) = GuardSearch::try_new(radius, sample_spacing(&policy)) else {
+        let Some(search) = guard_search([
+            policy.maximum_barrier_gap_metres,
+            policy.maximum_platform_gap_metres,
+            policy.maximum_landing_gap_metres,
+            policy.climbable_barrier_distance_metres,
+        ]) else {
             evaluation.push_not_evaluated(
                 NotEvaluatedReason::InvalidDeclaration,
                 "horizontal-guard thresholds do not define a usable search",
@@ -331,13 +328,27 @@ fn admitted(edge: &GuardEdge, search: &GuardSearch) -> GuardEdge {
     )
 }
 
-/// Samples an edge at half the tightest gap the policy cares about, so a
-/// candidate cannot slip between samples.
-fn sample_spacing(policy: &Policy) -> f64 {
-    let tightest = policy
-        .maximum_barrier_gap_metres
-        .min(policy.maximum_platform_gap_metres);
-    (0.5 * tightest).max(0.1)
+/// The search for the barrier, platform and landing gaps and the climbing
+/// distance, or `None` when they define no usable search.
+///
+/// The search must reach at least as far as any threshold compared
+/// against, or a candidate that would have passed is never measured and
+/// the edge is wrongly reported unguarded. It samples an edge at half the
+/// tightest gap that matters, so a candidate cannot slip between samples.
+fn guard_search(
+    [barrier_gap, platform_gap, landing_gap, climb_distance]: [f64; 4],
+) -> Option<GuardSearch> {
+    let radius = barrier_gap
+        .max(platform_gap)
+        .max(landing_gap)
+        .max(climb_distance);
+    let spacing = (0.5 * barrier_gap.min(platform_gap)).max(0.1);
+    GuardSearch::try_new(radius, spacing).ok()
+}
+
+/// The gap a barrier may leave along the edge and still cover it.
+fn coverage_gap(barrier_gap: f64, platform_gap: f64) -> f64 {
+    barrier_gap.max(platform_gap)
 }
 
 /// Describes why an edge is unguarded, or `None` when it is protected.
@@ -351,9 +362,10 @@ fn edge_diagnosis(edge: &GuardEdge, policy: &Policy) -> Option<GuardDiagnosis> {
     let barriers = adequate_barriers(edge, policy);
     let barrier_coverage = GuardEdge::covered_fraction(
         &barriers,
-        policy
-            .maximum_barrier_gap_metres
-            .max(policy.maximum_platform_gap_metres),
+        coverage_gap(
+            policy.maximum_barrier_gap_metres,
+            policy.maximum_platform_gap_metres,
+        ),
     );
 
     if barrier_coverage >= REQUIRED_COVERAGE {
@@ -371,18 +383,21 @@ fn edge_diagnosis(edge: &GuardEdge, policy: &Policy) -> Option<GuardDiagnosis> {
     // tall the stub is, and the fall itself is what matters -- so the landing
     // branch decides. Without this gate a single short railing beside a long
     // open edge reports `hole_in_barrier` instead of `missing_barrier`.
-    let reaching = reaching_barriers(edge, policy);
+    let reaching = reaching_barriers(edge, policy.maximum_platform_gap_metres);
     let reaching_coverage = GuardEdge::covered_fraction(
         &reaching,
-        policy
-            .maximum_barrier_gap_metres
-            .max(policy.maximum_platform_gap_metres),
+        coverage_gap(
+            policy.maximum_barrier_gap_metres,
+            policy.maximum_platform_gap_metres,
+        ),
     );
     if reaching_coverage > BARRIER_PRESENT_COVERAGE
         && let Some(tallest) = tallest_reaching_barrier(edge, policy)
     {
         let mut defects = Vec::new();
-        if barrier_height(&tallest, policy) + EPSILON_M < policy.minimum_barrier_height_metres {
+        if barrier_height(&tallest, policy.measure_barrier_from_curb) + EPSILON_M
+            < policy.minimum_barrier_height_metres
+        {
             // The curb is the *reason* the barrier is short, so it is the more
             // specific and more actionable diagnosis of the two.
             let defect = if curb_lowers_barrier(&tallest, policy) {
@@ -431,24 +446,26 @@ fn edge_diagnosis(edge: &GuardEdge, policy: &Policy) -> Option<GuardDiagnosis> {
 /// The tallest barrier close enough to the edge to matter, regardless of
 /// whether it is tall enough. Distinguishes an inadequate barrier from none.
 /// Every barrier close enough to the edge to count, whatever its height.
-fn reaching_barriers(edge: &GuardEdge, policy: &Policy) -> Vec<GuardCandidate> {
+fn reaching_barriers(edge: &GuardEdge, platform_gap: f64) -> Vec<GuardCandidate> {
     edge.barriers()
         .iter()
-        .filter(|barrier| {
-            barrier.horizontal_gap_metres() <= policy.maximum_platform_gap_metres + EPSILON_M
-        })
+        .filter(|barrier| reaches(barrier, platform_gap))
         .cloned()
         .collect()
+}
+
+/// Whether `barrier` stands within `platform_gap` of the edge.
+fn reaches(barrier: &GuardCandidate, platform_gap: f64) -> bool {
+    barrier.horizontal_gap_metres() <= platform_gap + EPSILON_M
 }
 
 fn tallest_reaching_barrier(edge: &GuardEdge, policy: &Policy) -> Option<GuardCandidate> {
     edge.barriers()
         .iter()
-        .filter(|barrier| {
-            barrier.horizontal_gap_metres() <= policy.maximum_platform_gap_metres + EPSILON_M
-        })
+        .filter(|barrier| reaches(barrier, policy.maximum_platform_gap_metres))
         .max_by(|left, right| {
-            barrier_height(left, policy).total_cmp(&barrier_height(right, policy))
+            barrier_height(left, policy.measure_barrier_from_curb)
+                .total_cmp(&barrier_height(right, policy.measure_barrier_from_curb))
         })
         .cloned()
 }
@@ -477,7 +494,8 @@ fn adequate_barriers(edge: &GuardEdge, policy: &Policy) -> Vec<GuardCandidate> {
     edge.barriers()
         .iter()
         .filter(|barrier| {
-            barrier_height(barrier, policy) + EPSILON_M >= policy.minimum_barrier_height_metres
+            barrier_height(barrier, policy.measure_barrier_from_curb) + EPSILON_M
+                >= policy.minimum_barrier_height_metres
         })
         .cloned()
         .collect()
@@ -485,11 +503,8 @@ fn adequate_barriers(edge: &GuardEdge, policy: &Policy) -> Vec<GuardCandidate> {
 
 /// A barrier standing on a curb is only as tall as its exposed part when the
 /// declaration says to measure from the curb.
-fn barrier_height(barrier: &GuardCandidate, policy: &Policy) -> f64 {
-    match (
-        policy.measure_barrier_from_curb,
-        barrier.curb_top_offset_metres(),
-    ) {
+fn barrier_height(barrier: &GuardCandidate, from_curb: bool) -> f64 {
+    match (from_curb, barrier.curb_top_offset_metres()) {
         (true, Some(curb)) => barrier.top_offset_metres() - curb,
         _ => barrier.top_offset_metres(),
     }
@@ -503,10 +518,15 @@ fn adequate_landings(edge: &GuardEdge, policy: &Policy) -> Vec<GuardCandidate> {
             // `top_offset` is negative below the walking surface, so a short
             // fall is one whose landing is no further down than the allowance.
             landing.top_offset_metres() + EPSILON_M >= -policy.maximum_fall_height_metres
-                && landing.landing_width_metres() + EPSILON_M >= policy.minimum_landing_width_metres
+                && wide_enough(landing, policy.minimum_landing_width_metres)
         })
         .cloned()
         .collect()
+}
+
+/// Whether `landing` is at least `minimum_width` wide to stand on.
+fn wide_enough(landing: &GuardCandidate, minimum_width: f64) -> bool {
+    landing.landing_width_metres() + EPSILON_M >= minimum_width
 }
 
 /// An object close enough, tall enough and broad enough to climb.
@@ -515,10 +535,18 @@ fn defeating_climbable<'edge>(
     policy: &Policy,
 ) -> Option<&'edge ClimbableCandidate> {
     edge.climbables().iter().find(|climbable| {
-        climbable.distance_to_barrier_metres()
-            <= policy.climbable_barrier_distance_metres + EPSILON_M
-            && climbable.top_offset_metres() <= policy.maximum_climbable_height_metres + EPSILON_M
-            && climbable.minimum_side_length_metres() + EPSILON_M
-                >= policy.minimum_climbable_side_length_metres
+        may_climb(
+            climbable,
+            policy.climbable_barrier_distance_metres,
+            policy.minimum_climbable_side_length_metres,
+        ) && climbable.top_offset_metres() <= policy.maximum_climbable_height_metres + EPSILON_M
     })
+}
+
+/// Whether `climbable` stands within `distance` of its barrier and is at
+/// least `side` broad: close and broad enough to climb, whatever its
+/// height.
+fn may_climb(climbable: &ClimbableCandidate, distance: f64, side: f64) -> bool {
+    climbable.distance_to_barrier_metres() <= distance + EPSILON_M
+        && climbable.minimum_side_length_metres() + EPSILON_M >= side
 }

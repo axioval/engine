@@ -246,6 +246,91 @@
         }
       },
       {
+        "id": "wall-layers",
+        "definitionId": "axioval:parity.public.body-extent",
+        "name": {
+          "default": "wall-layers",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "axis": {
+            "type": "string",
+            "value": "forward"
+          },
+          "target_property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:material",
+            "property": "axioval:parity.public.layer-thickness"
+          },
+          "tolerance": {
+            "type": "quantity",
+            "value": 1.0,
+            "unit": "mm"
+          }
+        }
+      },
+      {
+        "id": "wall-length",
+        "definitionId": "axioval:parity.public.body-extent",
+        "name": {
+          "default": "wall-length",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "axis": {
+            "type": "string",
+            "value": "right"
+          },
+          "minimum": {
+            "type": "quantity",
+            "value": 2.0,
+            "unit": "m"
+          },
+          "maximum": {
+            "type": "quantity",
+            "value": 6.0,
+            "unit": "m"
+          }
+        }
+      },
+      {
+        "id": "slab-thickness",
+        "definitionId": "axioval:parity.public.body-extent",
+        "name": {
+          "default": "slab-thickness",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.slab",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "axis": {
+            "type": "string",
+            "value": "up"
+          },
+          "maximum": {
+            "type": "quantity",
+            "value": 200.0,
+            "unit": "mm"
+          }
+        }
+      },
+      {
         "id": "element-triangles",
         "definitionId": "axioval:parity.public.triangle-count",
         "name": {

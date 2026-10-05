@@ -1,0 +1,283 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "directional-extent:ifc-step:bs-ifc4-infra-road.ifc/#108:[0,0,1]",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:placement:#108:#116<#54<#45<#26<#23",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "91523371-d2ab-5f9a-b584-a3650f701128",
+      "message": "body extent along `up` is 0.25 m; required at most 0.2 m",
+      "object_id": {
+        "local_id": "#108",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-thickness",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "directional-extent:ifc-step:bs-ifc4-infra-road.ifc/#276:[0,0,1]",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:placement:#276:#282<#181<#45<#26<#23",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "ea8fdb7f-a248-5f51-ab8d-c4ce484ae938",
+      "message": "body extent along `up` is 0.25 m; required at most 0.2 m",
+      "object_id": {
+        "local_id": "#276",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-thickness",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "directional-extent:ifc-step:bs-ifc4-infra-road.ifc/#350:[0,0,1]",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:placement:#350:#356<#318<#311<#26<#23",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "1c097d36-e803-56c6-82b0-f89f7827440a",
+      "message": "body extent along `up` is 0.25 m; required at most 0.2 m",
+      "object_id": {
+        "local_id": "#350",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-thickness",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "directional-extent:ifc-step:bs-ifc4-infra-road.ifc/#460:[0,0,1]",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:placement:#460:#466<#393<#311<#26<#23",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "a544b19a-9263-5e8d-8ebb-2f90baa920e6",
+      "message": "body extent along `up` is 0.25 m; required at most 0.2 m",
+      "object_id": {
+        "local_id": "#460",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-thickness",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "directional-extent:ifc-step:bs-ifc4-infra-road.ifc/#578:[0.0000000000000033833051735861043,0.00000000000000012715140937869616,1]",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:placement:#578:#584<#534<#503<#487<#23",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "ff1fd6c1-25e3-5209-b2c1-8407e11e4f87",
+      "message": "body extent along `up` is 0.395814 m; required at most 0.2 m",
+      "object_id": {
+        "local_id": "#578",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-thickness",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "directional-extent:ifc-step:bs-ifc4-infra-road.ifc/#672:[-0.000000000000003383305173586105,-0.00000000000000012715140937867234,1]",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:placement:#672:#678<#640<#614<#487<#23",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "dac4aa42-53c8-5459-9c28-cbdb5241262c",
+      "message": "body extent along `up` is 0.395814 m; required at most 0.2 m",
+      "object_id": {
+        "local_id": "#672",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-thickness",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "directional-extent:ifc-step:bs-ifc4-infra-road.ifc/#823:[0,0,1]",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:placement:#823:#829<#739<#730<#700<#23",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "35b85a20-527f-585e-b585-b362f4437dc1",
+      "message": "body extent along `up` is 0.25 m; required at most 0.2 m",
+      "object_id": {
+        "local_id": "#823",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-thickness",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "directional-extent:ifc-step:bs-ifc4-infra-road.ifc/#998:[0,0,1]",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:placement:#998:#1004<#914<#907<#893<#23",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "b181c946-d2b6-5bb7-b11a-4f3d82265eb7",
+      "message": "body extent along `up` is 0.25 m; required at most 0.2 m",
+      "object_id": {
+        "local_id": "#998",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-thickness",
+      "severity": "error"
+    }
+  ],
+  "not_evaluated": [],
+  "rules": [
+    {
+      "checked": 32,
+      "failed": 8,
+      "not_evaluated": 0,
+      "rule_id": "slab-thickness",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "wall-layers",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "wall-length",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "wall-thickness",
+      "status": "nothing_selected"
+    }
+  ]
+}

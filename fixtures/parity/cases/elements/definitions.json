@@ -166,6 +166,29 @@
           "name": "Depth"
         }
       ]
+    },
+    "axioval:parity.public.layer-thickness": {
+      "id": "axioval:parity.public.layer-thickness",
+      "name": {
+        "default": "layer-thickness",
+        "translations": {}
+      },
+      "valueKind": "quantity",
+      "unitDimension": "length",
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "TotalThickness"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "TotalThickness"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "TotalThickness"
+        }
+      ]
     }
   },
   "propertySets": {

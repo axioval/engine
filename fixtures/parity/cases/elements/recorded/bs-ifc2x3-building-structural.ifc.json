@@ -1,0 +1,222 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "directional-extent:ifc-step:bs-ifc2x3-building-structural.ifc/#153:[0,1,0]",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:absence:#153:axioval:material:TotalThickness",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:placement:#153:#162<#38<#31<#20",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "aaefd7fd-51af-5abd-b0c0-c13c17e3e216",
+      "message": "body extent along `forward` is 0.2 m; `axioval:material.axioval:parity.public.layer-thickness` is absent",
+      "object_id": {
+        "local_id": "#153",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "wall-layers",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "directional-extent:ifc-step:bs-ifc2x3-building-structural.ifc/#309:[0.0000000000000007168623403958414,1,0]",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:absence:#309:axioval:material:TotalThickness",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:placement:#309:#316<#38<#31<#20",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "f0be6225-5f1c-5524-9af2-fc10fcfb57a0",
+      "message": "body extent along `forward` is 0.2 m; `axioval:material.axioval:parity.public.layer-thickness` is absent",
+      "object_id": {
+        "local_id": "#309",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "wall-layers",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "directional-extent:ifc-step:bs-ifc2x3-building-structural.ifc/#463:[0.000000000000010829689592158854,-1,-0.00000000000000000000000000009037854858261729]",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:absence:#463:axioval:material:TotalThickness",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:placement:#463:#470<#38<#31<#20",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "cda70578-cd8b-5dcd-8ad0-5911f2beee9e",
+      "message": "body extent along `forward` is 0.2 m; `axioval:material.axioval:parity.public.layer-thickness` is absent",
+      "object_id": {
+        "local_id": "#463",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "wall-layers",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "directional-extent:ifc-step:bs-ifc2x3-building-structural.ifc/#685:[0.000000000000010678030306608418,-1,-0.0000000000000000000000000000882297025894784]",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:absence:#685:axioval:material:TotalThickness",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:placement:#685:#692<#38<#31<#20",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "cbe852a1-16ae-5c36-b60c-c3b1c78703ca",
+      "message": "body extent along `forward` is 0.2 m; `axioval:material.axioval:parity.public.layer-thickness` is absent",
+      "object_id": {
+        "local_id": "#685",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "wall-layers",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "directional-extent:ifc-step:bs-ifc2x3-building-structural.ifc/#463:[-1,-0.000000000000010829689592158854,0.000000000000007573624267414214]",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:placement:#463:#470<#38<#31<#20",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "91d4d94d-de7b-52be-9273-a5562fc06676",
+      "message": "body extent along `right` is 1.3 m; required at least 2 m",
+      "object_id": {
+        "local_id": "#463",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "wall-length",
+      "severity": "error"
+    }
+  ],
+  "not_evaluated": [],
+  "rules": [
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "slab-thickness",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 4,
+      "failed": 4,
+      "not_evaluated": 0,
+      "rule_id": "wall-layers",
+      "status": "failed"
+    },
+    {
+      "checked": 4,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "wall-length",
+      "status": "failed"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "wall-thickness",
+      "status": "passed"
+    }
+  ]
+}

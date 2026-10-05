@@ -1,0 +1,346 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "directional-extent:ifc-step:bs-ifc4x3-building-architecture.ifc/#261:[-0.707106781186532,-0.0000000000000015343992092947548,0.7071067811865631]",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:placement:#261:#270<#254<#30<#23",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "9a5badf5-f75a-53a0-a9c6-f0bfe59e9a5a",
+      "message": "body extent along `up` is 0.3 m; required at most 0.2 m",
+      "object_id": {
+        "local_id": "#261",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-thickness",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "directional-extent:ifc-step:bs-ifc4x3-building-architecture.ifc/#285:[0.7071067811865405,0.000000000000013827840298789286,0.7071067811865547]",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:placement:#285:#291<#254<#30<#23",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "d98e840b-25fb-5f34-bdb3-f31959bc82a1",
+      "message": "body extent along `up` is 0.3 m; required at most 0.2 m",
+      "object_id": {
+        "local_id": "#285",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-thickness",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "directional-extent:ifc-step:bs-ifc4x3-building-architecture.ifc/#53:[0,0,1]",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:placement:#53:#68<#47<#40<#30<#23",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "7b3dc4af-c493-5f84-968a-0324321f66a5",
+      "message": "body extent along `up` is 0.25 m; required at most 0.2 m",
+      "object_id": {
+        "local_id": "#53",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-thickness",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "directional-extent:ifc-step:bs-ifc4x3-building-architecture.ifc/#158:[1,0.000000000000025272447978365648,-0.0000000000000000000000000000866553734059983]",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:absence:#158:axioval:material:TotalThickness",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:placement:#158:#167<#47<#40<#30<#23",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "b1359b20-0e22-5276-bc1e-c977638f8c76",
+      "message": "body extent along `forward` is 0.2 m; `axioval:material.axioval:parity.public.layer-thickness` is absent",
+      "object_id": {
+        "local_id": "#158",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "wall-layers",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "directional-extent:ifc-step:bs-ifc4x3-building-architecture.ifc/#182:[1,-0.0000000000000011508600077130768,0]",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:absence:#182:axioval:material:TotalThickness",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:placement:#182:#189<#47<#40<#30<#23",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "cb69c04a-6e17-5257-989d-bdfe2c67a88e",
+      "message": "body extent along `forward` is 0.2 m; `axioval:material.axioval:parity.public.layer-thickness` is absent",
+      "object_id": {
+        "local_id": "#182",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "wall-layers",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "directional-extent:ifc-step:bs-ifc4x3-building-architecture.ifc/#201:[-1,0.0000000000000013173934614068503,0]",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:absence:#201:axioval:material:TotalThickness",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:placement:#201:#208<#47<#40<#30<#23",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "a115eff0-01fe-5fc7-a7ae-321087bc0b7f",
+      "message": "body extent along `forward` is 0.2 m; `axioval:material.axioval:parity.public.layer-thickness` is absent",
+      "object_id": {
+        "local_id": "#201",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "wall-layers",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "directional-extent:ifc-step:bs-ifc4x3-building-architecture.ifc/#228:[1,-0.0000000000000013173934614068503,0]",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:absence:#228:axioval:material:TotalThickness",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:placement:#228:#237<#47<#40<#30<#23",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "0178f51a-57e0-586c-a3c7-70454f0bf149",
+      "message": "body extent along `forward` is 0.024 m; `axioval:material.axioval:parity.public.layer-thickness` is absent",
+      "object_id": {
+        "local_id": "#228",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "wall-layers",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "directional-extent:ifc-step:bs-ifc4x3-building-architecture.ifc/#158:[0.000000000000025272447978365648,-1,0.0000000000000032836943041225645]",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:placement:#158:#167<#47<#40<#30<#23",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "857d117c-dc0e-593c-8b32-2bb960ed550c",
+      "message": "body extent along `right` is 1.8 m; required at least 2 m",
+      "object_id": {
+        "local_id": "#158",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "wall-length",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "directional-extent:ifc-step:bs-ifc4x3-building-architecture.ifc/#228:[1,-0.0000000000000013173934614068503,0]",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:placement:#228:#237<#47<#40<#30<#23",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "54da3cc7-130d-5832-8020-71d4c816f88b",
+      "message": "body extent along `forward` is 0.024 m; required at least 0.15 m",
+      "object_id": {
+        "local_id": "#228",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "wall-thickness",
+      "severity": "error"
+    }
+  ],
+  "not_evaluated": [],
+  "rules": [
+    {
+      "checked": 3,
+      "failed": 3,
+      "not_evaluated": 0,
+      "rule_id": "slab-thickness",
+      "status": "failed"
+    },
+    {
+      "checked": 4,
+      "failed": 4,
+      "not_evaluated": 0,
+      "rule_id": "wall-layers",
+      "status": "failed"
+    },
+    {
+      "checked": 4,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "wall-length",
+      "status": "failed"
+    },
+    {
+      "checked": 4,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "wall-thickness",
+      "status": "failed"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "findings": [],
+  "not_evaluated": [
+    {
+      "message": "body-extent needs the object-frame and vertical-extent services",
+      "object_id": null,
+      "reason": "missing_service",
+      "rule_id": "wall-thickness"
+    }
+  ],
+  "rules": [
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "wall-thickness",
+      "status": "not_evaluated"
+    }
+  ]
+}

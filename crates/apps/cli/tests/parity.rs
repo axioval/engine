@@ -21,10 +21,22 @@
 //!   contract (`outcomes` by default), `"uncounted": true` for a rewrite
 //!   reporting one finding where the capability reports one per check, and
 //!   `"values": {"<name>": <rounding>}` for measured values to compare;
-//! - `divergences`: every difference a pair is known to show on a model,
-//!   `{"model", "capability", "difference", "reason", "decision"}`, the
-//!   difference as the harness prints it. A difference not recorded, or a
-//!   recorded one no longer shown, fails the test.
+//! - `recorded`: rules of a capability rebuilt as a template, each
+//!   `{"rule": "<rule id>", "reason": "…"}` with a pair's `comparison`,
+//!   `uncounted` and `values`. The rule's outcomes as the retired
+//!   implementation reported them are stored per model in the case's
+//!   `recorded/<model>.json` (the report restricted to those rules), and
+//!   the rule as it runs now is compared with them, so the retired
+//!   implementation's side outlives its code. `AXIOVAL_PARITY_RECORD=1`
+//!   writes those files from the current run instead of comparing: run it
+//!   once, before the implementation is retired, and review its output
+//!   like any other change;
+//! - `divergences`: every difference a pair or a recorded rule is known to
+//!   show on a model, `{"model", "capability", "difference", "reason",
+//!   "decision"}` (`"recorded"` naming the rule in place of
+//!   `"capability"`), the difference as the harness prints it. A
+//!   difference not recorded, or a recorded one no longer shown, fails the
+//!   test.
 //!
 //! Each pair's evidence on each model prints as one JSON line.
 #![allow(missing_docs)]
@@ -134,6 +146,40 @@ fn check(case: &Path, model: &Path, geometry: bool) -> Report {
     serde_json::from_value(result["report"].clone()).expect("a report")
 }
 
+/// The part of `report` about `rules`: their findings, not-evaluated
+/// outcomes, tables and summaries, as a case stores a retired
+/// implementation's outcomes.
+fn restricted(report: &Report, rules: &BTreeSet<&str>) -> Value {
+    let mut value = serde_json::to_value(report).expect("a report serializes");
+    let about = |entry: &Value| {
+        entry["rule_id"]
+            .as_str()
+            .is_some_and(|rule| rules.contains(rule))
+    };
+    for field in ["findings", "not_evaluated", "tables", "rules"] {
+        if let Some(entries) = value.get_mut(field).and_then(Value::as_array_mut) {
+            entries.retain(about);
+        }
+    }
+    if let Some(fields) = value.as_object_mut() {
+        fields.remove("stale_decisions");
+    }
+    value
+}
+
+/// The rules a case compares with their recorded outcomes.
+fn recorded_rules(parity: &Value) -> Vec<&Value> {
+    parity["recorded"]
+        .as_array()
+        .map(|rules| rules.iter().collect())
+        .unwrap_or_default()
+}
+
+/// Where a case stores the recorded outcomes on `model`.
+fn recording(case: &Path, model: &str) -> PathBuf {
+    case.join("recorded").join(format!("{model}.json"))
+}
+
 /// Runs one case over every model it names; the failures.
 fn run_case(case: &Path, models: &[(String, PathBuf)]) -> Vec<String> {
     let parity = read(&case.join("parity.json"));
@@ -154,7 +200,13 @@ fn run_case(case: &Path, models: &[(String, PathBuf)]) -> Vec<String> {
     let pairs = parity["pairs"]
         .as_array()
         .expect("`pairs` lists rule pairs");
-    assert!(!pairs.is_empty(), "{}: no pairs to compare", case.display());
+    let stored = recorded_rules(&parity);
+    assert!(
+        !pairs.is_empty() || !stored.is_empty(),
+        "{}: nothing to compare",
+        case.display()
+    );
+    let recording_now = std::env::var_os("AXIOVAL_PARITY_RECORD").is_some();
     let recorded: BTreeSet<(String, String, String)> = parity["divergences"]
         .as_array()
         .map(Vec::as_slice)
@@ -170,8 +222,15 @@ fn run_case(case: &Path, models: &[(String, PathBuf)]) -> Vec<String> {
                     case.display()
                 );
             }
-            let field = |name: &str| divergence[name].as_str().unwrap().to_owned();
-            (field("model"), field("capability"), field("difference"))
+            let field = |name: &str| divergence[name].as_str().map(str::to_owned);
+            let side = field("capability")
+                .or_else(|| field("recorded").map(|rule| format!("{rule} (recorded)")))
+                .expect("a divergence names its `capability` or `recorded` rule");
+            (
+                field("model").expect("a divergence names its model"),
+                side,
+                field("difference").expect("a divergence states its difference"),
+            )
         })
         .collect();
     let geometry = parity["geometry"].as_bool().unwrap_or(true);
@@ -194,6 +253,43 @@ fn run_case(case: &Path, models: &[(String, PathBuf)]) -> Vec<String> {
                 shown.insert((name.clone(), capability.to_owned(), difference.to_string()));
             }
         }
+        if stored.is_empty() {
+            continue;
+        }
+        let path = recording(case, name);
+        if recording_now {
+            let rules: BTreeSet<&str> = stored
+                .iter()
+                .map(|entry| entry["rule"].as_str().expect("a recorded rule id"))
+                .collect();
+            std::fs::create_dir_all(path.parent().expect("a case directory"))
+                .expect("the recordings are writable");
+            let mut text = serde_json::to_string_pretty(&restricted(&report, &rules))
+                .expect("a recording serializes");
+            text.push('\n');
+            std::fs::write(&path, text).expect("the recording is writable");
+            continue;
+        }
+        let before: Report = serde_json::from_value(read(&path))
+            .unwrap_or_else(|error| panic!("{}: not a report: {error}", path.display()));
+        for entry in &stored {
+            let rule = entry["rule"].as_str().expect("a recorded rule id");
+            let retired = format!("{rule} (recorded)");
+            let evidence = comparison(entry).compare(
+                (&retired, &Observations::of_report(&before, rule)),
+                (rule, &Observations::of_report(&report, rule)),
+            );
+            let mut line = serde_json::to_value(&evidence).unwrap();
+            line["model"] = name.clone().into();
+            println!("{line}");
+            *covered.entry(retired.clone()).or_default() += evidence.objects;
+            for difference in &evidence.differences {
+                shown.insert((name.clone(), retired.clone(), difference.to_string()));
+            }
+        }
+    }
+    if recording_now {
+        return Vec::new();
     }
     for (capability, objects) in &covered {
         assert!(
@@ -234,9 +330,10 @@ fn cases() -> Vec<PathBuf> {
 }
 
 /// Without the models: every case's packages compile against the current
-/// registry, and every pair and recorded divergence names rules of its
-/// ruleset, so a capability changing its signature fails here and not
-/// only in the job that fetches the models.
+/// registry, every pair, recorded rule and recorded divergence names rules
+/// of its ruleset, and a case comparing recorded rules has a recording for
+/// every model it names, so a capability changing its signature fails here
+/// and not only in the job that fetches the models.
 #[test]
 fn the_public_cases_compile_and_name_their_rules() {
     let registry = axioval::default_registry().unwrap();
@@ -260,10 +357,51 @@ fn the_public_cases_compile_and_name_their_rules() {
             }
             comparison(pair);
         }
+        for entry in recorded_rules(&parity) {
+            let rule = entry["rule"].as_str().expect("a recorded rule id");
+            assert!(rules.contains(rule), "{}: no rule {rule}", case.display());
+            assert!(
+                entry["reason"]
+                    .as_str()
+                    .is_some_and(|reason| !reason.is_empty()),
+                "{}: recorded rule {rule} without a reason",
+                case.display()
+            );
+            comparison(entry);
+        }
+        if !recorded_rules(&parity).is_empty() {
+            for model in case_models(&parity) {
+                let path = recording(&case, &model);
+                let _: Report = serde_json::from_value(read(&path))
+                    .unwrap_or_else(|error| panic!("{}: not a report: {error}", path.display()));
+            }
+        }
         for divergence in parity["divergences"].as_array().expect("divergences") {
-            let rule = divergence["capability"].as_str().expect("a rule id");
+            let rule = divergence["capability"]
+                .as_str()
+                .or_else(|| divergence["recorded"].as_str())
+                .expect("a rule id");
             assert!(rules.contains(rule), "{}: no rule {rule}", case.display());
         }
+    }
+}
+
+/// The names of the pinned models a case names.
+fn case_models(parity: &Value) -> Vec<String> {
+    match &parity["models"] {
+        Value::String(all) if all == "*" => {
+            read(&Path::new(FIXTURES).join("models.json"))["models"]
+                .as_array()
+                .expect("`models` lists the pinned models")
+                .iter()
+                .map(|model| model["name"].as_str().expect("a model name").to_owned())
+                .collect()
+        }
+        Value::Array(names) => names
+            .iter()
+            .map(|name| name.as_str().expect("a model name").to_owned())
+            .collect(),
+        other => panic!("`models` is {other}"),
     }
 }
 

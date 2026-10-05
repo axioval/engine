@@ -6,6 +6,9 @@
     {"capability": "wall-thickness", "expression": "wall-thickness-expression"},
     {"capability": "element-triangles", "expression": "element-triangles-expression"}
   ],
+  "recorded": [
+    {"rule": "wall-thickness", "comparison": "contract", "reason": "body-extent runs as a template (#278); without its geometry services it must leave the rule open as its retired implementation did (D4, D18), recorded before that implementation was retired."}
+  ],
   "divergences": [
     {
       "model": "bs-ifc4-building-architecture.ifc",

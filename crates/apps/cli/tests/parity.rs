@@ -167,6 +167,42 @@ fn restricted(report: &Report, rules: &BTreeSet<&str>) -> Value {
     value
 }
 
+/// What a case's comparisons showed: every difference by model, side and
+/// difference, and how many scopes each side's comparisons covered.
+#[derive(Default)]
+struct Tally {
+    shown: BTreeSet<(String, String, String)>,
+    covered: BTreeMap<String, usize>,
+}
+
+impl Tally {
+    /// Prints `evidence` as one JSON line and counts it.
+    fn add(&mut self, model: &str, side: &str, evidence: &axioval::rules::parity::ParityEvidence) {
+        let mut line = serde_json::to_value(evidence).unwrap();
+        line["model"] = model.into();
+        println!("{line}");
+        *self.covered.entry(side.to_owned()).or_default() += evidence.objects;
+        for difference in &evidence.differences {
+            self.shown
+                .insert((model.to_owned(), side.to_owned(), difference.to_string()));
+        }
+    }
+}
+
+/// Writes the outcomes the recorded rules reported in `report` to `path`.
+fn write_recording(path: &Path, report: &Report, stored: &[&Value]) {
+    let rules: BTreeSet<&str> = stored
+        .iter()
+        .map(|entry| entry["rule"].as_str().expect("a recorded rule id"))
+        .collect();
+    std::fs::create_dir_all(path.parent().expect("a case directory"))
+        .expect("the recordings are writable");
+    let mut text =
+        serde_json::to_string_pretty(&restricted(report, &rules)).expect("a recording serializes");
+    text.push('\n');
+    std::fs::write(path, text).expect("the recording is writable");
+}
+
 /// The rules a case compares with their recorded outcomes.
 fn recorded_rules(parity: &Value) -> Vec<&Value> {
     parity["recorded"]
@@ -178,6 +214,36 @@ fn recorded_rules(parity: &Value) -> Vec<&Value> {
 /// Where a case stores the recorded outcomes on `model`.
 fn recording(case: &Path, model: &str) -> PathBuf {
     case.join("recorded").join(format!("{model}.json"))
+}
+
+/// The divergences a case records, by model, side and difference.
+fn divergences(case: &Path, parity: &Value) -> BTreeSet<(String, String, String)> {
+    parity["divergences"]
+        .as_array()
+        .map(Vec::as_slice)
+        .unwrap_or_default()
+        .iter()
+        .map(|divergence| {
+            for field in ["reason", "decision"] {
+                assert!(
+                    divergence[field]
+                        .as_str()
+                        .is_some_and(|text| !text.is_empty()),
+                    "{}: a divergence without a {field}",
+                    case.display()
+                );
+            }
+            let field = |name: &str| divergence[name].as_str().map(str::to_owned);
+            let side = field("capability")
+                .or_else(|| field("recorded").map(|rule| format!("{rule} (recorded)")))
+                .expect("a divergence names its `capability` or `recorded` rule");
+            (
+                field("model").expect("a divergence names its model"),
+                side,
+                field("difference").expect("a divergence states its difference"),
+            )
+        })
+        .collect()
 }
 
 /// Runs one case over every model it names; the failures.
@@ -207,35 +273,9 @@ fn run_case(case: &Path, models: &[(String, PathBuf)]) -> Vec<String> {
         case.display()
     );
     let recording_now = std::env::var_os("AXIOVAL_PARITY_RECORD").is_some();
-    let recorded: BTreeSet<(String, String, String)> = parity["divergences"]
-        .as_array()
-        .map(Vec::as_slice)
-        .unwrap_or_default()
-        .iter()
-        .map(|divergence| {
-            for field in ["reason", "decision"] {
-                assert!(
-                    divergence[field]
-                        .as_str()
-                        .is_some_and(|text| !text.is_empty()),
-                    "{}: a divergence without a {field}",
-                    case.display()
-                );
-            }
-            let field = |name: &str| divergence[name].as_str().map(str::to_owned);
-            let side = field("capability")
-                .or_else(|| field("recorded").map(|rule| format!("{rule} (recorded)")))
-                .expect("a divergence names its `capability` or `recorded` rule");
-            (
-                field("model").expect("a divergence names its model"),
-                side,
-                field("difference").expect("a divergence states its difference"),
-            )
-        })
-        .collect();
+    let recorded = divergences(case, &parity);
     let geometry = parity["geometry"].as_bool().unwrap_or(true);
-    let mut shown = BTreeSet::new();
-    let mut covered: BTreeMap<String, usize> = BTreeMap::new();
+    let mut tally = Tally::default();
     for (name, model) in named {
         let report = check(case, model, geometry);
         for pair in pairs {
@@ -245,29 +285,14 @@ fn run_case(case: &Path, models: &[(String, PathBuf)]) -> Vec<String> {
                 (capability, &Observations::of_report(&report, capability)),
                 (expression, &Observations::of_report(&report, expression)),
             );
-            let mut line = serde_json::to_value(&evidence).unwrap();
-            line["model"] = name.clone().into();
-            println!("{line}");
-            *covered.entry(capability.to_owned()).or_default() += evidence.objects;
-            for difference in &evidence.differences {
-                shown.insert((name.clone(), capability.to_owned(), difference.to_string()));
-            }
+            tally.add(name, capability, &evidence);
         }
         if stored.is_empty() {
             continue;
         }
         let path = recording(case, name);
         if recording_now {
-            let rules: BTreeSet<&str> = stored
-                .iter()
-                .map(|entry| entry["rule"].as_str().expect("a recorded rule id"))
-                .collect();
-            std::fs::create_dir_all(path.parent().expect("a case directory"))
-                .expect("the recordings are writable");
-            let mut text = serde_json::to_string_pretty(&restricted(&report, &rules))
-                .expect("a recording serializes");
-            text.push('\n');
-            std::fs::write(&path, text).expect("the recording is writable");
+            write_recording(&path, &report, &stored);
             continue;
         }
         let before: Report = serde_json::from_value(read(&path))
@@ -279,18 +304,13 @@ fn run_case(case: &Path, models: &[(String, PathBuf)]) -> Vec<String> {
                 (&retired, &Observations::of_report(&before, rule)),
                 (rule, &Observations::of_report(&report, rule)),
             );
-            let mut line = serde_json::to_value(&evidence).unwrap();
-            line["model"] = name.clone().into();
-            println!("{line}");
-            *covered.entry(retired.clone()).or_default() += evidence.objects;
-            for difference in &evidence.differences {
-                shown.insert((name.clone(), retired.clone(), difference.to_string()));
-            }
+            tally.add(name, &retired, &evidence);
         }
     }
     if recording_now {
         return Vec::new();
     }
+    let Tally { shown, covered } = tally;
     for (capability, objects) in &covered {
         assert!(
             *objects > 0,

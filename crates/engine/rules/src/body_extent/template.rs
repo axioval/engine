@@ -103,6 +103,8 @@ fn stated_form() -> Form {
         },
         fail: "{measured}{stated}",
         undecided: "{measured}, which straddles the stated length{stated}",
+        members: None,
+        table: None,
     }
 }
 
@@ -126,6 +128,8 @@ fn range_form() -> Form {
         },
         fail: "{measured}; required {bound}",
         undecided: "{measured}, which straddles {bound}",
+        members: None,
+        table: None,
     }
 }
 
@@ -201,6 +205,7 @@ pub(crate) fn template() -> Template {
             ParameterDescriptor::optional("minimum", ParameterType::Quantity),
             ParameterDescriptor::optional("maximum", ParameterType::Quantity),
         ],
+        grades: false,
         name: "body-extent",
         defaults: vec![ParameterDefault {
             parameter: "tolerance",

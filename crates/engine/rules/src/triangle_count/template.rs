@@ -21,6 +21,7 @@ pub(crate) fn template() -> Template {
             "maximum",
             ParameterType::Integer,
         )],
+        grades: false,
         name: "triangle-count",
         defaults: Vec::new(),
         declaration: vec![Check::Count {
@@ -58,6 +59,8 @@ pub(crate) fn template() -> Template {
             },
             fail: "mesh has {count} triangles; at most {maximum} allowed{tessellated}",
             undecided: "mesh has {count} triangles, which straddles at most {maximum}{tessellated}",
+            members: None,
+            table: None,
         }],
     }
 }

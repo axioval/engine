@@ -51,6 +51,11 @@ pub struct Template {
     /// The capability's parameter descriptor, unchanged by the template.
     #[serde(skip)]
     pub parameters: Vec<ParameterDescriptor>,
+    /// Whether a finding states how far its value misses the bound it
+    /// fails (the descriptor's `grades_deviation`), measured from the
+    /// declared bound, never the widened one.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub grades: bool,
     /// How messages about the rule as a whole name the capability, such as
     /// `body-extent` in the message ``body-extent: `minimum` exceeds `maximum` ``.
     pub name: &'static str,
@@ -102,6 +107,25 @@ pub enum Check {
     /// and is at least zero: otherwise `` parameter `<parameter>` is
     /// required `` or `` `<parameter>` is negative ``.
     Count { parameter: &'static str },
+    /// The parameter, where stated, is of its descriptor's kind, refused
+    /// as the parameter reader words a wrong one: a check placed where the
+    /// capability read the parameter, so refusals keep their order.
+    Kind { parameter: &'static str },
+    /// Every number of `parameters` that is stated is at least zero: each
+    /// is read first (a wrong type refused as the parameter reader words
+    /// it), then any below zero fails with `message`.
+    NonNegative {
+        parameters: &'static [&'static str],
+        message: &'static str,
+    },
+    /// The traversal the rule declares (`relationship`, `direction`,
+    /// `follow_chain`, `path`, `skip_absent_relationship_ends`) is valid,
+    /// as the traversal reader words a refusal, and is declared only
+    /// together with one of `with`.
+    Traversal {
+        with: &'static [&'static str],
+        message: &'static str,
+    },
     /// No parameter of `one` is stated together with one of `other`.
     Exclusive {
         one: &'static [&'static str],
@@ -182,6 +206,13 @@ pub enum Condition {
     /// The value was read from evidence that is not exact: a count of a
     /// tessellation, a measurement within a chord deviation.
     Inexact { value: &'static str },
+    /// The string parameter (or its default) is `value`. Several texts of
+    /// one name may each hold under another condition; the first that
+    /// holds is rendered.
+    Equals {
+        parameter: &'static str,
+        value: &'static str,
+    },
 }
 
 /// One composition of a template.
@@ -198,6 +229,78 @@ pub struct Form {
     pub fail: &'static str,
     /// The not-evaluated message where the values cannot decide.
     pub undecided: &'static str,
+    /// The members each selected object (an anchor) is judged through,
+    /// where the form judges anchors.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub members: Option<Members>,
+    /// The report table the form fills with what it read, passing or not.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub table: Option<Table>,
+}
+
+/// The members of an anchor: the objects a selector parameter picks that
+/// the rule's traversal (`relationship` or `path`) reaches from the
+/// anchor, or, without one, every such object of the anchor's own source
+/// but the anchor. A value reads them as an aggregate over
+/// [`Members::source`]; the runner narrows it to the anchor's members.
+/// Findings relate the members surely picked.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Members {
+    /// The selector parameter picking members.
+    pub selector: &'static str,
+    /// What members the selector cannot decide leave.
+    pub undecided: UndecidedMembers,
+}
+
+impl Members {
+    /// The aggregate source a value reads an anchor's members through:
+    /// the objects the member selector picks, as a block editor shows it.
+    /// Run, it is the anchor's members.
+    #[must_use]
+    pub fn source(selector: &str) -> axioval_ir::contract::AggregateSource {
+        axioval_ir::contract::AggregateSource::Selector {
+            selector: Box::new(axioval_ir::contract::Selector::Expression {
+                expression: Box::new(Expression::Parameter {
+                    name: selector.to_owned(),
+                    label: None,
+                }),
+            }),
+        }
+    }
+}
+
+/// How an anchor with members the selector cannot decide is judged.
+#[derive(Clone, Debug, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum UndecidedMembers {
+    /// Undecided members can only add to the value (a sum of areas): only
+    /// a value surely above the maximum stands, and the anchor is otherwise
+    /// left not evaluated with `message` (`{undecided}` the count of
+    /// undecided members, `{relation}` how they are reached). The anchor
+    /// has no row in the form's table: its value is known only from below.
+    OnlyExcess { message: &'static str },
+}
+
+/// A report table a form fills: one row per selected object whose values
+/// were read, keyed by the object.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Table {
+    /// The table's name, a report contract.
+    pub name: &'static str,
+    /// Its columns, in order.
+    pub columns: Vec<Column>,
+}
+
+/// One column of a [`Table`]: a value of the form, under an id that may
+/// name a [`Text`] (`{column}`), in a quantity's dimension.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Column {
+    pub id: &'static str,
+    pub value: &'static str,
+    pub dimension: axioval_ir::QuantityDimension,
 }
 
 /// One value of a form: an expression the shared evaluator evaluates for

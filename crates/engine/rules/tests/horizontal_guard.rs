@@ -758,15 +758,28 @@ fn the_guard_decision_as_an_expression_over_edges_reaches_the_verdicts() {
     let m = |value: f64| json!({"kind": "literal", "value": {"type": "quantity", "value": value, "unit": "m"}});
     let compare = |operator: &str, left: Value, right: Value| json!({"kind": "compare", "operator": operator, "left": left, "right": right});
     let rounded = |name: &str| json!({"kind": "round", "operand": field(name), "step": m(1e-6)});
+    // A field an edge does not state (no barrier, nothing climbable, no
+    // landing) is `null`, which decides nothing: each test states that an
+    // absent field does not meet it.
+    let stated = |name: &str, test: Value| json!({"kind": "and", "operands": [{"kind": "isDefined", "operand": field(name)}, test]});
     let requirement = |curb: bool| {
-        let covered = compare("greaterThanOrEquals", rounded("guarded_height"), m(1.0));
-        let climbed = compare("lessThanOrEquals", rounded("climbable_height"), m(0.6));
+        let covered = stated(
+            "guarded_height",
+            compare("greaterThanOrEquals", rounded("guarded_height"), m(1.0)),
+        );
+        let climbed = stated(
+            "climbable_height",
+            compare("lessThanOrEquals", rounded("climbable_height"), m(0.6)),
+        );
         let present = compare(
             "greaterThan",
             field("barrier_share"),
             json!({"kind": "literal", "value": {"type": "number", "value": 0.5}}),
         );
-        let landed = compare("lessThanOrEquals", rounded("landing_fall"), m(0.5));
+        let landed = stated(
+            "landing_fall",
+            compare("lessThanOrEquals", rounded("landing_fall"), m(0.5)),
+        );
         let list = format!(
             "guard_edges;barrier_gap=0.1;platform_gap=0.1;landing_gap=0.3;landing_width=1;\
              climb_distance=0.3;climb_side=0.1;measure_from={}",

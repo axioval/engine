@@ -881,9 +881,22 @@ pub const EXPRESSION_KINDS: &[NodeKind] = &[
         label: &en_de("Rule passed", "Regel erfüllt"),
         help: &en_de(
             "Whether another rule of the ruleset passed the object; `null` when it did not \
-             select it.",
+             select it, which decides no requirement: guard it with `selected`.",
             "Ob eine andere Regel des Regelwerks das Objekt bestanden hat; `null`, wenn sie es \
-             nicht ausgewählt hat.",
+             nicht ausgewählt hat, was keine Anforderung entscheidet: mit `selected` absichern.",
+        ),
+    },
+    NodeKind {
+        kind: "selected",
+        category: "ruleOutcome",
+        fields: RULE,
+        result: TRUTH,
+        label: &en_de("Selected by a rule", "Von einer Regel ausgewählt"),
+        help: &en_de(
+            "Whether another rule of the ruleset selected the object; not evaluated when it \
+             could not decide.",
+            "Ob eine andere Regel des Regelwerks das Objekt ausgewählt hat; ungeprüft, wenn sie \
+             es nicht entscheiden konnte.",
         ),
     },
     NodeKind {
@@ -1675,6 +1688,7 @@ mod tests {
             E::Sin { .. } => "sin", E::Cos { .. } => "cos", E::Tan { .. } => "tan",
             E::Atan2 { .. } => "atan2", E::ConvertSlope { .. } => "convertSlope",
             E::Aggregate { .. } => "aggregate", E::RuleOutcome { .. } => "ruleOutcome",
+            E::Selected { .. } => "selected",
             E::FindingCount { .. } => "findingCount", E::Deviation { .. } => "deviation",
             E::Concat { .. } => "concat", E::Length { .. } => "length",
             E::Lower { .. } => "lower", E::Upper { .. } => "upper", E::Trim { .. } => "trim",

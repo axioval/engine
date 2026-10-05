@@ -106,9 +106,16 @@
                         "branches": [
                           {
                             "when": {
-                              "kind": "property",
-                              "propertySet": "axioval:example.composing.durability",
-                              "property": "axioval:example.composing.prestressed"
+                              "kind": "coalesce",
+                              "label": "prestressed",
+                              "operands": [
+                                {
+                                  "kind": "property",
+                                  "propertySet": "axioval:example.composing.durability",
+                                  "property": "axioval:example.composing.prestressed"
+                                },
+                                {"kind": "literal", "value": {"type": "boolean", "value": false}}
+                              ]
                             },
                             "then": {"kind": "parameter", "name": "prestress_allowance"}
                           }

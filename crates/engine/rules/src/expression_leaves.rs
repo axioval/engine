@@ -386,18 +386,35 @@ impl ExpressionContext for ObjectLeaves<'_> {
         let Some(record) = outcomes.get(rule) else {
             return Leaf::unreadable(format!("rule `{rule}` has not run"));
         };
-        let verdict = record.object(self.object);
+        let verdict = if read == RuleRead::Selected {
+            // Whether it was selected, however it was then judged.
+            match record.selected(self.object) {
+                Ok(true) => ObjectVerdict::Passed,
+                Ok(false) => ObjectVerdict::NotSelected,
+                Err(why) => ObjectVerdict::Undecided(why),
+            }
+        } else {
+            record.object(self.object)
+        };
         let (count, deviation) = record.findings_about(&self.object.id);
         let value = match (read, verdict) {
             (_, ObjectVerdict::Undecided(why)) => {
                 self.reasons
                     .borrow_mut()
                     .push(NotEvaluatedReason::IncompleteEvidence);
-                return Leaf::unreadable(format!("rule `{rule}` left it open: {why}"));
+                let what = if read == RuleRead::Selected {
+                    "cannot tell whether it selected it"
+                } else {
+                    "left it open"
+                };
+                return Leaf::unreadable(format!("rule `{rule}` {what}: {why}"));
             }
             (RuleRead::Outcome, ObjectVerdict::Passed) => Value::Boolean(true),
             (RuleRead::Outcome, ObjectVerdict::Failed) => Value::Boolean(false),
             (RuleRead::Outcome, ObjectVerdict::NotSelected) => Value::Null,
+            (RuleRead::Selected, verdict) => {
+                Value::Boolean(!matches!(verdict, ObjectVerdict::NotSelected))
+            }
             (RuleRead::FindingCount, _) => Value::integer(i64::try_from(count).unwrap_or(i64::MAX)),
             (RuleRead::Deviation, _) => match deviation {
                 Some((lower, upper)) => Value::Number {

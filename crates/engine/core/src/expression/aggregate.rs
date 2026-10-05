@@ -3,8 +3,13 @@
 //! A member whose membership cannot be decided is never dropped: `count`,
 //! `sum`, `min`, `max` and `distinctCount` widen to every result it allows,
 //! `any`, `all` and `none` follow Kleene logic over membership and truth,
-//! and `average` is not evaluated. `null` member values are skipped by
-//! numeric aggregates and are not true for truth aggregates.
+//! and `average` is not evaluated.
+//!
+//! A member value that is `null` is never skipped and never false: it
+//! makes `sum`, `min`, `max`, `average` and `distinctCount` `null`, and it
+//! is an unknown truth for `any`, `all` and `none`, as `or` and `and` read
+//! `null`. Members that state nothing are left out by the author, with a
+//! `where` or a `coalesce` in the `value`.
 
 use std::collections::BTreeSet;
 
@@ -27,59 +32,79 @@ fn undecided(members: &[Member]) -> Failure {
     ))
 }
 
-/// A member's truth: decided, or not evaluated and why.
-fn truth(member: &Member) -> Result<Option<bool>, Failure> {
+/// The truths a member's value may be: whether it can be true, false and
+/// `null` (unknown). A value not evaluated may be any.
+#[derive(Clone, Copy)]
+struct Can {
+    true_: bool,
+    false_: bool,
+    null: bool,
+}
+
+/// A member's possible truths.
+fn truth(member: &Member) -> Result<Can, Failure> {
+    let can = |true_, false_, null| Can {
+        true_,
+        false_,
+        null,
+    };
     match &member.value {
-        Ok(Value::Boolean(value)) => Ok(Some(*value)),
-        Ok(Value::Null) => Ok(Some(false)),
+        Ok(Value::Boolean(value)) => Ok(can(*value, !*value, false)),
+        Ok(Value::Null) => Ok(can(false, false, true)),
         Ok(other) => Err(Failure::Here(Reason::Mismatch(format!(
             "a member's value is {}, not a truth",
             other.kind()
         )))),
-        Err(_) => Ok(None),
+        Err(_) => Ok(can(true, true, true)),
     }
 }
 
-/// `any` (or `all`) over every way the undecided members may belong: true
-/// or false when every way agrees, otherwise not evaluated, naming a
-/// member's own reason where there is one.
+/// `any` (or `all`) over every way the undecided members may belong and
+/// every truth a member not evaluated may have: true, false or `null` when
+/// every way agrees, otherwise not evaluated, naming a member's own reason
+/// where there is one.
 ///
-/// `all` holds for a set of at least one member, each true; `any` for a
-/// set with a true member.
+/// `all` holds for a set of at least one member, each true, and fails for
+/// an empty set or one with a false member; `any` holds for a set with a
+/// true member and fails for one whose members are all false. Otherwise a
+/// `null` member leaves either `null`, as Kleene's `and` and `or`.
 fn quantified(all: bool, members: &[Member]) -> Result<Value, Failure> {
     let mut certain = Vec::new();
     let mut possible = Vec::new();
     let mut cause = None;
     for member in members {
-        let value = truth(member)?;
-        if let (None, Err(why)) = (value, &member.value) {
+        let can = truth(member)?;
+        if let Err(why) = &member.value {
             cause.get_or_insert_with(|| why.clone());
         }
-        // Whether it can be true, and whether it can be false.
-        let can = (value != Some(false), value != Some(true));
         if member.certain {
             certain.push(can);
         } else {
             possible.push(can);
         }
     }
-    let (may_hold, may_fail) = if all {
+    let every = |test: fn(&Can) -> bool| certain.iter().all(test);
+    let some = |test: fn(&Can) -> bool| certain.iter().chain(&possible).any(test);
+    let (may_hold, may_fail, may_be_null) = if all {
         (
-            certain.iter().all(|(true_, _)| *true_)
-                && (!certain.is_empty() || possible.iter().any(|(true_, _)| *true_)),
-            certain.is_empty()
-                || certain.iter().any(|(_, false_)| *false_)
-                || possible.iter().any(|(_, false_)| *false_),
+            // Every included member true, and at least one included.
+            every(|can| can.true_) && (!certain.is_empty() || some(|can| can.true_)),
+            // An included member false, or none included.
+            certain.is_empty() || some(|can| can.false_),
+            // No included member false, and one unknown.
+            every(|can| can.true_ || can.null) && some(|can| can.null),
         )
     } else {
         (
-            certain.iter().chain(&possible).any(|(true_, _)| *true_),
-            certain.iter().all(|(_, false_)| *false_),
+            some(|can| can.true_),
+            every(|can| can.false_),
+            every(|can| can.false_ || can.null) && some(|can| can.null),
         )
     };
-    match (may_hold, may_fail) {
-        (true, false) => Ok(Value::Boolean(true)),
-        (false, true) => Ok(Value::Boolean(false)),
+    match (may_hold, may_fail, may_be_null) {
+        (true, false, false) => Ok(Value::Boolean(true)),
+        (false, true, false) => Ok(Value::Boolean(false)),
+        (false, false, true) => Ok(Value::Null),
         _ => Err(cause.map_or_else(|| undecided(members), Failure::Member)),
     }
 }
@@ -115,9 +140,21 @@ fn count(lower: usize, upper: usize) -> Value {
     }
 }
 
-/// The members' numeric values, `null` ones skipped: certain ones, then
-/// those of undecided members, and their one unit.
+/// The members' numeric values: certain ones, then those of undecided
+/// members, and their one unit.
 type Numbers = (Vec<Interval>, Vec<Interval>, Option<Unit>);
+
+/// Whether a member's `null` value makes the aggregate `null`: `Some(true)`
+/// when a certain member states none, `Some(false)` when only undecided
+/// ones do (the result depends on whether they belong), `None` when every
+/// member states a value.
+fn stated_absent(members: &[Member]) -> Option<bool> {
+    let mut null = members
+        .iter()
+        .filter(|member| member.value == Ok(Value::Null));
+    let first = null.next()?;
+    Some(first.certain || null.any(|member| member.certain))
+}
 
 fn numbers(members: &[Member]) -> Result<Numbers, Failure> {
     let (mut certain, mut possible, mut unit): Numbers = (Vec::new(), Vec::new(), None);
@@ -154,7 +191,14 @@ fn numbers(members: &[Member]) -> Result<Numbers, Failure> {
 
 fn numeric(function: AggregateFunction, members: &[Member]) -> Result<Value, Failure> {
     use AggregateFunction as F;
+    // A certain member stating no value decides, whatever the others are.
+    if stated_absent(members) == Some(true) {
+        return Ok(Value::Null);
+    }
     let (certain, possible, unit) = numbers(members)?;
+    if stated_absent(members).is_some() {
+        return Err(undecided(members));
+    }
     let Some(unit) = unit else {
         // No member has a value, or none is surely there.
         return if members.iter().any(|member| !member.certain) && function != F::Sum {
@@ -236,6 +280,18 @@ fn key(value: &Value) -> Result<Option<String>, Failure> {
 }
 
 fn distinct(members: &[Member]) -> Result<Value, Failure> {
+    if stated_absent(members) == Some(true) {
+        return Ok(Value::Null);
+    }
+    if let Some(why) = members
+        .iter()
+        .find_map(|member| member.value.as_ref().err())
+    {
+        return Err(Failure::Member(why.clone()));
+    }
+    if stated_absent(members).is_some() {
+        return Err(undecided(members));
+    }
     let mut certain = BTreeSet::new();
     let mut possible = BTreeSet::new();
     for member in members {

@@ -657,7 +657,7 @@ impl Checker<'_> {
                     (_, None) => Type::Any,
                 }
             }
-            Expression::RuleOutcome { .. } => Type::Boolean,
+            Expression::RuleOutcome { .. } | Expression::Selected { .. } => Type::Boolean,
             Expression::FindingCount { .. } => Type::Integer,
             Expression::Deviation { .. } => Type::NUMBER,
             Expression::Concat { operands, .. } => {

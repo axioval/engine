@@ -175,24 +175,29 @@ fn kleene(value: serde_json::Value) -> &'static str {
     match evaluate(&expression(value), "r", &mut Context::default()).outcome {
         Ok(Value::Boolean(true)) => "T",
         Ok(Value::Boolean(false)) => "F",
+        Ok(Value::Null) => "N",
         Ok(other) => panic!("{other:?}"),
         Err(_) => "U",
     }
 }
 
+/// The four states of a truth's place: true, false, `null` (a value stated
+/// absent) and not evaluated (`U`).
+const STATES: [&str; 4] = ["T", "F", "N", "U"];
+
 #[test]
-fn logic_follows_kleene_truth_tables() {
-    // Rows: left T F U; columns: right T F U.
-    let states = ["T", "F", "U"];
+fn logic_follows_kleene_truth_tables_with_null_apart_from_not_evaluated() {
+    // Rows: left T F N U; columns: right T F N U. `null` is Kleene's
+    // unknown; not evaluated outranks it, as it may be any of the three.
     let tables = [
-        ("and", ["TFU", "FFF", "UFU"]),
-        ("or", ["TTT", "TFU", "TUU"]),
-        ("implies", ["TFU", "TTT", "TUU"]),
-        ("xor", ["FTU", "TFU", "UUU"]),
+        ("and", ["TFNU", "FFFF", "NFNU", "UFUU"]),
+        ("or", ["TTTT", "TFNU", "TNNU", "TUUU"]),
+        ("implies", ["TFNU", "TTTT", "TNNU", "TUUU"]),
+        ("xor", ["FTNU", "TFNU", "NNNU", "UUUU"]),
     ];
     for (kind, rows) in tables {
-        for (left, row) in states.iter().zip(rows) {
-            for (right, expected) in states.iter().zip(row.chars()) {
+        for (left, row) in STATES.iter().zip(rows) {
+            for (right, expected) in STATES.iter().zip(row.chars()) {
                 let value = match kind {
                     "implies" => {
                         json!({"kind": kind, "antecedent": truth(left), "consequent": truth(right)})
@@ -204,12 +209,137 @@ fn logic_follows_kleene_truth_tables() {
             }
         }
     }
-    for (operand, expected) in [("T", "F"), ("F", "T"), ("U", "U"), ("N", "T")] {
+    let unary = [
+        ("not", "FTNU"),
+        ("isDefined", "TTFU"),
+        ("isUndefined", "FFTU"),
+    ];
+    for (kind, row) in unary {
+        for (operand, expected) in STATES.iter().zip(row.chars()) {
+            assert_eq!(
+                kleene(json!({"kind": kind, "operand": truth(operand)})),
+                expected.to_string(),
+                "{kind} {operand}"
+            );
+        }
+    }
+    // `not(x == 5)` on a stated absence is `null`, never true.
+    let five = json!({"kind": "literal", "value": {"type": "integer", "value": 5}});
+    assert_eq!(
+        kleene(json!({"kind": "not", "operand":
+            {"kind": "compare", "operator": "equals", "left": {"kind": "null"}, "right": five}})),
+        "N"
+    );
+}
+
+/// A number leaf: 3, `null`, or not evaluated.
+fn number_state(state: &str) -> serde_json::Value {
+    match state {
+        "3" => json!({"kind": "literal", "value": {"type": "integer", "value": 3}}),
+        "4" => json!({"kind": "literal", "value": {"type": "integer", "value": 4}}),
+        "N" => json!({"kind": "null"}),
+        _ => parameter("unknown"),
+    }
+}
+
+#[test]
+fn comparisons_and_set_tests_are_null_on_a_stated_absence() {
+    let operands = ["3", "N", "U"];
+    // Rows: left 3 N U; columns: right 3 N U.
+    let tables = [
+        ("equals", ["TNU", "NNU", "UUU"]),
+        ("notEquals", ["FNU", "NNU", "UUU"]),
+        ("lessThan", ["FNU", "NNU", "UUU"]),
+        ("greaterThanOrEquals", ["TNU", "NNU", "UUU"]),
+    ];
+    for (operator, rows) in tables {
+        for (left, row) in operands.iter().zip(rows) {
+            for (right, expected) in operands.iter().zip(row.chars()) {
+                let value = json!({"kind": "compare", "operator": operator,
+                    "left": number_state(left), "right": number_state(right)});
+                assert_eq!(
+                    kleene(value),
+                    expected.to_string(),
+                    "{left} {operator} {right}"
+                );
+            }
+        }
+    }
+    // `between(x, low, high)`: `null` anywhere is `null` unless the other
+    // bound already fails.
+    let between = |operand: &str, low: &str, high: &str| {
+        kleene(json!({"kind": "between", "operand": number_state(operand),
+            "low": number_state(low), "high": number_state(high)}))
+    };
+    assert_eq!(between("3", "3", "4"), "T");
+    assert_eq!(between("N", "3", "4"), "N");
+    assert_eq!(between("3", "N", "4"), "N");
+    assert_eq!(between("4", "N", "3"), "F");
+    assert_eq!(between("U", "3", "4"), "U");
+    assert_eq!(between("N", "U", "4"), "U");
+    // `oneOf` is `or` over equalities and `noneOf` its negation, so they
+    // agree with `not oneOf` in every state.
+    let cases = [
+        ("3", vec!["3"], "T"),
+        ("4", vec!["3"], "F"),
+        ("N", vec!["3"], "N"),
+        ("U", vec!["3"], "U"),
+        ("3", vec!["N", "3"], "T"),
+        ("4", vec!["N", "3"], "N"),
+        ("4", vec!["U", "3"], "U"),
+    ];
+    for (operand, values, one_of) in cases {
+        let values: Vec<_> = values.iter().map(|value| number_state(value)).collect();
+        let set = |kind: &str| {
+            kleene(json!({"kind": kind, "operand": number_state(operand), "values": values}))
+        };
+        let negated = kleene(json!({"kind": "not", "operand":
+            {"kind": "oneOf", "operand": number_state(operand), "values": values}}));
+        assert_eq!(set("oneOf"), one_of, "{operand} oneOf {values:?}");
+        assert_eq!(set("noneOf"), negated, "{operand} noneOf {values:?}");
+    }
+}
+
+#[test]
+fn if_and_coalesce_over_every_state() {
+    let three = json!({"kind": "literal", "value": {"type": "integer", "value": 3}});
+    let four = json!({"kind": "literal", "value": {"type": "integer", "value": 4}});
+    let run = |value: serde_json::Value| {
+        evaluate(&expression(value), "r", &mut Context::default()).outcome
+    };
+    let choose = |condition: &str, then: &serde_json::Value| {
+        run(
+            json!({"kind": "if", "branches": [{"when": truth(condition), "then": then}],
+            "else": three}),
+        )
+    };
+    assert_eq!(choose("T", &four), Ok(Value::integer(4)));
+    assert_eq!(choose("F", &four), Ok(Value::integer(3)));
+    assert_eq!(choose("N", &four), Ok(Value::Null));
+    assert!(matches!(
+        choose("U", &four).map_err(|why| why.reason),
+        Err(Reason::UndecidedCondition(_))
+    ));
+    // Branches that agree decide whatever the condition.
+    assert_eq!(choose("N", &three), Ok(Value::integer(3)));
+    assert_eq!(choose("U", &three), Ok(Value::integer(3)));
+    // `coalesce` skips `null` and stops at the first value or the first
+    // operand not evaluated.
+    for (first, expected) in [
+        ("T", Ok(Value::Boolean(true))),
+        ("F", Ok(Value::Boolean(false))),
+        ("N", Ok(Value::integer(3))),
+    ] {
         assert_eq!(
-            kleene(json!({"kind": "not", "operand": truth(operand)})),
+            run(json!({"kind": "coalesce", "operands": [truth(first), three]})),
             expected
         );
     }
+    assert!(run(json!({"kind": "coalesce", "operands": [truth("U"), three]})).is_err());
+    assert_eq!(
+        run(json!({"kind": "coalesce", "operands": [{"kind": "null"}, {"kind": "null"}]})),
+        Ok(Value::Null)
+    );
 }
 
 #[test]
@@ -220,21 +350,6 @@ fn null_is_a_stated_absence_and_never_not_evaluated() {
     let run = |value: serde_json::Value| {
         evaluate(&expression(value), "r", &mut Context::default()).outcome
     };
-    for operator in ["equals", "notEquals", "lessThan", "greaterThanOrEquals"] {
-        assert_eq!(
-            run(json!({"kind": "compare", "operator": operator, "left": absent, "right": three})),
-            Ok(Value::Boolean(false)),
-            "{operator}"
-        );
-    }
-    assert_eq!(
-        run(json!({"kind": "isUndefined", "operand": absent})),
-        Ok(Value::Boolean(true))
-    );
-    assert_eq!(
-        run(json!({"kind": "isDefined", "operand": absent})),
-        Ok(Value::Boolean(false))
-    );
     assert!(run(json!({"kind": "isDefined", "operand": unknown})).is_err());
     assert_eq!(
         run(json!({"kind": "add", "left": absent, "right": three})),
@@ -244,19 +359,7 @@ fn null_is_a_stated_absence_and_never_not_evaluated() {
         run(json!({"kind": "add", "left": unknown, "right": absent})),
         Ok(Value::Null)
     );
-    assert_eq!(
-        run(json!({"kind": "coalesce", "operands": [absent, three]})),
-        Ok(Value::integer(3))
-    );
     assert!(run(json!({"kind": "coalesce", "operands": [unknown, three]})).is_err());
-    assert_eq!(
-        run(json!({"kind": "coalesce", "operands": [absent, absent]})),
-        Ok(Value::Null)
-    );
-    assert_eq!(
-        run(json!({"kind": "oneOf", "operand": absent, "values": [three]})),
-        Ok(Value::Boolean(false))
-    );
     assert_eq!(
         run(
             json!({"kind": "concat", "operands": [absent, {"kind": "literal", "value": {"type": "string", "value": "a"}}]})
@@ -601,8 +704,14 @@ fn measured_member_fields_are_typed_inside_their_aggregate_only() {
     );
 }
 
-/// Members handed to an aggregate as stated: membership and value.
+/// Members handed to an aggregate as stated: membership and value, the
+/// text `not evaluated` standing for a value not evaluated.
 struct Members(Vec<(bool, Value)>);
+
+/// A member value not evaluated, as [`Members`] reads it.
+fn not_evaluated() -> Value {
+    Value::Text("not evaluated".into())
+}
 
 impl ExpressionContext for Members {
     fn property(&mut self, _: Option<&str>, name: &str) -> Leaf {
@@ -625,7 +734,15 @@ impl ExpressionContext for Members {
             .iter()
             .map(|(certain, value)| axioval_engine::expression::Member {
                 certain: *certain,
-                value: Ok(value.clone()),
+                value: if *value == not_evaluated() {
+                    Err(axioval_engine::expression::NotEvaluated {
+                        path: "a.aggregate.value".into(),
+                        label: None,
+                        reason: Reason::Unreadable("a member's value".into()),
+                    })
+                } else {
+                    Ok(value.clone())
+                },
                 evidence: Vec::new(),
             })
             .collect())
@@ -712,6 +829,100 @@ fn aggregates_widen_over_undecided_members_and_follow_kleene_logic() {
             "{function} {members:?}"
         );
     }
+}
+
+#[test]
+fn aggregates_over_true_false_null_and_not_evaluated_members() {
+    let state = |state: char| match state {
+        'T' => Value::Boolean(true),
+        'F' => Value::Boolean(false),
+        'N' => Value::Null,
+        '1' => Value::number(1.0),
+        '2' => Value::number(2.0),
+        _ => not_evaluated(),
+    };
+    let short = |outcome: Result<Value, Reason>| match outcome {
+        Ok(Value::Boolean(true)) => "T".to_owned(),
+        Ok(Value::Boolean(false)) => "F".to_owned(),
+        Ok(Value::Null) => "N".to_owned(),
+        Ok(Value::Number { value, .. }) if value.is_point() => value.lower.to_string(),
+        Ok(other) => panic!("{other:?}"),
+        Err(_) => "U".to_owned(),
+    };
+    // Every member certain, written as one character each; `""` is none.
+    let cases = [
+        ("any", "", "F"),
+        ("any", "T", "T"),
+        ("any", "F", "F"),
+        ("any", "N", "N"),
+        ("any", "U", "U"),
+        ("any", "FN", "N"),
+        ("any", "TN", "T"),
+        ("any", "NU", "U"),
+        ("any", "TU", "T"),
+        ("all", "", "F"),
+        ("all", "T", "T"),
+        ("all", "F", "F"),
+        ("all", "N", "N"),
+        ("all", "U", "U"),
+        ("all", "TN", "N"),
+        ("all", "FN", "F"),
+        ("all", "NU", "U"),
+        ("all", "FU", "F"),
+        ("none", "", "T"),
+        ("none", "T", "F"),
+        ("none", "F", "T"),
+        ("none", "N", "N"),
+        ("none", "U", "U"),
+        ("none", "FN", "N"),
+        ("none", "TN", "F"),
+        ("count", "", "0"),
+        ("count", "N", "1"),
+        ("count", "TFNU", "4"),
+        ("sum", "", "0"),
+        ("sum", "12", "3"),
+        ("sum", "1N", "N"),
+        ("sum", "1U", "U"),
+        ("sum", "NU", "N"),
+        ("min", "", "N"),
+        ("min", "12", "1"),
+        ("min", "1N", "N"),
+        ("min", "1U", "U"),
+        ("max", "", "N"),
+        ("max", "2N", "N"),
+        ("average", "", "N"),
+        ("average", "12", "1.5"),
+        ("average", "1N", "N"),
+        ("distinctCount", "", "0"),
+        ("distinctCount", "11", "1"),
+        ("distinctCount", "1N", "N"),
+        ("distinctCount", "1U", "U"),
+    ];
+    for (function, members, expected) in cases {
+        let listed = members
+            .chars()
+            .map(|member| (true, state(member)))
+            .collect();
+        assert_eq!(
+            short(aggregate(function, listed)),
+            expected,
+            "{function} over {members:?}"
+        );
+    }
+    // A `null` member whose membership is undecided leaves the result
+    // depending on it.
+    assert_eq!(
+        aggregate("sum", vec![(true, state('1')), (false, state('N'))]),
+        Err(Reason::UndecidedMembers(1))
+    );
+    assert_eq!(
+        aggregate("any", vec![(true, state('F')), (false, state('N'))]),
+        Err(Reason::UndecidedMembers(1))
+    );
+    assert_eq!(
+        aggregate("any", vec![(true, state('N')), (false, state('F'))]),
+        Ok(Value::Null)
+    );
 }
 
 #[test]

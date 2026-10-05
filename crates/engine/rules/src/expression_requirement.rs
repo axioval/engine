@@ -18,8 +18,10 @@ use crate::support::finding;
 /// Requires the expression `requirement` to hold for each selected object.
 ///
 /// True passes, false is a finding naming the subexpression that failed and
-/// every value read, and not evaluated leaves the object not evaluated with
-/// the reason, naming the subexpression. A rule definition may declare
+/// every value read, `null` (a value the requirement needs is stated
+/// absent) is a missing-information finding, never a pass, and not
+/// evaluated leaves the object not evaluated with the reason, naming the
+/// subexpression. A rule definition may declare
 /// parameters of its own (scalar values, string lists and tables) for the
 /// expression to read, as the book's Expressions chapter describes.
 pub struct ExpressionRequirement;
@@ -103,6 +105,11 @@ impl RuleCapability for ExpressionRequirement {
                         Some(ParameterValue::String { value: template }) => {
                             render(template, &labelled)
                         }
+                        _ if result.outcome == Ok(Value::Null) => format!(
+                            "requirement cannot be confirmed: {failed} is null, as a value \
+                             it needs is stated absent{}",
+                            read_values(&result)
+                        ),
                         _ => format!(
                             "requirement does not hold: {failed} is false{}",
                             read_values(&result)
@@ -175,35 +182,60 @@ pub(crate) fn reason_of(why: &NotEvaluated) -> NotEvaluatedReason {
     }
 }
 
-/// The subexpression a false requirement fails on, by its path, and how a
-/// finding names it: its label, or its path and kind. Descends through
-/// `and` (the first operand the evaluation found false) and the consequent
-/// of an `implies`, reading the values the evaluation traced.
+/// The subexpression a false or `null` requirement fails on, by its path,
+/// and how a finding names it: its label, or its path and kind. Descends
+/// through `and` (the first operand the evaluation found as untrue as the
+/// requirement: false, else `null`) and through `implies` (its consequent,
+/// or a `null` antecedent), reading the values the evaluation traced.
 fn failing(expression: &Expression, path: &str, evaluation: &Evaluation) -> (String, String) {
+    let value = |path: &str| {
+        evaluation
+            .trace
+            .iter()
+            .find(|step| step.path == path)
+            .and_then(|step| step.value.clone())
+    };
+    let wanted = value(path).unwrap_or_else(|| "false".into());
+    descend(expression, path, &wanted, &value)
+}
+
+fn descend(
+    expression: &Expression,
+    path: &str,
+    wanted: &str,
+    value: &dyn Fn(&str) -> Option<String>,
+) -> (String, String) {
     let name = match expression.label() {
         Some(label) => format!("`{label}`"),
         None => format!("`{path}` ({})", expression.kind()),
     };
-    let untrue = |path: &str| {
-        evaluation.trace.iter().any(|step| {
-            step.path == path && matches!(step.value.as_deref(), Some("false" | "null"))
-        })
-    };
+    let is = |path: &str, wanted: &str| value(path).as_deref() == Some(wanted);
+    let here = || (path.to_owned(), name.clone());
     match expression {
         Expression::And { operands, .. } => operands
             .iter()
             .enumerate()
             .map(|(index, operand)| (operand, format!("{path}.and[{index}]")))
-            .find(|(_, operand_path)| untrue(operand_path))
-            .map_or((path.to_owned(), name), |(operand, operand_path)| {
-                failing(operand, &operand_path, evaluation)
+            .find(|(_, operand_path)| is(operand_path, wanted))
+            .map_or_else(here, |(operand, operand_path)| {
+                descend(operand, &operand_path, wanted, value)
             }),
-        Expression::Implies { consequent, .. } => failing(
+        Expression::Implies {
+            antecedent,
             consequent,
-            &format!("{path}.implies.consequent"),
-            evaluation,
-        ),
-        _ => (path.to_owned(), name),
+            ..
+        } => {
+            let consequent_path = format!("{path}.implies.consequent");
+            let antecedent_path = format!("{path}.implies.antecedent");
+            if is(&consequent_path, wanted) {
+                descend(consequent, &consequent_path, wanted, value)
+            } else if wanted == "null" && is(&antecedent_path, "null") {
+                descend(antecedent, &antecedent_path, wanted, value)
+            } else {
+                here()
+            }
+        }
+        _ => here(),
     }
 }
 
@@ -227,6 +259,7 @@ fn read_values(evaluation: &Evaluation) -> String {
                 "{rule}.{}",
                 match read {
                     axioval_engine::expression::RuleRead::Outcome => "outcome",
+                    axioval_engine::expression::RuleRead::Selected => "selected",
                     axioval_engine::expression::RuleRead::FindingCount => "findingCount",
                     axioval_engine::expression::RuleRead::Deviation => "deviation",
                 }

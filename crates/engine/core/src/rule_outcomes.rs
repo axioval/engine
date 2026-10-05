@@ -213,6 +213,33 @@ impl RuleRecord {
         self.findings.get(object).copied().unwrap_or_default()
     }
 
+    /// Whether the rule selected `object`: true for a subject of a finding
+    /// or an object surely selected, false for one surely not selected (and
+    /// for every object of a skipped rule), and why not when the selection
+    /// is undecided or was not recorded.
+    ///
+    /// # Errors
+    ///
+    /// Why the selection cannot be told.
+    pub fn selected(&self, object: &Object) -> Result<bool, String> {
+        if self.failed.contains(&object.id) {
+            return Ok(true);
+        }
+        if self.skipped {
+            return Ok(false);
+        }
+        let Some((selected, open)) = &self.selection else {
+            return Err("its selection was not recorded".into());
+        };
+        if selected.contains(&object.id) {
+            return Ok(true);
+        }
+        match open.get(&object.id) {
+            Some(why) => Err(format!("its selection is undecided: {why}")),
+            None => Ok(false),
+        }
+    }
+
     /// How the rule judged `object`.
     ///
     /// A finding about the object fails it. Otherwise an object left not

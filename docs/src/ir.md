@@ -202,7 +202,7 @@ A grouped table writes its group column ids as `group_by` and each row's group v
 
 `contract::Expression` is a typed expression tree: values a rule computes and combines, stated as data. It is tagged by `kind` like a selector, refuses unknown kinds and fields when a package is read, and serializes in a stable order (a lookup's keys by column ID). The language is total: no loops, no recursion, no user-defined functions and no package-provided code, so a finite tree always finishes evaluating. A parameter value of type `expression` (`{"type": "expression", "value": {…}}`, `ParameterValue::Expression`) carries one, for a parameter of kind `expression` (`ParameterKind::Expression`); [Expression requirements](./capabilities.md#expression-requirements) bind it.
 
-Every node may carry a `label`, which findings name in place of the node's rendered form. `Expression::validate` refuses what serde cannot state: nesting deeper than `MAX_EXPRESSION_DEPTH` (64), an empty operand list, an `if` without a branch, a lookup without keys, a blank name, unit or label, and a number that is not finite. Types and units are checked when a ruleset is compiled. The engine evaluates every value as an interval with three-valued truth; `null` is a value the source states as absent, never a value that could not be read or measured, and the two never mix.
+Every node may carry a `label`, which findings name in place of the node's rendered form. `Expression::validate` refuses what serde cannot state: nesting deeper than `MAX_EXPRESSION_DEPTH` (64), an empty operand list, an `if` without a branch, a lookup without keys, a blank name, unit or label, and a number that is not finite. Types and units are checked when a ruleset is compiled. The engine evaluates every value as an interval with Kleene's three-valued truth over true, false and `null`, not evaluated apart; `null` is a value the source states as absent, never a value that could not be read or measured, and the two never mix (see [Truth](./expressions.md#truth)).
 
 | Kind | Fields | Meaning |
 | --- | --- | --- |
@@ -230,7 +230,7 @@ Every node may carry a `label`, which findings name in place of the node's rende
 | `atan2` | `y`, `x` | the plane angle of the vector `(x, y)` |
 | `convertSlope` | `operand`, `from`, `to` | a slope restated between `ratio`, `percent` and `angle` |
 | `aggregate` | `function`, `over`, `where`?, `value`? | `count`, `sum`, `min`, `max`, `average`, `any`, `all`, `none` or `distinctCount` over the objects a `path`, a derived `group` or a `selector` reaches, filtered by `where`, `value` evaluated per member; see [Aggregates](./expressions.md#aggregates) |
-| `ruleOutcome`, `findingCount`, `deviation` | `rule` | another rule's verdict, finding count or greatest graded deviation about the object in scope; see [Other rules' outcomes](./expressions.md#other-rules-outcomes) |
+| `ruleOutcome`, `selected`, `findingCount`, `deviation` | `rule` | another rule's verdict, whether it selected the object in scope, its finding count or its greatest graded deviation about the object; see [Other rules' outcomes](./expressions.md#other-rules-outcomes) |
 | `concat` | `operands` | joined text |
 | `length`, `lower`, `upper`, `trim` | `operand` | text functions |
 

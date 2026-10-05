@@ -34991,11 +34991,49 @@
       "help": [
         {
           "language": "en",
-          "text": "Whether another rule of the ruleset passed the object; `null` when it did not select it."
+          "text": "Whether another rule of the ruleset passed the object; `null` when it did not select it, which decides no requirement: guard it with `selected`."
         },
         {
           "language": "de",
-          "text": "Ob eine andere Regel des Regelwerks das Objekt bestanden hat; `null`, wenn sie es nicht ausgewählt hat."
+          "text": "Ob eine andere Regel des Regelwerks das Objekt bestanden hat; `null`, wenn sie es nicht ausgewählt hat, was keine Anforderung entscheidet: mit `selected` absichern."
+        }
+      ]
+    },
+    {
+      "kind": "selected",
+      "category": "ruleOutcome",
+      "fields": [
+        {
+          "name": "rule",
+          "kind": {
+            "type": "name",
+            "refers": "rule"
+          },
+          "required": true
+        }
+      ],
+      "result": {
+        "type": "fixed",
+        "value": "boolean"
+      },
+      "label": [
+        {
+          "language": "en",
+          "text": "Selected by a rule"
+        },
+        {
+          "language": "de",
+          "text": "Von einer Regel ausgewählt"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "Whether another rule of the ruleset selected the object; not evaluated when it could not decide."
+        },
+        {
+          "language": "de",
+          "text": "Ob eine andere Regel des Regelwerks das Objekt ausgewählt hat; ungeprüft, wenn sie es nicht entscheiden konnte."
         }
       ]
     },

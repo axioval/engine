@@ -1293,10 +1293,34 @@
         },
         {
           "additionalProperties": false,
-          "description": "How the rule `rule` of the same ruleset judged the object in scope:\ntrue when it passed it, false when it reported a finding about it,\n`null` when it did not select it, and not evaluated when it left it\nopen or could not decide whether it selected it.",
+          "description": "How the rule `rule` of the same ruleset judged the object in scope:\ntrue when it passed it, false when it reported a finding about it,\n`null` when it did not select it, and not evaluated when it left it\nopen or could not decide whether it selected it. `null` decides no\nrequirement: guard a reading with [`Expression::Selected`].",
           "properties": {
             "kind": {
               "const": "ruleOutcome",
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "rule": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "rule"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Whether the rule `rule` of the same ruleset selected the object in\nscope: true or false, and not evaluated when it could not decide.",
+          "properties": {
+            "kind": {
+              "const": "selected",
               "type": "string"
             },
             "label": {

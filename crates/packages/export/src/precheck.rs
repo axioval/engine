@@ -175,6 +175,7 @@ fn operands<'e>(node: &'e Expression, path: &str) -> Vec<(String, &'e Expression
         | Expression::Parameter { .. }
         | Expression::Derived { .. }
         | Expression::RuleOutcome { .. }
+        | Expression::Selected { .. }
         | Expression::FindingCount { .. }
         | Expression::Deviation { .. } => Vec::new(),
         Expression::Lookup { keys, .. } => keys

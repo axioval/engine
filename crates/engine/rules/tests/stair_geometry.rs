@@ -4271,11 +4271,16 @@ mod as_expressions {
     #[test]
     fn gaps_between_handrail_pieces_reach_the_verdicts() {
         let gaps = |maximum: f64| {
-            // `all` needs a member; a flight with no rail has no gap.
+            // `all` needs a member; a flight with no rail has no gap. The
+            // last piece states no gap after it, `null`, which decides
+            // nothing: the guard states that it leaves no gap.
             over(
                 "none",
                 "handrails;rails=railing;reach_across=0.2;reach_above=1.5",
-                Some(compare("greaterThan", mm(field("gap_after")), m(maximum))),
+                Some(and(vec![
+                    defined(&field("gap_after")),
+                    compare("greaterThan", mm(field("gap_after")), m(maximum)),
+                ])),
             )
         };
         let parameters =
@@ -5310,7 +5315,8 @@ mod as_expressions {
                             defined(&field("extension_bottom")), level("bottom_rise")]),
                         and(vec![field("last_on_side"),
                             defined(&field("extension_top")), level("top_rise")]),
-                        compare("greaterThan", mm(field("gap_after")), m(0.05))]}),
+                        and(vec![defined(&field("gap_after")),
+                            compare("greaterThan", mm(field("gap_after")), m(0.05))])]}),
                 ),
                 rails("any", field("left")),
                 rails("any", field("right")),

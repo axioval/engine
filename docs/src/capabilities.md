@@ -376,7 +376,7 @@ Rounding is transitive, so `unique-value` groups values that round alike. A tole
 
 `axioval:capability.expression` requires an [expression](./expressions.md) to hold for each selected object. Its `requirement` (kind `expression`) must be a truth; the compiler checks its structure, the concepts and measured values it reads, and its types and units, and refuses an ill-typed requirement with `EngineError::InvalidExpression` naming the path into it (`requirement.and[2].compare.left`).
 
-- True passes. False is a finding naming the subexpression that failed (its `label`, or its path and kind: the first false operand of an `and`, the consequent of an `implies`) and every value read, with each value's interval and unit, citing the evidence of every read. A requirement that is `null` fails, as a comparison with `null` does.
+- True passes. False is a finding naming the subexpression that failed (its `label`, or its path and kind: the first false operand of an `and`, the consequent of an `implies`) and every value read, with each value's interval and unit, citing the evidence of every read. A requirement that is `null` (a value it needs is stated absent, as a comparison with `null` is `null`) is a missing-information finding, `requirement cannot be confirmed: … is null`, never a pass.
 - Not evaluated leaves the object not evaluated, with the reason and the subexpression's path: a property that cannot be read (with the resolver's own reason), a measured value straddling a bound (`incomplete_evidence`), or an `if` whose condition is undecided and whose branches disagree.
 
 Two optional parameters word and grade the findings:

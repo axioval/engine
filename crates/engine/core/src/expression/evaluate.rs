@@ -7,10 +7,12 @@
 //! - Not evaluated is [`NotEvaluated`]: a value could not be read or
 //!   measured, or a result cannot be decided. It names the subexpression by
 //!   its path (`requirement.and[2].compare.left`) and carries a reason.
-//! - Truth is Kleene's: `and` is false when any operand is false and `or`
-//!   true when any is true, whatever the others; otherwise the first
-//!   not-evaluated operand decides. `null` is not true: where a truth is
-//!   needed it counts as false, as a comparison with `null` is false.
+//! - Truth is Kleene's over true, false and `null`, with not evaluated
+//!   apart: `and` is false when any operand is false and `or` true when
+//!   any is true, whatever the others; otherwise the first not-evaluated
+//!   operand decides, then `null`. A comparison with `null` is `null`, and
+//!   `null` in a truth's place stays `null`: missing information, never
+//!   false and never a pass.
 //! - A comparison of intervals is decided only when every value they allow
 //!   gives the same answer; a straddling one is not evaluated.
 use std::cmp::Ordering as Order;
@@ -371,6 +373,8 @@ pub enum RuleRead {
     /// Whether it passed the object: true, false when it reported a
     /// finding, `null` when it did not select it.
     Outcome,
+    /// Whether it selected the object: true or false.
+    Selected,
     /// How many findings it reported about the object.
     FindingCount,
     /// The greatest graded deviation of its findings about the object.
@@ -599,8 +603,9 @@ fn interval_reason(failure: IntervalFailure) -> Reason {
     }
 }
 
-/// A three-valued truth: decided, or not evaluated.
-type Truth = Result<bool, NotEvaluated>;
+/// A truth in a truth's place: true, false, `null` (`None`: a value is
+/// stated absent, so the truth is unknown), or not evaluated.
+type Truth = Result<Option<bool>, NotEvaluated>;
 
 impl Evaluator<'_> {
     fn eval(&mut self, expression: &Expression, path: &str) -> Outcome {
@@ -694,13 +699,13 @@ impl Evaluator<'_> {
             }
             Expression::Not { operand, .. } => {
                 let truth = self.truth(operand, &child("operand"))?;
-                Ok(Value::Boolean(!truth))
+                Ok(truth_value(truth.map(|truth| !truth)))
             }
             Expression::And { operands, .. } => {
-                self.junction(operands, &item, false).map(Value::Boolean)
+                self.junction(operands, &item, false).map(truth_value)
             }
             Expression::Or { operands, .. } => {
-                self.junction(operands, &item, true).map(Value::Boolean)
+                self.junction(operands, &item, true).map(truth_value)
             }
             Expression::Implies {
                 antecedent,
@@ -708,21 +713,20 @@ impl Evaluator<'_> {
                 ..
             } => {
                 let antecedent = self.truth(antecedent, &child("antecedent"));
-                if antecedent == Ok(false) {
+                if antecedent == Ok(Some(false)) {
                     return Ok(Value::Boolean(true));
                 }
                 let consequent = self.truth(consequent, &child("consequent"));
-                match (antecedent, consequent) {
-                    (_, Ok(true)) => Ok(Value::Boolean(true)),
-                    (Ok(true), Ok(false)) => Ok(Value::Boolean(false)),
-                    (Err(why), _) | (_, Err(why)) => Err(why),
-                    (Ok(false), _) => unreachable!("returned above"),
-                }
+                // `not antecedent or consequent`, Kleene's way.
+                let negated = antecedent.map(|truth| truth.map(|truth| !truth));
+                kleene(&[negated, consequent], true).map(truth_value)
             }
             Expression::Xor { left, right, .. } => {
                 let left = self.truth(left, &child("left"))?;
                 let right = self.truth(right, &child("right"))?;
-                Ok(Value::Boolean(left != right))
+                Ok(truth_value(
+                    left.zip(right).map(|(left, right)| left != right),
+                ))
             }
             Expression::Compare {
                 operator,
@@ -735,7 +739,7 @@ impl Evaluator<'_> {
                 let right = self.eval(right, &child("right"));
                 let (left, right) = (left?, right?);
                 compare(*operator, &left, &right, *case_sensitive)
-                    .map(Value::Boolean)
+                    .map(truth_value)
                     .map_err(here)
             }
             Expression::Between {
@@ -762,7 +766,7 @@ impl Evaluator<'_> {
                 };
                 let above = compare(above, &value, &low, true).map_err(here);
                 let below = compare(below, &value, &high, true).map_err(here);
-                kleene(&[above, below], false).map(Value::Boolean)
+                kleene(&[above, below], false).map(truth_value)
             }
             Expression::OneOf {
                 operand,
@@ -776,24 +780,30 @@ impl Evaluator<'_> {
                 case_sensitive,
                 ..
             } => {
+                // `noneOf` is `not oneOf`, so the two always agree: a
+                // `null` operand is `null` for both.
                 let none = matches!(expression, Expression::NoneOf { .. });
                 let value = self.eval(operand, &child("operand"))?;
-                if value == Value::Null {
-                    return Ok(Value::Boolean(false));
-                }
                 let mut truths = Vec::new();
                 for (index, candidate) in values.iter().enumerate() {
                     let candidate =
                         self.eval(candidate, &format!("{path}.{kind}.values[{index}]"))?;
-                    let operator = if none {
-                        ExpressionComparison::NotEquals
-                    } else {
-                        ExpressionComparison::Equals
-                    };
-                    truths
-                        .push(compare(operator, &value, &candidate, *case_sensitive).map_err(here));
+                    truths.push(
+                        compare(
+                            ExpressionComparison::Equals,
+                            &value,
+                            &candidate,
+                            *case_sensitive,
+                        )
+                        .map_err(here),
+                    );
                 }
-                kleene(&truths, !none).map(Value::Boolean)
+                let found = kleene(&truths, true)?;
+                Ok(truth_value(if none {
+                    found.map(|found| !found)
+                } else {
+                    found
+                }))
             }
             Expression::IsDefined { operand, .. } => Ok(Value::Boolean(
                 self.eval(operand, &child("operand"))? != Value::Null,
@@ -949,10 +959,12 @@ impl Evaluator<'_> {
                 })
             }
             Expression::RuleOutcome { rule, .. }
+            | Expression::Selected { rule, .. }
             | Expression::FindingCount { rule, .. }
             | Expression::Deviation { rule, .. } => {
                 let read = match expression {
                     Expression::RuleOutcome { .. } => RuleRead::Outcome,
+                    Expression::Selected { .. } => RuleRead::Selected,
                     Expression::FindingCount { .. } => RuleRead::FindingCount,
                     _ => RuleRead::Deviation,
                 };
@@ -1023,11 +1035,11 @@ impl Evaluator<'_> {
         outcome
     }
 
-    /// The truth of `operand`; `null` is not true.
+    /// The truth of `operand`; `null` stays `null` (`None`).
     fn truth(&mut self, operand: &Expression, path: &str) -> Truth {
         match self.eval(operand, path)? {
-            Value::Boolean(value) => Ok(value),
-            Value::Null => Ok(false),
+            Value::Boolean(value) => Ok(Some(value)),
+            Value::Null => Ok(None),
             other => Err(fail(
                 operand,
                 path,
@@ -1037,7 +1049,8 @@ impl Evaluator<'_> {
     }
 
     /// `and` (`decisive` false) or `or` (`decisive` true), Kleene's way: a
-    /// decisive operand decides and ends the evaluation.
+    /// decisive operand decides and ends the evaluation; otherwise the
+    /// first operand not evaluated, then any `null`.
     fn junction(
         &mut self,
         operands: &[Expression],
@@ -1045,21 +1058,27 @@ impl Evaluator<'_> {
         decisive: bool,
     ) -> Truth {
         let mut undecided = None;
+        let mut null = false;
         for (index, operand) in operands.iter().enumerate() {
             match self.truth(operand, &item(index)) {
-                Ok(truth) if truth == decisive => return Ok(decisive),
-                Ok(_) => {}
+                Ok(Some(truth)) if truth == decisive => return Ok(Some(decisive)),
+                Ok(Some(_)) => {}
+                Ok(None) => null = true,
                 Err(why) => {
                     undecided.get_or_insert(why);
                 }
             }
         }
-        undecided.map_or(Ok(!decisive), Err)
+        match undecided {
+            Some(why) => Err(why),
+            None => Ok((!null).then_some(!decisive)),
+        }
     }
 
     /// The value of the first branch from `from` whose condition holds. A
-    /// condition not evaluated still decides when the branch it would take
-    /// and the rest agree on one value.
+    /// condition that is `null` or not evaluated still decides when the
+    /// branch it would take and the rest agree on one value; otherwise a
+    /// `null` condition gives `null` and one not evaluated is not evaluated.
     fn choose(
         &mut self,
         branches: &[Branch],
@@ -1073,8 +1092,17 @@ impl Evaluator<'_> {
         let when = format!("{path}.if.branches[{from}].when");
         let then = format!("{path}.if.branches[{from}].then");
         match self.truth(&branch.when, &when) {
-            Ok(true) => self.eval(&branch.then, &then),
-            Ok(false) => self.choose(branches, from + 1, otherwise, path),
+            Ok(Some(true)) => self.eval(&branch.then, &then),
+            Ok(Some(false)) => self.choose(branches, from + 1, otherwise, path),
+            Ok(None) => {
+                let taken = self.eval(&branch.then, &then);
+                let rest = self.choose(branches, from + 1, otherwise, path);
+                match (taken, rest) {
+                    (Ok(taken), Ok(rest)) if taken == rest => Ok(taken),
+                    (Err(why), _) | (_, Err(why)) => Err(why),
+                    _ => Ok(Value::Null),
+                }
+            }
             Err(why) => {
                 let taken = self.eval(&branch.then, &then);
                 let rest = self.choose(branches, from + 1, otherwise, path);
@@ -1092,15 +1120,21 @@ impl Evaluator<'_> {
 }
 
 /// Kleene's `and` (`decisive` false) or `or` (`decisive` true) over truths
-/// already evaluated.
+/// already evaluated: a decisive operand decides, then the first operand
+/// not evaluated, then any `null`.
 fn kleene(truths: &[Truth], decisive: bool) -> Truth {
-    if truths.contains(&Ok(decisive)) {
-        return Ok(decisive);
+    if truths.contains(&Ok(Some(decisive))) {
+        return Ok(Some(decisive));
     }
-    truths
-        .iter()
-        .find_map(|truth| truth.clone().err())
-        .map_or(Ok(!decisive), Err)
+    if let Some(why) = truths.iter().find_map(|truth| truth.clone().err()) {
+        return Err(why);
+    }
+    Ok((!truths.contains(&Ok(None))).then_some(!decisive))
+}
+
+/// A truth as a value: `None` is `null`.
+fn truth_value(truth: Option<bool>) -> Value {
+    truth.map_or(Value::Null, Value::Boolean)
 }
 
 fn number(value: &Value) -> Result<(Interval, Unit), Reason> {
@@ -1225,18 +1259,29 @@ fn slope_name(form: SlopeForm) -> &'static str {
     }
 }
 
-/// `left operator right`: false when either is `null`, otherwise decided
-/// only when every value the operands allow gives one answer.
+/// `left operator right`: `null` (`None`) when either is `null`,
+/// otherwise decided only when every value the operands allow gives one
+/// answer.
 fn compare(
+    operator: ExpressionComparison,
+    left: &Value,
+    right: &Value,
+    case_sensitive: bool,
+) -> Result<Option<bool>, Reason> {
+    if *left == Value::Null || *right == Value::Null {
+        return Ok(None);
+    }
+    decided(operator, left, right, case_sensitive).map(Some)
+}
+
+/// `left operator right` over two values that are not `null`.
+fn decided(
     operator: ExpressionComparison,
     left: &Value,
     right: &Value,
     case_sensitive: bool,
 ) -> Result<bool, Reason> {
     use ExpressionComparison as C;
-    if *left == Value::Null || *right == Value::Null {
-        return Ok(false);
-    }
     let fold = |text: &str| {
         if case_sensitive {
             text.to_owned()

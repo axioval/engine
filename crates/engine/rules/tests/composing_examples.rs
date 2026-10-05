@@ -508,10 +508,17 @@ fn a_slab_carries_the_cover_its_exposure_class_needs() {
             ("unread".into(), NotEvaluatedReason::IncompleteEvidence),
         ]
     );
-    // A finding names the subexpression that failed and the values read.
+    // A finding names the subexpression that failed and the values read; a
+    // cover stated as `null` leaves the requirement unconfirmed, a
+    // missing-information finding and never a pass.
     let uncovered = message(&report, "uncovered");
     assert!(
-        uncovered.contains("`cover meets the class` is false"),
+        uncovered.contains("cannot be confirmed: `cover meets the class` is null"),
         "{uncovered}"
+    );
+    let exposed = message(&report, "exposed");
+    assert!(
+        exposed.contains("`cover meets the class` is false"),
+        "{exposed}"
     );
 }

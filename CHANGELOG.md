@@ -197,6 +197,28 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ### Changed
 
+- **Behaviour:** a stated-absent value never passes an expression
+  silently (#269). Truth is Kleene's three-valued logic over true, false
+  and `null`, with not evaluated apart and outranking `null`: a comparison
+  with `null` is `null` (no longer false), so `not(x == 5)`, `x != 5` and
+  `between` are `null` for an object stating no `x`; `null` in a truth's
+  place stays `null` through `not`, `and`, `or`, `implies` and `xor`; an
+  `if` on a `null` condition is `null` unless its branches agree.
+  `noneOf` is `not oneOf` in every state, both `null` on a `null` operand.
+  `any`, `all` and `none` read a `null` member as unknown, not false, and
+  `sum`, `min`, `max`, `average` and `distinctCount` are `null` when a
+  member's value is, instead of skipping it. An expression requirement
+  that is `null` is a missing-information finding (`requirement cannot be
+  confirmed: … is null`), never a pass; a selector expression that is
+  `null` selects nothing, as before. The new `selected` node (catalogue,
+  blocks, JSON Schema) states whether another rule selected the object, so
+  `ruleOutcome`'s `null` for an object it did not select is guarded
+  explicitly (`implies(selected(r), ruleOutcome(r))`) instead of making an
+  implication pass vacuously. Truth tables for every operator are in the
+  book's Expressions chapter. Expressions relying on `null` as false say
+  so with `coalesce(x, false)` or an `isDefined` guard; the composing
+  cover example now does.
+
 - **Behaviour:** derived linear placements follow IFC4.3 (`ifc-geometry`
   0.10, openbimrs/ifc#355): a positive `OffsetLateral` lies to the left of
   the basis curve's direction and the product's local Z is up, with an

@@ -984,12 +984,16 @@ fn intervals_counts_and_unknown_flags_reach_the_verdicts() {
     let number =
         |value: f64| json!({"kind": "literal", "value": {"type": "number", "value": value}});
     let pairs = "exit_pairs;exits=bounds:backward;kinds=door";
-    // A third where the storey says sprinklered, else a half.
+    // A third where the storey says sprinklered, else a half. An unstated
+    // flag is `null`, which decides nothing: the expression states that it
+    // reads one as unsprinklered.
     let fraction = json!({"kind": "if", "branches": [{
         "when": {"kind": "aggregate", "function": "any",
             "over": {"kind": "path", "path": ["contains:backward"]},
             "value": {"kind": "compare", "operator": "equals",
-                "left": {"kind": "property", "propertySet": "Fire", "property": "Sprinklered"},
+                "left": {"kind": "coalesce", "operands": [
+                    {"kind": "property", "propertySet": "Fire", "property": "Sprinklered"},
+                    {"kind": "literal", "value": {"type": "boolean", "value": false}}]},
                 "right": {"kind": "literal", "value": {"type": "boolean", "value": true}}}},
         "then": number(1.0 / 3.0)}],
         "else": number(0.5)});

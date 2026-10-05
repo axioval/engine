@@ -75,17 +75,18 @@ Selector blocks have their own output check (a selection, not a value)
 and plug only into selector inputs; source and member blocks only into an
 aggregate's `over`.
 
-## Truth has three outcomes
+## Truth has four outcomes
 
-A boolean block yields true, false or **not evaluated**, and `null` is a
-fourth value it may read, not a third truth. An editor shows a boolean
-block's result with all three outcomes and never folds not evaluated into
-false: a measurement straddling a bound, a property that could not be
-read, or another rule that left the object open leaves the result not
-evaluated, and that propagates through `and`, `or`, `not`, comparisons and
-arithmetic as [Expressions](./expressions.md#truth) states. `null` (the
-source states no value) makes a comparison false and is tested with
-`isDefined` and `isUndefined`; it never stands for not evaluated.
+A boolean block yields true, false, `null` or **not evaluated**. An editor
+shows a boolean block's result with all four and never folds `null` or
+not evaluated into false: a measurement straddling a bound, a property
+that could not be read, or another rule that left the object open leaves
+the result not evaluated, and that propagates through `and`, `or`, `not`,
+comparisons and arithmetic as [Expressions](./expressions.md#truth)
+states. `null` (the source states no value) makes a comparison `null`, a
+requirement that is `null` a missing-information finding, and is tested
+with `isDefined`, `isUndefined` and `coalesce`; it never stands for not
+evaluated and never for false.
 
 ## `if`, `else if`, `else` and the ternary
 
@@ -95,10 +96,11 @@ each further one an `else if`, and its `else` input is required. A
 ternary `condition ? a : b` is the one-branch `if`. The editor's mutator
 adds and removes `else if` branches; it never drops `else`.
 
-When a branch's condition is not evaluated, the `if` is decided only when
-every value it might take agrees; otherwise the whole block is not
-evaluated. An editor shows this path explicitly, beside the true and
-false paths, rather than as a fall-through to `else`.
+When a branch's condition is `null` or not evaluated, the `if` is
+decided only when every value it might take agrees; otherwise the whole
+block is `null` or not evaluated, as its condition is. An editor shows
+this path explicitly, beside the true and false paths, rather than as a
+fall-through to `else`.
 
 ## Aggregates
 

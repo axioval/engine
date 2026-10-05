@@ -177,10 +177,14 @@ fn a_quantity_is_never_compared_with_a_bare_number() {
 }
 
 /// A bound computed per object: load-bearing walls at most 0.3, others 2.
+/// An unstated flag is `null`, which decides no branch, so the bound
+/// states that a wall not stated load-bearing is one of the others.
 #[test]
 fn a_bound_computed_per_object_judges_each_object_by_its_own() {
     let bound = common::expression(serde_json::json!({"kind": "if",
-        "branches": [{"when": {"kind": "property", "propertySet": "Pset", "property": "LoadBearing"},
+        "branches": [{"when": {"kind": "coalesce", "operands": [
+                          {"kind": "property", "propertySet": "Pset", "property": "LoadBearing"},
+                          {"kind": "literal", "value": {"type": "boolean", "value": false}}]},
                       "then": {"kind": "literal", "value": {"type": "number", "value": 0.3}}}],
         "else": {"kind": "literal", "value": {"type": "number", "value": 2.0}}}));
     let evaluation = check("Width", "less_or_equal", vec![("number", bound)]);

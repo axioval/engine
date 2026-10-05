@@ -670,7 +670,7 @@ incomplete evidence.
 verdicts on every fixture through the parity harness, but one: a wall
 stating only one of its side areas, which `opening-area` leaves open,
 reads the missing side as `null` in an expression, so the comparison is
-false, a finding. The summed `opening_section_area` checks no two openings
+`null`, a missing-information finding. The summed `opening_section_area` checks no two openings
 against each other and knows no minimum area.
 
 Expressions over these values reach `plan-area`'s, `area-ratio`'s,
@@ -684,9 +684,9 @@ of contact, and the top or bottom storey left out. Ratios are rounded to
 the literal bound names. A sum of areas divided by `1 m²` is a plain
 number, so a sum over no member is a plain 0. These differ:
 
-- an `area-ratio` member stating no area leaves its anchor open; an
-  aggregate skips a `null`, so the rewrite requires every member to state
-  one (`all` of `isDefined`) and finds the anchor instead;
+- an `area-ratio` member stating no area leaves its anchor open; in an
+  aggregate it makes the sum `null`, so the rewrite requires every member
+  to state one (`all` of `isDefined`) and finds the anchor instead;
 - `plan-area` leaves an anchor with undecided members open unless its sum
   already exceeds the maximum; the aggregate measures the undecided members
   too, so a sum that stays within the bounds either way passes;
@@ -898,7 +898,8 @@ and declare their parameters and typed fields:
 
 Step `j` climbs riser `j` onto tread `j`; its `going`, `nosing` and
 `winder_angle` are measured from the tread below, so the first step and a
-final riser have none (`null`). A field the measurement cannot decide (an
+final riser have none (`null`), which an expression guards with
+`isDefined` where it should skip them. A field the measurement cannot decide (an
 unmeasured winder angle, whether a riser is closed, the order of pieces
 lying beside one another) leaves an expression reading it not evaluated.
 Built-in code registered beside the capabilities measures each list

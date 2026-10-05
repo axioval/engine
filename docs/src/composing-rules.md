@@ -39,19 +39,22 @@ written in another type system needs the concepts' names there.
 Every number is an interval in coherent SI units: a point when known
 exactly, wider when measured on a tessellated body or stated with a
 tolerance. A comparison is decided only when every value the intervals
-allow gives the same answer, so every requirement comes out one of three
+allow gives the same answer, so every requirement comes out one of four
 ways:
 
 | Requirement | Outcome |
 | --- | --- |
 | true | the object passes |
 | false | a finding, naming the labelled subexpression that failed and every value read with its evidence |
+| `null` | a missing-information finding: a value the requirement needs is stated absent, so it cannot be confirmed |
 | undecided | the object is **not evaluated**, with the reason and the path to the subexpression that could not be decided |
 
 A measurement straddling its bound is never a pass and never a finding.
 `and` is false as soon as one operand is false and `or` true as soon as one
 is true, whatever the others are; otherwise an undecided operand leaves the
-whole undecided. `implies(a, b)` is `or(not a, b)` under the same rules.
+whole undecided, and a `null` one leaves it `null`. `implies(a, b)` is
+`or(not a, b)` under the same rules. The truth tables are in
+[Expressions](./expressions.md#truth).
 
 ## `null` is not "not evaluated"
 
@@ -65,13 +68,15 @@ The two kinds of missing value never mix:
   unreadable property, a refused or unavailable measurement), or a result
   cannot be decided (a straddling interval).
 
-`null` is false in every comparison and in a truth position, `isDefined`
-of it is false, and arithmetic on it is `null` again. A value that is not
+A comparison with `null` is `null`, and so is `not` of it: `not(x == 5)`
+never holds for an object that states no `x`. `isDefined` of it is false,
+and arithmetic on it is `null` again. A requirement that comes out `null`
+is a missing-information finding, never a pass. A value that is not
 evaluated keeps everything reading it not evaluated, unless the result is
-decided either way (`and` with another operand false). In a selector, a
-`null` value matches no comparison, so the object is not selected; an
-unreadable one leaves the selection undecided and the object not evaluated
-in that rule, never silently skipped.
+decided either way (`and` with another operand false). In a selector, an
+expression that is `null` selects nothing, so the object is not selected;
+an unreadable one leaves the selection undecided and the object not
+evaluated in that rule, never silently skipped.
 
 Whether an absent value passes or fails is the author's decision, and the
 expression states it:
@@ -79,15 +84,20 @@ expression states it:
 - `implies(isDefined(x), test)` holds where `x` is `null`: the requirement
   applies only where a value is stated.
 - `and(isDefined(x), test)` fails where `x` is `null`: a value is required.
+- `coalesce(x, default)` reads an absent `x` as the default.
+- Without either, a `null` `x` is a missing-information finding.
 
 Neither guard turns an unreadable `x` into a pass or a finding:
 `isDefined` of a value that cannot be read is itself not evaluated.
 
 Over a measured member list, `all` holds when every member's value does
 (and is false over no member), `none` when no member's does (and is true
-over none). A guard inside the value skips the members a field does not
-apply to: `all(implies(isDefined(going), …))` judges every step that has a
-going. A member value that is not evaluated leaves the aggregate not
+over none). A member value that is `null` is never skipped: it leaves
+`all`, `any` and `none` `null` unless another member decides. A guard
+inside the value skips the members a field does not apply to:
+`all(implies(isDefined(going), …))` judges every step that has a going,
+and `none(and(isDefined(gap), gap > 0.15 m))` every piece followed by a
+gap. A member value that is not evaluated leaves the aggregate not
 evaluated.
 
 ## Example: an embankment slope limit by soil class
@@ -206,8 +216,9 @@ The requirement is an `implies` whose antecedent is
 to meet. The consequent is an `and` of two comparisons:
 
 - the stated cover against `lookup(minimum_cover, exposure)` plus an `if`
-  on `Prestressed`: an unstated or `null` flag is false in the `if`'s
-  condition, so the `else` branch adds nothing;
+  on `coalesce(Prestressed, false)`: an unstated or `null` flag is read as
+  false, so the `else` branch adds nothing (a bare `null` condition would
+  decide neither branch);
 - the measured `extent_z` less twice the stated cover against the authored
   `least_core`.
 
@@ -226,13 +237,14 @@ to meet. The consequent is an `and` of two comparisons:
 | `prestressed` | 30 + 10 mm needed, 35 mm stated | finding: `cover meets the class` is false |
 | `thin` | cover enough, 0.16–0.18 m thick: a core of 0.09–0.11 m | not evaluated: straddles 0.1 m |
 | `unclassified` | exposure class `null`, 10 mm stated | passes: nothing is required |
-| `uncovered` | a class, cover `null` | finding: a comparison with `null` is false |
+| `uncovered` | a class, cover `null` | missing-information finding: `cover meets the class` is `null` |
 | `unread` | a class, cover unreadable | not evaluated |
 
 `unclassified` and `uncovered` both lack a value, and the expression
 decides each by what the author stated: a missing class lifts the
-requirement, a missing cover fails it. `unread` lacks no value; the
-source could not read it, so no verdict is given.
+requirement, a missing cover leaves it unconfirmed, a finding either way.
+`unread` lacks no value; the source could not read it, so no verdict is
+given.
 
 ## Running the examples against a model
 

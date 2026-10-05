@@ -1,0 +1,14 @@
+{
+  "expression": {
+    "kind": "selected",
+    "rule": "fire-resistance",
+    "label": "fire rule applies"
+  },
+  "blocks": {
+    "type": "expression.selected",
+    "label": "fire rule applies",
+    "fields": {
+      "rule": "fire-resistance"
+    }
+  }
+}

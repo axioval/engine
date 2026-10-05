@@ -318,8 +318,16 @@ pub enum Expression {
     /// How the rule `rule` of the same ruleset judged the object in scope:
     /// true when it passed it, false when it reported a finding about it,
     /// `null` when it did not select it, and not evaluated when it left it
-    /// open or could not decide whether it selected it.
+    /// open or could not decide whether it selected it. `null` decides no
+    /// requirement: guard a reading with [`Expression::Selected`].
     RuleOutcome {
+        rule: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        label: Option<String>,
+    },
+    /// Whether the rule `rule` of the same ruleset selected the object in
+    /// scope: true or false, and not evaluated when it could not decide.
+    Selected {
         rule: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         label: Option<String>,
@@ -547,7 +555,7 @@ pub enum ExpressionError {
 
 impl Expression {
     /// Every node `kind`, in declaration order.
-    pub const KINDS: [&'static str; 45] = [
+    pub const KINDS: [&'static str; 46] = [
         "literal",
         "null",
         "property",
@@ -586,6 +594,7 @@ impl Expression {
         "convertSlope",
         "aggregate",
         "ruleOutcome",
+        "selected",
         "findingCount",
         "deviation",
         "concat",
@@ -637,6 +646,7 @@ impl Expression {
             Self::ConvertSlope { .. } => "convertSlope",
             Self::Aggregate { .. } => "aggregate",
             Self::RuleOutcome { .. } => "ruleOutcome",
+            Self::Selected { .. } => "selected",
             Self::FindingCount { .. } => "findingCount",
             Self::Deviation { .. } => "deviation",
             Self::Concat { .. } => "concat",
@@ -689,6 +699,7 @@ impl Expression {
             | Self::ConvertSlope { label, .. }
             | Self::Aggregate { label, .. }
             | Self::RuleOutcome { label, .. }
+            | Self::Selected { label, .. }
             | Self::FindingCount { label, .. }
             | Self::Deviation { label, .. }
             | Self::Concat { label, .. }
@@ -710,6 +721,7 @@ impl Expression {
             | Self::Parameter { .. }
             | Self::Derived { .. }
             | Self::RuleOutcome { .. }
+            | Self::Selected { .. }
             | Self::FindingCount { .. }
             | Self::Deviation { .. } => Vec::new(),
             Self::Lookup { keys, .. } => keys.values().collect(),
@@ -779,6 +791,7 @@ impl Expression {
         while let Some(node) = pending.pop() {
             match node {
                 Self::RuleOutcome { rule, .. }
+                | Self::Selected { rule, .. }
                 | Self::FindingCount { rule, .. }
                 | Self::Deviation { rule, .. } => rules.push(rule.as_str()),
                 Self::Aggregate {
@@ -800,6 +813,7 @@ impl Expression {
     pub fn rename_rules(&mut self, rename: &dyn Fn(&str) -> String) {
         match self {
             Self::RuleOutcome { rule, .. }
+            | Self::Selected { rule, .. }
             | Self::FindingCount { rule, .. }
             | Self::Deviation { rule, .. } => *rule = rename(rule),
             Self::Aggregate { filter, value, .. } => {
@@ -985,6 +999,7 @@ impl Expression {
                 blank(kind, "name", name)?;
             }
             Self::RuleOutcome { rule, .. }
+            | Self::Selected { rule, .. }
             | Self::FindingCount { rule, .. }
             | Self::Deviation { rule, .. } => blank(kind, "rule", rule)?,
             Self::Lookup {

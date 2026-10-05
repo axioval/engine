@@ -27,8 +27,6 @@ use crate::selection::select_objects;
 /// space is only "low" when it misses the requirement by more than this, and
 /// an overlap no thicker than this is contact, not intersection.
 const DEFAULT_TOLERANCE_M: f64 = 0.005;
-/// Overlaps smaller than this are contact, not intersection.
-const OVERLAP_AREA_EPSILON_M2: f64 = 1.0e-8;
 /// A cap this well covered is complete for checking purposes.
 const CAP_COMPLETE_RATIO: f64 = 0.98;
 
@@ -567,10 +565,9 @@ fn check_overlaps(
                     Containment::OtherInsideSubject => {
                         Some(SpaceCategory::ContainedBody.message("space contains another body"))
                     }
-                    Containment::Partial
-                        if overlap.area_square_metres() >= OVERLAP_AREA_EPSILON_M2
-                            && overlap.height_metres() > policy.tolerance_metres =>
-                    {
+                    // Contact, not intersection, as `SpaceOverlap::intersects`
+                    // reads it for the measured `intersection_count` too.
+                    Containment::Partial if overlap.intersects(policy.tolerance_metres) => {
                         let (category, other) = if overlap.other_is_space() {
                             (SpaceCategory::IntersectingSpace, "another space")
                         } else {
@@ -678,52 +675,55 @@ fn check_unallocated_share(
         return;
     };
     let storey = first.storey();
-    let gross = match first.floor_area_square_metres() {
-        Some(gross)
-            if gross > 0.0
-                && regions
-                    .iter()
-                    .all(|region| region.floor_area_square_metres() == Some(gross)) =>
-        {
-            gross
-        }
-        _ => {
-            evaluation.push_object_not_evaluated(
-                storey.clone(),
-                NotEvaluatedReason::IncompleteEvidence,
-                "space-validation: the storey's gross floor area is not measured, so its \
-                 unallocated share is undefined",
-            );
-            return;
-        }
-    };
-    let area: f64 = regions
-        .iter()
-        .map(|region| region.area_square_metres())
-        .sum();
-    let share = area / gross;
-    if share > maximum {
-        evaluation.push_graded_finding(
-            finding(
-                rule,
-                storey.clone(),
-                Severity::Warning,
-                SpaceCategory::UnallocatedArea.message(&format!(
-                    "{:.3}% of the storey's gross floor area ({area:.3} m2 of {gross:.3} m2) \
-                     belongs to no space; required at most {}%",
-                    share * 100.0,
-                    maximum * 100.0
-                )),
-                evidence,
-            )
-            .with_related(
-                regions
-                    .iter()
-                    .flat_map(|region| region.elements().iter().cloned()),
-            ),
-            Deviation::above(maximum, share, share),
+    // The share `axioval:measured` `unallocated_share` answers too.
+    let Some(measured) = UnallocatedRegion::storey_share(regions) else {
+        evaluation.push_object_not_evaluated(
+            storey.clone(),
+            NotEvaluatedReason::IncompleteEvidence,
+            "space-validation: the storey's gross floor area is not measured, so its \
+             unallocated share is undefined",
         );
+        return;
+    };
+    let (lower, upper) = measured.share();
+    if upper <= maximum {
+        return;
     }
+    let (area, _) = measured.area_square_metres();
+    let gross = measured.gross_floor_area_square_metres();
+    if lower <= maximum {
+        // Only the rounding of the sum and quotient straddles the maximum.
+        evaluation.push_object_not_evaluated(
+            storey.clone(),
+            NotEvaluatedReason::IncompleteEvidence,
+            format!(
+                "space-validation: the storey's unallocated share ({area:.3} m2 of {gross:.3} \
+                 m2) straddles the maximum of {}%",
+                maximum * 100.0
+            ),
+        );
+        return;
+    }
+    evaluation.push_graded_finding(
+        finding(
+            rule,
+            storey.clone(),
+            Severity::Warning,
+            SpaceCategory::UnallocatedArea.message(&format!(
+                "{:.3}% of the storey's gross floor area ({area:.3} m2 of {gross:.3} m2) \
+                 belongs to no space; required at most {}%",
+                lower * 100.0,
+                maximum * 100.0
+            )),
+            evidence,
+        )
+        .with_related(
+            regions
+                .iter()
+                .flat_map(|region| region.elements().iter().cloned()),
+        ),
+        Deviation::above(maximum, lower, upper),
+    );
 }
 
 /// Judges each unallocated region on its own against the allowance, so a

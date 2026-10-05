@@ -15,6 +15,7 @@ use std::sync::Arc;
 
 use axioval_ir::{Evidence, ObjectId};
 
+use crate::expression::Interval;
 use crate::services::reviewable_exact_evidence;
 
 /// Why a space measurement could not be produced.
@@ -252,7 +253,25 @@ impl SpaceOverlap {
     pub fn containment(&self) -> Containment {
         self.containment
     }
+    /// Whether the overlap is an intersection rather than contact: either
+    /// body containing the other always is, a partial overlap only over an
+    /// area of at least `OVERLAP_AREA_EPSILON_M2` and thicker than
+    /// `tolerance_metres`. The one reading `space-validation` judges and
+    /// `axioval:measured` `intersection_count` counts.
+    pub fn intersects(&self, tolerance_metres: f64) -> bool {
+        match self.containment {
+            Containment::SubjectInsideOther | Containment::OtherInsideSubject => true,
+            Containment::Partial => {
+                self.area_square_metres >= OVERLAP_AREA_EPSILON_M2
+                    && self.height_metres > tolerance_metres
+            }
+        }
+    }
 }
+
+/// The area, in square metres, below which a partial overlap is contact,
+/// not intersection ([`SpaceOverlap::intersects`]).
+const OVERLAP_AREA_EPSILON_M2: f64 = 1.0e-8;
 
 /// How much of a space's horizontal cap is covered by elements.
 #[derive(Clone, Debug, PartialEq)]
@@ -360,6 +379,59 @@ impl UnallocatedRegion {
     /// The elements surrounding the region, in canonical order.
     pub fn elements(&self) -> &[ObjectId] {
         &self.elements
+    }
+    /// The share of their storey's gross floor area that one storey's
+    /// `regions` cover together: their summed area over the gross area the
+    /// service states, the same on every region. `None` when the regions
+    /// are none, do not state one positive gross area alike, or sum to no
+    /// finite area: the share is then undefined, never zero. The one
+    /// reading `space-validation`'s `maximum_unallocated_share` judges and
+    /// `axioval:measured` `unallocated_share` answers.
+    pub fn storey_share(regions: &[&Self]) -> Option<UnallocatedShare> {
+        let gross = regions.first()?.floor_area_square_metres.filter(|gross| {
+            *gross > 0.0
+                && regions
+                    .iter()
+                    .all(|region| region.floor_area_square_metres == Some(*gross))
+        })?;
+        // Summed and divided outward, so both hold the exact values.
+        let area = regions
+            .iter()
+            .try_fold(Interval::point(0.0), |total, region| {
+                total.plus(Interval::point(region.area_square_metres)).ok()
+            })?;
+        let share = area.divided_by(Interval::point(gross)).ok()?;
+        Some(UnallocatedShare {
+            area,
+            gross_floor_area_square_metres: gross,
+            share,
+        })
+    }
+}
+
+/// One storey's unallocated floor against its gross floor area
+/// ([`UnallocatedRegion::storey_share`]), each an interval sure to hold the
+/// exact value.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct UnallocatedShare {
+    area: Interval,
+    gross_floor_area_square_metres: f64,
+    share: Interval,
+}
+
+impl UnallocatedShare {
+    /// The regions' summed area, `(lower, upper)` in square metres.
+    pub fn area_square_metres(&self) -> (f64, f64) {
+        (self.area.lower, self.area.upper)
+    }
+    /// The storey's gross floor area the service states.
+    pub fn gross_floor_area_square_metres(&self) -> f64 {
+        self.gross_floor_area_square_metres
+    }
+    /// The summed area's share of the gross floor area, `(lower, upper)`;
+    /// incoherent regions summing past the gross area give a share above 1.
+    pub fn share(&self) -> (f64, f64) {
+        (self.share.lower, self.share.upper)
     }
 }
 
@@ -575,6 +647,45 @@ mod tests {
     }
     fn oid(local: &str) -> ObjectId {
         ObjectId::new(source(), local).unwrap()
+    }
+
+    /// Containment always intersects; a partial overlap only over a real
+    /// area and thicker than the tolerance.
+    #[test]
+    fn an_overlap_intersects_beyond_contact() {
+        let overlap = |area, height, containment| {
+            SpaceOverlap::try_new(oid("other"), true, area, height, containment).unwrap()
+        };
+        assert!(overlap(0.0, 0.0, Containment::SubjectInsideOther).intersects(0.005));
+        assert!(overlap(0.0, 0.0, Containment::OtherInsideSubject).intersects(0.005));
+        assert!(overlap(1.0, 0.01, Containment::Partial).intersects(0.005));
+        assert!(!overlap(1.0, 0.005, Containment::Partial).intersects(0.005));
+        assert!(!overlap(1.0e-9, 1.0, Containment::Partial).intersects(0.005));
+    }
+
+    /// A storey's share holds the exact one, and is undefined without one
+    /// gross area every region states alike.
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn a_storey_share_needs_one_gross_area() {
+        let region = |area: f64, gross: Option<f64>| {
+            let region = UnallocatedRegion::try_new(oid("storey"), area, Vec::new()).unwrap();
+            match gross {
+                Some(gross) => region.with_floor_area(gross).unwrap(),
+                None => region,
+            }
+        };
+        let (two, three) = (region(2.0, Some(100.0)), region(3.0, Some(100.0)));
+        let share = UnallocatedRegion::storey_share(&[&two, &three]).unwrap();
+        let (lower, upper) = share.share();
+        assert!(lower <= 0.05 && 0.05 <= upper && upper - lower < 1e-15);
+        assert_eq!(share.area_square_metres(), (5.0, 5.0));
+        assert_eq!(share.gross_floor_area_square_metres(), 100.0);
+        assert!(UnallocatedRegion::storey_share(&[]).is_none());
+        assert!(UnallocatedRegion::storey_share(&[&region(2.0, None)]).is_none());
+        let other = region(2.0, Some(90.0));
+        assert!(UnallocatedRegion::storey_share(&[&two, &other]).is_none());
+        assert!(UnallocatedRegion::storey_share(&[&region(0.0, Some(0.0))]).is_none());
     }
 
     /// A refusal names its aspect and the first unmeasured objects in

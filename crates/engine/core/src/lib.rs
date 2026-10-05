@@ -1105,7 +1105,7 @@ pub use source_metadata::{SourceMetadata, SourceMetadataIndex};
 pub use space::{
     BoundaryGap, BoundaryRequest, Cap, CapCoverage, CapRequest, ClearHeightEvidence, Containment,
     OverlapRequest, SpaceAspect, SpaceError, SpaceOverlap, SpaceService, SpaceServiceHandle,
-    SupportCounts, UnallocatedRegion, UnmeasuredObjects,
+    SupportCounts, UnallocatedRegion, UnallocatedShare, UnmeasuredObjects,
 };
 pub use table_files::{
     PackageDirectory, PackageFiles, TABLE_FILE_LIMIT_BYTES, TableFileError,

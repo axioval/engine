@@ -15,7 +15,7 @@ use crate::expression::Interval;
 use super::{Answer, Measures};
 use crate::properties::PropertyResolutionError;
 use crate::space::{
-    BoundaryRequest, Cap, CapRequest, Containment, OverlapRequest, SpaceError, SpaceService,
+    BoundaryRequest, Cap, CapRequest, OverlapRequest, SpaceError, SpaceService, UnallocatedRegion,
 };
 
 /// The names measured here.
@@ -28,10 +28,6 @@ pub(super) const NAMES: &[&str] = &[
     "support_count",
     "unallocated_share",
 ];
-
-/// The area below which a partial overlap is no intersection, as
-/// `space-validation` counts it.
-const OVERLAP_AREA_EPSILON_M2: f64 = 1.0e-8;
 
 fn length(call: &MeasuredCall, key: &str) -> Option<f64> {
     match call.argument(key) {
@@ -161,13 +157,7 @@ impl Measures {
                     .map_err(unavailable)?;
                 let intersecting = overlaps
                     .iter()
-                    .filter(|overlap| match overlap.containment() {
-                        Containment::SubjectInsideOther | Containment::OtherInsideSubject => true,
-                        Containment::Partial => {
-                            overlap.area_square_metres() >= OVERLAP_AREA_EPSILON_M2
-                                && overlap.height_metres() > tolerance
-                        }
-                    })
+                    .filter(|overlap| overlap.intersects(tolerance))
                     .count();
                 Ok(count(intersecting, locator, exact))
             }
@@ -241,32 +231,21 @@ fn unallocated(
             exact,
         ));
     }
-    let Some(first) = regions.first() else {
+    if regions.is_empty() {
         return Ok(Answer::Value(0.0, 0.0, None, locator, exact));
-    };
-    let gross = first
-        .floor_area_square_metres()
-        .filter(|gross| {
-            *gross > 0.0
-                && regions
-                    .iter()
-                    .all(|region| region.floor_area_square_metres() == Some(*gross))
-        })
-        .ok_or_else(|| {
-            PropertyResolutionError::Incomplete(format!(
-                "`{MEASURED_SET}` value `{name}` of {object}: the storey's gross floor area is \
-                 not measured, so its unallocated share is undefined"
-            ))
-        })?;
-    // Summed and divided outward, so the share holds the exact one.
-    let area = regions
-        .iter()
-        .try_fold(super::span(0.0, 0.0), |total, region| {
-            let area = region.area_square_metres();
-            total
-                .plus(super::span(area, area))
-                .map_err(|_| PropertyResolutionError::InvalidValue)
-        })?;
-    let (lower, upper) = share(area, gross)?;
-    Ok(Answer::Value(lower, upper, None, locator, exact))
+    }
+    let share = UnallocatedRegion::storey_share(&regions).ok_or_else(|| {
+        PropertyResolutionError::Incomplete(format!(
+            "`{MEASURED_SET}` value `{name}` of {object}: the storey's gross floor area is \
+             not measured, so its unallocated share is undefined"
+        ))
+    })?;
+    let (lower, upper) = share.share();
+    Ok(Answer::Value(
+        lower.clamp(0.0, 1.0),
+        upper.clamp(0.0, 1.0),
+        None,
+        locator,
+        exact,
+    ))
 }

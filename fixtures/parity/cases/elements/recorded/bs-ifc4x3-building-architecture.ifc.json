@@ -26,6 +26,52 @@
     {
       "evidence": [
         {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:occurrence:#267/#265",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "1775b4b6-56b6-5605-a14f-65b194422f6d",
+      "message": "property axioval:parity.public.slab-quantities.axioval:parity.public.depth does not satisfy less_or_equal 0.25 m; actual value is 0.3 m",
+      "object_id": {
+        "local_id": "#261",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-depth",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:occurrence:#289/#287",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "7c890dd4-00a0-50d9-9242-c8544000df55",
+      "message": "property axioval:parity.public.slab-quantities.axioval:parity.public.depth does not satisfy less_or_equal 0.25 m; actual value is 0.3 m",
+      "object_id": {
+        "local_id": "#285",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-depth",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
           "exact": false,
           "locator": "directional-extent:ifc-step:bs-ifc4x3-building-architecture.ifc/#261:[-0.707106781186532,-0.0000000000000015343992092947548,0.7071067811865631]",
           "source": {
@@ -333,6 +379,98 @@
       },
       "rule_id": "wall-thickness",
       "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:occurrence:#165/#162",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "25961dcf-70cf-5cb6-a0d0-dab1fd490c63",
+      "message": "property axioval:parity.public.wall-quantities.axioval:parity.public.width does not satisfy greater_or_equal 250 mm; actual value is 0.2 m",
+      "object_id": {
+        "local_id": "#158",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "wall-width",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:occurrence:#187/#184",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "255423ad-55a9-5094-b709-2bff0f3a50a9",
+      "message": "property axioval:parity.public.wall-quantities.axioval:parity.public.width does not satisfy greater_or_equal 250 mm; actual value is 0.2 m",
+      "object_id": {
+        "local_id": "#182",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "wall-width",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:occurrence:#206/#203",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "7961f951-3b6c-526c-ac27-9dc3e83ecf6d",
+      "message": "property axioval:parity.public.wall-quantities.axioval:parity.public.width does not satisfy greater_or_equal 250 mm; actual value is 0.2 m",
+      "object_id": {
+        "local_id": "#201",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "wall-width",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:occurrence:#235/#232",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "fb647cb9-b085-5492-a209-6e8acf2a6f55",
+      "message": "property axioval:parity.public.wall-quantities.axioval:parity.public.width does not satisfy greater_or_equal 250 mm; actual value is 0.024 m",
+      "object_id": {
+        "local_id": "#228",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "wall-width",
+      "severity": "error"
     }
   ],
   "not_evaluated": [],
@@ -342,6 +480,13 @@
       "failed": 1,
       "not_evaluated": 0,
       "rule_id": "element-triangles",
+      "status": "failed"
+    },
+    {
+      "checked": 3,
+      "failed": 2,
+      "not_evaluated": 0,
+      "rule_id": "slab-depth",
       "status": "failed"
     },
     {
@@ -370,6 +515,13 @@
       "failed": 1,
       "not_evaluated": 0,
       "rule_id": "wall-thickness",
+      "status": "failed"
+    },
+    {
+      "checked": 4,
+      "failed": 4,
+      "not_evaluated": 0,
+      "rule_id": "wall-width",
       "status": "failed"
     }
   ]

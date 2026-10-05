@@ -12,7 +12,9 @@
     {"rule": "wall-layers", "comparison": "contract", "reason": "As wall-thickness, against a stated layer thickness within a tolerance."},
     {"rule": "wall-length", "comparison": "contract", "reason": "As wall-thickness, along the walls' own right axis."},
     {"rule": "slab-thickness", "comparison": "contract", "reason": "As wall-thickness, along the slabs' own up axis."},
-    {"rule": "element-triangles", "comparison": "contract", "reason": "triangle-count runs as a template (#282); the outcomes its retired implementation reported, recorded before it was retired, are the contract."}
+    {"rule": "element-triangles", "comparison": "contract", "reason": "triangle-count runs as a template (#282); the outcomes its retired implementation reported, recorded before it was retired, are the contract."},
+    {"rule": "wall-width", "comparison": "contract", "reason": "property-predicate runs as a template (#287); the outcomes its retired implementation reported, recorded before it was retired, are the contract."},
+    {"rule": "slab-depth", "comparison": "contract", "reason": "As wall-width, against a maximum in metres."}
   ],
   "divergences": []
 }

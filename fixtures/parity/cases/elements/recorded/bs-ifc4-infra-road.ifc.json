@@ -27,6 +27,190 @@
       "evidence": [
         {
           "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#207:Qto_SlabBaseQuantities:Depth",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "1372e762-8f39-54f9-abf2-2d70930eca13",
+      "message": "property axioval:parity.public.slab-quantities.axioval:parity.public.depth does not satisfy less_or_equal 0.25 m; actual value is absent",
+      "object_id": {
+        "local_id": "#207",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-depth",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#412:Qto_SlabBaseQuantities:Depth",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "06d6fb49-a3e5-5fce-a206-a1542a59a1b0",
+      "message": "property axioval:parity.public.slab-quantities.axioval:parity.public.depth does not satisfy less_or_equal 0.25 m; actual value is absent",
+      "object_id": {
+        "local_id": "#412",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-depth",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:occurrence:#582/#580",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "08eda026-a4b0-5590-b47d-65c955a6aa21",
+      "message": "property axioval:parity.public.slab-quantities.axioval:parity.public.depth does not satisfy less_or_equal 0.25 m; actual value is 0.39581400000000005 m",
+      "object_id": {
+        "local_id": "#578",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-depth",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#596:Qto_SlabBaseQuantities:Depth",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "5de32136-7399-570d-8a17-571bbed37506",
+      "message": "property axioval:parity.public.slab-quantities.axioval:parity.public.depth does not satisfy less_or_equal 0.25 m; actual value is absent",
+      "object_id": {
+        "local_id": "#596",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-depth",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:occurrence:#676/#674",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "43c3b629-a20a-5e6e-adee-d2ee6b599c74",
+      "message": "property axioval:parity.public.slab-quantities.axioval:parity.public.depth does not satisfy less_or_equal 0.25 m; actual value is 0.39581400000000005 m",
+      "object_id": {
+        "local_id": "#672",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-depth",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#685:Qto_SlabBaseQuantities:Depth",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "bdce4749-8ee5-5548-9642-6608f8b1c552",
+      "message": "property axioval:parity.public.slab-quantities.axioval:parity.public.depth does not satisfy less_or_equal 0.25 m; actual value is absent",
+      "object_id": {
+        "local_id": "#685",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-depth",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#761:Qto_SlabBaseQuantities:Depth",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "8b4ec0a7-e677-5aec-b958-675c0f9944a1",
+      "message": "property axioval:parity.public.slab-quantities.axioval:parity.public.depth does not satisfy less_or_equal 0.25 m; actual value is absent",
+      "object_id": {
+        "local_id": "#761",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-depth",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:absence:#936:Qto_SlabBaseQuantities:Depth",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "44f99f1b-1bfe-5b76-9f68-44d7b57816dd",
+      "message": "property axioval:parity.public.slab-quantities.axioval:parity.public.depth does not satisfy less_or_equal 0.25 m; actual value is absent",
+      "object_id": {
+        "local_id": "#936",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-depth",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
           "locator": "directional-extent:ifc-step:bs-ifc4-infra-road.ifc/#108:[0,0,1]",
           "source": {
             "document": "bs-ifc4-infra-road.ifc",
@@ -285,6 +469,13 @@
       "checked": 32,
       "failed": 8,
       "not_evaluated": 0,
+      "rule_id": "slab-depth",
+      "status": "failed"
+    },
+    {
+      "checked": 32,
+      "failed": 8,
+      "not_evaluated": 0,
       "rule_id": "slab-thickness",
       "status": "failed"
     },
@@ -307,6 +498,13 @@
       "failed": 0,
       "not_evaluated": 0,
       "rule_id": "wall-thickness",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "wall-width",
       "status": "nothing_selected"
     }
   ]

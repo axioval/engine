@@ -30,6 +30,29 @@
       },
       "rule_id": "wall-thickness",
       "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:absence:#45:Qto_WallBaseQuantities:Width",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "8d9c4fd9-08e4-511c-9be8-b4acbcffaad6",
+      "message": "property axioval:parity.public.wall-quantities.axioval:parity.public.width does not satisfy greater_or_equal 250 mm; actual value is absent",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "wall-width",
+      "severity": "error"
     }
   ],
   "not_evaluated": [],
@@ -40,6 +63,13 @@
       "not_evaluated": 0,
       "rule_id": "element-triangles",
       "status": "passed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "slab-depth",
+      "status": "nothing_selected"
     },
     {
       "checked": 0,
@@ -67,6 +97,13 @@
       "failed": 1,
       "not_evaluated": 0,
       "rule_id": "wall-thickness",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "wall-width",
       "status": "failed"
     }
   ]

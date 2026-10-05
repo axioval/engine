@@ -209,6 +209,98 @@
       },
       "rule_id": "wall-length",
       "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:db64895488aad4eab082c8292f5632145b0fc864c0642d4fe667404882bacf27:occurrence:#117/#114",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "2a5821c4-89a0-5664-9c1e-df242a60f8a6",
+      "message": "property axioval:parity.public.wall-quantities.axioval:parity.public.width does not satisfy greater_or_equal 250 mm; actual value is 0.2 m",
+      "object_id": {
+        "local_id": "#112",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "wall-width",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:db64895488aad4eab082c8292f5632145b0fc864c0642d4fe667404882bacf27:occurrence:#152/#149",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "b4acb11b-ae0d-55d5-a090-a7c704ab80ee",
+      "message": "property axioval:parity.public.wall-quantities.axioval:parity.public.width does not satisfy greater_or_equal 250 mm; actual value is 0.2 m",
+      "object_id": {
+        "local_id": "#147",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "wall-width",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:db64895488aad4eab082c8292f5632145b0fc864c0642d4fe667404882bacf27:occurrence:#76/#73",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "fb4cd590-fd04-5317-a988-92e4fa0a597f",
+      "message": "property axioval:parity.public.wall-quantities.axioval:parity.public.width does not satisfy greater_or_equal 250 mm; actual value is 0.2 m",
+      "object_id": {
+        "local_id": "#69",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "wall-width",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:db64895488aad4eab082c8292f5632145b0fc864c0642d4fe667404882bacf27:occurrence:#98/#95",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "1b8b2ab1-ed0b-55ee-9bae-63c05ffbe110",
+      "message": "property axioval:parity.public.wall-quantities.axioval:parity.public.width does not satisfy greater_or_equal 250 mm; actual value is 0.2 m",
+      "object_id": {
+        "local_id": "#93",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "wall-width",
+      "severity": "error"
     }
   ],
   "not_evaluated": [],
@@ -219,6 +311,13 @@
       "not_evaluated": 0,
       "rule_id": "element-triangles",
       "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "slab-depth",
+      "status": "nothing_selected"
     },
     {
       "checked": 0,
@@ -247,6 +346,13 @@
       "not_evaluated": 0,
       "rule_id": "wall-thickness",
       "status": "passed"
+    },
+    {
+      "checked": 4,
+      "failed": 4,
+      "not_evaluated": 0,
+      "rule_id": "wall-width",
+      "status": "failed"
     }
   ]
 }

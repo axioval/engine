@@ -13,6 +13,13 @@
       "checked": 0,
       "failed": 0,
       "not_evaluated": 0,
+      "rule_id": "slab-depth",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
       "rule_id": "slab-thickness",
       "status": "nothing_selected"
     },
@@ -35,6 +42,13 @@
       "failed": 0,
       "not_evaluated": 0,
       "rule_id": "wall-thickness",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "wall-width",
       "status": "nothing_selected"
     }
   ]

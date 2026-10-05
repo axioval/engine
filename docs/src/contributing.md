@@ -65,3 +65,14 @@ The architecture gate (`scripts/architecture.py`, mutation-proven by its
 The gate also fails a capability without labels and help in
 `crates/engine/rules/src/catalogue_texts.rs`; see the
 [authoring catalogue](./catalogue.md).
+
+**One implementation per quantity.** A measured value reproducing a
+capability's measurement calls the capability's own function (or both call
+one in the service contract), never a copy: a copy drifts apart the day
+one side changes. The gate catches the simplest copy, a tolerance defined
+twice: every `const <NAME>: f64 = <value>;` in `crates/engine/*/src` whose
+name holds `EPSILON`, `TOLERANCE`, `SLACK` or `EPS` as a word is defined
+once per name and value (values compared as numbers, so `1e-8` and
+`1.0e-8` agree). One name with two meanings, or two names for one value,
+passes; import the constant or call the function applying it instead of
+repeating it.

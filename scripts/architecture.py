@@ -429,6 +429,32 @@ def self_test() -> None:
     assert catalogue_violations(capability, '    id: "axioval:capability.gauge",\n') == []
     assert catalogue_violations(capability, '    id: "axioval:capability.other",\n')
 
+    # A tolerance copied into a second module is a rejected mutation; one
+    # name with two meanings, or two names for one value, is not.
+    measured = "const OVERLAP_AREA_EPSILON_M2: f64 = 1.0e-8;\n"
+    capability = "/// Contact.\nconst OVERLAP_AREA_EPSILON_M2: f64 = 1e-8;\n"
+    assert duplicated_tolerances({"space.rs": measured, "rules.rs": capability}) == [
+        "tolerance `OVERLAP_AREA_EPSILON_M2 = 1e-08` is defined 2 times "
+        "(rules.rs, space.rs); define it once and share it"
+    ]
+    assert duplicated_tolerances(
+        {"a.rs": "fn f() {\n    const SLACK: f64 = 1.0e-3;\n}", "b.rs": "const SLACK: f64 = 1e-3_f64;"}
+    )
+    assert not duplicated_tolerances(
+        {"a.rs": "const TOLERANCE: f64 = 0.05;", "b.rs": "const TOLERANCE: f64 = 1.0e-9;"}
+    )
+    assert not duplicated_tolerances(
+        {"a.rs": "const EPSILON_M: f64 = 1.0e-6;", "b.rs": "const EPSILON: f64 = 1.0e-6;"}
+    )
+    # Not a tolerance by name, or only quoted in a comment: not counted.
+    assert not duplicated_tolerances(
+        {
+            "a.rs": "const REQUIRED_COVERAGE: f64 = 0.5;\nconst EPSILON: f64 = 1.0;",
+            "b.rs": "const REQUIRED_COVERAGE: f64 = 0.5;\n// const EPSILON: f64 = 1.0;",
+        }
+    )
+    assert duplicated_tolerances({"a.rs": "fn f() {}"}), "an empty scan must fail"
+
     vocabulary = '{"stems": ["StairRule", "free_floor_space"]}'
     stems = rule_stems(vocabulary)
     assert stems == {"stair", "free_floor_space"}
@@ -667,6 +693,43 @@ CAPABILITY_ID = re.compile(r"fn id\(&self\) -> &'static str \{\s*\"(axioval:capa
 CATALOGUED_ID = re.compile(r"^\s*id: \"(axioval:capability\.[a-z0-9-]+)\",", re.M)
 
 
+# One tolerance, one definition (#272): a tolerance copied into a second
+# module (a capability and the measured value reproducing it) drifts apart
+# the day one copy changes. Every `const <NAME>: f64 = <value>;` in the
+# engine crates whose name is a tolerance (`EPSILON`, `TOLERANCE`, `SLACK`,
+# `EPS` as a word of it) is defined once per name and value; a second user
+# imports the first or calls the function that applies it.
+TOLERANCE_CONST = re.compile(r"\bconst\s+([A-Z][A-Z0-9_]*)\s*:\s*f64\s*=\s*([^;]+);")
+TOLERANCE_NAME = re.compile(r"(?:^|_)(?:EPSILON|TOLERANCE|SLACK|EPS)(?:_|$)")
+
+
+def tolerance_value(literal: str) -> str:
+    """A constant's value, normalised so `1e-8`, `1.0e-8` and `1.0E-8_f64` agree."""
+    text = re.sub(r"\s+|_", "", literal).removesuffix("f64")
+    try:
+        return repr(float(text))
+    except ValueError:
+        return text
+
+
+def duplicated_tolerances(files: dict[str, str]) -> list[str]:
+    """Tolerance constants defined more than once with one name and value."""
+    defined: dict[tuple[str, str], list[str]] = {}
+    for path, text in sorted(files.items()):
+        for match in TOLERANCE_CONST.finditer(strip_noise(text)):
+            name, value = match.group(1), tolerance_value(match.group(2))
+            if TOLERANCE_NAME.search(name):
+                defined.setdefault((name, value), []).append(path)
+    if not defined:
+        return ["no tolerance constant found in the engine crates; the duplicate check is inert"]
+    return [
+        f"tolerance `{name} = {value}` is defined {len(paths)} times "
+        f"({', '.join(paths)}); define it once and share it"
+        for (name, value), paths in sorted(defined.items())
+        if len(paths) > 1
+    ]
+
+
 def catalogue_violations(files: dict[str, str], texts: str) -> list[str]:
     """Capabilities without catalogue labels and help."""
     catalogued = set(CATALOGUED_ID.findall(texts))
@@ -689,6 +752,15 @@ def composability(root: Path) -> list[str]:
     }
     failures = measurement_gate.check(root, [path for _, path in core_crates(root)])
     failures.extend(catalogue_violations(files, files.get("catalogue_texts.rs", "")))
+    engine = root / "crates" / "engine"
+    failures.extend(
+        duplicated_tolerances(
+            {
+                source.relative_to(root).as_posix(): source.read_text(encoding="utf-8")
+                for source in sorted(engine.glob("*/src/**/*.rs"))
+            }
+        )
+    )
     return failures
 
 

@@ -2,6 +2,12 @@
   "findings": [],
   "not_evaluated": [
     {
+      "message": "triangle-count service is not registered",
+      "object_id": null,
+      "reason": "missing_service",
+      "rule_id": "element-triangles"
+    },
+    {
       "message": "body-extent needs the object-frame and vertical-extent services",
       "object_id": null,
       "reason": "missing_service",
@@ -9,6 +15,13 @@
     }
   ],
   "rules": [
+    {
+      "checked": 10,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "element-triangles",
+      "status": "not_evaluated"
+    },
     {
       "checked": 4,
       "failed": 0,

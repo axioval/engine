@@ -3,6 +3,29 @@
     {
       "evidence": [
         {
+          "exact": true,
+          "locator": "triangle-count:ifc-step:bs-ifc4x3-building-architecture.ifc/#353",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "5a9e145c-538e-54ea-be59-8f04a38b3c8d",
+      "message": "mesh has 824 triangles; at most 100 allowed",
+      "object_id": {
+        "local_id": "#353",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "element-triangles",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
           "exact": false,
           "locator": "directional-extent:ifc-step:bs-ifc4x3-building-architecture.ifc/#261:[-0.707106781186532,-0.0000000000000015343992092947548,0.7071067811865631]",
           "source": {
@@ -314,6 +337,13 @@
   ],
   "not_evaluated": [],
   "rules": [
+    {
+      "checked": 9,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "element-triangles",
+      "status": "failed"
+    },
     {
       "checked": 3,
       "failed": 3,

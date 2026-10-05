@@ -1,7 +1,38 @@
 {
-  "findings": [],
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "triangle-count:ifc-step:bs-ifc4-building-hvac.ifc/#136",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "5a9e145c-538e-54ea-be59-8f04a38b3c8d",
+      "message": "mesh has 824 triangles; at most 100 allowed",
+      "object_id": {
+        "local_id": "#136",
+        "source": {
+          "document": "bs-ifc4-building-hvac.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "element-triangles",
+      "severity": "error"
+    }
+  ],
   "not_evaluated": [],
   "rules": [
+    {
+      "checked": 2,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "element-triangles",
+      "status": "failed"
+    },
     {
       "checked": 0,
       "failed": 0,

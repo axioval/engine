@@ -3,6 +3,13 @@
   "not_evaluated": [],
   "rules": [
     {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "element-triangles",
+      "status": "passed"
+    },
+    {
       "checked": 0,
       "failed": 0,
       "not_evaluated": 0,

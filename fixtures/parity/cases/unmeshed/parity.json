@@ -7,7 +7,8 @@
     {"capability": "element-triangles", "expression": "element-triangles-expression"}
   ],
   "recorded": [
-    {"rule": "wall-thickness", "comparison": "contract", "reason": "body-extent runs as a template (#278); without its geometry services it must leave the rule open as its retired implementation did (D4, D18), recorded before that implementation was retired."}
+    {"rule": "wall-thickness", "comparison": "contract", "reason": "body-extent runs as a template (#278); without its geometry services it must leave the rule open as its retired implementation did (D4, D18), recorded before that implementation was retired."},
+    {"rule": "element-triangles", "comparison": "contract", "reason": "triangle-count runs as a template (#282); without the triangle-count service it must leave the rule open as its retired implementation did (D4), recorded before that implementation was retired."}
   ],
   "divergences": [
     {

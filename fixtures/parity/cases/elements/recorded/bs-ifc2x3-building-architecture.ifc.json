@@ -4,6 +4,29 @@
       "evidence": [
         {
           "exact": true,
+          "locator": "triangle-count:ifc-step:bs-ifc2x3-building-architecture.ifc/#900",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "5a9e145c-538e-54ea-be59-8f04a38b3c8d",
+      "message": "mesh has 824 triangles; at most 100 allowed",
+      "object_id": {
+        "local_id": "#900",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "element-triangles",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
           "locator": "directional-extent:ifc-step:bs-ifc2x3-building-architecture.ifc/#44:[0,0,1]",
           "source": {
             "document": "bs-ifc2x3-building-architecture.ifc",
@@ -312,8 +335,28 @@
       "severity": "error"
     }
   ],
-  "not_evaluated": [],
+  "not_evaluated": [
+    {
+      "message": "triangle count: triangle count unavailable: ifc-step:bs-ifc2x3-building-architecture.ifc/#460 has a body that was not meshed: no body representation",
+      "object_id": {
+        "local_id": "#460",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "element-triangles"
+    }
+  ],
   "rules": [
+    {
+      "checked": 12,
+      "failed": 1,
+      "not_evaluated": 1,
+      "rule_id": "element-triangles",
+      "status": "failed"
+    },
     {
       "checked": 3,
       "failed": 3,

@@ -672,7 +672,7 @@ mod as_expressions {
         let (rewritten, parity) = parity(|| wall(None), None, &requirement(None));
         assert_eq!(parity.differences.len(), 1, "{}", parity.diff());
         let difference = &parity.differences[0];
-        assert_eq!(difference.object.local_id, "w");
+        assert_eq!(difference.scope.object().unwrap().local_id, "w");
         assert!(matches!(
             difference.capability,
             Some(axioval_rules::parity::Outcome::NotEvaluated {

@@ -259,10 +259,101 @@ mod as_expressions {
         assert_eq!(
             differences(ID, &found, &rewritten),
             [
-                "test:model/b: capability not evaluated (IncompleteEvidence), expression passed",
-                "test:model/eg: capability passed, expression not evaluated (IncompleteEvidence)",
-                "test:model/og: capability passed, expression not evaluated (IncompleteEvidence)",
+                "test:model/b: capability not evaluated (IncompleteEvidence), \
+                 expression reported nothing",
+                "test:model/eg: capability reported nothing, \
+                 expression not evaluated (IncompleteEvidence)",
+                "test:model/og: capability reported nothing, \
+                 expression not evaluated (IncompleteEvidence)",
             ]
         );
+    }
+
+    /// Generated buildings: storeys at millimetre elevations, a range of
+    /// storey heights, the lowest storey judged or left out. The rewrite
+    /// reaches the capability's verdicts, and the rise it reads is the
+    /// height the capability reports in its `levels` table.
+    mod generated {
+        use super::*;
+        use axioval_rules::parity::{Observations, Parity};
+        use proptest::collection::vec;
+        use proptest::prelude::*;
+
+        fn storeys(base: i32, rises: &[i32]) -> Vec<(String, Option<f64>)> {
+            let mut elevation = base;
+            let mut storeys = vec![("s0".to_owned(), Some(f64::from(elevation) / 1000.0))];
+            for (index, rise) in rises.iter().enumerate() {
+                elevation += rise;
+                storeys.push((
+                    format!("s{}", index + 1),
+                    Some(f64::from(elevation) / 1000.0),
+                ));
+            }
+            storeys
+        }
+
+        fn model(storeys: &[(String, Option<f64>)]) -> Model {
+            let levels: Vec<(&str, Option<f64>)> = storeys
+                .iter()
+                .map(|(local, elevation)| (local.as_str(), *elevation))
+                .collect();
+            building(&levels)
+        }
+
+        proptest! {
+            #![proptest_config(ProptestConfig {
+                cases: 64,
+                failure_persistence: None,
+                ..ProptestConfig::default()
+            })]
+
+            #[test]
+            fn generated_buildings_hold_parity_with_their_heights(
+                base in -6000i32..3000,
+                rises in vec(2000i32..6000, 2..7),
+                minimum in 2000i32..4000,
+                spread in 0i32..3000,
+                lowest in any::<bool>(),
+            ) {
+                let storeys = storeys(base, &rises);
+                let (minimum, maximum) = (f64::from(minimum) / 1000.0, f64::from(minimum + spread) / 1000.0);
+                let mut parameters = vec![("minimum", metres(minimum)), ("maximum", metres(maximum))];
+                let mut options = ";highest=ignored".to_owned();
+                if lowest {
+                    parameters.push(("ignore_lowest", boolean(true)));
+                    options.push_str(";lowest=ignored");
+                }
+                let found = check(model(&storeys), parameters);
+                let rewritten = rewrite(model(&storeys), &bounded(&options, minimum, maximum));
+                let objects: Vec<_> = storeys.iter().map(|(local, _)| common::id(local)).collect();
+                // The rise of every level the check judges (divergence D16:
+                // the table reports a level left out as unmeasured, where
+                // the measured value leaving it out states it absent).
+                let judged = |scope: &axioval_ir::Scope| {
+                    let last = format!("s{}", storeys.len() - 1);
+                    scope.object().is_some_and(|object| {
+                        object.local_id != last && !(lowest && object.local_id == "s0")
+                    })
+                };
+                let rises = model(&storeys).measure(
+                    &format!("level_rise;levels=storey;order=Levels/Elevation;anchor=aggregates{options}"),
+                    &objects,
+                    |_| {},
+                );
+                let rewrite = rises
+                    .into_iter()
+                    .fold(Observations::of_evaluation(&rewritten), |observed, (object, rise)| {
+                        observed.with_value(object, "levels.height", rise)
+                    })
+                    .retain_values(|scope, _| judged(scope));
+                let capability =
+                    Observations::of_evaluation(&found).retain_values(|scope, _| judged(scope));
+                let parity = Parity::outcomes()
+                    .value("levels.height", 0.0)
+                    .compare((ID, &capability), ("expression", &rewrite));
+                prop_assert!(parity.holds(), "{}", parity.diff());
+                prop_assert!(parity.values > 0);
+            }
+        }
     }
 }

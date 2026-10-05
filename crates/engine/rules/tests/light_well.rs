@@ -360,8 +360,11 @@ fn the_well_as_an_expression_over_its_values_reaches_the_verdicts() {
                     .register(PlanSpanServiceHandle::new(service.clone()))
                     .unwrap();
             });
-        let parity =
-            axioval_rules::parity::compare_evaluations((ID, &expected), ("expression", &outcome));
+        // The capability reports each failed bound, the conjunction one
+        // finding (divergence D1).
+        let parity = axioval_rules::parity::Parity::outcomes()
+            .uncounted()
+            .compare_evaluations((ID, &expected), ("expression", &outcome));
         assert!(parity.holds(), "case {index}:\n{}", parity.diff());
     }
 }

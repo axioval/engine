@@ -4315,10 +4315,11 @@ mod as_expressions {
             )],
         );
         let rewritten = model().evaluate_measured(&ExpressionRequirement, &rewrite, register);
-        let parity = axioval_rules::parity::compare_evaluations(
-            (id, &evaluated),
-            ("expression", &rewritten),
-        );
+        // The capability reports each failed side, flight or strip, the
+        // rewrite each object once (divergence D1).
+        let parity = axioval_rules::parity::Parity::outcomes()
+            .uncounted()
+            .compare_evaluations((id, &evaluated), ("expression", &rewritten));
         assert!(parity.holds(), "{requirement}:\n{}", parity.diff());
         verdicts(&evaluated)
     }
@@ -4988,10 +4989,11 @@ mod as_expressions {
                 ),
                 tactile(two_flight_stairs, Strips::default),
             );
-            let parity = axioval_rules::parity::compare_evaluations(
-                (STAIR, &capability),
-                ("expression", &rewrite),
-            );
+            // The capability reports each strip missing on a flight, the
+            // rewrite each flight once (divergence D1).
+            let parity = axioval_rules::parity::Parity::outcomes()
+                .uncounted()
+                .compare_evaluations((STAIR, &capability), ("expression", &rewrite));
             assert!(parity.holds(), "{intermediate}:\n{}", parity.diff());
         }
     }

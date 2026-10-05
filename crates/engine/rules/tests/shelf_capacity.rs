@@ -428,7 +428,7 @@ fn a_rule_without_an_access_path_is_an_invalid_declaration() {
 mod as_expressions {
     use super::*;
     use axioval_rules::ExpressionRequirement;
-    use common::expressions::{and, assert_parity, at_least, graded, m, measured};
+    use common::expressions::{and, assert_parity_uncounted, at_least, graded, m, measured};
     use serde_json::Value;
 
     const SHELVING: &str = "depth=0.4;horizontal=0.3;vertical=0.35;bottom=0.1;top=2;\
@@ -467,7 +467,9 @@ mod as_expressions {
                     .unwrap();
             },
         );
-        assert_parity("axioval:capability.shelf-capacity", &found, &rewritten);
+        // The capability reports each short door, the rewrite the space once
+        // (divergence D1).
+        assert_parity_uncounted("axioval:capability.shelf-capacity", &found, &rewritten);
     }
 
     fn lone_store() -> common::Model {

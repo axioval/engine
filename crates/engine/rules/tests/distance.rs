@@ -1400,11 +1400,12 @@ fn distance_expressions_hold_to_the_parity_harness_in_every_mode() {
         assert_eq!(
             parity.differences,
             vec![Difference {
-                object: id("mid"),
+                scope: id("mid").into(),
                 capability: Some(Outcome::NotEvaluated {
                     reason: NotEvaluatedReason::IncompleteEvidence
                 }),
                 expression: None,
+                details: vec![],
             }],
             "{count} of unmeasured"
         );

@@ -2732,13 +2732,14 @@ mod as_expressions {
             None => "passed",
             Some(Outcome::Finding { .. }) => "finding",
             Some(Outcome::NotEvaluated { .. }) => "open",
+            Some(other) => panic!("no selection is recorded, yet {other}"),
         };
         parity
             .differences
             .iter()
             .map(|difference| {
                 (
-                    difference.object.local_id.as_str(),
+                    difference.scope.object().unwrap().local_id.as_str(),
                     shown(&difference.capability),
                     shown(&difference.expression),
                 )

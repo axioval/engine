@@ -1617,7 +1617,10 @@ mod parity {
             let rewritten = rewrite(&fixture, kind("storey"), &summed_at_most(&room(), 26.0));
             assert_eq!(
                 differences(ID, &found, &rewritten),
-                ["test:model/a: capability not evaluated (IncompleteEvidence), expression passed"]
+                [
+                    "test:model/a: capability not evaluated (IncompleteEvidence), \
+                  expression reported nothing"
+                ]
             );
             let found = capability(
                 &fixture,

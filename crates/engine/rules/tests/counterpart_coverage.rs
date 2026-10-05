@@ -1027,7 +1027,11 @@ mod as_expressions {
                 register,
             ));
         }
-        axioval_rules::parity::compare_evaluations((ID, &expected), ("expression", &rewritten))
+        // One rule per band finds a share in every band it exceeds, where
+        // the capability reports it once at its grade (divergence D1).
+        axioval_rules::parity::Parity::outcomes()
+            .uncounted()
+            .compare_evaluations((ID, &expected), ("expression", &rewritten))
     }
 
     /// [`parity`] over `boxes` and their own model.
@@ -1241,7 +1245,7 @@ mod as_expressions {
         assert_eq!(
             evidence.differences,
             vec![Difference {
-                object: id("w1"),
+                scope: id("w1").into(),
                 capability: Some(Outcome::Finding {
                     severity: Severity::Warning,
                     exact: false
@@ -1250,6 +1254,7 @@ mod as_expressions {
                     severity: Severity::Info,
                     exact: false
                 }),
+                details: vec![],
             }]
         );
     }

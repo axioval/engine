@@ -687,4 +687,128 @@ mod as_expressions {
             );
         }
     }
+
+    /// Generated walls: boxes of random size turned to a random heading,
+    /// measured exactly or within a slack, stating a thickness or none,
+    /// judged against the stated thickness within a tolerance or against a
+    /// range. The rewrite reaches the capability's verdicts and evidence
+    /// exactness on every one.
+    mod generated {
+        use super::*;
+        use axioval_rules::parity::Parity;
+        use proptest::collection::vec;
+        use proptest::prelude::*;
+
+        /// One wall: its size in mm, its heading in degrees, the slack of
+        /// its measurement in mm, and the thickness it states in mm.
+        type Wall = ([u32; 3], u32, u32, Option<u32>);
+
+        fn wall() -> impl Strategy<Value = Wall> {
+            (
+                [1000u32..8000, 50..600, 2000..4000],
+                prop_oneof![Just(0u32), Just(90), 0u32..180],
+                prop_oneof![Just(0u32), 1u32..20],
+                proptest::option::of(50u32..600),
+            )
+        }
+
+        fn fixture(walls: &[Wall]) -> (Model, Frames, Boxes) {
+            let mut model = Model::default();
+            let mut frames = Frames::new();
+            let mut boxes = Boxes::default();
+            for (index, (size, heading, slack, stated)) in walls.iter().enumerate() {
+                let local = format!("w{index}");
+                model = model.object(&local, "wall");
+                if let Some(stated) = stated {
+                    model = model.value(
+                        &local,
+                        MATERIAL,
+                        "TotalThickness",
+                        metres(f64::from(*stated) / 1000.0),
+                    );
+                }
+                let angle = f64::from(*heading).to_radians();
+                frames = frames.with(&local, [angle.cos(), angle.sin(), 0.0]);
+                boxes = boxes.with(
+                    &local,
+                    size.map(|value| f64::from(value) / 1000.0),
+                    f64::from(*slack) / 1000.0,
+                );
+            }
+            (model, frames, boxes)
+        }
+
+        fn hold(
+            walls: &[Wall],
+            parameters: Vec<(&str, ParameterValue)>,
+            requirement: &Value,
+        ) -> Result<(), TestCaseError> {
+            let (model, frames, boxes) = fixture(walls);
+            let capability = run(model, frames, boxes, parameters);
+            let rewrite = fixture(walls).0.evaluate_measured(
+                &axioval_rules::ExpressionRequirement,
+                &expression(kind("wall"), requirement),
+                |services| {
+                    let (_, frames, boxes) = fixture(walls);
+                    services
+                        .register(ObjectFrameServiceHandle::new(Arc::new(frames)))
+                        .unwrap();
+                    services
+                        .register(VerticalExtentServiceHandle::new(Arc::new(boxes)))
+                        .unwrap();
+                },
+            );
+            let parity =
+                Parity::outcomes().compare_evaluations((ID, &capability), ("expression", &rewrite));
+            prop_assert!(parity.holds(), "{}", parity.diff());
+            Ok(())
+        }
+
+        proptest! {
+            #![proptest_config(ProptestConfig {
+                cases: 64,
+                failure_persistence: None,
+                ..ProptestConfig::default()
+            })]
+
+            #[test]
+            fn generated_walls_against_their_thickness_hold_parity(
+                walls in vec(wall(), 1..5),
+                tolerance in prop_oneof![Just(0u32), 1u32..60],
+            ) {
+                let tolerance = f64::from(tolerance);
+                hold(
+                    &walls,
+                    vec![
+                        ("axis", string("forward")),
+                        ("target_property", thickness()),
+                        ("tolerance", millimetres(tolerance)),
+                    ],
+                    &as_stated("forward", quantity(tolerance, "mm")),
+                )?;
+            }
+
+            #[test]
+            fn generated_walls_within_a_range_hold_parity(
+                walls in vec(wall(), 1..5),
+                minimum in 50u32..400,
+                spread in 0u32..300,
+            ) {
+                let (low, high) = (f64::from(minimum), f64::from(minimum + spread));
+                hold(
+                    &walls,
+                    vec![
+                        ("axis", string("forward")),
+                        ("minimum", millimetres(low)),
+                        ("maximum", millimetres(high)),
+                    ],
+                    &between(
+                        mm(extent("forward")),
+                        quantity(low, "mm"),
+                        quantity(high, "mm"),
+                    ),
+                )?;
+            }
+        }
+    }
 }

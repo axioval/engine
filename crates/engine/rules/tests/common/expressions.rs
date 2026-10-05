@@ -189,6 +189,22 @@ pub fn assert_parity(id: &str, capability: &CapabilityEvaluation, rewrite: &Capa
     assert!(parity.holds(), "{}", parity.diff());
 }
 
+/// [`assert_parity`] without finding counts: the rewrite reports one
+/// finding per rule where the capability reports one per failed check, or
+/// the other way round (divergence D1, finding granularity, in the parity
+/// chapter of the book).
+#[track_caller]
+pub fn assert_parity_uncounted(
+    id: &str,
+    capability: &CapabilityEvaluation,
+    rewrite: &CapabilityEvaluation,
+) {
+    let parity = axioval_rules::parity::Parity::outcomes()
+        .uncounted()
+        .compare_evaluations((id, capability), ("expression", rewrite));
+    assert!(parity.holds(), "{}", parity.diff());
+}
+
 /// The differences between the capability `id`'s evaluation and the
 /// rewrite's, one line each, for a documented difference.
 pub fn differences(

@@ -60,6 +60,9 @@ schemars = { version = "1.2.2", default-features = false, features = ["std", "de
 # Test-only: validates package fixtures against those schemas. No remote or
 # file resolution: every schema is in memory.
 jsonschema = { version = "0.58.5", default-features = false }
+# Test-only: generated inputs for the parity harness. `std` only: no fork,
+# timeout or failure-persistence files.
+proptest = { version = "1.11.0", default-features = false, features = ["std"] }
 tracing = "0.1.41"
 clap = { version = "4.5.46", features = ["derive"] }
 axiolid-brep = "0.3.3"

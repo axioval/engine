@@ -434,7 +434,7 @@ fn the_centre_line_distance_as_a_value_reaches_the_verdicts() {
             assert_eq!(
                 parity.differences,
                 vec![axioval::rules::parity::Difference {
-                    object: id("wc"),
+                    scope: id("wc").into(),
                     capability: Some(axioval::rules::parity::Outcome::Finding {
                         severity: axioval::ir::Severity::Error,
                         exact: false,
@@ -443,6 +443,7 @@ fn the_centre_line_distance_as_a_value_reaches_the_verdicts() {
                         severity: axioval::ir::Severity::Error,
                         exact: true,
                     }),
+                    details: vec![],
                 }],
                 "case {index}"
             );

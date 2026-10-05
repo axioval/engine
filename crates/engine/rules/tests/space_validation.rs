@@ -1504,10 +1504,11 @@ fn the_aspects_as_expression_rules_hold_to_the_parity_harness() {
                 &expression,
             ));
         }
-        let parity = axioval_rules::parity::compare_evaluations(
-            ("space-validation", &expected),
-            ("expression", &rewritten),
-        );
+        // One rule per severity finds each failing aspect group, where the
+        // capability reports each aspect (divergence D1).
+        let parity = axioval_rules::parity::Parity::outcomes()
+            .uncounted()
+            .compare_evaluations(("space-validation", &expected), ("expression", &rewritten));
         assert!(
             parity.holds(),
             "{case}:\n{}\n{:?}",

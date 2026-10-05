@@ -1074,7 +1074,7 @@ fn intervals_counts_and_unknown_flags_reach_the_verdicts() {
     assert_eq!(
         unknown.differences,
         vec![Difference {
-            object: id("hall"),
+            scope: id("hall").into(),
             capability: Some(Outcome::NotEvaluated {
                 reason: NotEvaluatedReason::IncompleteEvidence
             }),
@@ -1082,6 +1082,7 @@ fn intervals_counts_and_unknown_flags_reach_the_verdicts() {
                 severity: axioval_ir::Severity::Error,
                 exact: true
             }),
+            details: vec![],
         }]
     );
 }

@@ -262,6 +262,47 @@ impl Model {
         )
     }
 
+    /// The measured value `name` of each of `objects` as a run reads it,
+    /// with `extra`'s geometry: what a rewrite or template compares, for
+    /// the parity harness's value comparison. Stated absent is `null`, a
+    /// refusal not evaluated.
+    pub fn measure(
+        self,
+        name: &str,
+        objects: &[ObjectId],
+        extra: impl Fn(&mut ServiceRegistry),
+    ) -> Vec<(ObjectId, axioval_rules::parity::Measure)> {
+        use axioval_rules::parity::Measure;
+        let project = Project::new(self.objects.clone()).unwrap();
+        let shared = Arc::new(self);
+        let registry =
+            axioval_rules::register_builtins(axioval_engine::CapabilityRegistry::new()).unwrap();
+        let mut services = ServiceRegistry::new();
+        services
+            .register(PropertyResolutionServiceHandle::new(shared.clone()))
+            .unwrap();
+        services
+            .register(RelationshipSelectionServiceHandle::new(shared))
+            .unwrap();
+        extra(&mut services);
+        registry.install_measured(&mut services, &project);
+        objects
+            .iter()
+            .map(|object| {
+                let value = match axioval_engine::measured_value(&services, &project, object, name)
+                {
+                    Ok(PropertyResolution::Present(resolved)) => {
+                        Measure::of_property(&resolved.property().value)
+                            .unwrap_or(Measure::NotEvaluated)
+                    }
+                    Ok(PropertyResolution::Absent(_)) => Measure::Null,
+                    Err(_) => Measure::NotEvaluated,
+                };
+                (object.clone(), value)
+            })
+            .collect()
+    }
+
     pub fn evaluate_with(
         self,
         capability: &dyn RuleCapability,

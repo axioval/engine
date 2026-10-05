@@ -330,11 +330,12 @@ fn the_rows_as_an_expression_over_recesses_reach_the_verdicts() {
             assert_eq!(
                 parity.differences,
                 vec![axioval_rules::parity::Difference {
-                    object: id("a"),
+                    scope: id("a").into(),
                     capability: Some(axioval_rules::parity::Outcome::NotEvaluated {
                         reason: NotEvaluatedReason::IncompleteEvidence,
                     }),
                     expression: None,
+                    details: vec![],
                 }],
                 "case {index}"
             );

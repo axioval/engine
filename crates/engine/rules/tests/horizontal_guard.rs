@@ -1003,18 +1003,29 @@ fn the_guard_decision_as_an_expression_over_edges_reaches_the_verdicts() {
             ("guard", &expected),
             ("expression", &evaluation),
         );
-        // The capability leaves the whole rule open, which the harness
-        // reads per object as passed; the expression leaves the slab open
-        // for the same reason.
+        // Divergence D4: the capability leaves the whole rule open, the
+        // expression each slab, for the same reason. The harness compares
+        // the rule-scoped outcome too, so both differ.
         let reason = expected.not_evaluated_outcomes()[0].reason().clone();
         assert_eq!(expected.not_evaluated_outcomes()[0].object_id(), None);
         assert_eq!(
             parity.differences,
-            vec![axioval_rules::parity::Difference {
-                object: oid("slab-1"),
-                capability: None,
-                expression: Some(axioval_rules::parity::Outcome::NotEvaluated { reason }),
-            }]
+            vec![
+                axioval_rules::parity::Difference {
+                    scope: axioval_ir::Scope::Project,
+                    capability: Some(axioval_rules::parity::Outcome::NotEvaluated {
+                        reason: reason.clone()
+                    }),
+                    expression: None,
+                    details: vec![],
+                },
+                axioval_rules::parity::Difference {
+                    scope: oid("slab-1").into(),
+                    capability: None,
+                    expression: Some(axioval_rules::parity::Outcome::NotEvaluated { reason }),
+                    details: vec![],
+                },
+            ]
         );
     }
 }

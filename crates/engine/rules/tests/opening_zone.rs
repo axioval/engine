@@ -1836,7 +1836,6 @@ fn openings_below_the_minimum_area_are_ignored() {
 )]
 mod as_expressions {
     use axioval_rules::ExpressionRequirement;
-    use axioval_rules::parity::compare_evaluations;
     use serde_json::{Value, json};
 
     use super::*;
@@ -1985,7 +1984,11 @@ mod as_expressions {
             ),
             |_| {},
         );
-        let parity = compare_evaluations((ID, &evaluated), ("expression", &rewritten));
+        // The capability reports each violated margin, the conjunction one
+        // finding (divergence D1).
+        let parity = axioval_rules::parity::Parity::outcomes()
+            .uncounted()
+            .compare_evaluations((ID, &evaluated), ("expression", &rewritten));
         assert!(parity.holds(), "{}", parity.diff());
         (parity.found, parity.open)
     }

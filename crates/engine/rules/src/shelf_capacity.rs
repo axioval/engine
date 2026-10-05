@@ -1,9 +1,10 @@
-//! Exact source-neutral shelf-capacity capability.
+//! `shelf-capacity`: the running metres of shelving a space holds, and
+//! whether it is tall enough for the shelving.
 //!
 //! ADR 0004: the measurement (running metres of shelving) comes from a
 //! [`LinearQuantityServiceHandle`]; the decision -- whether that clears the
 //! declared minimum, and whether the space is tall enough for the shelving
-//! -- is made here, in source-neutral policy.
+//! -- is made in source-neutral policy.
 //!
 //! The doors and openings whose clearances carry no shelving are the rule's
 //! selection: each space's are the elements `access_path` reaches it from,
@@ -11,115 +12,59 @@
 //! An element whose spaces cannot be read, or whose type is undecided and
 //! that reaches the space, leaves the space not evaluated: its clearance
 //! could take shelving away.
+//!
+//! It runs as a template ([`axioval_engine::template`]): the measured
+//! `shelf_clear_height` against the shelving's top, then `shelf_length`
+//! against the minimum, both measured with the rule's selectors bound into
+//! them (`doors=@door_selector`).
 
+use std::sync::LazyLock;
+
+use axioval_engine::template::Template;
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, LinearInterval, LinearQuantityError,
-    LinearQuantityEvidence, LinearQuantityKind, LinearQuantityRequest, LinearQuantityServiceHandle,
-    NotEvaluatedReason, ParameterDescriptor, ParameterType, RuleCapability, RuleContext,
-    ShelfGeometry,
+    CapabilityEvaluation, CompiledRule, LinearQuantityError, LinearQuantityEvidence,
+    LinearQuantityKind, LinearQuantityRequest, LinearQuantityServiceHandle, NotEvaluatedReason,
+    ParameterDescriptor, RuleCapability, RuleContext, ShelfGeometry,
 };
-use axioval_ir::contract::ParameterValue;
 use axioval_ir::{Evidence, ObjectId};
 
 mod measured;
+#[cfg(feature = "parity-reference")]
+pub(crate) mod reference;
+mod template;
 
 pub(crate) use measured::ShelfMeasures;
 
-use crate::level_spacing::shown;
-use crate::selection::select_objects;
-use crate::space_access::{AccessDeclaration, AccessIndex};
-use crate::support::{Parameters, Unavailable, finding, invalid};
+use crate::space_access::AccessIndex;
+use crate::support::Unavailable;
 
 /// Minimum running metres of shelving a space must provide.
 pub struct ShelfCapacity;
 
+static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
+static PLANS: crate::templates::Plans = crate::templates::Plans::new();
+
 impl RuleCapability for ShelfCapacity {
     fn id(&self) -> &'static str {
-        "axioval:capability.shelf-capacity"
+        template::ID
     }
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
-        vec![
-            ParameterDescriptor::required("minimum_running_metres", ParameterType::Number),
-            ParameterDescriptor::required("shelf_depth_metres", ParameterType::Number),
-            ParameterDescriptor::required("horizontal_spacing_metres", ParameterType::Number),
-            ParameterDescriptor::required("vertical_spacing_metres", ParameterType::Number),
-            ParameterDescriptor::required("bottom_elevation_metres", ParameterType::Number),
-            ParameterDescriptor::required("top_elevation_metres", ParameterType::Number),
-            ParameterDescriptor::required("door_clearance_metres", ParameterType::Number),
-            ParameterDescriptor::required("access_path", ParameterType::StringList),
-            ParameterDescriptor::optional("door_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("opening_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("space_selector", ParameterType::Selector),
-        ]
+        TEMPLATE.parameters.clone()
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let (selected, mut evaluation) = select_objects(context, &rule.selector);
+        crate::templates::run((&TEMPLATE, &PLANS), context, rule)
+    }
 
-        let parameters = Parameters(rule);
-        let (minimum, geometry, access) = match declaration(rule, &parameters) {
-            Ok(declared) => declared,
-            Err((reason, message)) => {
-                for object in selected {
-                    evaluation.push_object_not_evaluated(
-                        object.id.clone(),
-                        reason.clone(),
-                        message.clone(),
-                    );
-                }
-                return evaluation;
-            }
-        };
-
-        let Some(service) = context.services.get::<LinearQuantityServiceHandle>() else {
-            for object in selected {
-                evaluation.push_object_not_evaluated(
-                    object.id.clone(),
-                    NotEvaluatedReason::MissingService,
-                    "linear-quantity service is not registered",
-                );
-            }
-            return evaluation;
-        };
-
-        let index = access.index(context);
-        for object in selected {
-            let Shelving {
-                measured,
-                doors,
-                evidence,
-            } = match measure(service, &index, geometry, &object.id) {
-                Ok(shelving) => shelving,
-                Err((reason, message)) => {
-                    evaluation.push_object_not_evaluated(object.id.clone(), reason, message);
-                    continue;
-                }
-            };
-            judge_height(
-                &mut evaluation,
-                rule,
-                &object.id,
-                measured.clear_height(),
-                geometry.top_elevation_metres(),
-                &evidence,
-            );
-            judge_length(
-                &mut evaluation,
-                rule,
-                &object.id,
-                measured.measured(),
-                minimum,
-                evidence,
-                doors,
-            );
-        }
-        evaluation
+    fn template(&self) -> Option<&Template> {
+        Some(&TEMPLATE)
     }
 }
 
 /// What the service measured of one space's shelving, with the doors and
 /// openings sent and the evidence of both.
+#[derive(Clone)]
 struct Shelving {
     measured: LinearQuantityEvidence,
     doors: Vec<ObjectId>,
@@ -164,101 +109,6 @@ fn measure(
     })
 }
 
-/// The minimum, the arrangement and where the doors are read from.
-fn declaration<'a>(
-    rule: &CompiledRule,
-    parameters: &Parameters<'a>,
-) -> Result<(f64, ShelfGeometry, AccessDeclaration<'a>), Unavailable> {
-    let minimum = minimum_running_metres(rule)
-        .ok_or_else(|| invalid("shelf capacity minimum must be a finite, non-negative number"))?;
-    let geometry = shelf_geometry(rule).ok_or_else(|| {
-        invalid("shelf geometry parameters are missing or not physically realisable")
-    })?;
-    let access = AccessDeclaration::parse(parameters)
-        .and_then(|access| access.ok_or_else(|| invalid("parameter `access_path` is required")))
-        .map_err(|(reason, message)| (reason, format!("shelf-capacity: {message}")))?;
-    Ok((minimum, geometry, access))
-}
-
-/// The space is too low for the shelving when its clear height lies wholly
-/// below the shelving's top elevation.
-fn judge_height(
-    evaluation: &mut CapabilityEvaluation,
-    rule: &CompiledRule,
-    object: &axioval_ir::ObjectId,
-    height: Option<LinearInterval>,
-    top: f64,
-    evidence: &[axioval_ir::Evidence],
-) {
-    match height {
-        Some(height) if height.definitely_below(top) => evaluation.push_finding(finding(
-            rule,
-            object,
-            format!(
-                "space too low for the shelving: clear height {} below the shelving's top \
-                 elevation {}",
-                shown(height.lower_metres(), height.upper_metres()),
-                shown(top, top)
-            ),
-            evidence.to_vec(),
-            Vec::new(),
-        )),
-        Some(height) if height.definitely_at_least(top) => {}
-        Some(height) => evaluation.push_object_not_evaluated(
-            object.clone(),
-            NotEvaluatedReason::IncompleteEvidence,
-            format!(
-                "clear height {} may or may not reach the shelving's top elevation {}",
-                shown(height.lower_metres(), height.upper_metres()),
-                shown(top, top)
-            ),
-        ),
-        None => evaluation.push_object_not_evaluated(
-            object.clone(),
-            NotEvaluatedReason::IncompleteEvidence,
-            "the clear height of the space was not measured",
-        ),
-    }
-}
-
-fn judge_length(
-    evaluation: &mut CapabilityEvaluation,
-    rule: &CompiledRule,
-    object: &axioval_ir::ObjectId,
-    interval: LinearInterval,
-    minimum: f64,
-    evidence: Vec<axioval_ir::Evidence>,
-    doors: Vec<axioval_ir::ObjectId>,
-) {
-    if interval.definitely_at_least(minimum) {
-        return;
-    }
-    // Fail closed on ambiguity: an interval that straddles the minimum has
-    // not been shown to fail, so reporting a violation would assert more
-    // than was measured.
-    if !interval.definitely_below(minimum) {
-        evaluation.push_object_not_evaluated(
-            object.clone(),
-            NotEvaluatedReason::IncompleteEvidence,
-            format!(
-                "measured shelf length {} spans the required minimum {minimum:.3}",
-                shown(interval.lower_metres(), interval.upper_metres())
-            ),
-        );
-        return;
-    }
-    evaluation.push_finding(finding(
-        rule,
-        object,
-        format!(
-            "shelf running metres {:.3} below required {minimum:.3}",
-            interval.upper_metres()
-        ),
-        evidence,
-        doors,
-    ));
-}
-
 fn reason(error: LinearQuantityError) -> NotEvaluatedReason {
     match error {
         LinearQuantityError::Unavailable => NotEvaluatedReason::IncompleteEvidence,
@@ -271,31 +121,4 @@ fn reason(error: LinearQuantityError) -> NotEvaluatedReason {
         // means the declaration, not the model.
         LinearQuantityError::InvalidGeometry => NotEvaluatedReason::InvalidDeclaration,
     }
-}
-
-fn minimum_running_metres(rule: &CompiledRule) -> Option<f64> {
-    number(rule, "minimum_running_metres").filter(|value| *value >= 0.0)
-}
-
-fn number(rule: &CompiledRule, key: &str) -> Option<f64> {
-    match rule.parameters.get(key)? {
-        ParameterValue::Number { value } if value.is_finite() => Some(*value),
-        _ => None,
-    }
-}
-
-/// The measured arrangement, taken from the declaration.
-///
-/// Validity is decided by `ShelfGeometry`, so an impossible arrangement is
-/// rejected once rather than by each adapter.
-fn shelf_geometry(rule: &CompiledRule) -> Option<ShelfGeometry> {
-    ShelfGeometry::try_new(
-        number(rule, "shelf_depth_metres")?,
-        number(rule, "horizontal_spacing_metres")?,
-        number(rule, "vertical_spacing_metres")?,
-        number(rule, "bottom_elevation_metres")?,
-        number(rule, "top_elevation_metres")?,
-        number(rule, "door_clearance_metres")?,
-    )
-    .ok()
 }

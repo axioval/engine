@@ -202,6 +202,18 @@ provider keeps each object's area for the run (`AreaKey` in
 `plan_area/measured.rs`), so a member measured by its own rule is not
 measured again for its storey.
 
+`shelf-capacity` runs the `shelving` case's two rules. Its values name the
+rule's selectors (`doors=@door_selector`): they are bound once per rule and
+read for a chunk of spaces together (`MeasuredValues::read_bound_batch`),
+each memoized by space, name and bound arguments, and its provider keeps
+the access index once per run for its path and selections and each space's
+shelving once per run for its arguments, so `shelf_length` and
+`shelf_clear_height` share one request (`a_run_asks_once_per_space`). On the generated
+fixture (no spaces) and the public models whose spaces the service cannot measure it runs at 0.5
+to 0.75× its reference, and at 1.64 to 1.68× on the three architecture models,
+whose references take under 90 µs (judged together by the floor, where it
+holds); peak heap 0.76 to 1.28×.
+
 Before this work `body-extent`'s template ran 2.3 to 3.8 times as long as
 its reference (the fixture 3.8×): every value went through a request, a
 resolution and the evaluator's explanation, and the extent was measured

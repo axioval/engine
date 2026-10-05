@@ -21,7 +21,9 @@ and `plan-area` follow ([#282](https://github.com/axioval/engine/issues/282)),
 and `property-predicate` is the first of the generic judges
 ([#287](https://github.com/axioval/engine/issues/287)); `object-count`
 is the first deciding per source or for the project
-([#290](https://github.com/axioval/engine/issues/290)).
+([#290](https://github.com/axioval/engine/issues/290)); `shelf-capacity` is the
+first whose values take the rule's selectors
+([#289](https://github.com/axioval/engine/issues/289)).
 
 ## The outside contract
 
@@ -48,8 +50,9 @@ rules crate (`body_extent/template.rs`):
 | `id`, `parameters` | The capability's id and descriptor, unchanged. |
 | `grades` | Whether findings are graded (the descriptor's `grades_deviation`): each states how far its value misses the bound it fails, measured from the declared bound, never the widened one, for the runtime's severity bands. |
 | `name` | How rule-scoped messages name the capability (`body-extent: …`). |
+| `refusals` | Where a refused declaration and missing services are reported: `rule` (the default, once, before anything is selected, after the name) or `objects` (for each selected object, worded as the check states it, as capabilities that judged their declaration per object reported it). |
 | `defaults` | Values optional parameters take when unstated (`tolerance` 0 m). |
-| `declaration` | `Check`s over the rule's parameters, in order: `choice` (a string among options), `length` (a non-negative length), `count` (an integer of at least zero, stated where the descriptor requires it), `kind` (a parameter of its descriptor's kind, placed where the capability read it so refusals keep their order), `nonNegative` (numbers of at least zero), `traversal` (a valid `relationship` or `path`, declared only with one of the named parameters, or anywhere where it names none), `exclusive`, `anyOf`, `requires`, `ordered` (numbers, integers or quantities, as the descriptor types them), `disciplines` (a non-empty list of valid disciplines), `path` (a valid relationship path), `tolerance` (the rule's tolerance parameters valid together), `required` (a parameter stated, of its kind). The first failing check leaves the rule not evaluated as an invalid declaration, worded as the capability worded it. |
+| `declaration` | `Check`s over the rule's parameters, in order: `choice` (a string among options), `length` (a non-negative length), `count` (an integer of at least zero, stated where the descriptor requires it), `kind` (a parameter of its descriptor's kind, placed where the capability read it so refusals keep their order), `nonNegative` (numbers of at least zero), `traversal` (a valid `relationship` or `path`, declared only with one of the named parameters, or anywhere where it names none), `exclusive`, `anyOf`, `requires`, `ordered` (numbers, integers or quantities, as the descriptor types them), `disciplines` (a non-empty list of valid disciplines), `path` (a valid relationship path), `tolerance` (the rule's tolerance parameters valid together), `required` (a parameter stated, of its kind), `finite` (each parameter stated as a finite `number`, above or at least a bound where given), `increasing` (both numbers, the first below the second). The first failing check leaves the rule not evaluated as an invalid declaration, worded as the capability worded it. |
 | `services` | The host services the values need (`Service`: `object-frame`, `vertical-extent`, `triangle-count`), and the message leaving the whole rule open without them, before anything is selected. |
 | `texts` | Named message parts, optionally conditional: `Condition::Positive` (a parameter above zero), `Condition::Inexact` (a value read from evidence that is not exact, such as a count of a tessellation), `Condition::Equals` (a string parameter or its default is a value), `Condition::Zero` (a value's lower end is zero: nothing surely counted). Several texts may share a name, each under its own condition: the first that holds is rendered (`plan area` or `facade area` by `measure`). |
 | `forms` | The compositions. The first form whose `when` parameters are all stated applies. |
@@ -68,7 +71,29 @@ A `Form` holds:
   value under an id that may name a text), one row per selected object
   whose values were read, passing or not;
 - `scope`: where the form decides when not for each selected object
-  (`Scopes`): each source, or the whole project.
+  (`Scopes`): each source, or the whole project;
+- `related`: the value whose measured reads' cited objects a finding
+  relates (the doors a shelf length was measured with; see
+  [rule parameters as arguments](./derived.md#rule-parameters-and-the-anchor-as-arguments));
+  without it, the decided members, if any;
+- `checks`: further decisions (`FormCheck`: values, decision, `fail`,
+  `undecided`, `related`), judged in order after the form's values are read
+  and before the form's own decision, each its own finding or not-evaluated
+  outcome: a capability reporting one per failed check (D1). A check's
+  value that cannot be read leaves only that check open; a form value that
+  cannot be read leaves the object open once.
+
+**Rule parameters as arguments.** A value's measured name may hand the
+measurement the rule's own parameters and the anchor, `@name` and
+`@anchor` in a parameter's place (`shelf_length;…;doors=@door_selector`),
+as an expression rule may ([Rule parameters and the anchor as
+arguments](./derived.md#rule-parameters-and-the-anchor-as-arguments)).
+Binding leaves a reference in place; the value binds it per object, the
+selections read once per rule. A reference to an optional rule parameter
+the rule leaves unstated, where the measured parameter is optional without
+a default, is dropped when the rule binds (the value is measured as if the
+argument were not written); any other unstated reference leaves the value
+not evaluated.
 
 **Scopes.** A form with `scope` decides once per source of the session
 (an empty source included, `support::sources`), or once for the whole
@@ -370,6 +395,32 @@ the evaluator's exact interval sum: where the binary sum rounds, its
 interval holds the capability's rounded sum and is a unit in the last
 place wider (D19).
 
+### `shelf-capacity`
+
+| Form | When | Values | Checks | Decision |
+| --- | --- | --- | --- | --- |
+| shelving | always | `length` = `shelf_length;…` in metres | `height` = `shelf_clear_height;…` in metres, at least `top_elevation_metres`, no rounding | `length` at least `minimum_running_metres`, no rounding |
+
+Both values name the rule's arrangement and selectors as arguments:
+`depth=@shelf_depth_metres;horizontal=@horizontal_spacing_metres;vertical=@vertical_spacing_metres;bottom=@bottom_elevation_metres;top=@top_elevation_metres;clearance=@door_clearance_metres;access=@access_path;doors=@door_selector;openings=@opening_selector;spaces=@space_selector`,
+an unstated `opening_selector` or `space_selector` dropped. The provider
+measures both from one request per space with the doors and openings the
+access path reaches it from, the selections bound into it with their
+undecided objects (an undecided door that may reach the space leaves it
+open), and cites the doors it sent: the finding on the length relates
+them (`related`). The declaration is refused per space (`refusals:
+objects`), in the capability's order and words: the minimum (`finite`, at
+least zero), the arrangement (`finite` and `increasing`, one message), the
+selectors needing `access_path` (`requires`), `access_path` and a door or
+opening selector (`anyOf`); a malformed access path is refused by the
+measured value, as an invalid declaration worded as the capability worded
+it. A space too low for the shelving and one too short are two findings
+(the check, then the form's decision), as the capability reported them.
+Messages show the length's upper end and the minimum to three decimals
+(`{length:upper3}`, `{minimum_running_metres:fixed3}`). The provider keeps
+the access index and each space's shelving for the run, so both values
+read one request per space ([Template performance](./performance.md)).
+
 ## Binding and running a rule
 
 The rules crate's `templates` module runs a template
@@ -412,7 +463,9 @@ name (as stated; a property reference as `set.name`), a value with a
 format (`{extent:length}`: `0.3 m`, or `between 0.48 m and 0.52 m`;
 `{area:area}`: `26` or `between 24 and 26`, rounded to 1e-4 as the area
 capabilities showed areas; `{target:stated}`: the value as the source
-states it), `{bound}` (the bound a `Within` failed or straddled, a length:
+states it; `{minimum:fixed3}`: a constant, or a value known as one point,
+with three decimals; `{length:upper3}`: a value's upper end, or a
+constant, with three decimals), `{bound}` (the bound a `Within` failed or straddled, a length:
 `at least 0.26 m`), `{bound:plain}` (the bound as declared: `at least 6`),
 `{why}`, and an anchor's `{undecided}` and `{relation}`; a `Compare`
 form also reads `{target}` (the stated target as the rule declares it,
@@ -440,7 +493,11 @@ bound to a template into the `expression` rule it composes
 (`Fork::CAPABILITY`, `Fork::parameters`): the form's requirement with the
 rule's parameters bound in, every measured read canonical (a `measured.`
 block with its parameters as fields). It is the starting point for a
-stricter or extended rule. The fork reads the same values through the same
+stricter or extended rule. The rule's
+parameters its measured values name (`@door_selector`) travel with it
+(`Fork::carried`, in `Fork::parameters`), so it binds them as the template
+does; its definition declares them as authored parameters, a selector
+among them. A form's checks fork into an `and` with its decision. The fork reads the same values through the same
 evaluator and reaches the template's verdicts on every fixture
 (`the_forked_rule_reaches_the_templates_verdicts`), with two differences
 that are its own: its findings are worded as an `expression` rule's, and
@@ -579,6 +636,16 @@ under every combination of strictness, scope and tolerance; and by the
 `unique-value` rules of the `counts` case, recorded before the switch.
 It is never forked.
 
+`shelf-capacity` is held so too: every fixture of `shelf_capacity.rs`
+and generated spaces of random doors, heights and minimums against
+`axioval_rules::reference::ShelfCapacity` under `Parity::contract()`, the
+messages asserted literally; the case `shelving` records its rules on
+every public model before the switch (the public models' spaces all leave
+the linear-quantity service unable to measure, so they hold the
+refusals, not the layout); and the fork, an `expression` rule passing the
+rule's selectors (`doors=@door_selector`) and reaching the template's
+verdicts, compared uncounted (D1).
+
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the
 public models. A rebuild retires its reference once its family's
@@ -601,16 +668,18 @@ addition data the runner interprets, never code per capability:
 - **Grading** (built, `Template::grades`). A decision reports the
   deviation from the declared bound, never the widened one; severity bands
   stay the runtime's.
+- **Rule parameters and the anchor as arguments** (built, #289). A value
+  hands its measurement the rule's parameters or the anchor (`@name`,
+  `@anchor`), typed by the registry and bound per object; a provider
+  cites what it measured against, and `related` relates it.
 - **Scopes and related objects** (members built, `Form::members`; scopes
   built, `Form::scope`). An anchor judged through the members a selector
   parameter picks, read as an aggregate over them, findings relating the
   decided members; a source or the project judged over the objects the
   rule selects there.
-- **Several findings per object** (built for members, `Judgement`s of
-  `Decision::Each`, each its own outcome). An object-level form reporting
-  one finding per failed check (divergence D1, `property-comparison`,
-  `property-requirements`) still takes one decision: give `Form` a list of
-  judgements like `Each::checks` when the first of them is rebuilt.
+- **Several findings per object** (built: `Judgement`s of
+  `Decision::Each` for members, `Form::checks` for an object-level form,
+  each its own outcome; divergence D1).
 - **Tables and defaults.** Table parameters reach values through `lookup`;
   fallbacks (a stated value, then a table, then a declared default, each on
   an exact absence only) are a value list read in order, the first that is

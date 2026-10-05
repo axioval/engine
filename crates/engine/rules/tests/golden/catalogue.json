@@ -26155,7 +26155,385 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "shelf-capacity",
+        "refusals": "objects",
+        "declaration": [
+          {
+            "kind": "finite",
+            "parameters": [
+              "minimum_running_metres"
+            ],
+            "at_least": 0.0,
+            "message": "shelf capacity minimum must be a finite, non-negative number"
+          },
+          {
+            "kind": "finite",
+            "parameters": [
+              "shelf_depth_metres",
+              "horizontal_spacing_metres",
+              "vertical_spacing_metres"
+            ],
+            "above": 0.0,
+            "message": "shelf geometry parameters are missing or not physically realisable"
+          },
+          {
+            "kind": "finite",
+            "parameters": [
+              "bottom_elevation_metres",
+              "door_clearance_metres"
+            ],
+            "at_least": 0.0,
+            "message": "shelf geometry parameters are missing or not physically realisable"
+          },
+          {
+            "kind": "finite",
+            "parameters": [
+              "top_elevation_metres"
+            ],
+            "message": "shelf geometry parameters are missing or not physically realisable"
+          },
+          {
+            "kind": "increasing",
+            "low": "bottom_elevation_metres",
+            "high": "top_elevation_metres",
+            "message": "shelf geometry parameters are missing or not physically realisable"
+          },
+          {
+            "kind": "requires",
+            "parameter": "door_selector",
+            "with": [
+              "access_path"
+            ],
+            "message": "shelf-capacity: `door_selector`, `opening_selector` and `space_selector` need `access_path`"
+          },
+          {
+            "kind": "requires",
+            "parameter": "opening_selector",
+            "with": [
+              "access_path"
+            ],
+            "message": "shelf-capacity: `door_selector`, `opening_selector` and `space_selector` need `access_path`"
+          },
+          {
+            "kind": "requires",
+            "parameter": "space_selector",
+            "with": [
+              "access_path"
+            ],
+            "message": "shelf-capacity: `door_selector`, `opening_selector` and `space_selector` need `access_path`"
+          },
+          {
+            "kind": "anyOf",
+            "parameters": [
+              "access_path"
+            ],
+            "message": "shelf-capacity: parameter `access_path` is required"
+          },
+          {
+            "kind": "anyOf",
+            "parameters": [
+              "door_selector",
+              "opening_selector"
+            ],
+            "message": "shelf-capacity: `access_path` needs `door_selector`, `opening_selector` or both"
+          }
+        ],
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "length",
+                "expression": {
+                  "kind": "divide",
+                  "left": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "shelf_length;depth=@shelf_depth_metres;horizontal=@horizontal_spacing_metres;vertical=@vertical_spacing_metres;bottom=@bottom_elevation_metres;top=@top_elevation_metres;clearance=@door_clearance_metres;access=@access_path;doors=@door_selector;openings=@opening_selector;spaces=@space_selector"
+                  },
+                  "right": {
+                    "kind": "literal",
+                    "value": {
+                      "type": "quantity",
+                      "value": 1.0,
+                      "unit": "m"
+                    }
+                  },
+                  "label": "in metres"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "length",
+              "minimum": [
+                {
+                  "sign": "plus",
+                  "operand": {
+                    "kind": "parameter",
+                    "name": "minimum_running_metres"
+                  }
+                }
+              ],
+              "rounding": []
+            },
+            "fail": "shelf running metres {length:upper3} below required {minimum_running_metres:fixed3}",
+            "undecided": "measured shelf length {length:length} spans the required minimum {minimum_running_metres:fixed3}",
+            "related": "length",
+            "checks": [
+              {
+                "values": [
+                  {
+                    "name": "height",
+                    "expression": {
+                      "kind": "divide",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "shelf_clear_height;depth=@shelf_depth_metres;horizontal=@horizontal_spacing_metres;vertical=@vertical_spacing_metres;bottom=@bottom_elevation_metres;top=@top_elevation_metres;clearance=@door_clearance_metres;access=@access_path;doors=@door_selector;openings=@opening_selector;spaces=@space_selector"
+                      },
+                      "right": {
+                        "kind": "literal",
+                        "value": {
+                          "type": "quantity",
+                          "value": 1.0,
+                          "unit": "m"
+                        }
+                      },
+                      "label": "in metres"
+                    }
+                  }
+                ],
+                "decision": {
+                  "kind": "within",
+                  "value": "height",
+                  "minimum": [
+                    {
+                      "sign": "plus",
+                      "operand": {
+                        "kind": "parameter",
+                        "name": "top_elevation_metres"
+                      }
+                    }
+                  ],
+                  "rounding": []
+                },
+                "fail": "space too low for the shelving: clear height {height:length} below the shelving's top elevation {top_elevation_metres:length}",
+                "undecided": "clear height {height:length} may or may not reach the shelving's top elevation {top_elevation_metres:length}"
+              }
+            ]
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "and",
+                  "operands": [
+                    {
+                      "kind": "compare",
+                      "operator": "greaterThanOrEquals",
+                      "left": {
+                        "kind": "divide",
+                        "left": {
+                          "kind": "property",
+                          "propertySet": "axioval:measured",
+                          "property": "shelf_clear_height;depth=@shelf_depth_metres;horizontal=@horizontal_spacing_metres;vertical=@vertical_spacing_metres;bottom=@bottom_elevation_metres;top=@top_elevation_metres;clearance=@door_clearance_metres;access=@access_path;doors=@door_selector;openings=@opening_selector;spaces=@space_selector"
+                        },
+                        "right": {
+                          "kind": "literal",
+                          "value": {
+                            "type": "quantity",
+                            "value": 1.0,
+                            "unit": "m"
+                          }
+                        },
+                        "label": "in metres"
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "top_elevation_metres"
+                      },
+                      "label": "at least the lower bound"
+                    }
+                  ]
+                },
+                {
+                  "kind": "and",
+                  "operands": [
+                    {
+                      "kind": "compare",
+                      "operator": "greaterThanOrEquals",
+                      "left": {
+                        "kind": "divide",
+                        "left": {
+                          "kind": "property",
+                          "propertySet": "axioval:measured",
+                          "property": "shelf_length;depth=@shelf_depth_metres;horizontal=@horizontal_spacing_metres;vertical=@vertical_spacing_metres;bottom=@bottom_elevation_metres;top=@top_elevation_metres;clearance=@door_clearance_metres;access=@access_path;doors=@door_selector;openings=@opening_selector;spaces=@space_selector"
+                        },
+                        "right": {
+                          "kind": "literal",
+                          "value": {
+                            "type": "quantity",
+                            "value": 1.0,
+                            "unit": "m"
+                          }
+                        },
+                        "label": "in metres"
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "minimum_running_metres"
+                      },
+                      "label": "at least the lower bound"
+                    }
+                  ]
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.and",
+                      "inputs": {
+                        "operands": {
+                          "blocks": [
+                            {
+                              "type": "expression.compare",
+                              "label": "at least the lower bound",
+                              "fields": {
+                                "operator": "greaterThanOrEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "expression.divide",
+                                    "label": "in metres",
+                                    "inputs": {
+                                      "left": {
+                                        "block": {
+                                          "type": "measured.shelf_clear_height",
+                                          "fields": {
+                                            "access": "@access_path",
+                                            "bottom": "@bottom_elevation_metres",
+                                            "clearance": "@door_clearance_metres",
+                                            "depth": "@shelf_depth_metres",
+                                            "doors": "@door_selector",
+                                            "horizontal": "@horizontal_spacing_metres",
+                                            "openings": "@opening_selector",
+                                            "spaces": "@space_selector",
+                                            "top": "@top_elevation_metres",
+                                            "vertical": "@vertical_spacing_metres"
+                                          }
+                                        }
+                                      },
+                                      "right": {
+                                        "block": {
+                                          "type": "expression.literal",
+                                          "fields": {
+                                            "value": {
+                                              "type": "quantity",
+                                              "unit": "m",
+                                              "value": 1.0
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "top_elevation_metres"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.and",
+                      "inputs": {
+                        "operands": {
+                          "blocks": [
+                            {
+                              "type": "expression.compare",
+                              "label": "at least the lower bound",
+                              "fields": {
+                                "operator": "greaterThanOrEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "expression.divide",
+                                    "label": "in metres",
+                                    "inputs": {
+                                      "left": {
+                                        "block": {
+                                          "type": "measured.shelf_length",
+                                          "fields": {
+                                            "access": "@access_path",
+                                            "bottom": "@bottom_elevation_metres",
+                                            "clearance": "@door_clearance_metres",
+                                            "depth": "@shelf_depth_metres",
+                                            "doors": "@door_selector",
+                                            "horizontal": "@horizontal_spacing_metres",
+                                            "openings": "@opening_selector",
+                                            "spaces": "@space_selector",
+                                            "top": "@top_elevation_metres",
+                                            "vertical": "@vertical_spacing_metres"
+                                          }
+                                        }
+                                      },
+                                      "right": {
+                                        "block": {
+                                          "type": "expression.literal",
+                                          "fields": {
+                                            "value": {
+                                              "type": "quantity",
+                                              "unit": "m",
+                                              "value": 1.0
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "minimum_running_metres"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.slab-contact",

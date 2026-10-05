@@ -473,13 +473,16 @@ space open where an undecided door may reach it). A reference that cannot
 be bound (a parameter of another kind or not realisable, a selection whose
 objects cannot all be listed) leaves the value not evaluated for its
 reason, an invalid declaration for the parameter's own fault, never a
-default. Reads are memoized by object and name within a rule, which, the
-rule's parameters fixed, are the resolved arguments.
+default. A bound read is measured once per run for its object, its name as
+written and its bound arguments (the run's `MeasuredMemo`), so two rules
+naming the same selection share it; a template reads one naming no anchor
+for a chunk of objects together, bound once per rule
+(`MeasuredValues::read_bound_batch`).
 
 **What it was measured against.** A provider may cite the objects a value
 was measured against and the evidence that reached them
 (`MeasuredProvider::measure_cited`, `Citation`); a value read with bound
-arguments (`axioval_engine::measured_bound`) carries them, so an
+arguments (`MeasuredValues::read_bound_batch`) carries them, so an
 expression rule's finding relates them and a template's `related` names
 them.
 

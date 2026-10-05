@@ -107,6 +107,11 @@ const PAIRS: &[Pair] = &[
         case: "counts",
         reference: |registry| registry.replace(axioval::rules::reference::UniqueValue),
     },
+    Pair {
+        capability: "axioval:capability.shelf-capacity",
+        case: "shelving",
+        reference: |registry| registry.replace(axioval::rules::reference::ShelfCapacity),
+    },
 ];
 
 /// Warm-up runs per side before measuring.

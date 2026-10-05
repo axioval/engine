@@ -196,7 +196,10 @@ case `counts` holds `object-count` (per source and across sources),
 `related-count` (along a relationship, and every object of the anchor's
 source) and `unique-value` (per source, per storey and across sources)
 rules over every public model, unmeshed, recorded before they are
-rebuilt as templates (#287, #290).
+rebuilt as templates (#287, #290). The
+case `shelving` records two `shelf-capacity` rules (doors through stated
+space boundaries, and through the derived adjacency among selected
+spaces) before it became a template (#289).
 
 Each pair's evidence prints as one JSON line. That line is what the
 migration ledger records as a proof item, tagged `"kind": "parity"`; the
@@ -212,7 +215,7 @@ reproduce it unless that rebuild issue changes the contract on purpose.
 
 | | Capability | Where | Difference | Reason | Decision |
 |---|---|---|---|---|---|
-| D1 | `counterpart-coverage`, `light-well`, `opening-zone`, `shelf-capacity`, `space-validation`, `stair-geometry`, `ramp-geometry` | their rewrites' parity helpers, compared `uncounted` | finding counts per object | The capability reports one finding per failed check (bound, margin, door, aspect, side, strip), or one graded finding where one rule per band finds every band a share exceeds; a rewrite reports one per rule. | Accepted for rewrites. A template is held to the contract, which counts: it reports the capability's findings one for one. |
+| D1 | `counterpart-coverage`, `light-well`, `opening-zone`, `shelf-capacity`, `space-validation`, `stair-geometry`, `ramp-geometry` | their rewrites' parity helpers and `shelf-capacity`'s fork, compared `uncounted` | finding counts per object | The capability reports one finding per failed check (bound, margin, door, aspect, side, strip), or one graded finding where one rule per band finds every band a share exceeds; a rewrite reports one per rule. | Accepted for rewrites. A template is held to the contract, which counts: it reports the capability's findings one for one. |
 | D2 | `level-spacing` | `an_unordered_building_leaves_its_storeys_open` | the building open against each storey open | A storey without an elevation leaves the capability unable to order the building's storeys; the rewrite judges storeys and leaves each open. | Accepted for the rewrite (both fail closed). The template (#282) reports on the building, the anchor the capability judges. |
 | D3 | `recess-width` | `the_rows_as_an_expression_over_recesses_reach_the_verdicts` | open against passed | A depth on both sides of a row boundary leaves the capability's row open; the rewrite sees the width suffice under either row. | The rewrite's verdict is sound, every possible row agreeing. The template (#283) keeps the capability's outcome; deciding it is a contract change that issue must make explicitly. |
 | D4 | `horizontal-guard`; `body-extent`, `triangle-count` on public models without meshing | `the_guard_decision_as_an_expression_over_edges_reaches_the_verdicts`; case `unmeshed` | the project open against each object or source open | The capability asks for its service once and leaves the whole rule open; the rewrite reads a measured value per object, which the runtime collapses per source. | Accepted for rewrites: the same fail-closed reason at another scope. Templates reproduce the rule-scoped outcome: `body-extent`'s does (#278) and `triangle-count`'s (#282), each held to the recorded outcomes of case `unmeshed`; `horizontal-guard`'s will (#284). |

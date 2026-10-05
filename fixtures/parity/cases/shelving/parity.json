@@ -1,0 +1,10 @@
+{
+  "description": "shelf-capacity over every public model, meshed, recorded before it became a template (#289).",
+  "models": "*",
+  "pairs": [],
+  "recorded": [
+    {"rule": "shelving-boundaries", "comparison": "contract", "reason": "shelf-capacity becomes a template (#289); the outcomes its implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "shelving-adjacent", "comparison": "contract", "reason": "shelf-capacity becomes a template (#289); the outcomes its implementation reported, recorded before it was replaced, are the contract."}
+  ],
+  "divergences": []
+}

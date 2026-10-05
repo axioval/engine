@@ -1,0 +1,194 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:parity.public.shelving.definitions",
+    "name": {
+      "default": "Public parity definitions, shelving",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "Terms for holding shelf-capacity to the outcomes recorded before it became a template.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "objectTypes": {
+    "axioval:parity.public.shelving.space": {
+      "id": "axioval:parity.public.shelving.space",
+      "name": {
+        "default": "space",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcSpace"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcSpace"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcSpace"
+        }
+      ]
+    },
+    "axioval:parity.public.shelving.door": {
+      "id": "axioval:parity.public.shelving.door",
+      "name": {
+        "default": "door",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcDoor"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcDoor"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcDoor"
+        }
+      ]
+    },
+    "axioval:parity.public.shelving.opening": {
+      "id": "axioval:parity.public.shelving.opening",
+      "name": {
+        "default": "opening",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcOpeningElement"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcOpeningElement"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcOpeningElement"
+        }
+      ]
+    }
+  },
+  "properties": {},
+  "propertySets": {},
+  "definitions": {
+    "axioval:parity.public.shelving.shelf-capacity": {
+      "id": "axioval:parity.public.shelving.shelf-capacity",
+      "name": {
+        "default": "shelf-capacity",
+        "translations": {}
+      },
+      "capability": "axioval:capability.shelf-capacity",
+      "parameters": {
+        "minimum_running_metres": {
+          "id": "minimum_running_metres",
+          "name": {
+            "default": "minimum_running_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": true
+        },
+        "shelf_depth_metres": {
+          "id": "shelf_depth_metres",
+          "name": {
+            "default": "shelf_depth_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": true
+        },
+        "horizontal_spacing_metres": {
+          "id": "horizontal_spacing_metres",
+          "name": {
+            "default": "horizontal_spacing_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": true
+        },
+        "vertical_spacing_metres": {
+          "id": "vertical_spacing_metres",
+          "name": {
+            "default": "vertical_spacing_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": true
+        },
+        "bottom_elevation_metres": {
+          "id": "bottom_elevation_metres",
+          "name": {
+            "default": "bottom_elevation_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": true
+        },
+        "top_elevation_metres": {
+          "id": "top_elevation_metres",
+          "name": {
+            "default": "top_elevation_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": true
+        },
+        "door_clearance_metres": {
+          "id": "door_clearance_metres",
+          "name": {
+            "default": "door_clearance_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": true
+        },
+        "access_path": {
+          "id": "access_path",
+          "name": {
+            "default": "access_path",
+            "translations": {}
+          },
+          "kind": "stringList",
+          "required": true
+        },
+        "door_selector": {
+          "id": "door_selector",
+          "name": {
+            "default": "door_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "opening_selector": {
+          "id": "opening_selector",
+          "name": {
+            "default": "opening_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "space_selector": {
+          "id": "space_selector",
+          "name": {
+            "default": "space_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        }
+      }
+    }
+  }
+}

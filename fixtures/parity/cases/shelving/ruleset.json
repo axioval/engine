@@ -1,0 +1,160 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:parity.public.shelving",
+    "name": {
+      "default": "Public parity ruleset, shelving",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "shelf-capacity, recorded before it became a template.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "definitionPackages": [
+    "axioval:parity.public.shelving.definitions"
+  ],
+  "root": {
+    "id": "root",
+    "name": {
+      "default": "Shelving",
+      "translations": {}
+    },
+    "rules": [
+      {
+        "id": "shelving-boundaries",
+        "definitionId": "axioval:parity.public.shelving.shelf-capacity",
+        "name": {
+          "default": "shelving-boundaries",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.shelving.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "minimum_running_metres": {
+            "type": "number",
+            "value": 10.0
+          },
+          "shelf_depth_metres": {
+            "type": "number",
+            "value": 0.4
+          },
+          "horizontal_spacing_metres": {
+            "type": "number",
+            "value": 1.2
+          },
+          "vertical_spacing_metres": {
+            "type": "number",
+            "value": 0.35
+          },
+          "bottom_elevation_metres": {
+            "type": "number",
+            "value": 0.1
+          },
+          "top_elevation_metres": {
+            "type": "number",
+            "value": 2.0
+          },
+          "door_clearance_metres": {
+            "type": "number",
+            "value": 0.9
+          },
+          "access_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelSpaceBoundary:backward"
+            ]
+          },
+          "door_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.shelving.door",
+              "includeSubtypes": true
+            }
+          },
+          "opening_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.shelving.opening",
+              "includeSubtypes": true
+            }
+          }
+        }
+      },
+      {
+        "id": "shelving-adjacent",
+        "definitionId": "axioval:parity.public.shelving.shelf-capacity",
+        "name": {
+          "default": "shelving-adjacent",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.shelving.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "minimum_running_metres": {
+            "type": "number",
+            "value": 4.0
+          },
+          "shelf_depth_metres": {
+            "type": "number",
+            "value": 0.4
+          },
+          "horizontal_spacing_metres": {
+            "type": "number",
+            "value": 1.2
+          },
+          "vertical_spacing_metres": {
+            "type": "number",
+            "value": 0.35
+          },
+          "bottom_elevation_metres": {
+            "type": "number",
+            "value": 0.1
+          },
+          "top_elevation_metres": {
+            "type": "number",
+            "value": 2.0
+          },
+          "door_clearance_metres": {
+            "type": "number",
+            "value": 0.9
+          },
+          "access_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.adjacent-space"
+            ]
+          },
+          "door_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.shelving.door",
+              "includeSubtypes": true
+            }
+          },
+          "space_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.shelving.space",
+              "includeSubtypes": true
+            }
+          }
+        }
+      }
+    ]
+  }
+}

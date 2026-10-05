@@ -1,0 +1,173 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:relationship-scan:IfcRelAggregates:4",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:relationship:#46",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "2a3abe76-022c-548e-940e-af0a2843f0b6",
+      "message": "1 related object(s) via IfcRelAggregates; required at least 2",
+      "object_id": {
+        "local_id": "#35",
+        "source": {
+          "document": "bs-ifc4-building-hvac.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#45",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "building-storeys",
+      "severity": "error"
+    },
+    {
+      "evidence": [],
+      "id": "c024fcf6-3068-5f4d-9943-b703f5ee9519",
+      "message": "no object matches the selection in source `ifc-step:bs-ifc4-building-hvac.ifc`; required between 2 and 3",
+      "rule_id": "few-walls",
+      "severity": "error",
+      "source": {
+        "document": "bs-ifc4-building-hvac.ifc",
+        "system": "ifc-step"
+      }
+    },
+    {
+      "evidence": [],
+      "id": "db363997-a7b0-52e8-82ad-6274e1827d82",
+      "message": "no object matches the selection in the project; required at least 1",
+      "rule_id": "some-wall-anywhere",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:relationship-scan:IfcRelContainedInSpatialStructure:3",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:relationship:#53",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "cd1dddff-517c-57fd-a80a-79a53dcc7184",
+      "message": "0 related object(s) via IfcRelContainedInSpatialStructure; required between 1 and 40",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-building-hvac.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "storey-walls",
+      "severity": "error"
+    }
+  ],
+  "not_evaluated": [],
+  "rules": [
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "building-storeys",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "few-walls",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "one-building",
+      "status": "passed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "some-wall-anywhere",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "space-long-names",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-anything",
+      "status": "passed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-space-long-names",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-wall-types",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "storey-walls",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "wall-types",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "wall-types-across",
+      "status": "nothing_selected"
+    }
+  ]
+}

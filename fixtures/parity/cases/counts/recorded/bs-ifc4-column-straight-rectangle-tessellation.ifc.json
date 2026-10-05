@@ -1,0 +1,113 @@
+{
+  "findings": [
+    {
+      "evidence": [],
+      "id": "c3ce7333-bad3-5640-b96e-fd44715bb277",
+      "message": "no object matches the selection in source `ifc-step:bs-ifc4-column-straight-rectangle-tessellation.ifc`; required between 2 and 3",
+      "rule_id": "few-walls",
+      "severity": "error",
+      "source": {
+        "document": "bs-ifc4-column-straight-rectangle-tessellation.ifc",
+        "system": "ifc-step"
+      }
+    },
+    {
+      "evidence": [],
+      "id": "83442784-25b3-550c-a66d-1be1e94919dc",
+      "message": "no object matches the selection in source `ifc-step:bs-ifc4-column-straight-rectangle-tessellation.ifc`; required exactly 1",
+      "rule_id": "one-building",
+      "severity": "error",
+      "source": {
+        "document": "bs-ifc4-column-straight-rectangle-tessellation.ifc",
+        "system": "ifc-step"
+      }
+    },
+    {
+      "evidence": [],
+      "id": "db363997-a7b0-52e8-82ad-6274e1827d82",
+      "message": "no object matches the selection in the project; required at least 1",
+      "rule_id": "some-wall-anywhere",
+      "severity": "error"
+    }
+  ],
+  "not_evaluated": [],
+  "rules": [
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "building-storeys",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "few-walls",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "one-building",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "some-wall-anywhere",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "space-long-names",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-anything",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-space-long-names",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-wall-types",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-walls",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "wall-types",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "wall-types-across",
+      "status": "nothing_selected"
+    }
+  ]
+}

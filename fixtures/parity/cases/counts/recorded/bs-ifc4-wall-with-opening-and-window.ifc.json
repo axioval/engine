@@ -1,0 +1,190 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:relationship-scan:IfcRelAggregates:3",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:relationship:#41",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "996c26de-02a7-5d3b-ac7f-dc5f5b0006cd",
+      "message": "1 related object(s) via IfcRelAggregates; required at least 2",
+      "object_id": {
+        "local_id": "#34",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#38",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "building-storeys",
+      "severity": "error"
+    },
+    {
+      "evidence": [],
+      "id": "e1a7aca2-defc-5182-b06b-90b0eaa83575",
+      "message": "1 object(s) match the selection in source `ifc-step:bs-ifc4-wall-with-opening-and-window.ifc`; required between 2 and 3",
+      "related": [
+        {
+          "local_id": "#45",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "few-walls",
+      "severity": "error",
+      "source": {
+        "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+        "system": "ifc-step"
+      }
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:absence:#45:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "7f65a793-ad2b-5626-887f-3d78b094be6c",
+      "message": "axioval:attributes.axioval:parity.public.counts.object-type has no value",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "wall-types",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:absence:#45:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "3f8463ea-5a6d-5c1f-b41f-116c6bbf00a8",
+      "message": "axioval:attributes.axioval:parity.public.counts.object-type has no value",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "wall-types-across",
+      "severity": "error"
+    }
+  ],
+  "not_evaluated": [],
+  "rules": [
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "building-storeys",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "few-walls",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "one-building",
+      "status": "passed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "some-wall-anywhere",
+      "status": "passed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "space-long-names",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-anything",
+      "status": "passed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-space-long-names",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-wall-types",
+      "status": "passed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-walls",
+      "status": "passed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "wall-types",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "wall-types-across",
+      "status": "failed"
+    }
+  ]
+}

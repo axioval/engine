@@ -1,0 +1,1288 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:relationship-scan:IfcRelAggregates:4",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:relationship:#37",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "2a3abe76-022c-548e-940e-af0a2843f0b6",
+      "message": "1 related object(s) via IfcRelAggregates; required at least 2",
+      "object_id": {
+        "local_id": "#25",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#36",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "building-storeys",
+      "severity": "error"
+    },
+    {
+      "evidence": [],
+      "id": "9a149273-a4ad-5228-854f-917455b5d7f6",
+      "message": "4 object(s) match the selection in source `ifc-step:bs-ifc2x3-building-structural.ifc`; required between 2 and 3",
+      "related": [
+        {
+          "local_id": "#153",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#309",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#463",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#685",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "few-walls",
+      "severity": "error",
+      "source": {
+        "document": "bs-ifc2x3-building-structural.ifc",
+        "system": "ifc-step"
+      }
+    },
+    {
+      "evidence": [],
+      "id": "8f9bd062-c4cb-570e-82e6-b69e05aa1aea",
+      "message": "29 related object(s) in the same source; required at most 20",
+      "object_id": {
+        "local_id": "#36",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#1012",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#1054",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#1067",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#1069",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#1168",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#1261",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#1263",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#13",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#1306",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#1308",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#151",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#153",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#18",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#25",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#307",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#309",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#39",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#461",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#463",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#526",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#528",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#683",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#685",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#828",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#835",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#837",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#886",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#928",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#970",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "storey-anything",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#153:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#309:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#463:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#685:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:relationship-scan:IfcRelContainedInSpatialStructure:2",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:relationship:#42",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "295cdd3b-c268-5674-adf9-a11c617fc550",
+      "message": "axioval:attributes.axioval:parity.public.counts.object-type `solidwall` is also used by 3 other object(s)",
+      "object_id": {
+        "local_id": "#153",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#309",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#463",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#685",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "storey-wall-types",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#153:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#309:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#463:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#685:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:relationship-scan:IfcRelContainedInSpatialStructure:2",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:relationship:#42",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "c675a8aa-8b7c-5e6b-b2b2-d974915ef4e3",
+      "message": "axioval:attributes.axioval:parity.public.counts.object-type `solidwall` is also used by 3 other object(s)",
+      "object_id": {
+        "local_id": "#309",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#153",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#463",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#685",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "storey-wall-types",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#153:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#309:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#463:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#685:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:relationship-scan:IfcRelContainedInSpatialStructure:2",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:relationship:#42",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "3b652b62-b6da-5f4b-a70b-90ff6a6bd6b7",
+      "message": "axioval:attributes.axioval:parity.public.counts.object-type `solidwall` is also used by 3 other object(s)",
+      "object_id": {
+        "local_id": "#463",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#153",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#309",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#685",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "storey-wall-types",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#153:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#309:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#463:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#685:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:relationship-scan:IfcRelContainedInSpatialStructure:2",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:relationship:#42",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "1f5e57af-5a26-5e47-89d7-032fe0a75e2c",
+      "message": "axioval:attributes.axioval:parity.public.counts.object-type `solidwall` is also used by 3 other object(s)",
+      "object_id": {
+        "local_id": "#685",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#153",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#309",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#463",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "storey-wall-types",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#153:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#309:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#463:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#685:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "7d4d3cd7-8e7d-57bc-8f2d-1f679984d0e0",
+      "message": "axioval:attributes.axioval:parity.public.counts.object-type `solidwall` is also used by 3 other object(s)",
+      "object_id": {
+        "local_id": "#153",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#309",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#463",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#685",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "wall-types",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#153:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#309:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#463:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#685:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "1314ac07-2ce5-50db-a82d-d26fb7297876",
+      "message": "axioval:attributes.axioval:parity.public.counts.object-type `solidwall` is also used by 3 other object(s)",
+      "object_id": {
+        "local_id": "#309",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#153",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#463",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#685",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "wall-types",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#153:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#309:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#463:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#685:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "e4a44ead-f790-5c79-ae2d-538b1f07970b",
+      "message": "axioval:attributes.axioval:parity.public.counts.object-type `solidwall` is also used by 3 other object(s)",
+      "object_id": {
+        "local_id": "#463",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#153",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#309",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#685",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "wall-types",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#153:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#309:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#463:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#685:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "57720200-6e6a-534b-9961-86ecbebd1dc2",
+      "message": "axioval:attributes.axioval:parity.public.counts.object-type `solidwall` is also used by 3 other object(s)",
+      "object_id": {
+        "local_id": "#685",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#153",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#309",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#463",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "wall-types",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#153:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#309:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#463:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#685:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "929e205f-0f4f-5e43-a69a-5c66706180b0",
+      "message": "axioval:attributes.axioval:parity.public.counts.object-type `solidwall` is also used by 3 other object(s)",
+      "object_id": {
+        "local_id": "#153",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#309",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#463",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#685",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "wall-types-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#153:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#309:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#463:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#685:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "50ce35c1-3e0b-5874-9d39-2c5dc69e0c23",
+      "message": "axioval:attributes.axioval:parity.public.counts.object-type `solidwall` is also used by 3 other object(s)",
+      "object_id": {
+        "local_id": "#309",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#153",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#463",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#685",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "wall-types-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#153:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#309:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#463:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#685:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "42cef92c-2b5c-511d-a97c-828d01055012",
+      "message": "axioval:attributes.axioval:parity.public.counts.object-type `solidwall` is also used by 3 other object(s)",
+      "object_id": {
+        "local_id": "#463",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#153",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#309",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#685",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "wall-types-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#153:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#309:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#463:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:attribute:#685:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "7b163a10-4b00-56a0-84ca-53dbb991787e",
+      "message": "axioval:attributes.axioval:parity.public.counts.object-type `solidwall` is also used by 3 other object(s)",
+      "object_id": {
+        "local_id": "#685",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#153",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#309",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#463",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "wall-types-across",
+      "severity": "error"
+    }
+  ],
+  "not_evaluated": [],
+  "rules": [
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "building-storeys",
+      "status": "failed"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "few-walls",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "one-building",
+      "status": "passed"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "some-wall-anywhere",
+      "status": "passed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "space-long-names",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "storey-anything",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-space-long-names",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 4,
+      "failed": 4,
+      "not_evaluated": 0,
+      "rule_id": "storey-wall-types",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-walls",
+      "status": "passed"
+    },
+    {
+      "checked": 4,
+      "failed": 4,
+      "not_evaluated": 0,
+      "rule_id": "wall-types",
+      "status": "failed"
+    },
+    {
+      "checked": 4,
+      "failed": 4,
+      "not_evaluated": 0,
+      "rule_id": "wall-types-across",
+      "status": "failed"
+    }
+  ]
+}

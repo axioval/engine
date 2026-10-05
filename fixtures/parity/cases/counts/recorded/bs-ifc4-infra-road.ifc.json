@@ -1,0 +1,265 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelAggregates:20",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "6f28ec31-58df-5b82-950e-f11fd424fe32",
+      "message": "0 related object(s) via IfcRelAggregates; required at least 2",
+      "object_id": {
+        "local_id": "#31",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "building-storeys",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelAggregates:20",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "6608f1f6-36d2-5749-83df-e036504fdcbe",
+      "message": "0 related object(s) via IfcRelAggregates; required at least 2",
+      "object_id": {
+        "local_id": "#492",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "building-storeys",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelAggregates:20",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "c80a12bb-fa75-5795-b54b-69bce4b96816",
+      "message": "0 related object(s) via IfcRelAggregates; required at least 2",
+      "object_id": {
+        "local_id": "#607",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "building-storeys",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelAggregates:20",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "75817b3a-0b7b-58a8-987e-6e5cf89620ea",
+      "message": "0 related object(s) via IfcRelAggregates; required at least 2",
+      "object_id": {
+        "local_id": "#720",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "building-storeys",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelAggregates:20",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "b6dba238-d191-5d88-be21-f6601a4175ef",
+      "message": "0 related object(s) via IfcRelAggregates; required at least 2",
+      "object_id": {
+        "local_id": "#898",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "building-storeys",
+      "severity": "error"
+    },
+    {
+      "evidence": [],
+      "id": "d5693dec-cee5-5791-8742-236311f21c59",
+      "message": "no object matches the selection in source `ifc-step:bs-ifc4-infra-road.ifc`; required between 2 and 3",
+      "rule_id": "few-walls",
+      "severity": "error",
+      "source": {
+        "document": "bs-ifc4-infra-road.ifc",
+        "system": "ifc-step"
+      }
+    },
+    {
+      "evidence": [],
+      "id": "c80ce3e8-13da-5474-be97-d9fe0ef0f9b3",
+      "message": "5 object(s) match the selection in source `ifc-step:bs-ifc4-infra-road.ifc`; required exactly 1",
+      "related": [
+        {
+          "local_id": "#31",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#492",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#607",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#720",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#898",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "one-building",
+      "severity": "error",
+      "source": {
+        "document": "bs-ifc4-infra-road.ifc",
+        "system": "ifc-step"
+      }
+    },
+    {
+      "evidence": [],
+      "id": "db363997-a7b0-52e8-82ad-6274e1827d82",
+      "message": "no object matches the selection in the project; required at least 1",
+      "rule_id": "some-wall-anywhere",
+      "severity": "error"
+    }
+  ],
+  "not_evaluated": [],
+  "rules": [
+    {
+      "checked": 5,
+      "failed": 5,
+      "not_evaluated": 0,
+      "rule_id": "building-storeys",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "few-walls",
+      "status": "failed"
+    },
+    {
+      "checked": 5,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "one-building",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "some-wall-anywhere",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "space-long-names",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-anything",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-space-long-names",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-wall-types",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-walls",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "wall-types",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "wall-types-across",
+      "status": "nothing_selected"
+    }
+  ]
+}

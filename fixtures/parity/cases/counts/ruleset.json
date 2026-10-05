@@ -1,0 +1,321 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:parity.public.counts",
+    "name": {
+      "default": "Public parity ruleset, counts",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "Count and uniqueness judges, recorded before they became templates.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "definitionPackages": [
+    "axioval:parity.public.counts.definitions"
+  ],
+  "root": {
+    "id": "root",
+    "name": {
+      "default": "Counts",
+      "translations": {}
+    },
+    "rules": [
+      {
+        "id": "one-building",
+        "definitionId": "axioval:parity.public.counts.object-count",
+        "name": {
+          "default": "one-building",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.counts.building",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "minimum": {
+            "type": "integer",
+            "value": 1
+          },
+          "maximum": {
+            "type": "integer",
+            "value": 1
+          }
+        }
+      },
+      {
+        "id": "some-wall-anywhere",
+        "definitionId": "axioval:parity.public.counts.object-count",
+        "name": {
+          "default": "some-wall-anywhere",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.counts.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "across_sources": {
+            "type": "boolean",
+            "value": true
+          }
+        }
+      },
+      {
+        "id": "few-walls",
+        "definitionId": "axioval:parity.public.counts.object-count",
+        "name": {
+          "default": "few-walls",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.counts.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "minimum": {
+            "type": "integer",
+            "value": 2
+          },
+          "maximum": {
+            "type": "integer",
+            "value": 3
+          }
+        }
+      },
+      {
+        "id": "storey-walls",
+        "definitionId": "axioval:parity.public.counts.related-count",
+        "name": {
+          "default": "storey-walls",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.counts.storey",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "related_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.counts.wall",
+              "includeSubtypes": true
+            }
+          },
+          "relationship": {
+            "type": "string",
+            "value": "IfcRelContainedInSpatialStructure"
+          },
+          "minimum": {
+            "type": "integer",
+            "value": 1
+          },
+          "maximum": {
+            "type": "integer",
+            "value": 40
+          }
+        }
+      },
+      {
+        "id": "building-storeys",
+        "definitionId": "axioval:parity.public.counts.related-count",
+        "name": {
+          "default": "building-storeys",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.counts.building",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "related_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.counts.storey",
+              "includeSubtypes": true
+            }
+          },
+          "relationship": {
+            "type": "string",
+            "value": "IfcRelAggregates"
+          },
+          "minimum": {
+            "type": "integer",
+            "value": 2
+          }
+        }
+      },
+      {
+        "id": "storey-anything",
+        "definitionId": "axioval:parity.public.counts.related-count",
+        "name": {
+          "default": "storey-anything",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.counts.storey",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "maximum": {
+            "type": "integer",
+            "value": 20
+          }
+        }
+      },
+      {
+        "id": "space-long-names",
+        "definitionId": "axioval:parity.public.counts.unique-value",
+        "name": {
+          "default": "space-long-names",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.counts.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.counts.long-name"
+          }
+        }
+      },
+      {
+        "id": "storey-space-long-names",
+        "definitionId": "axioval:parity.public.counts.unique-value",
+        "name": {
+          "default": "storey-space-long-names",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.counts.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.counts.long-name"
+          },
+          "relationship": {
+            "type": "string",
+            "value": "IfcRelAggregates"
+          },
+          "direction": {
+            "type": "string",
+            "value": "backward"
+          }
+        }
+      },
+      {
+        "id": "wall-types",
+        "definitionId": "axioval:parity.public.counts.unique-value",
+        "name": {
+          "default": "wall-types",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.counts.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.counts.object-type"
+          }
+        }
+      },
+      {
+        "id": "storey-wall-types",
+        "definitionId": "axioval:parity.public.counts.unique-value",
+        "name": {
+          "default": "storey-wall-types",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.counts.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.counts.object-type"
+          },
+          "require_value": {
+            "type": "boolean",
+            "value": false
+          },
+          "relationship": {
+            "type": "string",
+            "value": "IfcRelContainedInSpatialStructure"
+          },
+          "direction": {
+            "type": "string",
+            "value": "backward"
+          }
+        }
+      },
+      {
+        "id": "wall-types-across",
+        "definitionId": "axioval:parity.public.counts.unique-value",
+        "name": {
+          "default": "wall-types-across",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.counts.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.counts.object-type"
+          },
+          "across_sources": {
+            "type": "boolean",
+            "value": true
+          },
+          "case_sensitive": {
+            "type": "boolean",
+            "value": true
+          },
+          "trim": {
+            "type": "boolean",
+            "value": false
+          }
+        }
+      }
+    ]
+  }
+}

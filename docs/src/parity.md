@@ -191,7 +191,12 @@ the `property-predicate` rules `wall-width` and `slab-depth` of `elements` (see
 recorded rules: `plan-area` (own footprints and facades, and storeys
 summing their members), `area-ratio`, `plan-coverage`, `level-spacing`,
 `slab-stack-spacing` and `coordinate-consistency` over every public
-model, recorded before any of them is rebuilt as a template (#282).
+model, recorded before any of them is rebuilt as a template (#282). The
+case `counts` holds `object-count` (per source and across sources),
+`related-count` (along a relationship, and every object of the anchor's
+source) and `unique-value` (per source, per storey and across sources)
+rules over every public model, unmeshed, recorded before they are
+rebuilt as templates (#287, #290).
 
 Each pair's evidence prints as one JSON line. That line is what the
 migration ledger records as a proof item, tagged `"kind": "parity"`; the

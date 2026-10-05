@@ -1,0 +1,20 @@
+{
+  "description": "Count and uniqueness judges over every public model, unmeshed, recorded before they become templates (#287, #290).",
+  "models": "*",
+  "geometry": false,
+  "pairs": [],
+  "recorded": [
+    {"rule": "one-building", "comparison": "contract", "reason": "object-count becomes a template (#287, #290); the outcomes its implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "some-wall-anywhere", "comparison": "contract", "reason": "object-count becomes a template (#287, #290); the outcomes its implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "few-walls", "comparison": "contract", "reason": "object-count becomes a template (#287, #290); the outcomes its implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "storey-walls", "comparison": "contract", "reason": "related-count becomes a template (#287, #290); the outcomes its implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "building-storeys", "comparison": "contract", "reason": "related-count becomes a template (#287, #290); the outcomes its implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "storey-anything", "comparison": "contract", "reason": "related-count becomes a template (#287, #290); the outcomes its implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "space-long-names", "comparison": "contract", "reason": "unique-value becomes a template (#287, #290); the outcomes its implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "storey-space-long-names", "comparison": "contract", "reason": "unique-value becomes a template (#287, #290); the outcomes its implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "wall-types", "comparison": "contract", "reason": "unique-value becomes a template (#287, #290); the outcomes its implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "storey-wall-types", "comparison": "contract", "reason": "unique-value becomes a template (#287, #290); the outcomes its implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "wall-types-across", "comparison": "contract", "reason": "unique-value becomes a template (#287, #290); the outcomes its implementation reported, recorded before it was replaced, are the contract."}
+  ],
+  "divergences": []
+}

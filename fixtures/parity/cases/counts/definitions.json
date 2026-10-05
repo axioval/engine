@@ -1,0 +1,500 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:parity.public.counts.definitions",
+    "name": {
+      "default": "Public parity definitions, counts",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "Terms for holding the count and uniqueness judges to the outcomes recorded before they became templates.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "objectTypes": {
+    "axioval:parity.public.counts.space": {
+      "id": "axioval:parity.public.counts.space",
+      "name": {
+        "default": "space",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcSpace"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcSpace"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcSpace"
+        }
+      ]
+    },
+    "axioval:parity.public.counts.storey": {
+      "id": "axioval:parity.public.counts.storey",
+      "name": {
+        "default": "storey",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcBuildingStorey"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcBuildingStorey"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcBuildingStorey"
+        }
+      ]
+    },
+    "axioval:parity.public.counts.building": {
+      "id": "axioval:parity.public.counts.building",
+      "name": {
+        "default": "building",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcBuilding"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcBuilding"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcBuilding"
+        }
+      ]
+    },
+    "axioval:parity.public.counts.wall": {
+      "id": "axioval:parity.public.counts.wall",
+      "name": {
+        "default": "wall",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcWall"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcWall"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcWall"
+        }
+      ]
+    },
+    "axioval:parity.public.counts.door": {
+      "id": "axioval:parity.public.counts.door",
+      "name": {
+        "default": "door",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcDoor"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcDoor"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcDoor"
+        }
+      ]
+    },
+    "axioval:parity.public.counts.window": {
+      "id": "axioval:parity.public.counts.window",
+      "name": {
+        "default": "window",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcWindow"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcWindow"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcWindow"
+        }
+      ]
+    },
+    "axioval:parity.public.counts.slab": {
+      "id": "axioval:parity.public.counts.slab",
+      "name": {
+        "default": "slab",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcSlab"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcSlab"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcSlab"
+        }
+      ]
+    }
+  },
+  "properties": {
+    "axioval:parity.public.counts.name": {
+      "id": "axioval:parity.public.counts.name",
+      "name": {
+        "default": "name",
+        "translations": {}
+      },
+      "valueKind": "string",
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "Name"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "Name"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "Name"
+        }
+      ]
+    },
+    "axioval:parity.public.counts.object-type": {
+      "id": "axioval:parity.public.counts.object-type",
+      "name": {
+        "default": "object-type",
+        "translations": {}
+      },
+      "valueKind": "string",
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "ObjectType"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "ObjectType"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "ObjectType"
+        }
+      ]
+    },
+    "axioval:parity.public.counts.long-name": {
+      "id": "axioval:parity.public.counts.long-name",
+      "name": {
+        "default": "long-name",
+        "translations": {}
+      },
+      "valueKind": "string",
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "LongName"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "LongName"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "LongName"
+        }
+      ]
+    }
+  },
+  "propertySets": {},
+  "definitions": {
+    "axioval:parity.public.counts.object-count": {
+      "id": "axioval:parity.public.counts.object-count",
+      "name": {
+        "default": "object-count",
+        "translations": {}
+      },
+      "capability": "axioval:capability.object-count",
+      "parameters": {
+        "minimum": {
+          "id": "minimum",
+          "name": {
+            "default": "minimum",
+            "translations": {}
+          },
+          "kind": "integer",
+          "required": false
+        },
+        "maximum": {
+          "id": "maximum",
+          "name": {
+            "default": "maximum",
+            "translations": {}
+          },
+          "kind": "integer",
+          "required": false
+        },
+        "across_sources": {
+          "id": "across_sources",
+          "name": {
+            "default": "across_sources",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "disciplines": {
+          "id": "disciplines",
+          "name": {
+            "default": "disciplines",
+            "translations": {}
+          },
+          "kind": "stringList",
+          "required": false
+        }
+      }
+    },
+    "axioval:parity.public.counts.related-count": {
+      "id": "axioval:parity.public.counts.related-count",
+      "name": {
+        "default": "related-count",
+        "translations": {}
+      },
+      "capability": "axioval:capability.related-count",
+      "parameters": {
+        "related_selector": {
+          "id": "related_selector",
+          "name": {
+            "default": "related_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "minimum": {
+          "id": "minimum",
+          "name": {
+            "default": "minimum",
+            "translations": {}
+          },
+          "kind": "integer",
+          "required": false
+        },
+        "maximum": {
+          "id": "maximum",
+          "name": {
+            "default": "maximum",
+            "translations": {}
+          },
+          "kind": "integer",
+          "required": false
+        },
+        "same_ends": {
+          "id": "same_ends",
+          "name": {
+            "default": "same_ends",
+            "translations": {}
+          },
+          "kind": "stringList",
+          "required": false
+        },
+        "relationship": {
+          "id": "relationship",
+          "name": {
+            "default": "relationship",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
+        "direction": {
+          "id": "direction",
+          "name": {
+            "default": "direction",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
+        "follow_chain": {
+          "id": "follow_chain",
+          "name": {
+            "default": "follow_chain",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "path": {
+          "id": "path",
+          "name": {
+            "default": "path",
+            "translations": {}
+          },
+          "kind": "stringList",
+          "required": false
+        },
+        "skip_absent_relationship_ends": {
+          "id": "skip_absent_relationship_ends",
+          "name": {
+            "default": "skip_absent_relationship_ends",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        }
+      }
+    },
+    "axioval:parity.public.counts.unique-value": {
+      "id": "axioval:parity.public.counts.unique-value",
+      "name": {
+        "default": "unique-value",
+        "translations": {}
+      },
+      "capability": "axioval:capability.unique-value",
+      "parameters": {
+        "property": {
+          "id": "property",
+          "name": {
+            "default": "property",
+            "translations": {}
+          },
+          "kind": "propertyReference",
+          "required": true
+        },
+        "trim": {
+          "id": "trim",
+          "name": {
+            "default": "trim",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "case_sensitive": {
+          "id": "case_sensitive",
+          "name": {
+            "default": "case_sensitive",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "require_value": {
+          "id": "require_value",
+          "name": {
+            "default": "require_value",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "across_sources": {
+          "id": "across_sources",
+          "name": {
+            "default": "across_sources",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "relationship": {
+          "id": "relationship",
+          "name": {
+            "default": "relationship",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
+        "direction": {
+          "id": "direction",
+          "name": {
+            "default": "direction",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
+        "follow_chain": {
+          "id": "follow_chain",
+          "name": {
+            "default": "follow_chain",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "path": {
+          "id": "path",
+          "name": {
+            "default": "path",
+            "translations": {}
+          },
+          "kind": "stringList",
+          "required": false
+        },
+        "skip_absent_relationship_ends": {
+          "id": "skip_absent_relationship_ends",
+          "name": {
+            "default": "skip_absent_relationship_ends",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "tolerance": {
+          "id": "tolerance",
+          "name": {
+            "default": "tolerance",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": false
+        },
+        "relative_tolerance": {
+          "id": "relative_tolerance",
+          "name": {
+            "default": "relative_tolerance",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": false
+        },
+        "decimals": {
+          "id": "decimals",
+          "name": {
+            "default": "decimals",
+            "translations": {}
+          },
+          "kind": "integer",
+          "required": false
+        }
+      }
+    }
+  }
+}

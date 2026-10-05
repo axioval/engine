@@ -1,0 +1,542 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:parity.public.storeys",
+    "name": {
+      "default": "Public parity ruleset, storeys",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "Plan, area, level and stack capabilities, recorded before they became templates.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "definitionPackages": [
+    "axioval:parity.public.storeys.definitions"
+  ],
+  "root": {
+    "id": "root",
+    "name": {
+      "default": "Storeys",
+      "translations": {}
+    },
+    "rules": [
+      {
+        "id": "space-area",
+        "definitionId": "axioval:parity.public.storeys.plan-area",
+        "name": {
+          "default": "space-area",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.storeys.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "minimum": {
+            "type": "number",
+            "value": 4.0
+          },
+          "maximum": {
+            "type": "number",
+            "value": 40.0
+          }
+        }
+      },
+      {
+        "id": "slab-area",
+        "definitionId": "axioval:parity.public.storeys.plan-area",
+        "name": {
+          "default": "slab-area",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.storeys.slab",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "maximum": {
+            "type": "number",
+            "value": 20.0
+          }
+        }
+      },
+      {
+        "id": "wall-facade",
+        "definitionId": "axioval:parity.public.storeys.plan-area",
+        "name": {
+          "default": "wall-facade",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.storeys.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "minimum": {
+            "type": "number",
+            "value": 5.0
+          },
+          "measure": {
+            "type": "string",
+            "value": "facade"
+          }
+        }
+      },
+      {
+        "id": "storey-space-area",
+        "definitionId": "axioval:parity.public.storeys.plan-area",
+        "name": {
+          "default": "storey-space-area",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.storeys.storey",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "minimum": {
+            "type": "number",
+            "value": 50.0
+          },
+          "maximum": {
+            "type": "number",
+            "value": 400.0
+          },
+          "member_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.storeys.space",
+              "includeSubtypes": true
+            }
+          },
+          "relationship": {
+            "type": "string",
+            "value": "IfcRelAggregates"
+          }
+        }
+      },
+      {
+        "id": "storey-slab-area",
+        "definitionId": "axioval:parity.public.storeys.plan-area",
+        "name": {
+          "default": "storey-slab-area",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.storeys.storey",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "minimum": {
+            "type": "number",
+            "value": 1.0
+          },
+          "maximum": {
+            "type": "number",
+            "value": 20.0
+          },
+          "member_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.storeys.slab",
+              "includeSubtypes": true
+            }
+          },
+          "relationship": {
+            "type": "string",
+            "value": "IfcRelContainedInSpatialStructure"
+          }
+        }
+      },
+      {
+        "id": "storey-facade-area",
+        "definitionId": "axioval:parity.public.storeys.plan-area",
+        "name": {
+          "default": "storey-facade-area",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.storeys.storey",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "minimum": {
+            "type": "number",
+            "value": 20.0
+          },
+          "measure": {
+            "type": "string",
+            "value": "facade"
+          },
+          "member_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.storeys.wall",
+              "includeSubtypes": true
+            }
+          },
+          "relationship": {
+            "type": "string",
+            "value": "IfcRelContainedInSpatialStructure"
+          }
+        }
+      },
+      {
+        "id": "space-share",
+        "definitionId": "axioval:parity.public.storeys.area-ratio",
+        "name": {
+          "default": "space-share",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.storeys.storey",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "numerator_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.storeys.space",
+              "includeSubtypes": true
+            }
+          },
+          "denominator_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.storeys.slab",
+              "includeSubtypes": true
+            }
+          },
+          "minimum": {
+            "type": "number",
+            "value": 0.5
+          },
+          "maximum": {
+            "type": "number",
+            "value": 1.2
+          },
+          "path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelAggregates:forward"
+            ]
+          }
+        }
+      },
+      {
+        "id": "window-to-wall",
+        "definitionId": "axioval:parity.public.storeys.area-ratio",
+        "name": {
+          "default": "window-to-wall",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.storeys.storey",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "numerator_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.storeys.window",
+              "includeSubtypes": true
+            }
+          },
+          "denominator_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.storeys.wall",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.storeys.window",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "minimum": {
+            "type": "number",
+            "value": 0.1
+          },
+          "maximum": {
+            "type": "number",
+            "value": 0.6
+          },
+          "measure": {
+            "type": "string",
+            "value": "facade"
+          },
+          "relationship": {
+            "type": "string",
+            "value": "IfcRelContainedInSpatialStructure"
+          }
+        }
+      },
+      {
+        "id": "space-on-slab",
+        "definitionId": "axioval:parity.public.storeys.plan-coverage",
+        "name": {
+          "default": "space-on-slab",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.storeys.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "candidate_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.storeys.slab",
+              "includeSubtypes": true
+            }
+          },
+          "minimum_ratio": {
+            "type": "number",
+            "value": 0.9
+          }
+        }
+      },
+      {
+        "id": "storey-height",
+        "definitionId": "axioval:parity.public.storeys.level-spacing",
+        "name": {
+          "default": "storey-height",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.storeys.building",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "member_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.storeys.storey",
+              "includeSubtypes": true
+            }
+          },
+          "order": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.storeys.elevation"
+          },
+          "minimum": {
+            "type": "quantity",
+            "value": 2.5,
+            "unit": "m"
+          },
+          "maximum": {
+            "type": "quantity",
+            "value": 4.0,
+            "unit": "m"
+          },
+          "relationship": {
+            "type": "string",
+            "value": "IfcRelAggregates"
+          }
+        }
+      },
+      {
+        "id": "storey-height-consistent",
+        "definitionId": "axioval:parity.public.storeys.level-spacing",
+        "name": {
+          "default": "storey-height-consistent",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.storeys.building",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "member_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.storeys.storey",
+              "includeSubtypes": true
+            }
+          },
+          "order": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.storeys.elevation"
+          },
+          "consistent": {
+            "type": "boolean",
+            "value": true
+          },
+          "ignore_lowest": {
+            "type": "boolean",
+            "value": true
+          },
+          "content_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelContainedInSpatialStructure"
+            ]
+          },
+          "relationship": {
+            "type": "string",
+            "value": "IfcRelAggregates"
+          }
+        }
+      },
+      {
+        "id": "storey-space-heights",
+        "definitionId": "axioval:parity.public.storeys.level-spacing",
+        "name": {
+          "default": "storey-space-heights",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.storeys.building",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "member_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.storeys.storey",
+              "includeSubtypes": true
+            }
+          },
+          "order": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.storeys.elevation"
+          },
+          "ignore_highest": {
+            "type": "boolean",
+            "value": true
+          },
+          "space_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.storeys.space",
+              "includeSubtypes": true
+            }
+          },
+          "space_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelAggregates"
+            ]
+          },
+          "space_tolerance": {
+            "type": "quantity",
+            "value": 0.05,
+            "unit": "m"
+          },
+          "space_elevation": {
+            "type": "string",
+            "value": "bottom"
+          },
+          "relationship": {
+            "type": "string",
+            "value": "IfcRelAggregates"
+          }
+        }
+      },
+      {
+        "id": "slab-stack",
+        "definitionId": "axioval:parity.public.storeys.slab-stack-spacing",
+        "name": {
+          "default": "slab-stack",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.storeys.slab",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "minimum_overlap_ratio": {
+            "type": "number",
+            "value": 0.5
+          },
+          "top_to_top_minimum": {
+            "type": "quantity",
+            "value": 2.5,
+            "unit": "m"
+          },
+          "top_to_bottom_minimum": {
+            "type": "quantity",
+            "value": 2.0,
+            "unit": "m"
+          },
+          "consistent": {
+            "type": "stringList",
+            "value": [
+              "top_to_top"
+            ]
+          }
+        }
+      },
+      {
+        "id": "coordinates",
+        "definitionId": "axioval:parity.public.storeys.coordinate-consistency",
+        "name": {
+          "default": "coordinates",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.storeys.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "length_tolerance": {
+            "type": "number",
+            "value": 0.001
+          }
+        }
+      }
+    ]
+  }
+}

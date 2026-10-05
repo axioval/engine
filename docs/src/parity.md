@@ -186,7 +186,11 @@ change. A divergence of a recorded rule names it as `"recorded"` in place
 of `"capability"`. The compile test checks that every recorded rule exists
 and that a recording exists for every model the case names. The
 `body-extent` and `triangle-count` rules of `elements` and `unmeshed` are recorded so (see
-[Capability templates](./templates.md)).
+[Capability templates](./templates.md)). The case `storeys` holds only
+recorded rules: `plan-area` (own footprints and facades, and storeys
+summing their members), `area-ratio`, `plan-coverage`, `level-spacing`,
+`slab-stack-spacing` and `coordinate-consistency` over every public
+model, recorded before any of them is rebuilt as a template (#282).
 
 Each pair's evidence prints as one JSON line. That line is what the
 migration ledger records as a proof item, tagged `"kind": "parity"`; the

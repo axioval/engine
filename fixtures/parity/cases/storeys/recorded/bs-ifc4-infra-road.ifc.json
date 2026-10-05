@@ -1,0 +1,5199 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#1014",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "66e9903f-beb0-544e-94b8-819808cbb058",
+      "message": "plan area is 72 m²; required at most 20 m²",
+      "object_id": {
+        "local_id": "#1014",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-area",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#188",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "03396304-802e-5cde-8bbf-6e4b16c7177e",
+      "message": "plan area is 72 m²; required at most 20 m²",
+      "object_id": {
+        "local_id": "#188",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-area",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#207",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "aea0f094-db4c-5814-9ea2-d0d5bd0b1004",
+      "message": "plan area is 72 m²; required at most 20 m²",
+      "object_id": {
+        "local_id": "#207",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-area",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#276",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "ddf7641c-8884-59e1-8f19-b25dbf8aca02",
+      "message": "plan area is 72 m²; required at most 20 m²",
+      "object_id": {
+        "local_id": "#276",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-area",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#294",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "22de9df4-6e3d-5502-8fdb-7bec619214c4",
+      "message": "plan area is 72 m²; required at most 20 m²",
+      "object_id": {
+        "local_id": "#294",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-area",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "2abb830e-d6e8-51e2-a2ac-a978c77f6c43",
+      "message": "plan area is 72 m²; required at most 20 m²",
+      "object_id": {
+        "local_id": "#398",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-area",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#412",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "19b08135-2ff3-5f89-833b-5b87b85ce1f0",
+      "message": "plan area is 72 m²; required at most 20 m²",
+      "object_id": {
+        "local_id": "#412",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-area",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "615b6a7b-d160-59cf-8239-05078e0ed735",
+      "message": "plan area is 72 m²; required at most 20 m²",
+      "object_id": {
+        "local_id": "#460",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-area",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "7e15e026-05c0-5662-8c50-bb514eb5863f",
+      "message": "plan area is 72 m²; required at most 20 m²",
+      "object_id": {
+        "local_id": "#473",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-area",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#744",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "7f1534a0-93cf-5629-8cc8-afcfea4dc381",
+      "message": "plan area is 72 m²; required at most 20 m²",
+      "object_id": {
+        "local_id": "#744",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-area",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#761",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "47b0ba8a-ec7c-531f-a5b3-f5529c2f0575",
+      "message": "plan area is 72 m²; required at most 20 m²",
+      "object_id": {
+        "local_id": "#761",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-area",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#823",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "f9e8d2e4-4d02-5f23-8b6f-eeea39f16eed",
+      "message": "plan area is 72 m²; required at most 20 m²",
+      "object_id": {
+        "local_id": "#823",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-area",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#839",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "76356852-e8c4-5e67-a00f-8f5e8af4faf4",
+      "message": "plan area is 72 m²; required at most 20 m²",
+      "object_id": {
+        "local_id": "#839",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-area",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#919",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "9aea735b-efcf-5dbb-a9d1-b2eb7853a674",
+      "message": "plan area is 72 m²; required at most 20 m²",
+      "object_id": {
+        "local_id": "#919",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-area",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#936",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "414655bd-443e-5efc-9329-673c1e52b8e4",
+      "message": "plan area is 72 m²; required at most 20 m²",
+      "object_id": {
+        "local_id": "#936",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-area",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "4ee777b6-88c5-579e-bd0a-a1100c52780d",
+      "message": "plan area is 72 m²; required at most 20 m²",
+      "object_id": {
+        "local_id": "#998",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-area",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#1014",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#1014:ifc-step:bs-ifc4-infra-road.ifc/#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#1014",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "3e82cf0d-7dcc-50f8-b77e-f4465bef5bb3",
+      "message": "clear distance from top to underside to ifc-step:bs-ifc4-infra-road.ifc/#998 is 0 m; required at least 2 m",
+      "object_id": {
+        "local_id": "#1014",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#1014",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#1014:ifc-step:bs-ifc4-infra-road.ifc/#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#1014",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "39f76e01-2292-5082-b736-b2091add1d54",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#998 is 0.25 m, which differs from the prevailing 0.04 m in this stack",
+      "object_id": {
+        "local_id": "#1014",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#1014",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#1014:ifc-step:bs-ifc4-infra-road.ifc/#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#1014",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "671519a9-a7ed-53bf-8a98-164395b4ffd4",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#998 is 0.25 m; required at least 2.5 m",
+      "object_id": {
+        "local_id": "#1014",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#108",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#108:ifc-step:bs-ifc4-infra-road.ifc/#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#108",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "fc8a8947-c413-56f3-953d-37dac3185e2e",
+      "message": "clear distance from top to underside to ifc-step:bs-ifc4-infra-road.ifc/#350 is -0.25 m; required at least 2 m",
+      "object_id": {
+        "local_id": "#108",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#108",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#108:ifc-step:bs-ifc4-infra-road.ifc/#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#108",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "132accd9-7205-5495-9ea3-758097b10e56",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#350 is 0 m; required at least 2.5 m",
+      "object_id": {
+        "local_id": "#108",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#131",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#131:ifc-step:bs-ifc4-infra-road.ifc/#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#131",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "7c358a59-6cf0-5ad0-944a-dda9044b11cc",
+      "message": "clear distance from top to underside to ifc-step:bs-ifc4-infra-road.ifc/#363 is -0.12 m; required at least 2 m",
+      "object_id": {
+        "local_id": "#131",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#131",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#131:ifc-step:bs-ifc4-infra-road.ifc/#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#131",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "72bd7043-7306-55df-b25b-1f3cb33acb92",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#363 is 0 m; required at least 2.5 m",
+      "object_id": {
+        "local_id": "#131",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#188",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#188:ifc-step:bs-ifc4-infra-road.ifc/#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#188",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "86a37535-65a0-521f-9d27-4952d2710320",
+      "message": "clear distance from top to underside to ifc-step:bs-ifc4-infra-road.ifc/#398 is -0.08 m; required at least 2 m",
+      "object_id": {
+        "local_id": "#188",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#188",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#188:ifc-step:bs-ifc4-infra-road.ifc/#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#188",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "f520a9bd-90be-5a84-961e-468be6e82f00",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#398 is 0 m; required at least 2.5 m",
+      "object_id": {
+        "local_id": "#188",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#207",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#412",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#207:ifc-step:bs-ifc4-infra-road.ifc/#412",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#207",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#412",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "0a360082-defd-50aa-8d0e-21e42f82e5da",
+      "message": "clear distance from top to underside to ifc-step:bs-ifc4-infra-road.ifc/#412 is -0.04 m; required at least 2 m",
+      "object_id": {
+        "local_id": "#207",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#412",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#207",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#412",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#207:ifc-step:bs-ifc4-infra-road.ifc/#412",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#207",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#412",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "1e7bcebe-5af1-5b54-bdc3-206612314bbe",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#412 is 0 m; required at least 2.5 m",
+      "object_id": {
+        "local_id": "#207",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#412",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#276",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#276:ifc-step:bs-ifc4-infra-road.ifc/#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#276",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "2f09709b-3cce-5170-bfdd-f02c90f3a2ab",
+      "message": "clear distance from top to underside to ifc-step:bs-ifc4-infra-road.ifc/#460 is -0.25 m; required at least 2 m",
+      "object_id": {
+        "local_id": "#276",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#276",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#276:ifc-step:bs-ifc4-infra-road.ifc/#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#276",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "df4237aa-5c12-50c6-9ebe-d45e9f43f057",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#460 is 0 m; required at least 2.5 m",
+      "object_id": {
+        "local_id": "#276",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#294",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#294:ifc-step:bs-ifc4-infra-road.ifc/#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#294",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "21fbfd5a-c4a3-5c83-a8d3-2d758febbc25",
+      "message": "clear distance from top to underside to ifc-step:bs-ifc4-infra-road.ifc/#473 is -0.12 m; required at least 2 m",
+      "object_id": {
+        "local_id": "#294",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#294",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#294:ifc-step:bs-ifc4-infra-road.ifc/#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#294",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "e129af49-1eb1-5181-be0c-0d6b121fa8ba",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#473 is 0 m; required at least 2.5 m",
+      "object_id": {
+        "local_id": "#294",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#323",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#323:ifc-step:bs-ifc4-infra-road.ifc/#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#323",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "83872afa-6a17-5b8a-981c-2dbbc579ac6e",
+      "message": "clear distance from top to underside to ifc-step:bs-ifc4-infra-road.ifc/#61 is -0.08 m; required at least 2 m",
+      "object_id": {
+        "local_id": "#323",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#323",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#323:ifc-step:bs-ifc4-infra-road.ifc/#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#323",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "322693de-9424-5b89-87a4-8cdaa1deb732",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#61 is 0 m; required at least 2.5 m",
+      "object_id": {
+        "local_id": "#323",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#337",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#85",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#337:ifc-step:bs-ifc4-infra-road.ifc/#85",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#337",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#85",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "6d103977-cedf-5406-9735-b160b35e6a5e",
+      "message": "clear distance from top to underside to ifc-step:bs-ifc4-infra-road.ifc/#85 is -0.04 m; required at least 2 m",
+      "object_id": {
+        "local_id": "#337",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#85",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#337",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#85",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#337:ifc-step:bs-ifc4-infra-road.ifc/#85",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#337",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#85",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "e894fed4-bef3-5938-9627-3d518a587e1a",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#85 is 0 m; required at least 2.5 m",
+      "object_id": {
+        "local_id": "#337",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#85",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#323",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#323:ifc-step:bs-ifc4-infra-road.ifc/#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#323",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "b429d637-776f-5e50-99b3-1104317f0eaf",
+      "message": "clear distance from top to underside to ifc-step:bs-ifc4-infra-road.ifc/#323 is 0 m; required at least 2 m",
+      "object_id": {
+        "local_id": "#350",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#323",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#323",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#323:ifc-step:bs-ifc4-infra-road.ifc/#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#323",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "42655bd6-417c-5697-bfbb-1d49a0655870",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#323 is 0.08 m, which differs from the prevailing 0 m in this stack",
+      "object_id": {
+        "local_id": "#350",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#323",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#323",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#323:ifc-step:bs-ifc4-infra-road.ifc/#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#323",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "c46d0504-d3d7-55c7-9d83-4b3e8ef34979",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#323 is 0.08 m; required at least 2.5 m",
+      "object_id": {
+        "local_id": "#350",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#323",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#108",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#108:ifc-step:bs-ifc4-infra-road.ifc/#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#108",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "e7fad15d-c191-5919-bfc5-2465efc83e5c",
+      "message": "clear distance from top to underside to ifc-step:bs-ifc4-infra-road.ifc/#108 is 0 m; required at least 2 m",
+      "object_id": {
+        "local_id": "#363",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#108",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#108",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#108:ifc-step:bs-ifc4-infra-road.ifc/#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#108",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "d744e7e6-e7e7-5466-b6f9-3fe0b6b05d32",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#108 is 0.25 m, which differs from the prevailing 0 m in this stack",
+      "object_id": {
+        "local_id": "#363",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#108",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#108",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#108:ifc-step:bs-ifc4-infra-road.ifc/#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#108",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "36afec02-155a-5546-8ae3-14c57e1b5ff1",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#108 is 0.25 m; required at least 2.5 m",
+      "object_id": {
+        "local_id": "#363",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#108",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#207",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#207:ifc-step:bs-ifc4-infra-road.ifc/#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#207",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "3f784ec6-850b-5568-86cf-332dd7916258",
+      "message": "clear distance from top to underside to ifc-step:bs-ifc4-infra-road.ifc/#207 is 0 m; required at least 2 m",
+      "object_id": {
+        "local_id": "#398",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#207",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#207",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#207:ifc-step:bs-ifc4-infra-road.ifc/#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#207",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "31bfd4a2-fe92-58e7-8cac-b68bf4e7c1f1",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#207 is 0.04 m, which differs from the prevailing 0 m in this stack",
+      "object_id": {
+        "local_id": "#398",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#207",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#207",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#207:ifc-step:bs-ifc4-infra-road.ifc/#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#207",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "48a06d22-0054-5c17-9177-3ac390cd94e1",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#207 is 0.04 m; required at least 2.5 m",
+      "object_id": {
+        "local_id": "#398",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#207",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#188",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#188:ifc-step:bs-ifc4-infra-road.ifc/#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#188",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "95b89ba2-3da8-509e-b526-5e803d7df3a1",
+      "message": "clear distance from top to underside to ifc-step:bs-ifc4-infra-road.ifc/#188 is 0 m; required at least 2 m",
+      "object_id": {
+        "local_id": "#460",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#188",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#188",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#188:ifc-step:bs-ifc4-infra-road.ifc/#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#188",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "a5c6220c-83c1-5fde-b127-a38759cb55a1",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#188 is 0.08 m, which differs from the prevailing 0 m in this stack",
+      "object_id": {
+        "local_id": "#460",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#188",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#188",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#188:ifc-step:bs-ifc4-infra-road.ifc/#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#188",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "abab86ab-bea9-59aa-aa27-86f70e3d3b6d",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#188 is 0.08 m; required at least 2.5 m",
+      "object_id": {
+        "local_id": "#460",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#188",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#276",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#276:ifc-step:bs-ifc4-infra-road.ifc/#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#276",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "32e394d8-1cab-5525-a42f-eac7467acb85",
+      "message": "clear distance from top to underside to ifc-step:bs-ifc4-infra-road.ifc/#276 is 0 m; required at least 2 m",
+      "object_id": {
+        "local_id": "#473",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#276",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#276",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#276:ifc-step:bs-ifc4-infra-road.ifc/#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#276",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "818e4ecf-af1a-5745-b0bc-d491d303cae3",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#276 is 0.25 m, which differs from the prevailing 0 m in this stack",
+      "object_id": {
+        "local_id": "#473",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#276",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#276",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#276:ifc-step:bs-ifc4-infra-road.ifc/#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#276",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "9244b221-0bb1-59bb-ae1d-7206d1d9945a",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#276 is 0.25 m; required at least 2.5 m",
+      "object_id": {
+        "local_id": "#473",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#276",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#541",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#541:ifc-step:bs-ifc4-infra-road.ifc/#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#541",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "7fb1cf54-2bff-55f9-8f1d-d60789602f87",
+      "message": "clear distance from top to underside to ifc-step:bs-ifc4-infra-road.ifc/#560 is 0.25 m; required at least 2 m",
+      "object_id": {
+        "local_id": "#541",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#541",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#541:ifc-step:bs-ifc4-infra-road.ifc/#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#541",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "e0bb1874-4cd0-5fdb-8cc6-281e8b159472",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#560 is 0.33 m, which differs from the prevailing 0.025814 m in this stack",
+      "object_id": {
+        "local_id": "#541",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#541",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#541:ifc-step:bs-ifc4-infra-road.ifc/#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#541",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "d89a8351-8f26-5bba-8427-73763932bc4a",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#560 is 0.33 m; required at least 2.5 m",
+      "object_id": {
+        "local_id": "#541",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#596",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#560:ifc-step:bs-ifc4-infra-road.ifc/#596",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#596",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "016afd39-8fab-541d-bcb6-9eb5b6e82a5b",
+      "message": "clear distance from top to underside to ifc-step:bs-ifc4-infra-road.ifc/#596 is -0 m; required at least 2 m",
+      "object_id": {
+        "local_id": "#560",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#596",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#596",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#560:ifc-step:bs-ifc4-infra-road.ifc/#596",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#596",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "c5784471-ae43-51f4-a729-c0c6f19c9bd4",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#596 is 0.04 m, which differs from the prevailing 0.025814 m in this stack",
+      "object_id": {
+        "local_id": "#560",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#596",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#596",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#560:ifc-step:bs-ifc4-infra-road.ifc/#596",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#596",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "5b02a479-bde9-509c-97ec-09ce7fb44d38",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#596 is 0.04 m; required at least 2.5 m",
+      "object_id": {
+        "local_id": "#560",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#596",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#578",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#596",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#578:ifc-step:bs-ifc4-infra-road.ifc/#596",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#578",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#596",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "c6e6ac82-f091-5bd0-a3bd-49cb808923a6",
+      "message": "clear distance from top to underside to ifc-step:bs-ifc4-infra-road.ifc/#578 is -0.37 m; required at least 2 m",
+      "object_id": {
+        "local_id": "#596",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#578",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#578",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#596",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#578:ifc-step:bs-ifc4-infra-road.ifc/#596",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#578",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#596",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "fa0869ed-b70c-5d74-bbe3-9a1e37c4d9bd",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#578 is 0.025814 m; required at least 2.5 m",
+      "object_id": {
+        "local_id": "#596",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#578",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#337",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#337:ifc-step:bs-ifc4-infra-road.ifc/#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#337",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "4ae2114f-003f-51e5-aad7-886307c491ac",
+      "message": "clear distance from top to underside to ifc-step:bs-ifc4-infra-road.ifc/#337 is 0 m; required at least 2 m",
+      "object_id": {
+        "local_id": "#61",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#337",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#337",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#337:ifc-step:bs-ifc4-infra-road.ifc/#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#337",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "8d4bbf34-15f3-5d04-8deb-859f44357eb0",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#337 is 0.04 m, which differs from the prevailing 0 m in this stack",
+      "object_id": {
+        "local_id": "#61",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#337",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#337",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#337:ifc-step:bs-ifc4-infra-road.ifc/#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#337",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "3ded7171-afae-583e-8a9c-4cdab780612f",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#337 is 0.04 m; required at least 2.5 m",
+      "object_id": {
+        "local_id": "#61",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#337",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#645",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#659",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#645:ifc-step:bs-ifc4-infra-road.ifc/#659",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#645",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#659",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "bf204546-7a44-5346-af14-0d83c46b0222",
+      "message": "clear distance from top to underside to ifc-step:bs-ifc4-infra-road.ifc/#659 is 0.25 m; required at least 2 m",
+      "object_id": {
+        "local_id": "#645",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#659",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#645",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#659",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#645:ifc-step:bs-ifc4-infra-road.ifc/#659",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#645",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#659",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "69948694-828b-5b2a-aad5-96e83e8465e4",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#659 is 0.33 m, which differs from the prevailing 0.025814 m in this stack",
+      "object_id": {
+        "local_id": "#645",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#659",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#645",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#659",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#645:ifc-step:bs-ifc4-infra-road.ifc/#659",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#645",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#659",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "67fe5e77-05a3-5583-acfa-3ad2ccbe154d",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#659 is 0.33 m; required at least 2.5 m",
+      "object_id": {
+        "local_id": "#645",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#659",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#659",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#685",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#659:ifc-step:bs-ifc4-infra-road.ifc/#685",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#659",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#685",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "179db170-c6a0-5a06-a62b-dc384f4c0a02",
+      "message": "clear distance from top to underside to ifc-step:bs-ifc4-infra-road.ifc/#685 is -0 m; required at least 2 m",
+      "object_id": {
+        "local_id": "#659",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#685",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#659",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#685",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#659:ifc-step:bs-ifc4-infra-road.ifc/#685",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#659",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#685",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "cd493168-cfa4-552f-a8b4-434a132ce36d",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#685 is 0.04 m, which differs from the prevailing 0.025814 m in this stack",
+      "object_id": {
+        "local_id": "#659",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#685",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#659",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#685",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#659:ifc-step:bs-ifc4-infra-road.ifc/#685",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#659",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#685",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "4c16f70f-c069-5bb1-b957-c14b34eb9fc0",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#685 is 0.04 m; required at least 2.5 m",
+      "object_id": {
+        "local_id": "#659",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#685",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#672",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#685",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#672:ifc-step:bs-ifc4-infra-road.ifc/#685",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#672",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#685",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "212b91d2-341d-50d2-9115-4e9e3a1f12ea",
+      "message": "clear distance from top to underside to ifc-step:bs-ifc4-infra-road.ifc/#672 is -0.37 m; required at least 2 m",
+      "object_id": {
+        "local_id": "#685",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#672",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#672",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#685",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#672:ifc-step:bs-ifc4-infra-road.ifc/#685",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#672",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#685",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "42d4f5ec-3926-5b8a-9997-2d24f00f7553",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#672 is 0.025814 m; required at least 2.5 m",
+      "object_id": {
+        "local_id": "#685",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#672",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#744",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#761",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#744:ifc-step:bs-ifc4-infra-road.ifc/#761",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#744",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#761",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "57365b3a-9774-547a-acc0-72c27d648f6c",
+      "message": "clear distance from top to underside to ifc-step:bs-ifc4-infra-road.ifc/#761 is 0 m; required at least 2 m",
+      "object_id": {
+        "local_id": "#744",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#761",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#744",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#761",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#744:ifc-step:bs-ifc4-infra-road.ifc/#761",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#744",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#761",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "08f2984c-2ad4-551f-9920-23066c33c626",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#761 is 0.04 m; required at least 2.5 m",
+      "object_id": {
+        "local_id": "#744",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#761",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#744",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#823",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#744:ifc-step:bs-ifc4-infra-road.ifc/#823",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#744",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#823",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "a712f95d-48ad-56e3-98db-c67ab1335bb9",
+      "message": "clear distance from top to underside to ifc-step:bs-ifc4-infra-road.ifc/#744 is 0 m; required at least 2 m",
+      "object_id": {
+        "local_id": "#823",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#744",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#744",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#823",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#744:ifc-step:bs-ifc4-infra-road.ifc/#823",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#744",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#823",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "9b3f7764-8cc9-57a3-9ba7-a5252a5066a9",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#744 is 0.08 m, which differs from the prevailing 0.04 m in this stack",
+      "object_id": {
+        "local_id": "#823",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#744",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#744",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#823",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#744:ifc-step:bs-ifc4-infra-road.ifc/#823",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#744",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#823",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "5da256ca-6e9c-5f6b-90be-9b447558b282",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#744 is 0.08 m; required at least 2.5 m",
+      "object_id": {
+        "local_id": "#823",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#744",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#823",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#839",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#823:ifc-step:bs-ifc4-infra-road.ifc/#839",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#823",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#839",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "003d8345-67a4-512c-8a23-45fc5c5a1820",
+      "message": "clear distance from top to underside to ifc-step:bs-ifc4-infra-road.ifc/#823 is 0 m; required at least 2 m",
+      "object_id": {
+        "local_id": "#839",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#823",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#823",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#839",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#823:ifc-step:bs-ifc4-infra-road.ifc/#839",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#823",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#839",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "ea83e367-03e6-50e4-b9ef-a1eb2402f339",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#823 is 0.25 m, which differs from the prevailing 0.04 m in this stack",
+      "object_id": {
+        "local_id": "#839",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#823",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#823",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#839",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#823:ifc-step:bs-ifc4-infra-road.ifc/#839",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#823",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#839",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "ac8d2995-12c9-57ef-b2f6-30ecd430b794",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#823 is 0.25 m; required at least 2.5 m",
+      "object_id": {
+        "local_id": "#839",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#823",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#919",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#936",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#919:ifc-step:bs-ifc4-infra-road.ifc/#936",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#919",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#936",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "ebe11622-b136-5d8e-8de8-8d776d3ed01f",
+      "message": "clear distance from top to underside to ifc-step:bs-ifc4-infra-road.ifc/#936 is 0 m; required at least 2 m",
+      "object_id": {
+        "local_id": "#919",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#936",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#919",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#936",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#919:ifc-step:bs-ifc4-infra-road.ifc/#936",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#919",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#936",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "9bb5a75e-800e-50cd-8fba-b4074835f3ee",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#936 is 0.04 m; required at least 2.5 m",
+      "object_id": {
+        "local_id": "#919",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#936",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#919",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#919:ifc-step:bs-ifc4-infra-road.ifc/#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#919",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "eddf1dbd-7148-5c79-b7c0-b9415dee7a3d",
+      "message": "clear distance from top to underside to ifc-step:bs-ifc4-infra-road.ifc/#919 is 0 m; required at least 2 m",
+      "object_id": {
+        "local_id": "#998",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#919",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#919",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#919:ifc-step:bs-ifc4-infra-road.ifc/#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#919",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "4ef2f5ff-f75f-5855-a2c8-82c8149a6439",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#919 is 0.08 m, which differs from the prevailing 0.04 m in this stack",
+      "object_id": {
+        "local_id": "#998",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#919",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#919",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-infra-road.ifc/#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc4-infra-road.ifc/#919:ifc-step:bs-ifc4-infra-road.ifc/#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#919",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "01b706c9-fa25-523a-9164-1f0154df24ed",
+      "message": "top-to-top distance to ifc-step:bs-ifc4-infra-road.ifc/#919 is 0.08 m; required at least 2.5 m",
+      "object_id": {
+        "local_id": "#998",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#919",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    }
+  ],
+  "not_evaluated": [
+    {
+      "message": "coordinate-consistency: the run checks 1 source(s); coordinate consistency compares at least two",
+      "object_id": null,
+      "reason": "incomplete_evidence",
+      "rule_id": "coordinates"
+    }
+  ],
+  "rules": [
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "coordinates",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 32,
+      "failed": 16,
+      "not_evaluated": 0,
+      "rule_id": "slab-area",
+      "status": "failed"
+    },
+    {
+      "checked": 32,
+      "failed": 26,
+      "not_evaluated": 0,
+      "rule_id": "slab-stack",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "space-area",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "space-on-slab",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "space-share",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-facade-area",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 5,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-height",
+      "status": "passed"
+    },
+    {
+      "checked": 5,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-height-consistent",
+      "status": "passed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-slab-area",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-space-area",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 5,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-space-heights",
+      "status": "passed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "wall-facade",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "window-to-wall",
+      "status": "nothing_selected"
+    }
+  ],
+  "tables": [
+    {
+      "columns": [
+        {
+          "dimension": "area",
+          "id": "plan_area",
+          "kind": "quantity"
+        }
+      ],
+      "name": "areas",
+      "rows": [
+        {
+          "object_id": {
+            "local_id": "#1014",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 72.0
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#108",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 14.262561821495012
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#131",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 14.26256182149502
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#188",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 71.99999999999994
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#207",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 71.99999999999999
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#276",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 71.99999999999993
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#294",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 72.00000000000004
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#323",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 14.262561821494998
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#337",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 14.262561821494998
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#350",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 14.262561821495012
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#363",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 14.26256182149502
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#398",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 71.99999999999994
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#412",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 71.99999999999999
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#460",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 71.99999999999993
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#473",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 72.00000000000004
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#541",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 17.143699999999995
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#560",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 9.021700400000029
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#578",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 17.143699999999995
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#596",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 8.992900399999968
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#61",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 14.262561821494998
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#645",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 17.143700000000138
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#659",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 9.021700400000212
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#672",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 17.14370000000008
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#685",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 8.992900400000167
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#744",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 72.00000000000011
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#761",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 72.00000000000023
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#823",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 72.00000000000011
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#839",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 72.00000000000011
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#85",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 14.262561821494998
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#919",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 72.0
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#936",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 71.99999999999994
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#998",
+            "source": {
+              "document": "bs-ifc4-infra-road.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 72.0
+            }
+          ]
+        }
+      ],
+      "rule_id": "slab-area"
+    }
+  ]
+}

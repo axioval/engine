@@ -1,0 +1,22 @@
+{
+  "description": "Plan, area, level, stack and coordinate checks over every public model, meshed, recorded before their capabilities become templates (#282).",
+  "models": "*",
+  "pairs": [],
+  "recorded": [
+    {"rule": "space-area", "comparison": "contract", "reason": "plan-area becomes a template (#282); the outcomes its implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "slab-area", "comparison": "contract", "reason": "plan-area becomes a template (#282); the outcomes its implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "wall-facade", "comparison": "contract", "reason": "plan-area becomes a template (#282); the outcomes its implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "storey-space-area", "comparison": "contract", "reason": "plan-area becomes a template (#282); the outcomes its implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "storey-slab-area", "comparison": "contract", "reason": "plan-area becomes a template (#282); the outcomes its implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "storey-facade-area", "comparison": "contract", "reason": "plan-area becomes a template (#282); the outcomes its implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "space-share", "comparison": "contract", "reason": "area-ratio becomes a template (#282); the outcomes its implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "window-to-wall", "comparison": "contract", "reason": "area-ratio becomes a template (#282); the outcomes its implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "space-on-slab", "comparison": "contract", "reason": "plan-coverage becomes a template (#282); the outcomes its implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "storey-height", "comparison": "contract", "reason": "level-spacing becomes a template (#282); the outcomes its implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "storey-height-consistent", "comparison": "contract", "reason": "level-spacing becomes a template (#282); the outcomes its implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "storey-space-heights", "comparison": "contract", "reason": "level-spacing becomes a template (#282); the outcomes its implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "slab-stack", "comparison": "contract", "reason": "slab-stack-spacing becomes a template (#282); the outcomes its implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "coordinates", "comparison": "contract", "reason": "coordinate-consistency becomes a template (#282); the outcomes its implementation reported, recorded before it was replaced, are the contract."}
+  ],
+  "divergences": []
+}

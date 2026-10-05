@@ -1,0 +1,565 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:relationship-scan:IfcRelContainedInSpatialStructure:2",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:relationship:#42",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "035917df-98d6-5e89-b64d-df029c90595e",
+      "message": "summed plan area of the members is 0 m²; required at least 1 m²",
+      "object_id": {
+        "local_id": "#36",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "storey-slab-area",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:relationship-scan:IfcRelAggregates:4",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "718220bf-2f10-5659-a43f-3b10549dc5ed",
+      "message": "summed plan area of the members is 0 m²; required at least 50 m²",
+      "object_id": {
+        "local_id": "#36",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "storey-space-area",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "facade-area:ifc-step:bs-ifc2x3-building-structural.ifc/#153:faces=48:partial=0",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "facade-area:ifc-step:bs-ifc2x3-building-structural.ifc/#309:faces=54:partial=0",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "facade-area:ifc-step:bs-ifc2x3-building-structural.ifc/#463:faces=16:partial=0",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "facade-area:ifc-step:bs-ifc2x3-building-structural.ifc/#685:faces=50:partial=0",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:relationship-scan:IfcRelContainedInSpatialStructure:2",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:relationship:#42",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "f379f3a5-4271-5be3-9222-eb2749b67691",
+      "message": "facade area ratio is 0 (0 m² of 116.83 m²); required at least 0.1",
+      "object_id": {
+        "local_id": "#36",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "window-to-wall",
+      "severity": "error"
+    }
+  ],
+  "not_evaluated": [
+    {
+      "message": "coordinate-consistency: the run checks 1 source(s); coordinate consistency compares at least two",
+      "object_id": null,
+      "reason": "incomplete_evidence",
+      "rule_id": "coordinates"
+    },
+    {
+      "message": "the denominator has no plan area",
+      "object_id": {
+        "local_id": "#36",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "space-share"
+    },
+    {
+      "message": "the highest level has no level above it; its height needs geometry",
+      "object_id": {
+        "local_id": "#36",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "storey-height"
+    }
+  ],
+  "rules": [
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "coordinates",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "slab-area",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "slab-stack",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "space-area",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "space-on-slab",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "space-share",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-facade-area",
+      "status": "passed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "storey-height",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-height-consistent",
+      "status": "passed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "storey-slab-area",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "storey-space-area",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-space-heights",
+      "status": "passed"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "wall-facade",
+      "status": "passed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "window-to-wall",
+      "status": "failed"
+    }
+  ],
+  "tables": [
+    {
+      "columns": [
+        {
+          "dimension": "area",
+          "id": "facade_area",
+          "kind": "quantity"
+        }
+      ],
+      "name": "areas",
+      "rows": [
+        {
+          "object_id": {
+            "local_id": "#36",
+            "source": {
+              "document": "bs-ifc2x3-building-structural.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 116.82777484305107
+            }
+          ]
+        }
+      ],
+      "rule_id": "storey-facade-area"
+    },
+    {
+      "columns": [
+        {
+          "dimension": "length",
+          "id": "elevation",
+          "kind": "quantity"
+        },
+        {
+          "dimension": "length",
+          "id": "height",
+          "kind": "quantity"
+        }
+      ],
+      "name": "levels",
+      "rows": [
+        {
+          "object_id": {
+            "local_id": "#36",
+            "source": {
+              "document": "bs-ifc2x3-building-structural.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 0.0
+            },
+            {
+              "type": "unknown"
+            }
+          ]
+        }
+      ],
+      "rule_id": "storey-height"
+    },
+    {
+      "columns": [
+        {
+          "dimension": "length",
+          "id": "elevation",
+          "kind": "quantity"
+        },
+        {
+          "dimension": "length",
+          "id": "height",
+          "kind": "quantity"
+        }
+      ],
+      "name": "levels",
+      "rows": [
+        {
+          "object_id": {
+            "local_id": "#36",
+            "source": {
+              "document": "bs-ifc2x3-building-structural.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 0.0
+            },
+            {
+              "type": "unknown"
+            }
+          ]
+        }
+      ],
+      "rule_id": "storey-height-consistent"
+    },
+    {
+      "columns": [
+        {
+          "dimension": "area",
+          "id": "plan_area",
+          "kind": "quantity"
+        }
+      ],
+      "name": "areas",
+      "rows": [
+        {
+          "object_id": {
+            "local_id": "#36",
+            "source": {
+              "document": "bs-ifc2x3-building-structural.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 0.0
+            }
+          ]
+        }
+      ],
+      "rule_id": "storey-slab-area"
+    },
+    {
+      "columns": [
+        {
+          "dimension": "area",
+          "id": "plan_area",
+          "kind": "quantity"
+        }
+      ],
+      "name": "areas",
+      "rows": [
+        {
+          "object_id": {
+            "local_id": "#36",
+            "source": {
+              "document": "bs-ifc2x3-building-structural.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 0.0
+            }
+          ]
+        }
+      ],
+      "rule_id": "storey-space-area"
+    },
+    {
+      "columns": [
+        {
+          "dimension": "length",
+          "id": "elevation",
+          "kind": "quantity"
+        },
+        {
+          "dimension": "length",
+          "id": "height",
+          "kind": "quantity"
+        }
+      ],
+      "name": "levels",
+      "rows": [
+        {
+          "object_id": {
+            "local_id": "#36",
+            "source": {
+              "document": "bs-ifc2x3-building-structural.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 0.0
+            },
+            {
+              "type": "unknown"
+            }
+          ]
+        }
+      ],
+      "rule_id": "storey-space-heights"
+    },
+    {
+      "columns": [
+        {
+          "dimension": "area",
+          "id": "facade_area",
+          "kind": "quantity"
+        }
+      ],
+      "name": "areas",
+      "rows": [
+        {
+          "object_id": {
+            "local_id": "#153",
+            "source": {
+              "document": "bs-ifc2x3-building-structural.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 45.26129597754852
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#309",
+            "source": {
+              "document": "bs-ifc2x3-building-structural.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 31.614290686067196
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#463",
+            "source": {
+              "document": "bs-ifc2x3-building-structural.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 8.259756452165963
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#685",
+            "source": {
+              "document": "bs-ifc2x3-building-structural.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 31.69243172726939
+            }
+          ]
+        }
+      ],
+      "rule_id": "wall-facade"
+    },
+    {
+      "columns": [
+        {
+          "dimension": "area",
+          "id": "numerator_area",
+          "kind": "quantity"
+        },
+        {
+          "dimension": "area",
+          "id": "denominator_area",
+          "kind": "quantity"
+        },
+        {
+          "id": "ratio",
+          "kind": "number"
+        }
+      ],
+      "name": "ratios",
+      "rows": [
+        {
+          "object_id": {
+            "local_id": "#36",
+            "source": {
+              "document": "bs-ifc2x3-building-structural.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 0.0
+            },
+            {
+              "type": "exact",
+              "value": 116.82777484305107
+            },
+            {
+              "type": "exact",
+              "value": 0.0
+            }
+          ]
+        }
+      ],
+      "rule_id": "window-to-wall"
+    }
+  ]
+}

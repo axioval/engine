@@ -1,0 +1,428 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:903b5a005901397aa2b235daf6a60f46c099eae286cb01c815abf0a341707432:relationship-scan:IfcRelContainedInSpatialStructure:3",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:903b5a005901397aa2b235daf6a60f46c099eae286cb01c815abf0a341707432:relationship:#53",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "035917df-98d6-5e89-b64d-df029c90595e",
+      "message": "summed plan area of the members is 0 m²; required at least 1 m²",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "storey-slab-area",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:903b5a005901397aa2b235daf6a60f46c099eae286cb01c815abf0a341707432:relationship-scan:IfcRelAggregates:5",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "718220bf-2f10-5659-a43f-3b10549dc5ed",
+      "message": "summed plan area of the members is 0 m²; required at least 50 m²",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "storey-space-area",
+      "severity": "error"
+    }
+  ],
+  "not_evaluated": [
+    {
+      "message": "coordinate-consistency: the run checks 1 source(s); coordinate consistency compares at least two",
+      "object_id": null,
+      "reason": "incomplete_evidence",
+      "rule_id": "coordinates"
+    },
+    {
+      "message": "the denominator has no plan area",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "space-share"
+    },
+    {
+      "message": "facade area unavailable: winding number of ifc-step:bs-ifc4-building-structural.ifc/#50 unavailable: MeshNotWindingUsable(MeshHealth { positions: 96, triangles: 68, usable_triangles: 64, invalid_indices: 0, non_finite_positions: 0, degenerate_triangles: 4, boundary_edges: 96, non_manifold_edges: 0, inconsistent_winding_edges: 0, first_invalid_index: None, first_non_finite_position: None })",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "storey-facade-area"
+    },
+    {
+      "message": "the highest level has no level above it; its height needs geometry",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "storey-height"
+    },
+    {
+      "message": "facade area unavailable: winding number of ifc-step:bs-ifc4-building-structural.ifc/#50 unavailable: MeshNotWindingUsable(MeshHealth { positions: 96, triangles: 68, usable_triangles: 64, invalid_indices: 0, non_finite_positions: 0, degenerate_triangles: 4, boundary_edges: 96, non_manifold_edges: 0, inconsistent_winding_edges: 0, first_invalid_index: None, first_non_finite_position: None })",
+      "object_id": {
+        "local_id": "#112",
+        "source": {
+          "document": "bs-ifc4-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "wall-facade"
+    },
+    {
+      "message": "facade area unavailable: winding number of ifc-step:bs-ifc4-building-structural.ifc/#50 unavailable: MeshNotWindingUsable(MeshHealth { positions: 96, triangles: 68, usable_triangles: 64, invalid_indices: 0, non_finite_positions: 0, degenerate_triangles: 4, boundary_edges: 96, non_manifold_edges: 0, inconsistent_winding_edges: 0, first_invalid_index: None, first_non_finite_position: None })",
+      "object_id": {
+        "local_id": "#147",
+        "source": {
+          "document": "bs-ifc4-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "wall-facade"
+    },
+    {
+      "message": "facade area unavailable: winding number of ifc-step:bs-ifc4-building-structural.ifc/#131 unavailable: MeshNotWindingUsable(MeshHealth { positions: 156, triangles: 100, usable_triangles: 98, invalid_indices: 0, non_finite_positions: 0, degenerate_triangles: 2, boundary_edges: 154, non_manifold_edges: 0, inconsistent_winding_edges: 0, first_invalid_index: None, first_non_finite_position: None })",
+      "object_id": {
+        "local_id": "#69",
+        "source": {
+          "document": "bs-ifc4-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "wall-facade"
+    },
+    {
+      "message": "facade area unavailable: winding number of ifc-step:bs-ifc4-building-structural.ifc/#50 unavailable: MeshNotWindingUsable(MeshHealth { positions: 96, triangles: 68, usable_triangles: 64, invalid_indices: 0, non_finite_positions: 0, degenerate_triangles: 4, boundary_edges: 96, non_manifold_edges: 0, inconsistent_winding_edges: 0, first_invalid_index: None, first_non_finite_position: None })",
+      "object_id": {
+        "local_id": "#93",
+        "source": {
+          "document": "bs-ifc4-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "wall-facade"
+    },
+    {
+      "message": "facade area unavailable: winding number of ifc-step:bs-ifc4-building-structural.ifc/#50 unavailable: MeshNotWindingUsable(MeshHealth { positions: 96, triangles: 68, usable_triangles: 64, invalid_indices: 0, non_finite_positions: 0, degenerate_triangles: 4, boundary_edges: 96, non_manifold_edges: 0, inconsistent_winding_edges: 0, first_invalid_index: None, first_non_finite_position: None })",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "window-to-wall"
+    }
+  ],
+  "rules": [
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "coordinates",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "slab-area",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "slab-stack",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "space-area",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "space-on-slab",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "space-share",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "storey-facade-area",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "storey-height",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-height-consistent",
+      "status": "passed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "storey-slab-area",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "storey-space-area",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-space-heights",
+      "status": "passed"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 4,
+      "rule_id": "wall-facade",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "window-to-wall",
+      "status": "not_evaluated"
+    }
+  ],
+  "tables": [
+    {
+      "columns": [
+        {
+          "dimension": "length",
+          "id": "elevation",
+          "kind": "quantity"
+        },
+        {
+          "dimension": "length",
+          "id": "height",
+          "kind": "quantity"
+        }
+      ],
+      "name": "levels",
+      "rows": [
+        {
+          "object_id": {
+            "local_id": "#45",
+            "source": {
+              "document": "bs-ifc4-building-structural.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 0.0
+            },
+            {
+              "type": "unknown"
+            }
+          ]
+        }
+      ],
+      "rule_id": "storey-height"
+    },
+    {
+      "columns": [
+        {
+          "dimension": "length",
+          "id": "elevation",
+          "kind": "quantity"
+        },
+        {
+          "dimension": "length",
+          "id": "height",
+          "kind": "quantity"
+        }
+      ],
+      "name": "levels",
+      "rows": [
+        {
+          "object_id": {
+            "local_id": "#45",
+            "source": {
+              "document": "bs-ifc4-building-structural.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 0.0
+            },
+            {
+              "type": "unknown"
+            }
+          ]
+        }
+      ],
+      "rule_id": "storey-height-consistent"
+    },
+    {
+      "columns": [
+        {
+          "dimension": "area",
+          "id": "plan_area",
+          "kind": "quantity"
+        }
+      ],
+      "name": "areas",
+      "rows": [
+        {
+          "object_id": {
+            "local_id": "#45",
+            "source": {
+              "document": "bs-ifc4-building-structural.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 0.0
+            }
+          ]
+        }
+      ],
+      "rule_id": "storey-slab-area"
+    },
+    {
+      "columns": [
+        {
+          "dimension": "area",
+          "id": "plan_area",
+          "kind": "quantity"
+        }
+      ],
+      "name": "areas",
+      "rows": [
+        {
+          "object_id": {
+            "local_id": "#45",
+            "source": {
+              "document": "bs-ifc4-building-structural.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 0.0
+            }
+          ]
+        }
+      ],
+      "rule_id": "storey-space-area"
+    },
+    {
+      "columns": [
+        {
+          "dimension": "length",
+          "id": "elevation",
+          "kind": "quantity"
+        },
+        {
+          "dimension": "length",
+          "id": "height",
+          "kind": "quantity"
+        }
+      ],
+      "name": "levels",
+      "rows": [
+        {
+          "object_id": {
+            "local_id": "#45",
+            "source": {
+              "document": "bs-ifc4-building-structural.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 0.0
+            },
+            {
+              "type": "unknown"
+            }
+          ]
+        }
+      ],
+      "rule_id": "storey-space-heights"
+    }
+  ]
+}

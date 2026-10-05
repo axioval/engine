@@ -1,0 +1,505 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "facade-area:ifc-step:bs-ifc4-wall-with-opening-and-window.ifc/#45:faces=20:partial=0",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:relationship-scan:IfcRelContainedInSpatialStructure:1",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:relationship:#44",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "0452c12c-b050-5d76-b23e-eb04eea3b9f9",
+      "message": "summed facade area of the members is 11.2 m²; required at least 20 m²",
+      "object_id": {
+        "local_id": "#38",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#45",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "storey-facade-area",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:relationship-scan:IfcRelContainedInSpatialStructure:1",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:relationship:#44",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "77ad3870-14aa-5c2c-98b6-ae484c5a5084",
+      "message": "summed plan area of the members is 0 m²; required at least 1 m²",
+      "object_id": {
+        "local_id": "#38",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "storey-slab-area",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:relationship-scan:IfcRelAggregates:3",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "809805ba-01a9-533d-a0cb-c05404a571d6",
+      "message": "summed plan area of the members is 0 m²; required at least 50 m²",
+      "object_id": {
+        "local_id": "#38",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "storey-space-area",
+      "severity": "error"
+    }
+  ],
+  "not_evaluated": [
+    {
+      "message": "coordinate-consistency: the run checks 1 source(s); coordinate consistency compares at least two",
+      "object_id": null,
+      "reason": "incomplete_evidence",
+      "rule_id": "coordinates"
+    },
+    {
+      "message": "the denominator has no plan area",
+      "object_id": {
+        "local_id": "#38",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "space-share"
+    },
+    {
+      "message": "the highest level has no level above it; its height needs geometry",
+      "object_id": {
+        "local_id": "#38",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "storey-height"
+    }
+  ],
+  "rules": [
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "coordinates",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "slab-area",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "slab-stack",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "space-area",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "space-on-slab",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "space-share",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "storey-facade-area",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "storey-height",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-height-consistent",
+      "status": "passed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "storey-slab-area",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "storey-space-area",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-space-heights",
+      "status": "passed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "wall-facade",
+      "status": "passed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "window-to-wall",
+      "status": "passed"
+    }
+  ],
+  "tables": [
+    {
+      "columns": [
+        {
+          "dimension": "area",
+          "id": "facade_area",
+          "kind": "quantity"
+        }
+      ],
+      "name": "areas",
+      "rows": [
+        {
+          "object_id": {
+            "local_id": "#38",
+            "source": {
+              "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 11.2
+            }
+          ]
+        }
+      ],
+      "rule_id": "storey-facade-area"
+    },
+    {
+      "columns": [
+        {
+          "dimension": "length",
+          "id": "elevation",
+          "kind": "quantity"
+        },
+        {
+          "dimension": "length",
+          "id": "height",
+          "kind": "quantity"
+        }
+      ],
+      "name": "levels",
+      "rows": [
+        {
+          "object_id": {
+            "local_id": "#38",
+            "source": {
+              "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 0.0
+            },
+            {
+              "type": "unknown"
+            }
+          ]
+        }
+      ],
+      "rule_id": "storey-height"
+    },
+    {
+      "columns": [
+        {
+          "dimension": "length",
+          "id": "elevation",
+          "kind": "quantity"
+        },
+        {
+          "dimension": "length",
+          "id": "height",
+          "kind": "quantity"
+        }
+      ],
+      "name": "levels",
+      "rows": [
+        {
+          "object_id": {
+            "local_id": "#38",
+            "source": {
+              "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 0.0
+            },
+            {
+              "type": "unknown"
+            }
+          ]
+        }
+      ],
+      "rule_id": "storey-height-consistent"
+    },
+    {
+      "columns": [
+        {
+          "dimension": "area",
+          "id": "plan_area",
+          "kind": "quantity"
+        }
+      ],
+      "name": "areas",
+      "rows": [
+        {
+          "object_id": {
+            "local_id": "#38",
+            "source": {
+              "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 0.0
+            }
+          ]
+        }
+      ],
+      "rule_id": "storey-slab-area"
+    },
+    {
+      "columns": [
+        {
+          "dimension": "area",
+          "id": "plan_area",
+          "kind": "quantity"
+        }
+      ],
+      "name": "areas",
+      "rows": [
+        {
+          "object_id": {
+            "local_id": "#38",
+            "source": {
+              "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 0.0
+            }
+          ]
+        }
+      ],
+      "rule_id": "storey-space-area"
+    },
+    {
+      "columns": [
+        {
+          "dimension": "length",
+          "id": "elevation",
+          "kind": "quantity"
+        },
+        {
+          "dimension": "length",
+          "id": "height",
+          "kind": "quantity"
+        }
+      ],
+      "name": "levels",
+      "rows": [
+        {
+          "object_id": {
+            "local_id": "#38",
+            "source": {
+              "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 0.0
+            },
+            {
+              "type": "unknown"
+            }
+          ]
+        }
+      ],
+      "rule_id": "storey-space-heights"
+    },
+    {
+      "columns": [
+        {
+          "dimension": "area",
+          "id": "facade_area",
+          "kind": "quantity"
+        }
+      ],
+      "name": "areas",
+      "rows": [
+        {
+          "object_id": {
+            "local_id": "#45",
+            "source": {
+              "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 11.2
+            }
+          ]
+        }
+      ],
+      "rule_id": "wall-facade"
+    },
+    {
+      "columns": [
+        {
+          "dimension": "area",
+          "id": "numerator_area",
+          "kind": "quantity"
+        },
+        {
+          "dimension": "area",
+          "id": "denominator_area",
+          "kind": "quantity"
+        },
+        {
+          "id": "ratio",
+          "kind": "number"
+        }
+      ],
+      "name": "ratios",
+      "rows": [
+        {
+          "object_id": {
+            "local_id": "#38",
+            "source": {
+              "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 2.0
+            },
+            {
+              "type": "exact",
+              "value": 13.2
+            },
+            {
+              "type": "exact",
+              "value": 0.1515151515151515
+            }
+          ]
+        }
+      ],
+      "rule_id": "window-to-wall"
+    }
+  ]
+}

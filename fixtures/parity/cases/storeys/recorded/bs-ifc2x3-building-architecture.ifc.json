@@ -1,0 +1,622 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc2x3-building-architecture.ifc/#44",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "2880d2fe-50cc-55f3-bcbe-c202fb27ca7d",
+      "message": "plan area is 25.75 m²; required at most 20 m²",
+      "object_id": {
+        "local_id": "#44",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-area",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc2x3-building-architecture.ifc/#606",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "5394eb2a-64e2-590b-a405-d0b933b8df6b",
+      "message": "plan area is 22.07 m²; required at most 20 m²",
+      "object_id": {
+        "local_id": "#606",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-area",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc2x3-building-architecture.ifc/#44",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc2x3-building-architecture.ifc/#606",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-overlap:ifc-step:bs-ifc2x3-building-architecture.ifc/#44:ifc-step:bs-ifc2x3-building-architecture.ifc/#606",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc2x3-building-architecture.ifc/#44",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc2x3-building-architecture.ifc/#606",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "99a9153f-9efd-5756-9d35-e23bbceb174a",
+      "message": "clear distance from top to underside to ifc-step:bs-ifc2x3-building-architecture.ifc/#606 is 1.475736 m; required at least 2 m",
+      "object_id": {
+        "local_id": "#44",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#606",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-stack",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc2x3-building-architecture.ifc/#44",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:relationship-scan:IfcRelContainedInSpatialStructure:3",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:relationship:#58",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "161789b7-4b56-56ac-b939-e3f2542c3136",
+      "message": "summed plan area of the members is 25.75 m²; required at most 20 m²",
+      "object_id": {
+        "local_id": "#36",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#44",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "storey-slab-area",
+      "severity": "error"
+    }
+  ],
+  "not_evaluated": [
+    {
+      "message": "coordinate-consistency: the run checks 1 source(s); coordinate consistency compares at least two",
+      "object_id": null,
+      "reason": "incomplete_evidence",
+      "rule_id": "coordinates"
+    },
+    {
+      "message": "plan area unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#183 cannot be computed",
+      "object_id": {
+        "local_id": "#183",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "space-area"
+    },
+    {
+      "message": "plan area unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#296 cannot be computed",
+      "object_id": {
+        "local_id": "#296",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "space-area"
+    },
+    {
+      "message": "plan area unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#183 cannot be computed",
+      "object_id": {
+        "local_id": "#183",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "space-on-slab"
+    },
+    {
+      "message": "plan area unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#296 cannot be computed",
+      "object_id": {
+        "local_id": "#296",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "space-on-slab"
+    },
+    {
+      "message": "plan area unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#183 cannot be computed",
+      "object_id": {
+        "local_id": "#36",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "space-share"
+    },
+    {
+      "message": "facade area unavailable: ifc-step:bs-ifc2x3-building-architecture.ifc/#460 has a body that was not measured (no body representation), so what the faces look at is unknown",
+      "object_id": {
+        "local_id": "#36",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "storey-facade-area"
+    },
+    {
+      "message": "the highest level has no level above it; its height needs geometry",
+      "object_id": {
+        "local_id": "#36",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "storey-height"
+    },
+    {
+      "message": "plan area unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#183 cannot be computed",
+      "object_id": {
+        "local_id": "#36",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "storey-space-area"
+    },
+    {
+      "message": "facade area unavailable: ifc-step:bs-ifc2x3-building-architecture.ifc/#460 has a body that was not measured (no body representation), so what the faces look at is unknown",
+      "object_id": {
+        "local_id": "#319",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "wall-facade"
+    },
+    {
+      "message": "facade area unavailable: ifc-step:bs-ifc2x3-building-architecture.ifc/#460 has a body that was not measured (no body representation), so what the faces look at is unknown",
+      "object_id": {
+        "local_id": "#370",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "wall-facade"
+    },
+    {
+      "message": "facade area unavailable: ifc-step:bs-ifc2x3-building-architecture.ifc/#460 has a body that was not measured (no body representation), so what the faces look at is unknown",
+      "object_id": {
+        "local_id": "#415",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "wall-facade"
+    },
+    {
+      "message": "facade area unavailable: ifc-step:bs-ifc2x3-building-architecture.ifc/#460 has a body that was not measured (no body representation), so what the faces look at is unknown",
+      "object_id": {
+        "local_id": "#468",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "wall-facade"
+    },
+    {
+      "message": "facade area unavailable: ifc-step:bs-ifc2x3-building-architecture.ifc/#460 has a body that was not measured (no body representation), so what the faces look at is unknown",
+      "object_id": {
+        "local_id": "#36",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "window-to-wall"
+    }
+  ],
+  "rules": [
+    {
+      "checked": 2,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "coordinates",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 3,
+      "failed": 2,
+      "not_evaluated": 0,
+      "rule_id": "slab-area",
+      "status": "failed"
+    },
+    {
+      "checked": 3,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "slab-stack",
+      "status": "failed"
+    },
+    {
+      "checked": 2,
+      "failed": 0,
+      "not_evaluated": 2,
+      "rule_id": "space-area",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 2,
+      "failed": 0,
+      "not_evaluated": 2,
+      "rule_id": "space-on-slab",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "space-share",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "storey-facade-area",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "storey-height",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-height-consistent",
+      "status": "passed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "storey-slab-area",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "storey-space-area",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-space-heights",
+      "status": "passed"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 4,
+      "rule_id": "wall-facade",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "window-to-wall",
+      "status": "not_evaluated"
+    }
+  ],
+  "tables": [
+    {
+      "columns": [
+        {
+          "dimension": "area",
+          "id": "plan_area",
+          "kind": "quantity"
+        }
+      ],
+      "name": "areas",
+      "rows": [
+        {
+          "object_id": {
+            "local_id": "#44",
+            "source": {
+              "document": "bs-ifc2x3-building-architecture.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 25.74999999999998
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#555",
+            "source": {
+              "document": "bs-ifc2x3-building-architecture.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 15.8400021015289
+            }
+          ]
+        },
+        {
+          "object_id": {
+            "local_id": "#606",
+            "source": {
+              "document": "bs-ifc2x3-building-architecture.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 22.07000189393326
+            }
+          ]
+        }
+      ],
+      "rule_id": "slab-area"
+    },
+    {
+      "columns": [
+        {
+          "dimension": "length",
+          "id": "elevation",
+          "kind": "quantity"
+        },
+        {
+          "dimension": "length",
+          "id": "height",
+          "kind": "quantity"
+        }
+      ],
+      "name": "levels",
+      "rows": [
+        {
+          "object_id": {
+            "local_id": "#36",
+            "source": {
+              "document": "bs-ifc2x3-building-architecture.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 0.0
+            },
+            {
+              "type": "unknown"
+            }
+          ]
+        }
+      ],
+      "rule_id": "storey-height"
+    },
+    {
+      "columns": [
+        {
+          "dimension": "length",
+          "id": "elevation",
+          "kind": "quantity"
+        },
+        {
+          "dimension": "length",
+          "id": "height",
+          "kind": "quantity"
+        }
+      ],
+      "name": "levels",
+      "rows": [
+        {
+          "object_id": {
+            "local_id": "#36",
+            "source": {
+              "document": "bs-ifc2x3-building-architecture.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 0.0
+            },
+            {
+              "type": "unknown"
+            }
+          ]
+        }
+      ],
+      "rule_id": "storey-height-consistent"
+    },
+    {
+      "columns": [
+        {
+          "dimension": "area",
+          "id": "plan_area",
+          "kind": "quantity"
+        }
+      ],
+      "name": "areas",
+      "rows": [
+        {
+          "object_id": {
+            "local_id": "#36",
+            "source": {
+              "document": "bs-ifc2x3-building-architecture.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 25.74999999999998
+            }
+          ]
+        }
+      ],
+      "rule_id": "storey-slab-area"
+    },
+    {
+      "columns": [
+        {
+          "dimension": "length",
+          "id": "elevation",
+          "kind": "quantity"
+        },
+        {
+          "dimension": "length",
+          "id": "height",
+          "kind": "quantity"
+        }
+      ],
+      "name": "levels",
+      "rows": [
+        {
+          "object_id": {
+            "local_id": "#36",
+            "source": {
+              "document": "bs-ifc2x3-building-architecture.ifc",
+              "system": "ifc-step"
+            }
+          },
+          "values": [
+            {
+              "type": "exact",
+              "value": 0.0
+            },
+            {
+              "type": "unknown"
+            }
+          ]
+        }
+      ],
+      "rule_id": "storey-space-heights"
+    }
+  ]
+}

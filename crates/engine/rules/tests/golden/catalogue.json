@@ -5919,7 +5919,515 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "centre-line-distance",
+        "declaration": [
+          {
+            "kind": "choice",
+            "parameter": "centre_line",
+            "options": [
+              "long",
+              "short",
+              "against-wall"
+            ]
+          },
+          {
+            "kind": "choice",
+            "parameter": "sides",
+            "options": [
+              "nearest",
+              "both"
+            ]
+          },
+          {
+            "kind": "finiteLength",
+            "parameter": "minimum"
+          },
+          {
+            "kind": "finiteLength",
+            "parameter": "maximum"
+          },
+          {
+            "kind": "finiteLength",
+            "parameter": "reach"
+          },
+          {
+            "kind": "positive",
+            "parameter": "reach",
+            "message": "`reach` is required and must be positive"
+          },
+          {
+            "kind": "anyOf",
+            "parameters": [
+              "minimum",
+              "maximum"
+            ],
+            "message": "declare `minimum`, `maximum` or both"
+          },
+          {
+            "kind": "ordered",
+            "low": "minimum",
+            "high": "maximum",
+            "message": "`minimum` exceeds `maximum`"
+          },
+          {
+            "kind": "ordered",
+            "low": "minimum",
+            "high": "reach",
+            "message": "`reach` must be at least `minimum` and `maximum`: a wall beyond it is none"
+          },
+          {
+            "kind": "ordered",
+            "low": "maximum",
+            "high": "reach",
+            "message": "`reach` must be at least `minimum` and `maximum`: a wall beyond it is none"
+          },
+          {
+            "kind": "finiteLength",
+            "parameter": "inset"
+          },
+          {
+            "kind": "required",
+            "parameter": "wall_selector"
+          }
+        ],
+        "services": {
+          "needs": [
+            "plan-span"
+          ],
+          "message": "centre-line-distance needs the plan-span service"
+        },
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "judged",
+                "expression": {
+                  "kind": "literal",
+                  "value": {
+                    "type": "integer",
+                    "value": 1
+                  },
+                  "label": "the sides are judged"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "judged",
+              "rounding": []
+            },
+            "fail": "",
+            "undecided": "",
+            "checks": [
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {},
+                  "list": "centre_line_sides;walls=@wall_selector;centre_line=@centre_line;sides=@sides;reach=@reach;inset=@inset",
+                  "refused": "centre line: {why}",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "null",
+                          "field": "distance"
+                        }
+                      ],
+                      "judge": {
+                        "kind": "fails"
+                      },
+                      "fail": "{label}: no wall nearby (none within {reach:length})",
+                      "undecided": ""
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "stated",
+                          "field": "distance"
+                        },
+                        {
+                          "kind": "declared",
+                          "parameter": "minimum"
+                        }
+                      ],
+                      "judge": {
+                        "kind": "range",
+                        "value": "distance",
+                        "unit": "length",
+                        "atLeast": [
+                          {
+                            "name": "minimum",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "parameter",
+                                    "name": "minimum"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "none"
+                        },
+                        "grade": false,
+                        "null": {
+                          "kind": "skip"
+                        }
+                      },
+                      "fail": "{label}: too close: {sure:length} from {wall}, less than the minimum {minimum:length}",
+                      "undecided": "{label}: {undecided}",
+                      "then": {
+                        "judge": {
+                          "kind": "range",
+                          "value": "distance",
+                          "unit": "length",
+                          "atMost": [
+                            {
+                              "name": "maximum",
+                              "options": [
+                                {
+                                  "bound": {
+                                    "kind": "operand",
+                                    "value": {
+                                      "kind": "parameter",
+                                      "name": "maximum"
+                                    }
+                                  }
+                                }
+                              ],
+                              "words": ""
+                            }
+                          ],
+                          "allowance": {
+                            "kind": "none"
+                          },
+                          "grade": false,
+                          "null": {
+                            "kind": "skip"
+                          }
+                        },
+                        "fail": "{label}: too far: {far}",
+                        "undecided": "{label}: {undecided}",
+                        "related": "wall"
+                      },
+                      "straddled": {
+                        "judge": {
+                          "kind": "range",
+                          "value": "distance",
+                          "unit": "length",
+                          "atMost": [
+                            {
+                              "name": "maximum",
+                              "options": [
+                                {
+                                  "bound": {
+                                    "kind": "operand",
+                                    "value": {
+                                      "kind": "parameter",
+                                      "name": "maximum"
+                                    }
+                                  }
+                                }
+                              ],
+                              "words": ""
+                            }
+                          ],
+                          "allowance": {
+                            "kind": "none"
+                          },
+                          "grade": false,
+                          "null": {
+                            "kind": "skip"
+                          }
+                        },
+                        "fail": "{label}: too far: {far}",
+                        "undecided": "{label}: {undecided}",
+                        "effects": [
+                          {
+                            "on": "pass",
+                            "message": "{label}: {undecided}"
+                          }
+                        ],
+                        "related": "wall"
+                      },
+                      "related": "wall"
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "stated",
+                          "field": "distance"
+                        },
+                        {
+                          "kind": "undeclared",
+                          "parameter": "minimum"
+                        }
+                      ],
+                      "judge": {
+                        "kind": "range",
+                        "value": "distance",
+                        "unit": "length",
+                        "atMost": [
+                          {
+                            "name": "maximum",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "parameter",
+                                    "name": "maximum"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "none"
+                        },
+                        "grade": false,
+                        "null": {
+                          "kind": "skip"
+                        }
+                      },
+                      "fail": "{label}: too far: {far}",
+                      "undecided": "{label}: {undecided}",
+                      "related": "wall"
+                    }
+                  ],
+                  "texts": [
+                    {
+                      "name": "far",
+                      "when": [
+                        {
+                          "kind": "stated",
+                          "field": "sure"
+                        }
+                      ],
+                      "text": "{sure:length} from {wall}, more than the maximum {maximum:length}"
+                    },
+                    {
+                      "name": "far",
+                      "text": "no wall within the maximum {maximum:length}"
+                    },
+                    {
+                      "name": "undecided",
+                      "when": [
+                        {
+                          "kind": "stated",
+                          "field": "sure"
+                        }
+                      ],
+                      "text": "the nearest wall lies {distance:length} from the centre line ({wall} {sure:length}), which does not decide the bounds"
+                    },
+                    {
+                      "name": "undecided",
+                      "text": "a wall may lie {lower:length} or farther from the centre line, but none surely does"
+                    }
+                  ]
+                },
+                "fail": "",
+                "undecided": ""
+              }
+            ]
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "aggregate",
+                  "function": "none",
+                  "over": {
+                    "kind": "measured",
+                    "name": "centre_line_sides;walls=@wall_selector;centre_line=@centre_line;sides=@sides;reach=@reach;inset=@inset"
+                  },
+                  "value": {
+                    "kind": "not",
+                    "operand": {
+                      "kind": "and",
+                      "operands": [
+                        {
+                          "kind": "compare",
+                          "operator": "greaterThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "distance"
+                          },
+                          "right": {
+                            "kind": "parameter",
+                            "name": "minimum"
+                          }
+                        },
+                        {
+                          "kind": "compare",
+                          "operator": "lessThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "distance"
+                          },
+                          "right": {
+                            "kind": "parameter",
+                            "name": "maximum"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "label": "no item fails"
+                },
+                {
+                  "kind": "isDefined",
+                  "operand": {
+                    "kind": "literal",
+                    "value": {
+                      "type": "integer",
+                      "value": 1
+                    },
+                    "label": "the sides are judged"
+                  },
+                  "label": "read"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.aggregate",
+                      "label": "no item fails",
+                      "fields": {
+                        "function": "none"
+                      },
+                      "inputs": {
+                        "over": {
+                          "block": {
+                            "type": "members.centre_line_sides",
+                            "fields": {
+                              "centre_line": "@centre_line",
+                              "inset": "@inset",
+                              "reach": "@reach",
+                              "sides": "@sides",
+                              "walls": "@wall_selector"
+                            }
+                          }
+                        },
+                        "value": {
+                          "block": {
+                            "type": "expression.not",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.and",
+                                  "inputs": {
+                                    "operands": {
+                                      "blocks": [
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "greaterThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "distance",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.parameter",
+                                                "fields": {
+                                                  "name": "minimum"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "lessThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "distance",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.parameter",
+                                                "fields": {
+                                                  "name": "maximum"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.isDefined",
+                      "label": "read",
+                      "inputs": {
+                        "operand": {
+                          "block": {
+                            "type": "expression.literal",
+                            "label": "the sides are judged",
+                            "fields": {
+                              "value": {
+                                "type": "integer",
+                                "value": 1
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.clash",
@@ -74210,6 +74718,278 @@
             {
               "language": "de",
               "text": "Ob das Ende auf einem Podest zwischen zwei Läufen der Treppe liegt."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "centre_line_sides",
+      "parameters": [
+        {
+          "key": "walls",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The walls beside the footprint: source kinds, `,`-separated, or the objects a selector parameter of the rule picks (`@name`), those it leaves undecided walls that may be there."
+            },
+            {
+              "language": "de",
+              "text": "Die Wände neben dem Grundriss: Quellarten, durch `,` getrennt, oder die Objekte, die ein Selektorparameter der Regel wählt (`@name`), die unentschiedenen Wände, die dort sein können."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "centre_line",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "long",
+              "short",
+              "against-wall"
+            ]
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The footprint's centre line: along its long or short axis, or from the wall it stands against to its front."
+            },
+            {
+              "language": "de",
+              "text": "Die Mittellinie des Grundrisses: entlang seiner langen oder kurzen Achse oder von der Wand, vor der es steht, zu seiner Vorderseite."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "sides",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "nearest",
+              "both"
+            ]
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "Both sides of the centre line, each an item, or the nearer of the two, one item."
+            },
+            {
+              "language": "de",
+              "text": "Beide Seiten der Mittellinie, jede ein Element, oder die nähere der beiden, ein Element."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "reach",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "How far from the centre line a wall is searched."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit von der Mittellinie eine Wand gesucht wird."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "inset",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How far the strip beside the footprint is narrowed at both ends; not at all without it."
+            },
+            {
+              "language": "de",
+              "text": "Um wie viel der Streifen neben dem Grundriss an beiden Enden verkürzt wird; ohne Angabe gar nicht."
+            }
+          ],
+          "references": "length"
+        }
+      ],
+      "services": [
+        "plan-span",
+        "type-hierarchy"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the walls beside the footprint cannot be measured",
+        "the footprint has no long axis",
+        "no side is surely nearer a wall than the others"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Sides of the centre line"
+        },
+        {
+          "language": "de",
+          "text": "Seiten der Mittellinie"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "Each side of the centre line of the footprint's least-area rectangle a `centre-line-distance` rule judges, with the walls beside it, square to it, as that capability reads them."
+        },
+        {
+          "language": "de",
+          "text": "Jede Seite der Mittellinie des kleinsten umschließenden Rechtecks des Grundrisses, die eine `centre-line-distance`-Regel prüft, mit den Wänden daneben, rechtwinklig zu ihr, wie diese Fähigkeit sie liest."
+        }
+      ],
+      "fields": [
+        {
+          "name": "label",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Side"
+            },
+            {
+              "language": "de",
+              "text": "Seite"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "How the side is named: `centre line to the left`, `… beside the +first side`, `… to the nearest wall`."
+            },
+            {
+              "language": "de",
+              "text": "Wie die Seite benannt ist: `centre line to the left`, `… beside the +first side`, `… to the nearest wall`."
+            }
+          ]
+        },
+        {
+          "name": "distance",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Distance"
+            },
+            {
+              "language": "de",
+              "text": "Abstand"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "From every wall that may lie beside the side to the nearest wall surely there, or just past `reach` without one; `null` where no wall may lie within `reach`."
+            },
+            {
+              "language": "de",
+              "text": "Von jeder Wand, die neben der Seite liegen kann, bis zur nächsten sicher dort liegenden, oder knapp jenseits von `reach` ohne eine; `null`, wo keine Wand innerhalb von `reach` liegen kann."
+            }
+          ]
+        },
+        {
+          "name": "lower",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Least distance"
+            },
+            {
+              "language": "de",
+              "text": "Kleinster Abstand"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The least distance of any wall that may lie beside the side; `null` where none may."
+            },
+            {
+              "language": "de",
+              "text": "Der kleinste Abstand einer Wand, die neben der Seite liegen kann; `null`, wo keine liegen kann."
+            }
+          ]
+        },
+        {
+          "name": "sure",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Nearest sure wall"
+            },
+            {
+              "language": "de",
+              "text": "Nächste sichere Wand"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The distance of the nearest wall surely beside the side; `null` where none surely is."
+            },
+            {
+              "language": "de",
+              "text": "Der Abstand der nächsten Wand, die sicher neben der Seite liegt; `null`, wo keine sicher liegt."
+            }
+          ]
+        },
+        {
+          "name": "wall",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Wall"
+            },
+            {
+              "language": "de",
+              "text": "Wand"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The nearest wall surely beside the side, if any."
+            },
+            {
+              "language": "de",
+              "text": "Die nächste Wand, die sicher neben der Seite liegt, falls eine."
             }
           ]
         }

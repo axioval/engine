@@ -41,7 +41,7 @@ a value without an upper bound
 the first of the plan-span capabilities
 ([#283](https://github.com/axioval/engine/issues/283)), judging the items
 of a measured list against a row its provider selects from the rule's
-table, and `light-well` follows.
+table, and `light-well` and `centre-line-distance` follow.
 
 ## The outside contract
 
@@ -1049,6 +1049,33 @@ spaces (`related: members`). The declaration keeps the capability's checks
 and words: `member_path` and its steps, `requirements` and each row (the
 list's argument check), the tolerance not negative.
 
+### `centre-line-distance`
+
+| Form | When | Values | Checks |
+| --- | --- | --- | --- |
+| one | always | `judged` = 1 | `Items` over `centre_line_sides;walls=@wall_selector;centre_line=@centre_line;sides=@sides;reach=@reach;inset=@inset`: each side's `distance` none within reach, at least `minimum`, then at most `maximum` |
+
+The measured sides are the capability's own reading (`wall_sides.rs`,
+`centre_line_distance::line`): one item per side for `sides` `both`
+(named `centre line to the left` or `… to the right` where a front is
+known, `… beside the +first side` otherwise), or one for the nearer
+(`centre line to the nearest wall`), each with `distance` (from every
+wall that may lie there to the nearest wall surely there, or just past
+`reach` without one; `null` where none may), `lower`, `sure` (the nearest
+sure wall's own interval) and `wall`. Its tests: `null` is `{label}: no
+wall nearby (none within {reach:length})`; where `minimum` is stated, a
+distance below it is `{label}: too close: {sure:length} from {wall}, …`,
+one above it is judged against `maximum` (`then`), and one straddling it
+is judged against `maximum` with its pass open (`straddled`, an effect
+on the pass); without it, the maximum alone. Too far reads `{far}`, a text
+naming the sure wall or `no wall within the maximum …`, and an open side
+`{undecided}`, a text naming the walls' interval or the least distance a
+wall may lie at. Findings relate the sure wall. A side list that cannot be
+measured (walls unmeasured, no long axis, no front) leaves the object open
+once, `centre line: {why}`. The declaration keeps the capability's checks,
+words and order (`finiteLength` for its lengths); without the plan-span
+service the rule is open as a whole.
+
 ## Binding and running a rule
 
 The rules crate's `templates` module runs a template
@@ -1456,6 +1483,16 @@ generated wells of random stacks (exact and inexact extents, gaps and
 overlaps, some spaces unmeasured), sections (empty, inexact) and rows
 under random tolerances; and by the `light-well` rules of the `spans`
 case, recorded before the switch. It is never forked.
+
+`centre-line-distance` is held to `centre_line_distance/reference.rs`
+(`axioval_rules::reference::CentreLineDistance`, which reads the walls and
+the centre line as the measured sides do) on every fixture of the facade's
+`tests/axiolid_centre_line_distance.rs`, measured on real meshes, its
+messages and refusals asserted literally; by generated stalls of WCs at
+many distances from one or two walls, along every centre line, on one
+side or both, under many bounds; and by the `centre-line-distance` rules
+of the `spans` case, recorded before the switch. It is never forked
+(D28).
 
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the

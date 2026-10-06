@@ -109,13 +109,29 @@ impl Scene {
                 AxiolidPlanSpanService::new(self.geometry, source()),
             )))
             .unwrap();
-        CentreLineDistance.evaluate(
-            &RuleContext {
-                project: &project,
-                services: &services,
-            },
-            &rule,
-        )
+        // The template reads the measured sides as a run does.
+        let registry =
+            axioval::rules::register_builtins(axioval::engine::CapabilityRegistry::new()).unwrap();
+        registry.install_measured(&mut services, &project);
+        let context = RuleContext {
+            project: &project,
+            services: &services,
+        };
+        let template = CentreLineDistance.evaluate(&context, &rule);
+        // Held to the implementation it replaced, on the same scene.
+        let reference = axioval_rules::reference::CentreLineDistance.evaluate(&context, &rule);
+        let parity = axioval::rules::parity::Parity::contract().compare(
+            (
+                "centre-line-distance",
+                &axioval::rules::parity::Observations::of_evaluation(&reference),
+            ),
+            (
+                "template",
+                &axioval::rules::parity::Observations::of_evaluation(&template),
+            ),
+        );
+        assert!(parity.holds(), "{}", parity.diff());
+        template
     }
 }
 
@@ -451,4 +467,107 @@ fn the_centre_line_distance_as_a_value_reaches_the_verdicts() {
             assert!(parity.holds(), "case {index}:\n{}", parity.diff());
         }
     }
+}
+
+/// Each refused declaration is worded as the capability worded it.
+#[test]
+fn refusals_keep_their_words() {
+    let refused = |parameters: &[(&str, ParameterValue)]| {
+        unevaluated(&Scene::wc(0.43).check(parameters))
+            .into_iter()
+            .map(|(_, message)| message)
+            .collect::<Vec<_>>()
+    };
+    let area = ParameterValue::Quantity {
+        value: 1.0,
+        unit: "m2".into(),
+    };
+    for (parameters, message) in [
+        (
+            vec![("centre_line", text("forward"))],
+            "centre_line `forward` is unsupported; use `long`, `short` or `against-wall`",
+        ),
+        (
+            vec![("sides", text("left"))],
+            "sides `left` is unsupported; use `nearest` or `both`",
+        ),
+        (
+            vec![("minimum", metres(-0.1))],
+            "`minimum` must be a finite length, not negative",
+        ),
+        (vec![("maximum", area.clone())], "`maximum` is not a length"),
+        (
+            vec![
+                ("reach", metres(0.0)),
+                ("minimum", none()),
+                ("maximum", none()),
+            ],
+            "`reach` is required and must be positive",
+        ),
+        (
+            vec![("minimum", none()), ("maximum", none())],
+            "declare `minimum`, `maximum` or both",
+        ),
+        (
+            vec![("minimum", metres(0.5))],
+            "`minimum` exceeds `maximum`",
+        ),
+        (
+            vec![("reach", metres(0.4))],
+            "`reach` must be at least `minimum` and `maximum`: a wall beyond it is none",
+        ),
+        (vec![("inset", area)], "`inset` is not a length"),
+    ] {
+        assert_eq!(
+            refused(&parameters),
+            vec![format!("centre-line-distance: {message}")],
+            "{parameters:?}"
+        );
+    }
+}
+
+/// Generated stalls: WCs at many distances from their walls, with or
+/// without a second wall at many distances, judged along every centre
+/// line, on one side or both, under many bounds; each evaluation is held
+/// to the implementation the template replaced.
+#[test]
+fn generated_stalls_hold_parity() {
+    let mut judged = 0;
+    for step in 0..12_u32 {
+        let axis = 0.2 + f64::from(step) * 0.07;
+        for east in [None, Some(0.75), Some(1.1), Some(1.6)] {
+            for (line, sides) in [
+                ("long", "both"),
+                ("short", "nearest"),
+                ("against-wall", "nearest"),
+                ("against-wall", "both"),
+            ] {
+                for (minimum, maximum) in [
+                    (Some(0.405), Some(0.455)),
+                    (Some(0.3), None),
+                    (None, Some(0.6)),
+                    (Some(0.1), Some(0.9)),
+                ] {
+                    let mut scene = Scene::wc(axis);
+                    if let Some(east) = east {
+                        scene = scene.body(
+                            "east",
+                            "wall",
+                            cuboid([axis + east, -0.2, 0.0], [axis + east + 0.2, 3.2, 2.5]),
+                        );
+                    }
+                    let bound = |value: Option<f64>| value.map_or_else(none, metres);
+                    // `check` holds the template to the reference.
+                    let outcome = scene.check(&[
+                        ("centre_line", text(line)),
+                        ("sides", text(sides)),
+                        ("minimum", bound(minimum)),
+                        ("maximum", bound(maximum)),
+                    ]);
+                    judged += outcome.findings().len() + outcome.not_evaluated_outcomes().len();
+                }
+            }
+        }
+    }
+    assert!(judged > 0);
 }

@@ -187,6 +187,7 @@ pub use wall_spacing::WallSpacing;
 pub mod reference {
     pub use crate::area_ratio::reference::AreaRatio;
     pub use crate::body_extent::reference::BodyExtent;
+    pub use crate::centre_line_distance::reference::CentreLineDistance;
     pub use crate::conformance::reference::SelectorConformance;
     pub use crate::consistent_value::reference::ConsistentValue;
     pub use crate::counterpart_coverage::reference::CounterpartCoverage;

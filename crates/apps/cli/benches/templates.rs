@@ -192,6 +192,11 @@ const PAIRS: &[Pair] = &[
         case: "spans",
         reference: |registry| registry.replace(axioval::rules::reference::LightWell),
     },
+    Pair {
+        capability: "axioval:capability.centre-line-distance",
+        case: "spans",
+        reference: |registry| registry.replace(axioval::rules::reference::CentreLineDistance),
+    },
 ];
 
 /// Warm-up runs per side before measuring.

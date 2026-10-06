@@ -9,7 +9,8 @@ use serde::Serialize;
 
 use super::registry::{
     ANGLE_TOLERANCE, EFFECT_SERVICES, EFFECT_UNMEASURED, EFFECTIVE, FACE, FACE_AXES, FACING,
-    MEMBER_PATH, NO_FACE, NO_GEOMETRY, OPENINGS_MINIMUM, PAIRED, SPACED_MEMBERS, WELL_MEMBERS, en_de,
+    MEMBER_PATH, NO_FACE, NO_GEOMETRY, OPENINGS_MINIMUM, PAIRED, SPACED_MEMBERS, WELL_MEMBERS,
+    en_de,
 };
 use super::{
     FACE_PIECES, LocalizedText, MeasuredCall, MeasuredDescriptor, MeasuredError, MeasuredExactness,
@@ -238,6 +239,151 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
                      `parking-bay` die Ausrichtung einer Stellfläche aus ihren Nachbarn \
                      ableitet; unentschieden, wo sie keine Längsachse hat oder die Mitten \
                      zu nah beieinander liegen.",
+                ),
+            ),
+        ],
+    },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
+            name: "centre_line_sides",
+            parameters: &[
+                MeasuredParameter {
+                    key: "walls",
+                    kind: MeasuredParameterKind::Objects,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The walls beside the footprint: source kinds, `,`-separated, or the \
+                         objects a selector parameter of the rule picks (`@name`), those it \
+                         leaves undecided walls that may be there.",
+                        "Die Wände neben dem Grundriss: Quellarten, durch `,` getrennt, oder \
+                         die Objekte, die ein Selektorparameter der Regel wählt (`@name`), \
+                         die unentschiedenen Wände, die dort sein können.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "centre_line",
+                    kind: MeasuredParameterKind::Choice {
+                        options: &["long", "short", "against-wall"],
+                    },
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The footprint's centre line: along its long or short axis, or from \
+                         the wall it stands against to its front.",
+                        "Die Mittellinie des Grundrisses: entlang seiner langen oder kurzen \
+                         Achse oder von der Wand, vor der es steht, zu seiner Vorderseite.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "sides",
+                    kind: MeasuredParameterKind::Choice {
+                        options: &["nearest", "both"],
+                    },
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "Both sides of the centre line, each an item, or the nearer of the \
+                         two, one item.",
+                        "Beide Seiten der Mittellinie, jede ein Element, oder die nähere der \
+                         beiden, ein Element.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "reach",
+                    kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "How far from the centre line a wall is searched.",
+                        "Wie weit von der Mittellinie eine Wand gesucht wird.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "inset",
+                    kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "How far the strip beside the footprint is narrowed at both ends; not at \
+                         all without it.",
+                        "Um wie viel der Streifen neben dem Grundriss an beiden Enden \
+                         verkürzt wird; ohne Angabe gar nicht.",
+                    ),
+                },
+            ],
+            dimension: None,
+            services: &["plan-span", "type-hierarchy"],
+            exactness: MeasuredExactness::Measured,
+            not_evaluated: &[
+                "the walls beside the footprint cannot be measured",
+                "the footprint has no long axis",
+                "no side is surely nearer a wall than the others",
+            ],
+            label: &en_de("Sides of the centre line", "Seiten der Mittellinie"),
+            help: &en_de(
+                "Each side of the centre line of the footprint's least-area rectangle a \
+                 `centre-line-distance` rule judges, with the walls beside it, square to it, as \
+                 that capability reads them.",
+                "Jede Seite der Mittellinie des kleinsten umschließenden Rechtecks des \
+                 Grundrisses, die eine `centre-line-distance`-Regel prüft, mit den Wänden \
+                 daneben, rechtwinklig zu ihr, wie diese Fähigkeit sie liest.",
+            ),
+        },
+        fields: &[
+            field(
+                "label",
+                MemberFieldKind::Text,
+                &en_de("Side", "Seite"),
+                &en_de(
+                    "How the side is named: `centre line to the left`, `… beside the +first \
+                     side`, `… to the nearest wall`.",
+                    "Wie die Seite benannt ist: `centre line to the left`, `… beside the \
+                     +first side`, `… to the nearest wall`.",
+                ),
+            ),
+            field(
+                "distance",
+                LENGTH,
+                &en_de("Distance", "Abstand"),
+                &en_de(
+                    "From every wall that may lie beside the side to the nearest wall surely \
+                     there, or just past `reach` without one; `null` where no wall may lie \
+                     within `reach`.",
+                    "Von jeder Wand, die neben der Seite liegen kann, bis zur nächsten sicher \
+                     dort liegenden, oder knapp jenseits von `reach` ohne eine; `null`, wo \
+                     keine Wand innerhalb von `reach` liegen kann.",
+                ),
+            ),
+            field(
+                "lower",
+                LENGTH,
+                &en_de("Least distance", "Kleinster Abstand"),
+                &en_de(
+                    "The least distance of any wall that may lie beside the side; `null` \
+                     where none may.",
+                    "Der kleinste Abstand einer Wand, die neben der Seite liegen kann; \
+                     `null`, wo keine liegen kann.",
+                ),
+            ),
+            field(
+                "sure",
+                LENGTH,
+                &en_de("Nearest sure wall", "Nächste sichere Wand"),
+                &en_de(
+                    "The distance of the nearest wall surely beside the side; `null` where \
+                     none surely is.",
+                    "Der Abstand der nächsten Wand, die sicher neben der Seite liegt; \
+                     `null`, wo keine sicher liegt.",
+                ),
+            ),
+            field(
+                "wall",
+                MemberFieldKind::Objects,
+                &en_de("Wall", "Wand"),
+                &en_de(
+                    "The nearest wall surely beside the side, if any.",
+                    "Die nächste Wand, die sicher neben der Seite liegt, falls eine.",
                 ),
             ),
         ],

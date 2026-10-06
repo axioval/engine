@@ -314,3 +314,8 @@ extents, their section) for the run, and the section is measured only once
 the stack is: read ahead for a chunk of wells, a section measured before
 the stack refused it ran 5 to 16× its reference on the architecture models,
 whose storeys hold a body without a mesh.
+
+`centre-line-distance` runs the `spans` case's three rules: 0.80 to 1.07×
+its reference's run time and 1.00 to 1.10× its peak heap. Its list reads
+the wall selection bound once per rule and measures each footprint's
+sides once per object, as the capability did.

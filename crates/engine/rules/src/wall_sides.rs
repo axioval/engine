@@ -55,6 +55,16 @@ impl Walls {
         }
     }
 
+    /// Walls a selection bound into a measured value picked: `sure`, and
+    /// `maybe` it leaves undecided, which may be there.
+    pub(crate) fn possible(sure: BTreeSet<ObjectId>, maybe: BTreeSet<ObjectId>) -> Self {
+        Self {
+            sure,
+            maybe,
+            failed: None,
+        }
+    }
+
     /// Walls surely selected: `sure`, and none undecided.
     pub(crate) fn of(sure: BTreeSet<ObjectId>) -> Self {
         Self {

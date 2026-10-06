@@ -233,6 +233,124 @@ impl PlanMeasures {
         Ok(value(gap, LENGTH, exact, locator))
     }
 
+    /// Each side of the centre line a `centre-line-distance` rule judges,
+    /// with the walls beside it, as that capability reads them: both sides
+    /// (named left and right where a front is known), or the nearer of the
+    /// two, its least distance over both and its nearest sure wall the
+    /// nearer one's.
+    #[allow(clippy::too_many_lines)]
+    fn centre_line_sides(
+        call: &MeasuredCall,
+        object: &ObjectId,
+        context: &RuleContext<'_>,
+    ) -> Result<Vec<MeasuredMember>, Unavailable> {
+        let spans = spans(context)?;
+        let selection = crate::measured_kinds::selection(context, call, "walls", Some(object))
+            .map_err(|error| (NotEvaluatedReason::IncompleteEvidence, error.to_string()))?
+            .ok_or_else(|| crate::support::invalid("`walls` is required"))?;
+        let walls = Walls::possible(selection.matched, selection.undecided);
+        let reach = length(call, "reach");
+        let measured = walls.measure(spans, object, reach, length(call, "inset"))?;
+        let centre = match call.choice("centre_line") {
+            Some("short") => Line::Short,
+            Some("against-wall") => Line::AgainstWall,
+            _ => Line::Long,
+        };
+        let (axis, front, mut evidence) = line(centre, &walls, &measured)?;
+        evidence.push(measured.evidence().clone());
+        evidence.push(measured.rectangle().evidence().clone());
+        let exact = evidence.iter().all(|evidence| evidence.exact);
+        let label = "centre line";
+        // The two sides facing square to the centre line, named left and
+        // right when the front is known.
+        let across = 1 - axis;
+        let pair = [RectangleSide::ALL[across], RectangleSide::ALL[across + 2]];
+        let named = |side: RectangleSide| match front {
+            Some(front) => {
+                let out = side.outward(measured.rectangle());
+                // Facing along the front, left is a quarter turn anticlockwise.
+                if front[0] * out[1] - front[1] * out[0] > 0.0 {
+                    format!("{label} to the left")
+                } else {
+                    format!("{label} to the right")
+                }
+            }
+            None => format!("{label} beside the {} side", side.name()),
+        };
+        let sides: Vec<(String, Nearest)> = if call.choice("sides") == Some("both") {
+            pair.into_iter()
+                .map(|side| (named(side), walls.nearest(&measured, side)))
+                .collect()
+        } else {
+            let [first, second] = pair.map(|side| walls.nearest(&measured, side));
+            let lower = match (first.lower, second.lower) {
+                (Some(a), Some(b)) => Some(a.min(b)),
+                (a, b) => a.or(b),
+            };
+            let sure = match (first.sure, second.sure) {
+                (Some(a), Some(b)) => Some(if b.2 < a.2 { b } else { a }),
+                (a, b) => a.or(b),
+            };
+            vec![(
+                format!("{label} to the nearest wall"),
+                Nearest { lower, sure },
+            )]
+        };
+        Ok(sides
+            .into_iter()
+            .enumerate()
+            .map(|(index, (label, nearest))| {
+                let at = |field: &str| format!("centre_line_sides:{object}#{}:{field}", index + 1);
+                let none = |field: &str| {
+                    MemberValue::Measured(Measurement::Absent {
+                        locator: format!("{}: no wall", at(field)),
+                    })
+                };
+                let (distance, lower) = match nearest.lower {
+                    Some(lower) => {
+                        let upper = nearest
+                            .sure
+                            .as_ref()
+                            .map_or(reach.next_up(), |(_, _, upper)| *upper);
+                        (
+                            MemberValue::Measured(value(
+                                (lower, upper.max(lower)),
+                                LENGTH,
+                                exact,
+                                at("distance"),
+                            )),
+                            MemberValue::Measured(value(
+                                (lower, lower),
+                                LENGTH,
+                                exact,
+                                at("lower"),
+                            )),
+                        )
+                    }
+                    None => (none("distance"), none("lower")),
+                };
+                let (sure, wall) = match nearest.sure {
+                    Some((wall, low, high)) => (
+                        MemberValue::Measured(value((low, high), LENGTH, exact, at("sure"))),
+                        vec![wall],
+                    ),
+                    None => (none("sure"), Vec::new()),
+                };
+                MeasuredMember {
+                    certain: true,
+                    exact,
+                    fields: BTreeMap::from([
+                        ("label", MemberValue::Text { text: label }),
+                        ("distance", distance),
+                        ("lower", lower),
+                        ("sure", sure),
+                        ("wall", MemberValue::Objects { objects: wall }),
+                    ]),
+                }
+            })
+            .collect())
+    }
+
     /// Each pair of consecutive spaces of the well, bottom to top, with the
     /// gap from the lower one's top to the upper one's bottom, as
     /// `light-well` subtracts them.
@@ -743,6 +861,7 @@ impl MeasuredProvider for PlanMeasures {
 
     fn member_lists(&self) -> &'static [&'static str] {
         &[
+            "centre_line_sides",
             "end_walls",
             "exit_pairs",
             "recesses",
@@ -769,6 +888,7 @@ impl MeasuredProvider for PlanMeasures {
         match call.name() {
             "recesses" => Self::recesses(call, object, context),
             "well_gaps" => Self::well_gaps(call, object, context),
+            "centre_line_sides" => Self::centre_line_sides(call, object, context),
             "well_requirements" => Self::well_requirements(call, object, context),
             "end_walls" => Self::end_walls(call, object, context),
             _ => Self::exit_pairs(call, object, context),

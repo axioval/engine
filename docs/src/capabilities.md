@@ -1524,7 +1524,7 @@ Each side and each question (clear, inside the space) is its own finding or not-
 
 ### Centre lines beside walls
 
-`axioval:capability.centre-line-distance` requires the centre line of each selected component's footprint to lie between `minimum` and `maximum` from the walls beside it: a WC's axis 405 to 455 mm from the side wall, a basin's from the wall beside it. The centre line is one of the axes of the footprint's least-area rectangle, through its centre; the distance is measured square to it, to the nearest `wall_selector` wall in the strip beside the footprint on each side (as long as the footprint along the line, narrowed by `inset` at both ends), through `PlanSpanService::measure_side_distances` (see [Services](./services.md)). It needs the plan-span service.
+`axioval:capability.centre-line-distance` requires the centre line of each selected component's footprint to lie between `minimum` and `maximum` from the walls beside it: a WC's axis 405 to 455 mm from the side wall, a basin's from the wall beside it. The centre line is one of the axes of the footprint's least-area rectangle, through its centre; the distance is measured square to it, to the nearest `wall_selector` wall in the strip beside the footprint on each side (as long as the footprint along the line, narrowed by `inset` at both ends), through `PlanSpanService::measure_side_distances` (see [Services](./services.md)). It needs the plan-span service. It runs as a template ([Capability templates](./templates.md#centre-line-distance)) over the measured sides of the centre line.
 
 | Parameter | Kind | Meaning |
 |---|---|---|

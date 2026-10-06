@@ -23,6 +23,8 @@ axioval-xlsx = { workspace = true, optional = true }
 axioval-html = { workspace = true, optional = true }
 
 [dev-dependencies]
+# The implementations templates replaced, held to them in tests.
+axioval-rules = { workspace = true, features = ["parity-reference"] }
 serde_json.workspace = true
 openbim-bcf.workspace = true
 axiolid-construct.workspace = true

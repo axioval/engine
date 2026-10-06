@@ -47,6 +47,9 @@ pub(crate) type Prefetched = (
     Result<MeasuredRead, (NotEvaluatedReason, String)>,
 );
 
+/// An object's values read ahead, kept inline: a form reads a handful.
+pub(crate) type Prefetch = smallvec::SmallVec<[Prefetched; 4]>;
+
 /// Answers an expression's leaves for one selected object.
 pub(crate) struct ObjectLeaves<'a> {
     context: &'a RuleContext<'a>,
@@ -61,13 +64,13 @@ pub(crate) struct ObjectLeaves<'a> {
     /// Every stated property read, by set and name, as the source states
     /// it (`None` where it states the property absent): a template words a
     /// value that is not of the kind it needs as the source states it.
-    stated: RefCell<Vec<StatedRead>>,
+    stated: RefCell<smallvec::SmallVec<[StatedRead; 4]>>,
     /// The measured member in scope, whose fields `axioval:member` reads.
     fields: Option<&'a MeasuredMember>,
     /// The evidence of the measured member list last listed.
     listed: Vec<Evidence>,
     /// Properties of the object resolved ahead in a batch, each read once.
-    prefetched: Vec<Prefetched>,
+    prefetched: Prefetch,
 }
 
 impl<'a> ObjectLeaves<'a> {
@@ -83,10 +86,10 @@ impl<'a> ObjectLeaves<'a> {
             subject: object,
             parameters,
             reasons: RefCell::new(Vec::new()),
-            stated: RefCell::new(Vec::new()),
+            stated: RefCell::new(smallvec::SmallVec::new()),
             fields: None,
             listed: Vec::new(),
-            prefetched: Vec::new(),
+            prefetched: Prefetch::new(),
         }
     }
 
@@ -99,10 +102,10 @@ impl<'a> ObjectLeaves<'a> {
             subject: self.subject,
             parameters: self.parameters,
             reasons: RefCell::new(Vec::new()),
-            stated: RefCell::new(Vec::new()),
+            stated: RefCell::new(smallvec::SmallVec::new()),
             fields: None,
             listed: Vec::new(),
-            prefetched: Vec::new(),
+            prefetched: Prefetch::new(),
         }
     }
 
@@ -115,17 +118,17 @@ impl<'a> ObjectLeaves<'a> {
             subject: self.subject,
             parameters: self.parameters,
             reasons: RefCell::new(Vec::new()),
-            stated: RefCell::new(Vec::new()),
+            stated: RefCell::new(smallvec::SmallVec::new()),
             fields: Some(member),
             listed: Vec::new(),
-            prefetched: Vec::new(),
+            prefetched: Prefetch::new(),
         }
     }
 
     /// The leaves of the object, with properties resolved ahead in a batch
     /// (`support::resolve_batch`): a read of one takes its answer instead
     /// of resolving it again, and reads it exactly as a resolved one.
-    pub(crate) fn with_prefetched(mut self, prefetched: Vec<Prefetched>) -> Self {
+    pub(crate) fn with_prefetched(mut self, prefetched: Prefetch) -> Self {
         self.prefetched = prefetched;
         self
     }

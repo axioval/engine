@@ -33,7 +33,7 @@ use serde_json::Value as Json;
 
 use crate::body_extent::rounding_slack;
 use crate::counts::{Population, relation_text, tally};
-use crate::expression_leaves::{ObjectLeaves, Prefetched};
+use crate::expression_leaves::{ObjectLeaves, Prefetch};
 use crate::expression_requirement::reason_of;
 use crate::level_spacing::{metres, shown};
 use crate::plan_area::{Verdict, deviation, judge};
@@ -668,18 +668,46 @@ fn effective(plan: &Plan<'_>) -> Decision {
 /// What one object's values were read as.
 #[derive(Default)]
 struct Read {
-    values: BTreeMap<&'static str, Value>,
-    stated: BTreeMap<&'static str, Option<PropertyValue>>,
+    values: Named<Value>,
+    stated: Named<Option<PropertyValue>>,
     evidence: Vec<Evidence>,
     /// The values read from evidence that is not exact.
-    inexact: std::collections::BTreeSet<&'static str>,
+    inexact: Named<()>,
     /// The bound a decision failed or straddled, as the judge words it
     /// (`at least 6`).
     bound: Option<String>,
     why: Option<String>,
     /// Further placeholders the runner states: an anchor's `{undecided}`
     /// members and how they are reached (`{relation}`).
-    named: BTreeMap<&'static str, String>,
+    named: Named<String>,
+}
+
+/// The few values of one object a form names, in reading order: a list
+/// kept inline, since a form reads a handful and each object reads them
+/// anew.
+struct Named<V>(smallvec::SmallVec<[(&'static str, V); 6]>);
+
+impl<V> Default for Named<V> {
+    fn default() -> Self {
+        Self(smallvec::SmallVec::new())
+    }
+}
+
+impl<V> Named<V> {
+    fn get(&self, name: &str) -> Option<&V> {
+        self.0
+            .iter()
+            .find(|(key, _)| *key == name)
+            .map(|(_, value)| value)
+    }
+
+    /// Names `value`, replacing what the name held.
+    fn insert(&mut self, name: &'static str, value: V) {
+        match self.0.iter_mut().find(|(key, _)| *key == name) {
+            Some(slot) => slot.1 = value,
+            None => self.0.push((name, value)),
+        }
+    }
 }
 
 /// An interval of a value or a constant.
@@ -854,7 +882,8 @@ fn refusal(message: &str, expression: &Expression, object: &Object) -> String {
 
 /// `template` with its placeholders rendered.
 fn render(plan: &Plan<'_>, read: &Read, template: &str) -> String {
-    let mut out = String::new();
+    // Room for the placeholders' words, so a message grows once at most.
+    let mut out = String::with_capacity(template.len() * 2);
     let mut rest = template;
     while let Some(open) = rest.find('{') {
         let Some(close) = rest[open..].find('}') else {
@@ -954,7 +983,7 @@ fn holds(plan: &Plan<'_>, read: &Read, condition: Option<Condition>) -> bool {
             .get(parameter)
             .and_then(Constant::number)
             .is_some_and(|value| value > 0.0),
-        Some(Condition::Inexact { value }) => read.inexact.contains(value),
+        Some(Condition::Inexact { value }) => read.inexact.get(value).is_some(),
         Some(Condition::Equals { parameter, value }) => matches!(
             plan.constants.get(parameter),
             Some(Constant::Text(stated)) if stated == value
@@ -1102,7 +1131,7 @@ fn judge_object(
     context: &RuleContext<'_>,
     rule: &CompiledRule,
     object: &Object,
-    prefetched: Vec<Prefetched>,
+    prefetched: Prefetch,
 ) -> Judgement {
     let mut leaves =
         ObjectLeaves::new(context, object, Some(&rule.parameters)).with_prefetched(prefetched);
@@ -1121,10 +1150,12 @@ fn judge_object(
     }
     for (step, expression) in plan.values() {
         let expression = match (scope, &members) {
-            (Some(scope), Some(members)) => {
-                narrowed(expression, scope.members.selector, &members.decided)
-            }
-            _ => expression.clone(),
+            (Some(scope), Some(members)) => std::borrow::Cow::Owned(narrowed(
+                expression,
+                scope.members.selector,
+                &members.decided,
+            )),
+            _ => std::borrow::Cow::Borrowed(expression),
         };
         let (outcome, evidence) = read_step(&expression, step.name, &mut leaves);
         let before = read.evidence.len();
@@ -1133,7 +1164,7 @@ fn judge_object(
             .iter()
             .any(|evidence| !evidence.exact)
         {
-            read.inexact.insert(step.name);
+            read.inexact.insert(step.name, ());
         }
         let stated = property_read(&expression)
             .and_then(|(set, name)| leaves.stated(set, name))

@@ -68,7 +68,7 @@ fn facade_unavailable(error: FacadeAreaError) -> Unavailable {
 }
 
 /// Which area of an object is measured.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum Measure {
     /// The plan footprint, from the plan-area service.
     Footprint,
@@ -306,31 +306,32 @@ pub(crate) fn judge_bounds(
     maximum: Option<Bound>,
 ) -> Verdict {
     use axioval_engine::comparison::{Order, Tolerance, numbers};
+    // The bound is worded only for a verdict that names it.
     let bounds = [
         minimum.map(|Bound { value, exclusive }| {
-            let (order, text) = if exclusive {
-                (Order::Greater, format!("more than {value}"))
+            let (order, words) = if exclusive {
+                (Order::Greater, "more than")
             } else {
-                (Order::GreaterOrEqual, format!("at least {value}"))
+                (Order::GreaterOrEqual, "at least")
             };
-            (order, value, text, upper, lower)
+            (order, value, words, upper, lower)
         }),
         maximum.map(|Bound { value, exclusive }| {
-            let (order, text) = if exclusive {
-                (Order::Less, format!("less than {value}"))
+            let (order, words) = if exclusive {
+                (Order::Less, "less than")
             } else {
-                (Order::LessOrEqual, format!("at most {value}"))
+                (Order::LessOrEqual, "at most")
             };
-            (order, value, text, lower, upper)
+            (order, value, words, lower, upper)
         }),
     ];
     let holds =
         |order, end: f64, value: f64| numbers(order, (end, end), (value, value), &Tolerance::EXACT);
-    for (order, value, text, nearest, farthest) in bounds.into_iter().flatten() {
+    for (order, value, words, nearest, farthest) in bounds.into_iter().flatten() {
         match (holds(order, nearest, value), holds(order, farthest, value)) {
-            (Ok(false), _) => return Verdict::Fail(text),
+            (Ok(false), _) => return Verdict::Fail(format!("{words} {value}")),
             (Ok(true), Ok(true)) => {}
-            _ => return Verdict::Undecided(text),
+            _ => return Verdict::Undecided(format!("{words} {value}")),
         }
     }
     Verdict::Pass

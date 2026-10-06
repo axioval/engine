@@ -16,6 +16,8 @@ regex.workspace = true
 indexmap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+# The template runner's few named values per object, kept inline.
+smallvec.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]

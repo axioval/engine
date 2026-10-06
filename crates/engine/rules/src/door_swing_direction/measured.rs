@@ -3,9 +3,13 @@
 //! whether the door swings into it and whether it surely swings away from
 //! it.
 //!
-//! A door's leaves are read where its list is measured, once per rule,
-//! and each space it may open onto is probed once per run, however many
-//! lists name it.
+//! How many hinged leaves a door has (`hinged_leaves`) is the guard a
+//! template reads first: an object without them is refused before its
+//! spaces are listed. A door's leaves, once read, are kept for the run
+//! (an object refused is kept nowhere), and each space it may open onto
+//! is probed once per run, however many lists name it.
+
+use std::sync::Arc;
 
 use axioval_engine::{
     DoorLeaves, FreeSpaceServiceHandle, MeasuredMember, MeasuredMemo, MeasuredProvider,
@@ -22,6 +26,8 @@ use crate::support::{Traversal, Unavailable, invalid};
 
 /// The member list measured here.
 const SWING_SPACES: &str = "swing_spaces";
+/// How many hinged leaves a door has.
+const HINGED_LEAVES: &str = "hinged_leaves";
 
 /// Measures the spaces a door swings into and away from.
 pub(crate) struct SwingMeasures;
@@ -31,6 +37,34 @@ fn missing(service: &str) -> Unavailable {
         NotEvaluatedReason::MissingService,
         format!("the {service} service is not registered"),
     )
+}
+
+/// The key of a door's hinged leaves in the run's memo.
+#[derive(Hash, PartialEq, Eq)]
+struct LeavesKey(ObjectId);
+
+/// The hinged leaves of `door`, kept for the run once read: the guard,
+/// read first, reads and keeps them (`kept` false: nothing to look up yet),
+/// the list finds them. A refusal is not kept, so an object without leaves
+/// costs the run nothing.
+fn leaves_of(
+    context: &RuleContext<'_>,
+    frames: &ObjectFrameServiceHandle,
+    door: &ObjectId,
+    kept: bool,
+) -> Result<Arc<DoorLeaves>, Unavailable> {
+    let memo = context.services.get::<MeasuredMemo>();
+    if kept
+        && let Some(leaves) =
+            memo.and_then(|memo| memo.get::<_, Arc<DoorLeaves>>(&LeavesKey(door.clone())))
+    {
+        return Ok(leaves);
+    }
+    let leaves = Arc::new(hinged_leaves(frames, door)?);
+    if let Some(memo) = memo {
+        memo.insert(LeavesKey(door.clone()), Arc::clone(&leaves));
+    }
+    Ok(leaves)
 }
 
 /// The key of where a space lies against a door's swing.
@@ -69,7 +103,7 @@ impl SwingMeasures {
         let Some(MeasuredArgument::Path(steps)) = call.argument("path") else {
             return Err(invalid("`path` is required"));
         };
-        let leaves = hinged_leaves(frames, door)?;
+        let leaves = leaves_of(context, frames, &door.id, true)?;
         let everything: Vec<&Object> = context.project.objects().collect();
         let (mut reached, _) = Traversal::path(steps)?.related(context, &door.id, &everything)?;
         if call.argument("kinds").is_some() {
@@ -154,7 +188,7 @@ impl SwingMeasures {
 
 impl MeasuredProvider for SwingMeasures {
     fn names(&self) -> &'static [&'static str] {
-        &[]
+        &[HINGED_LEAVES]
     }
 
     fn member_lists(&self) -> &'static [&'static str] {
@@ -163,11 +197,27 @@ impl MeasuredProvider for SwingMeasures {
 
     fn measure(
         &self,
-        _: &MeasuredCall,
-        _: &ObjectId,
-        _: &RuleContext<'_>,
+        call: &MeasuredCall,
+        object: &ObjectId,
+        context: &RuleContext<'_>,
     ) -> Result<Measurement, PropertyResolutionError> {
-        Err(PropertyResolutionError::InvalidRequest)
+        if call.name() != HINGED_LEAVES {
+            return Err(PropertyResolutionError::InvalidRequest);
+        }
+        let refused = crate::measured_kinds::refused(HINGED_LEAVES, object);
+        let frames = context
+            .services
+            .get::<ObjectFrameServiceHandle>()
+            .ok_or_else(|| refused(missing("object-frame")))?;
+        let leaves = leaves_of(context, frames, object, false).map_err(&refused)?;
+        #[allow(clippy::cast_precision_loss)]
+        let count = leaves.hinged().count() as f64;
+        Ok(crate::measured_kinds::interval(
+            (count, count),
+            None,
+            leaves.evidence().exact,
+            format!("{HINGED_LEAVES}:{object}"),
+        ))
     }
 
     fn members(

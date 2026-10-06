@@ -3643,6 +3643,27 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ),
     },
     MeasuredDescriptor {
+        name: "hinged_leaves",
+        parameters: &[],
+        dimension: None,
+        services: &["object-frame"],
+        exactness: MeasuredExactness::Stated,
+        not_evaluated: &[
+            "the leaves of the door are unknown",
+            "the door has no hinged leaf",
+        ],
+        label: &en_de("Hinged leaves", "Drehflügel"),
+        help: &en_de(
+            "How many hinged leaves a door or window has, as its operation states \
+             them; refused for an object with none, so a check of where a door swings \
+             is left open there before anything else is read.",
+            "Wie viele Drehflügel eine Tür oder ein Fenster hat, wie ihre Bedienart sie \
+             angibt; verweigert für ein Objekt ohne, sodass eine Prüfung, wohin eine Tür \
+             aufschlägt, dort offen bleibt, bevor anderes gelesen wird.",
+        ),
+        subject: MeasuredSubject::Object,
+    },
+    MeasuredDescriptor {
         name: "intersection_count",
         parameters: &[
             ELEMENTS,

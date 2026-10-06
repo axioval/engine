@@ -153,7 +153,7 @@ fn check(
     everything: &[&Object],
     door: &Object,
 ) -> Result<Judged, Unavailable> {
-    let leaves = hinged_leaves(frames, door)?;
+    let leaves = hinged_leaves(frames, &door.id)?;
     let (reached, cited) = config.spaces.related(context, &door.id, everything)?;
     let mut judged = Judged {
         evidence: cited,

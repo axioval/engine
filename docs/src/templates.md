@@ -1382,9 +1382,12 @@ once (`into`, and `away`, undecided where neither probe lies in it).
 | not into | `swing_not_into` | each space's `into` a finding (`swings into {space}, which `swing_not_into` forbids`, relating it), open where the selection may pick it or the probes cannot place it |
 | into | `swing_into` | `Any`: a picked space swung into passes; otherwise the first space left open (the probes cannot place it, it may not be picked, or neither probe lies in it) opens the check; otherwise the picked spaces surely swung away from are one finding (`swings away from {failing}, …`) |
 
-Both checks leave the door open once (`once`), as the capability
-reported one doubt per door, and a door without a hinged leaf, or whose
-spaces cannot be reached, is open once with the list's refusal. The
+A guard (`unless`, `guard: true`) reads `hinged_leaves` first: an object
+without a hinged leaf, or whose leaves cannot be read, is open with
+`door-swing: {why}` before its spaces are listed, as the capability
+refused it first. Both checks leave the door open once (`once`), as the
+capability reported one doubt per door, and a door whose spaces cannot be
+reached is open once with the list's refusal. The
 services are `object-frame` and `free-space`, checked before anything is
 selected. The declaration checks `space_path`, both selectors' kinds,
 that one is stated, and the path, in the capability's order and words.

@@ -402,6 +402,7 @@ ignoring ASCII case):
 | `door_clear_width[;stated=<set/name>][;from_leaves=passage\|widest-leaf][;overall=<set/name>;deduction=<m>]`, `door_clear_height[;stated=…][;overall=…][;lining=…][;threshold=…]` | a door's clear width or height, as `keyed-limit` reads it | built in, over the door's properties and leaves |
 | `sill_height;floor_path=<steps>[;measure=greatest\|least]`, `threshold_step;floor_path=<steps>[;threshold=<set/name>][;ramps=<kinds>;ramp_reach=<m>][;measure=…]` | above the floors a path reaches | built in, over `VerticalExtentService` (and `ProximityService` for ramps) |
 | `leaf_count`, `leaf_width[;measure=widest\|narrowest\|total]`, `swing_area`, `swings_into;path=<steps>` | a door's or window's leaves and swing | built in, over `ObjectFrameService::leaves` and `FreeSpaceService` |
+| `hinged_leaves` | how many hinged leaves a door or window has; refused for an object with none, so a template guards a check of its swing with it | built in, over `ObjectFrameService::leaves` |
 | `profile_dimension;name=<column>`, `profile_slope;name=<column>` | a dimension or slope of the member's swept profile, by `allowed-profile`'s column names | built in, over the body set |
 | `section_area`, `section_modulus[;axis=strong\|weak]` | the profile's section area and elastic section modulus, where its family defines them | built in, over the body set |
 | `angle_to;path=<steps>[;between=axis\|face_normal]` | the angle to the objects a path reaches, an angle | `PlanSpanService::measure_rectangle` or `VerticalExtentService::measure_face_normals`, `RelationshipSelectionService` |
@@ -938,7 +939,7 @@ sites that cite a value exact:
 | --- | --- | --- |
 | `distance`, `count_within` | every counterpart that may be the nearest (farthest) or may count was measured exactly | the undecided counterparts, as `distance` cites them (`Cited`) |
 | `door_clear_width`, `door_clear_height`, `sill_height`, `threshold_step` | every extent, leaf and stated value read is exact | rounding of the differences, widened outward |
-| `leaf_count`, `leaf_width`, `swings_into` | the leaves (stated, exact by contract) and every probe are exact | a total width summed outward |
+| `leaf_count`, `leaf_width`, `swings_into`, `hinged_leaves` | the leaves (stated, exact by contract) and every probe are exact | a total width summed outward |
 | `swing_spaces` (members) | the leaves and every containment probe are exact (both exact by contract) | nothing |
 | `profile_dimension`, `profile_slope`, `section_area`, `section_modulus` | every dimension the formula reads is stated | rounding, π included; an unset radius widens the value and makes it inexact |
 | `flight_*`, `landing_*`, `stair_rise`, `end_width`, `walking_line_turns` | the flight's, run's or landing's evidence is exact | rounding of derived positions |

@@ -7,7 +7,7 @@ use axioval_engine::{
     CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ObjectFrameServiceHandle,
     ParameterDescriptor, RuleCapability, RuleContext,
 };
-use axioval_ir::Object;
+use axioval_ir::ObjectId;
 
 use crate::door_swing;
 use crate::support::Unavailable;
@@ -73,9 +73,9 @@ impl RuleCapability for DoorSwing {
 /// into no space.
 pub(crate) fn hinged_leaves(
     frames: &ObjectFrameServiceHandle,
-    door: &Object,
+    door: &ObjectId,
 ) -> Result<axioval_engine::DoorLeaves, Unavailable> {
-    let leaves = door_swing::leaves(frames, &door.id)?;
+    let leaves = door_swing::leaves(frames, door)?;
     if leaves.hinged().next().is_none() {
         return Err((
             NotEvaluatedReason::IncompleteEvidence,

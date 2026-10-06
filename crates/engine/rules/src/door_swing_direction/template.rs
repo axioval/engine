@@ -4,7 +4,8 @@
 
 use axioval_engine::template::{
     Any, Applies, Check, Decision, Effect, Form, FormCheck, ItemCheck, ItemTest, Items, Judge, On,
-    OpenCase, Refusals, Service, Services, Template, TemplateValue, Together, TogetherJudge, When,
+    OpenCase, Refusals, Service, Services, Template, TemplateValue, Together, TogetherJudge,
+    Unless, When,
 };
 use axioval_engine::{ParameterDescriptor, ParameterType};
 use serde_json::json;
@@ -208,6 +209,33 @@ fn into() -> FormCheck {
     })
 }
 
+/// The guard read first: a door without hinged leaves (or whose leaves
+/// cannot be read) is refused as the capability refused it, before its
+/// spaces are listed.
+fn leaves() -> Unless {
+    Unless {
+        applies: Applies {
+            when: &[],
+            any: &[],
+            condition: None,
+        },
+        value: TemplateValue {
+            name: "leaves",
+            expression: serde_json::from_value(json!({
+                "kind": "property",
+                "propertySet": axioval_ir::MEASURED_SET,
+                "property": "hinged_leaves",
+            }))
+            .expect("a measured read"),
+            expect: None,
+            absent: None,
+            mismatch: None,
+            refused: Some("door-swing: {why}"),
+        },
+        guard: true,
+    }
+}
+
 /// `door-swing`, rebuilt as a composition with its outside contract kept.
 pub(crate) fn template() -> Template {
     Template {
@@ -246,7 +274,7 @@ pub(crate) fn template() -> Template {
             derived: Vec::new(),
             related: None,
             checks: vec![not_into(), into()],
-            unless: Vec::new(),
+            unless: vec![leaves()],
             grading: None,
             once: Vec::new(),
             project: Vec::new(),

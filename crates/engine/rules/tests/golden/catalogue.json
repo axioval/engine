@@ -12197,6 +12197,21 @@
                 "fail": "",
                 "undecided": ""
               }
+            ],
+            "unless": [
+              {
+                "applies": {},
+                "value": {
+                  "name": "leaves",
+                  "expression": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "hinged_leaves"
+                  },
+                  "refused": "door-swing: {why}"
+                },
+                "guard": true
+              }
             ]
           }
         ],
@@ -12264,11 +12279,25 @@
                   "label": "no item fails"
                 },
                 {
-                  "kind": "literal",
-                  "value": {
-                    "type": "boolean",
-                    "value": true
-                  }
+                  "kind": "and",
+                  "operands": [
+                    {
+                      "kind": "isDefined",
+                      "operand": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "hinged_leaves"
+                      },
+                      "label": "guard leaves"
+                    },
+                    {
+                      "kind": "literal",
+                      "value": {
+                        "type": "boolean",
+                        "value": true
+                      }
+                    }
+                  ]
                 }
               ]
             },
@@ -12389,11 +12418,31 @@
                       }
                     },
                     {
-                      "type": "expression.literal",
-                      "fields": {
-                        "value": {
-                          "type": "boolean",
-                          "value": true
+                      "type": "expression.and",
+                      "inputs": {
+                        "operands": {
+                          "blocks": [
+                            {
+                              "type": "expression.isDefined",
+                              "label": "guard leaves",
+                              "inputs": {
+                                "operand": {
+                                  "block": {
+                                    "type": "measured.hinged_leaves"
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "type": "expression.literal",
+                              "fields": {
+                                "value": {
+                                  "type": "boolean",
+                                  "value": true
+                                }
+                              }
+                            }
+                          ]
                         }
                       }
                     }
@@ -65042,6 +65091,40 @@
         }
       ],
       "unit": "rad",
+      "available": true
+    },
+    {
+      "name": "hinged_leaves",
+      "parameters": [],
+      "services": [
+        "object-frame"
+      ],
+      "exactness": "stated",
+      "notEvaluated": [
+        "the leaves of the door are unknown",
+        "the door has no hinged leaf"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Hinged leaves"
+        },
+        {
+          "language": "de",
+          "text": "Drehflügel"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "How many hinged leaves a door or window has, as its operation states them; refused for an object with none, so a check of where a door swings is left open there before anything else is read."
+        },
+        {
+          "language": "de",
+          "text": "Wie viele Drehflügel eine Tür oder ein Fenster hat, wie ihre Bedienart sie angibt; verweigert für ein Objekt ohne, sodass eine Prüfung, wohin eine Tür aufschlägt, dort offen bleibt, bevor anderes gelesen wird."
+        }
+      ],
+      "unit": "1",
       "available": true
     },
     {

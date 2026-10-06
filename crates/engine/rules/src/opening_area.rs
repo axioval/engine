@@ -132,6 +132,28 @@ pub(crate) fn minimum_area(parameters: &Parameters<'_>) -> Result<Option<f64>, U
     }
 }
 
+/// The objects that may be openings: those surely picked and those the
+/// selection cannot decide, borrowed.
+#[derive(Clone, Copy)]
+pub(crate) struct Picks<'a> {
+    pub(crate) matched: &'a std::collections::BTreeSet<ObjectId>,
+    pub(crate) undecided: &'a std::collections::BTreeSet<ObjectId>,
+}
+
+impl<'a> Picks<'a> {
+    /// The objects `population` may pick.
+    pub(crate) fn of(population: &'a Population) -> Self {
+        Self {
+            matched: &population.matched,
+            undecided: &population.undecided,
+        }
+    }
+
+    fn contains(&self, id: &ObjectId) -> bool {
+        self.matched.contains(id) || self.undecided.contains(id)
+    }
+}
+
 /// The area a host's openings take from its middle plane.
 pub(crate) struct Voided {
     /// The summed area of the counted openings.
@@ -152,7 +174,7 @@ pub(crate) struct Voided {
 pub(crate) fn voided(
     context: &RuleContext<'_>,
     openings: &Openings<'_>,
-    population: &Population,
+    population: Picks<'_>,
     host: &Object,
     evidence: &mut Vec<Evidence>,
 ) -> Result<Voided, Unavailable> {

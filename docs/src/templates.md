@@ -78,7 +78,7 @@ rules crate (`body_extent/template.rs`):
 | `refusals` | Where a refused declaration and missing services are reported: `rule` (the default, once, before anything is selected, after the name), `objects` (for each selected object, worded as the check states it, as capabilities that judged their declaration per object reported it) or `prefixed` (for each selected object, a refused declaration after a prefix: `slab-contact declaration is invalid: …`; missing services as stated) or `servicesPerObject` (a refused declaration once for the rule, after the name, missing services for each selected object) or `selected` (once for the rule after selecting, and only where the rule selects an object, beside the selection's own outcomes: a refused declaration after the name, missing services as stated, as capabilities that selected before reading their declaration reported it). |
 | `defaults` | Values optional parameters take when unstated (`tolerance` 0 m). A default taking its value `from` other parameters takes the first of them the rule states, its literal where none is: one value a rule may state under either of two names (`horizontal` from `tolerance` or `horizontal_tolerance`), or the least severe of the thresholds stated. Such a name may be no parameter of the descriptor; messages, conditions and measured values (`@horizontal`) read it as any parameter. |
 | `declaration` | `Check`s over the rule's parameters, in order: `excludes` (where a mode is stated, no string parameter of a list states an option it does not combine with), `arguments` (where a mode is stated, the rule parameters a measured value or member list names, checked as stated by the value's own argument check: a declaration, such as a table of rows, only the measurement knows how to read), `choice` (a string among options), `length` (a non-negative length), `count` (an integer of at least zero, stated where the descriptor requires it), `kind` (a parameter of its descriptor's kind, placed where the capability read it so refusals keep their order), `nonNegative` (numbers of at least zero), `traversal` (a valid `relationship` or `path`, declared only with one of the named parameters, or anywhere where it names none), `exclusive`, `anyOf`, `requires`, `ordered` (numbers, integers or quantities, as the descriptor types them), `disciplines` (a non-empty list of valid disciplines), `path` (a valid relationship path), `tolerance` (the rule's tolerance parameters valid together), `required` (a parameter stated, of its kind), `finite` (each parameter stated as a finite `number`, above or at least a bound where given), `increasing` (both numbers, the first below the second), `atMost` (each number stated at most a value: a share no greater than the whole), `when` (a check that applies only where one of some boolean parameters is stated true: a declaration a mode needs only while it is on), `amongEach` (every string a list states, trimmed, among options, `{value}` the one that is not), `declaresListed` (`declares`, a string list only where it lists one), `holds` (a `Condition` holds over the parameters, their defaults applied: a declaration stated as conditions, such as two switches not both off, or a share in `[0, 1)`), `exceeds` (where stated, a number above each earlier one stated: thresholds strictly increasing), `quantity` (where stated, a quantity of one dimension, of any sign), `angleBelow` (where stated, a plane angle of at least zero and below a number of degrees, compared in degrees as the capability converted it), `finiteLength` (a finite length of at least zero, `` `x` must be a finite length, not negative `` or `` `x` is not a length ``), `listed` (every string a list states is, as stated and untrimmed, one of some options and listed once, judged string by string in the list's order: `unknown` or `repeated`, `{value}` the string) and `listedNeeds` (for each string a list states, in its order, the parameters that option `Needed` are stated: a mode list whose options each need their own inputs). The first failing check leaves the rule not evaluated as an invalid declaration, worded as the capability worded it. `ifStated` judges a check only where the rule states a parameter (of any kind). A refusal worded after the template's name is not named again where its message names the capability itself (`horizontal-guard declaration is missing or not realisable`). |
-| `services` | The host services the values need (`Service`: `object-frame`, `vertical-extent`, `triangle-count`, `walking-surface`, `contact`, `plan-area`, `plan-span`, `coordinate-system`, `envelope-membership`, `boundary-coverage`, `guard`, `space`), and the message leaving the whole rule open without them, before anything is selected (after selecting, with `selected` refusals). |
+| `services` | The host services the values need (`Service`: `object-frame`, `vertical-extent`, `triangle-count`, `walking-surface`, `contact`, `plan-area`, `plan-span`, `coordinate-system`, `envelope-membership`, `boundary-coverage`, `guard`, `space`, `free-space`), and the message leaving the whole rule open without them, before anything is selected (after selecting, with `selected` refusals). |
 | `texts` | Named message parts, optionally conditional: `Condition::Positive` (a parameter above zero), `Condition::Inexact` (a value read from evidence that is not exact, such as a count of a tessellation), `Condition::Equals` (a string parameter or its default is a value), `Condition::Zero` (a value's lower end is zero: nothing surely counted), `Condition::All` (every one of several), `Condition::Not`, `Condition::Cites` (a value's measured reads cite an object: a search found a candidate), `Condition::Absent` (a value is `null`: a measurement found nothing near), `Condition::Below` and `Condition::Above` (a value surely below or above a number: its upper or lower end is), `Condition::Lists` (a string-list parameter lists a word), `Condition::AtLeast` and `Condition::Under` (a parameter, or its default, a number at least or below a number: a tolerance not negative), `Condition::Exceeds` (a value's lower or upper end above the number a parameter states, never where it states none: a share surely or possibly above a threshold), `Condition::Stated` (the rule states a parameter, or a default gives it), `Condition::Measured` (a value was read: one read once per rule was not refused) and `Condition::Scope` (the source a scope judges is one a value's measured reads cite: the reference source), `Condition::Noted` (a value's measured reads noted something: boundaries that surely overlap). Several texts may share a name, each under its own condition: the first that holds is rendered (`plan area` or `facade area` by `measure`). |
 | `forms` | The compositions. The first form whose `when` parameters are all stated applies. |
 
@@ -367,7 +367,8 @@ never measured for a pass. A comparison in a truth is the evaluator's,
 sound interval arithmetic: it decides as a capability's plain binary
 comparison did except within a unit in the last place of a bound, which
 it leaves open. Its expression form is the truth itself, so a rule forks
-into it.
+into it. Only the values up to the truth are measured ahead for many
+objects at once; those after it are measured for an object that fails.
 
 `Decision::Unique` is the generic group decision: each selected object's
 stated value `value` compared with those of the other objects of its
@@ -589,7 +590,17 @@ check already did. Each item is judged by
 - `When` conditions read the rule (`declared`, `undeclared`, `equals`,
   `undecided`: a selector parameter leaving objects undecided) or the
   item (a truth field, a `null`, a number exactly or surely below a value,
-  an empty objects field).
+  an empty objects field, an undecided field: `unknown`).
+
+An `Items` check naming `at` (an objects field) reports each item's
+outcomes on the object it names, in place of the checked object: an
+opening a corridor reaches. A list that cannot be measured leaves the
+check open for the list's own reason.
+
+An `Items` check with `once` leaves the object open at most once: of its
+open outcomes only the first is reported, and none where an earlier check
+of the form already left the object open, as a capability reporting one
+doubt per object did.
 
 With `merged`, the findings of several items worded alike are one
 finding on the object, relating every object each related (sorted, each
@@ -605,10 +616,14 @@ ones in one finding graded by the worst and the open ones grouped or each
 on its own (a number surely within `zero` of zero is no item: a straight
 tread is no winder); every truth (`truths`); the `spread` of the numbers
 (the largest less the smallest) against a tolerance; their `count` within
-bounds (`{count}`); or their `least` against a minimum, the least between
+bounds (`{count}`); their `least` against a minimum, the least between
 the least lower and the least upper end, at the item of least upper end
 (`{least}`, `{at}`), an unmeasured item (`{unknown}`) only able to lower
-it.
+it; or `any`, one item meeting a requirement (`Any`, its conditions
+`holds`): where none holds, the first item matching one of the `open`
+cases leaves the check open (`{why}` an undecided field's reason), and
+where none is open the items matching `fails` are one finding
+(`{failing}`), relating each one's objects.
 `Passing` opens the check where every item passed and a condition holds
 (`undecided`): once, or per item of another list grouping them by a key
 (each stretch whose rails all pass). Messages read item fields
@@ -1352,21 +1367,22 @@ relates every opening reached.
 
 | Form | When | Values | Decision |
 | --- | --- | --- | --- |
-| one | always | `kept` = `opening_count;…` above 0 implies `opening_area;…` below `middle_face_area;…` less `area_tolerance` and the rounding allowance; `count`, `voided`, `face` the three values, read only for a finding | `Holds` over `kept` |
+| one | always | `voided` = `opening_area;…;cites=counted`; `kept` = `voided` above 0 m² implies `voided` below `middle_face_area;…` less `area_tolerance` and the rounding allowance; `face` = `middle_face_area;…`, read only for a finding | `Holds` over `kept` |
 
 The opening values name the rule's declaration as arguments
 (`path=@opening_path;length_axis=@length_axis;height_axis=@height_axis;minimum=@minimum_opening_area;openings=@opening_selector`,
-an unstated minimum or selector dropped) and place a host's openings once
-per run for both. The rounding allowance is the capability's, a
-nanometre times one square metre plus the face and the openings' area.
-A host with no opening on its middle plane holds, its face never
-measured. The declaration checks the path, the selector's kind, both axes
-(stated, then as the measurement reads them: `Check::Arguments`, the
-axes' options, that they differ, and the minimum area) and the tolerance
-(`nonNegativeQuantity`), in the capability's order and words; the
-tolerance defaults to 0 m². The finding reads `host is empty: its
-openings ({count:cited_ids}) void {voided:m2} of its {face:m2} face` and
-relates the counted openings, which `opening_count` cites.
+an unstated minimum or selector dropped), citing the openings that take
+area from the middle plane (`cites=counted`): an area above zero is an
+opening there, since only an opening of area takes it. The rounding
+allowance is the capability's, a nanometre times one square metre plus
+the face and the openings' area. A host with no opening on its middle
+plane holds, its face never measured. The declaration checks the path,
+the selector's kind, both axes (stated, then as the measurement reads
+them: `Check::Arguments`, the axes' options, that they differ, and the
+minimum area) and the tolerance (`nonNegativeQuantity`), in the
+capability's order and words; the tolerance defaults to 0 m². The finding
+reads `host is empty: its openings ({voided:cited_ids}) void {voided:m2} of
+its {face:m2} face` and relates the counted openings.
 
 ## Binding and running a rule
 

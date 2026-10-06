@@ -327,6 +327,7 @@ fn edges() -> FormCheck {
             texts: Vec::new(),
             merged: true,
             at: None,
+            once: false,
         })),
         fail: "",
         undecided: "",

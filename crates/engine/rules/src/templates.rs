@@ -201,6 +201,22 @@ impl Plan<'_> {
         self.form.values.iter().zip(&self.bound.expressions)
     }
 
+    /// The value steps read for every object: all of them, but for a truth
+    /// judge only those up to the truth, since the ones after it are read
+    /// only where it fails.
+    fn eager_values(&self) -> impl Iterator<Item = (&TemplateValue, &Expression)> {
+        let last = match self.form.decision {
+            Decision::Holds { value } => self
+                .form
+                .values
+                .iter()
+                .position(|step| step.name == value)
+                .map_or(usize::MAX, |index| index + 1),
+            _ => usize::MAX,
+        };
+        self.values().take(last)
+    }
+
     /// Each value step of the form's check `index`, bound.
     fn check_values(&self, index: usize) -> impl Iterator<Item = (&TemplateValue, &Expression)> {
         self.form.checks[index]
@@ -1648,32 +1664,6 @@ fn measured_read(expression: &Expression) -> Option<&str> {
     }
 }
 
-/// The names of the measured values `expression` reads anywhere in it.
-fn measured_names(expression: &Expression) -> Vec<String> {
-    fn walk(json: &Json, names: &mut Vec<String>) {
-        match json {
-            Json::Object(map) => {
-                if map.get("propertySet").and_then(Json::as_str) == Some(axioval_ir::MEASURED_SET)
-                    && let Some(call) = map.get("property").and_then(Json::as_str)
-                {
-                    let name = call.split(';').next().unwrap_or(call).to_owned();
-                    if !names.contains(&name) {
-                        names.push(name);
-                    }
-                }
-                map.values().for_each(|value| walk(value, names));
-            }
-            Json::Array(items) => items.iter().for_each(|value| walk(value, names)),
-            _ => {}
-        }
-    }
-    let mut names = Vec::new();
-    if let Ok(json) = serde_json::to_value(expression) {
-        walk(&json, &mut names);
-    }
-    names
-}
-
 /// The property a value step reads, when it reads one stated property.
 fn property_read(expression: &Expression) -> Option<(Option<&str>, &str)> {
     match expression {
@@ -1692,22 +1682,31 @@ fn property_read(expression: &Expression) -> Option<(Option<&str>, &str)> {
 /// (the object itself, or the member of an aggregate whose value it is).
 fn refusal(message: &str, expression: &Expression, object: &Object) -> String {
     let Some(name) = measured_read(expression) else {
-        // A composition: worded as the first measured value it reads that
-        // refused it words it.
-        return measured_names(expression)
-            .iter()
-            .find_map(|name| {
-                let message = message
-                    .strip_prefix("property evidence conflicts: ")
-                    .unwrap_or(message);
-                let message = message
-                    .strip_prefix(&format!("`{}` value ", axioval_ir::MEASURED_SET))
-                    .unwrap_or(message);
-                message
-                    .strip_prefix(&format!("`{name}` of {}: ", object.id))
-                    .map(ToOwned::to_owned)
-            })
-            .unwrap_or_else(|| message.to_owned());
+        // A composition: worded as the measured value that refused it
+        // words it, whichever of those it reads that was.
+        let message = message
+            .strip_prefix("property evidence conflicts: ")
+            .unwrap_or(message);
+        let message = message
+            .strip_prefix(&format!("`{}` value ", axioval_ir::MEASURED_SET))
+            .unwrap_or(message);
+        let named = format!("` of {}: ", object.id);
+        return match message
+            .strip_prefix('`')
+            .and_then(|rest| rest.split_once(&named))
+        {
+            // A measured value's name: snake case, as the registry names
+            // them.
+            Some((name, why))
+                if !name.is_empty()
+                    && name
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_') =>
+            {
+                why.to_owned()
+            }
+            _ => message.to_owned(),
+        };
     };
     let message = message
         .strip_prefix("property evidence conflicts: ")
@@ -2501,6 +2500,7 @@ fn judge_checks(
 }
 
 /// [`judge_checks`] of `checks`, their values bound in `values`.
+#[allow(clippy::too_many_lines)]
 fn judge_checks_in(
     plan: &Plan<'_>,
     (checks, values): (&[axioval_engine::template::FormCheck], &[Vec<Expression>]),
@@ -2544,7 +2544,11 @@ fn judge_checks_in(
             continue;
         }
         if let Decision::Items(judged) = &check.decision {
-            let found = items::judge_items(plan, judged, &checked, context, object, leaves);
+            let open_already = judged.once
+                && outcomes
+                    .iter()
+                    .any(|outcome| matches!(outcome, Outcome::Open(..)));
+            let found = items::judge_items(plan, judged, &checked, open_already, object, leaves);
             // The check's grading grades its items' findings too.
             let found = match index {
                 Some(index) if check.grading.is_some() => {
@@ -2552,7 +2556,24 @@ fn judge_checks_in(
                 }
                 _ => found,
             };
-            outcomes.extend(found);
+            if judged.once {
+                // Left open once: the first open outcome, and none after an
+                // earlier check's.
+                let mut open = outcomes
+                    .iter()
+                    .any(|outcome| matches!(outcome, Outcome::Open(..)));
+                for outcome in found {
+                    if matches!(outcome, Outcome::Open(..)) {
+                        if open {
+                            continue;
+                        }
+                        open = true;
+                    }
+                    outcomes.push(outcome);
+                }
+            } else {
+                outcomes.extend(found);
+            }
             continue;
         }
         let decision = effective_of(plan, &check.decision);
@@ -2968,10 +2989,18 @@ fn judge_object(
     (object, once): (&Object, &Read),
     ahead: Ahead,
 ) -> Judgement {
+    // Values composing reads (a truth over properties other values read)
+    // read them again: keep each once resolved.
+    let composed = plan
+        .form
+        .values
+        .iter()
+        .any(|step| property_read(&step.expression).is_none());
     let mut leaves = ObjectLeaves::new(context, object, Some(&plan.bound.parameters))
         .with_prefetched(ahead.prefetched)
         .with_bound(ahead.bound)
-        .with_arguments(arguments);
+        .with_arguments(arguments)
+        .with_cached_reads(composed);
     if let Some(outcome) = unless(plan, context, object, &mut leaves) {
         return outcome.into();
     }
@@ -3385,33 +3414,7 @@ fn push(
     object: &Object,
     outcome: Outcome,
 ) {
-    match outcome {
-        Outcome::Passed => {}
-        Outcome::Finding {
-            message,
-            evidence,
-            related,
-            deviation,
-            severity,
-        } => {
-            // A measurement several values read is cited once.
-            let mut cited: Vec<Evidence> = Vec::with_capacity(evidence.len());
-            for evidence in evidence {
-                if !cited.contains(&evidence) {
-                    cited.push(evidence);
-                }
-            }
-            let mut found = finding(rule, &object.id, message, cited, related);
-            if let Some(severity) = severity {
-                found.severity = severity;
-            }
-            evaluation.push_finding_deviating(found, deviation);
-        }
-        Outcome::Open(reason, message) => {
-            evaluation.push_object_not_evaluated(object.id.clone(), reason, message);
-        }
-        Outcome::Placed(placed, outcome) => push_on(evaluation, rule, &placed, *outcome),
-    }
+    push_on(evaluation, rule, &object.id, outcome);
 }
 
 /// Pushes one outcome about the object `id` into `evaluation`.
@@ -3899,7 +3902,7 @@ fn read_ahead(
         );
     }
     let batched = batched(
-        plan.values().map(|(_, expression)| expression),
+        plan.eager_values().map(|(_, expression)| expression),
         context,
         first,
     );
@@ -3919,7 +3922,7 @@ fn read_ahead(
             .is_none_or(|applies| each::applies(plan, applies))
     };
     let bound = bound_batched(
-        plan.values()
+        plan.eager_values()
             .chain(
                 (0..plan.form.checks.len())
                     .filter(applying)
@@ -4120,6 +4123,17 @@ fn read_step(
         return (
             leaf.value.map_err(|why| here(Reason::Unreadable(why))),
             leaf.evidence,
+        );
+    }
+    // A constant needs no evaluator.
+    if let Expression::Literal { value, .. } = expression {
+        return (
+            Value::from_literal(value).map_err(|why| NotEvaluated {
+                path: root.to_owned(),
+                label: expression.label().map(str::to_owned),
+                reason: Reason::Mismatch(why),
+            }),
+            Vec::new(),
         );
     }
     let evaluation = evaluate_untraced(expression, root, leaves);

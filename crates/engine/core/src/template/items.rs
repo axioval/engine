@@ -69,6 +69,12 @@ pub struct Items {
     /// floor judged in a check of the project.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub at: Option<&'static str>,
+    /// Whether the object is left open at most once: of this check's open
+    /// outcomes only the first is reported, and none where an earlier
+    /// check of the form already left the object open (a capability that
+    /// reported one doubt per object).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub once: bool,
 }
 
 /// A named message part of [`Items`].
@@ -109,6 +115,8 @@ pub enum When {
     Below { field: &'static str, value: f64 },
     /// The item's objects field names none.
     Empty { field: &'static str },
+    /// The item's field is undecided: the measurement could not tell.
+    Unknown { field: &'static str },
 }
 
 /// One check of an item: a test, or tests behind shared guards.
@@ -405,6 +413,46 @@ pub enum TogetherJudge {
     /// between the least lower end and the least upper end, at the item of
     /// least upper end; an item not measured can only lower it.
     Least(Box<Least>),
+    /// At least one item meets a requirement: an item holding passes,
+    /// otherwise the first item leaving it open does, otherwise the items
+    /// surely failing it are one finding.
+    Any(Box<Any>),
+}
+
+/// [`TogetherJudge::Any`]: one item holding is enough. Where none holds,
+/// the first item (in item order) matching one of `open` leaves the check
+/// open, worded by the first case it matches; where none is open either,
+/// the items matching `fails` are one finding (`{failing}`, each `item`,
+/// joined `, `), relating each one's `related` objects; and where none
+/// fails, it passes.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Any {
+    /// What an item meeting the requirement holds.
+    pub holds: Vec<When>,
+    /// What an item surely failing it holds.
+    pub fails: Vec<When>,
+    /// What leaves an item open, in order: its conditions, and how the
+    /// check is worded open (`{why}` the field `why`'s reason).
+    pub open: Vec<OpenCase>,
+    /// How a failing item is named: `{space}`.
+    pub item: &'static str,
+    /// The finding.
+    pub fail: &'static str,
+    /// The objects field each failing item relates.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub related: Option<&'static str>,
+}
+
+/// One way an item leaves an [`Any`] open.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenCase {
+    pub when: Vec<When>,
+    /// The undecided field whose reason is `{why}`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub why: Option<&'static str>,
+    pub message: &'static str,
 }
 
 /// [`TogetherJudge::Count`].
@@ -656,7 +704,7 @@ impl Items {
                 TogetherJudge::Truths(truths) => {
                     operands.push(truth(truths.value, truths.finding));
                 }
-                TogetherJudge::Count(_) | TogetherJudge::Least(_) => {}
+                TogetherJudge::Count(_) | TogetherJudge::Least(_) | TogetherJudge::Any(_) => {}
                 TogetherJudge::Spread(spread) => operands.push(compare(
                     ExpressionComparison::LessThanOrEquals,
                     Expression::Subtract {

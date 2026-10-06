@@ -105,6 +105,7 @@ fn items(applies: Applies, list: &'static str) -> Items {
         texts: Vec::new(),
         merged: false,
         at: None,
+        once: false,
     }
 }
 

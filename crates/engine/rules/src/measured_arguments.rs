@@ -41,6 +41,9 @@ pub(crate) struct Arguments {
     /// as a value and as a list: the rule's parameters bound, the anchor
     /// left for each object.
     anchored: RefCell<BTreeMap<(bool, String), Anchored>>,
+    /// Member lists as a template writes them, without the arguments
+    /// naming parameters the rule leaves unstated.
+    written: RefCell<BTreeMap<&'static str, std::sync::Arc<str>>>,
 }
 
 /// A name prepared once for the rule; `None` where it is not.
@@ -61,6 +64,7 @@ fn selection(
     let (matched, outcomes) = select_shared(context, selector);
     let mut undecided = BTreeSet::new();
     let mut first_undecided = None;
+    let mut reasons = BTreeMap::new();
     for outcome in outcomes.not_evaluated_outcomes() {
         match outcome.object_id() {
             Some(object) => {
@@ -68,6 +72,7 @@ fn selection(
                 first_undecided.get_or_insert_with(|| {
                     (outcome.reason().clone(), outcome.message().to_owned())
                 });
+                reasons.insert(object.clone(), outcome.message().to_owned());
             }
             None => {
                 return Err((
@@ -88,6 +93,7 @@ fn selection(
             .collect(),
         undecided,
         first_undecided,
+        reasons,
     })
 }
 
@@ -120,6 +126,7 @@ impl Arguments {
     ) -> Self {
         let mut undecided = BTreeSet::new();
         let mut first_undecided = None;
+        let mut reasons = BTreeMap::new();
         for outcome in outcomes.not_evaluated_outcomes() {
             match outcome.object_id() {
                 Some(object) => {
@@ -127,6 +134,7 @@ impl Arguments {
                     first_undecided.get_or_insert_with(|| {
                         (outcome.reason().clone(), outcome.message().to_owned())
                     });
+                    reasons.insert(object.clone(), outcome.message().to_owned());
                 }
                 // The selection cannot be listed whole: read it as bound.
                 None => return self,
@@ -139,6 +147,7 @@ impl Arguments {
                 matched: selected.iter().map(|object| object.id.clone()).collect(),
                 undecided,
                 first_undecided,
+                reasons,
             })),
         );
         self
@@ -211,6 +220,21 @@ impl Arguments {
         });
         self.anchored.borrow_mut().insert(key, call.clone());
         call
+    }
+
+    /// The list a template writes as `list`, as `write` writes it for the
+    /// rule, once per rule.
+    pub(crate) fn written(
+        &self,
+        list: &'static str,
+        write: impl FnOnce() -> String,
+    ) -> std::sync::Arc<str> {
+        if let Some(written) = self.written.borrow().get(list) {
+            return written.clone();
+        }
+        let written: std::sync::Arc<str> = std::sync::Arc::from(write());
+        self.written.borrow_mut().insert(list, written.clone());
+        written
     }
 
     /// The objects the selector parameter `parameter` picks, read once.

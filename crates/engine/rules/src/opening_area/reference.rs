@@ -7,7 +7,7 @@ use axioval_engine::{
 };
 use axioval_ir::{Evidence, Object, ObjectId, PropertyValue, QuantityDimension};
 
-use super::{Openings, Voided, voided};
+use super::{Openings, Picks, Voided, voided};
 use crate::counts::Population;
 use crate::opening_zone::face::ROUNDING;
 use crate::selection::select_objects;
@@ -138,8 +138,13 @@ fn check(
             ));
         }
     };
-    let Voided { sum, reached, .. } =
-        voided(context, &config.openings, openings, host, &mut evidence)?;
+    let Voided { sum, reached, .. } = voided(
+        context,
+        &config.openings,
+        Picks::of(openings),
+        host,
+        &mut evidence,
+    )?;
     let expected = gross - net;
     let slack = config.tolerance + ROUNDING * (1.0 + gross.abs() + net.abs() + sum);
     if (sum - expected).abs() <= slack {

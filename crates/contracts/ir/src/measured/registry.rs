@@ -1552,6 +1552,23 @@ const OPENINGS_PICKED: MeasuredParameter = selected(
     ),
 );
 
+/// Which openings a value cites: every one reached, or those taking area
+/// from the middle plane.
+const OPENINGS_CITED: MeasuredParameter = MeasuredParameter {
+    key: "cites",
+    kind: MeasuredParameterKind::Choice {
+        options: &["reached", "counted"],
+    },
+    required: false,
+    default: Some("reached"),
+    help: &en_de(
+        "The openings the value cites: every one the path `reached`, or those `counted`, \
+         taking area from the middle plane.",
+        "Die Öffnungen, die der Wert nennt: jede, die der Pfad erreicht (`reached`), oder die \
+         gezählten (`counted`), die der Mittelebene Fläche nehmen.",
+    ),
+};
+
 /// A host's openings and the face they void, as `opening-area` and
 /// `empty-host` read them.
 const HOST_OPENINGS: &[MeasuredParameter] = &[
@@ -1560,6 +1577,7 @@ const HOST_OPENINGS: &[MeasuredParameter] = &[
     FACE_AXES[1],
     OPENINGS_MINIMUM,
     OPENINGS_PICKED,
+    OPENINGS_CITED,
 ];
 
 const ALIGNMENT: MeasuredParameter = MeasuredParameter {

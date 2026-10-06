@@ -8,7 +8,6 @@
 //! names them, so `opening_area` and `opening_count` share one placement.
 
 use std::collections::BTreeMap;
-use std::fmt::Write as _;
 use std::sync::Arc;
 
 use axioval_engine::{
@@ -21,8 +20,8 @@ use axioval_ir::{Evidence, ObjectId, QuantityDimension, RuleId};
 
 use crate::counts::Population;
 use crate::empty_host::face_area;
-use crate::measured_kinds::{refused, selection};
-use crate::opening_area::{Openings, voided};
+use crate::measured_kinds::{refused, selection_cow};
+use crate::opening_area::{Openings, Picks, voided};
 use crate::opening_zone::face::{FaceAxes, read_host};
 use crate::support::{Parameters, Unavailable};
 
@@ -159,56 +158,70 @@ struct Voids {
     sum: f64,
     reached: Vec<ObjectId>,
     counted: Vec<ObjectId>,
-    evidence: Vec<Evidence>,
+    /// Whether every evidence placed from is exact.
+    exact: bool,
 }
-
-/// The key of a host's placed openings in the run's memo.
-#[derive(Hash, PartialEq, Eq)]
-struct VoidsKey(ObjectId, String);
 
 /// The key of every object as candidate openings in the run's memo.
 #[derive(Hash, PartialEq, Eq)]
 struct EveryObject;
 
-/// The openings of `host` the call names, placed once per run.
+/// The openings of `host` the call names, placed. Each value is measured
+/// once per run (the run memoizes it), and `opening_area` alone says what
+/// `empty-host` and `opening-area` compare, so nothing is kept here.
 fn voids(
     call: &MeasuredCall,
     host: &ObjectId,
     context: &RuleContext<'_>,
-) -> Result<Arc<Voids>, Unavailable> {
-    let mut key = String::new();
-    for name in ["path", "length_axis", "height_axis", "minimum", "openings"] {
-        let _ = write!(key, "{name}={:?};", call.argument(name));
-    }
-    MeasuredMemo::of(context.services, VoidsKey(host.clone(), key), || {
-        let rule = openings_rule(call, "path")?;
-        let openings = Openings::parse(&Parameters(&rule))?;
-        let population = match selection(context, call, "openings", None) {
-            Ok(Some(selection)) => Arc::new(Population {
-                matched: selection.matched,
-                undecided: selection.undecided,
-                first: None,
-            }),
-            Ok(None) => MeasuredMemo::of(context.services, EveryObject, || {
-                Arc::new(Population::of(context, &Selector::All))
-            }),
-            Err(error) => {
-                return Err((
-                    axioval_engine::NotEvaluatedReason::IncompleteEvidence,
-                    error.to_string(),
-                ));
+) -> Result<Voids, Unavailable> {
+    let rule = openings_rule(call, "path")?;
+    let openings = Openings::parse(&Parameters(&rule))?;
+    let every;
+    let picks = match selection_cow(context, call, "openings") {
+        Ok(Some(selection)) => {
+            every = selection;
+            Picks {
+                matched: &every.matched,
+                undecided: &every.undecided,
             }
-        };
-        let subject = crate::selection::object_by_id(context, host)
-            .ok_or_else(|| crate::support::invalid(format!("{host} is not in the project")))?;
-        let mut evidence = Vec::new();
-        let placed = voided(context, &openings, &population, subject, &mut evidence)?;
-        Ok(Arc::new(Voids {
-            sum: placed.sum,
-            reached: placed.reached,
-            counted: placed.counted,
-            evidence,
-        }))
+        }
+        Ok(None) => {
+            let population = MeasuredMemo::of(context.services, EveryObject, || {
+                Arc::new(Population::of(context, &Selector::All))
+            });
+            let subject = crate::selection::object_by_id(context, host)
+                .ok_or_else(|| crate::support::invalid(format!("{host} is not in the project")))?;
+            let mut evidence = Vec::new();
+            let placed = voided(
+                context,
+                &openings,
+                Picks::of(&population),
+                subject,
+                &mut evidence,
+            )?;
+            return Ok(Voids {
+                sum: placed.sum,
+                reached: placed.reached,
+                counted: placed.counted,
+                exact: exact(&evidence),
+            });
+        }
+        Err(error) => {
+            return Err((
+                axioval_engine::NotEvaluatedReason::IncompleteEvidence,
+                error.to_string(),
+            ));
+        }
+    };
+    let subject = crate::selection::object_by_id(context, host)
+        .ok_or_else(|| crate::support::invalid(format!("{host} is not in the project")))?;
+    let mut evidence = Vec::new();
+    let placed = voided(context, &openings, picks, subject, &mut evidence)?;
+    Ok(Voids {
+        sum: placed.sum,
+        reached: placed.reached,
+        counted: placed.counted,
+        exact: exact(&evidence),
     })
 }
 
@@ -259,7 +272,7 @@ impl MeasuredProvider for OpeningMeasures {
             }
             name => {
                 let placed = voids(call, object, context).map_err(refused)?;
-                let exact = exact(&placed.evidence);
+                let exact = placed.exact;
                 if name == OPENING_COUNT {
                     #[allow(clippy::cast_precision_loss)]
                     let counted = placed.counted.len() as f64;
@@ -271,7 +284,7 @@ impl MeasuredProvider for OpeningMeasures {
                             format!("{OPENING_COUNT}:{object}"),
                         ),
                         Citation {
-                            related: placed.counted.clone(),
+                            related: placed.counted,
                             evidence: Vec::new(),
                             notes: Vec::new(),
                             ..Citation::default()
@@ -283,18 +296,14 @@ impl MeasuredProvider for OpeningMeasures {
                         summed(placed.sum, placed.counted.len()),
                         Some(QuantityDimension::Area),
                         exact,
-                        format!(
-                            "{OPENING_AREA}:{object}:{}",
-                            placed
-                                .evidence
-                                .iter()
-                                .map(|evidence| evidence.locator.as_str())
-                                .collect::<Vec<_>>()
-                                .join("; ")
-                        ),
+                        format!("{OPENING_AREA}:{object}"),
                     ),
                     Citation {
-                        related: placed.reached.clone(),
+                        related: if call.choice("cites") == Some("counted") {
+                            placed.counted
+                        } else {
+                            placed.reached
+                        },
                         evidence: Vec::new(),
                         notes: Vec::new(),
                         ..Citation::default()

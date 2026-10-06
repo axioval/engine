@@ -98,6 +98,7 @@ fn items(list: &'static str, checks: Vec<ItemCheck>) -> FormCheck {
             texts: Vec::new(),
             merged: false,
             at: None,
+            once: false,
         })),
         fail: "",
         undecided: "",

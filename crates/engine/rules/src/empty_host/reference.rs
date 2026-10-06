@@ -4,7 +4,7 @@
 use super::face_area;
 use crate::counts::Population;
 use crate::opening_area::reference::{area_tolerance, square_metres};
-use crate::opening_area::{Openings, voided};
+use crate::opening_area::{Openings, Picks, voided};
 use crate::opening_zone::face::ROUNDING;
 use crate::selection::select_objects;
 use crate::support::{Parameters, Unavailable, finding};
@@ -65,7 +65,13 @@ impl RuleCapability for EmptyHost {
         for host in selected {
             let judged = (|| {
                 let mut evidence = Vec::new();
-                let void = voided(context, &openings, &population, host, &mut evidence)?;
+                let void = voided(
+                    context,
+                    &openings,
+                    Picks::of(&population),
+                    host,
+                    &mut evidence,
+                )?;
                 if void.counted.is_empty() {
                     return Ok(None);
                 }

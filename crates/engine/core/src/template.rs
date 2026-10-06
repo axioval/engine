@@ -39,9 +39,9 @@ mod items;
 mod parts;
 
 pub use items::{
-    Allowance, Bound, Choice, Count, Effect, Every, Group, Groups, Guard, ItemCheck, ItemTest,
-    ItemText, ItemUnit, Items, Judge, Least, On, OnNull, OpenItems, Passing, Range, Requirement,
-    RowColumn, Rows, Spread, Together, TogetherJudge, Truths, When,
+    Allowance, Any, Bound, Choice, Count, Effect, Every, Group, Groups, Guard, ItemCheck, ItemTest,
+    ItemText, ItemUnit, Items, Judge, Least, On, OnNull, OpenCase, OpenItems, Passing, Range,
+    Requirement, RowColumn, Rows, Spread, Together, TogetherJudge, Truths, When,
 };
 pub use parts::Parts;
 
@@ -525,6 +525,7 @@ pub enum Service {
     BoundaryCoverage,
     Guard,
     Space,
+    FreeSpace,
 }
 
 impl Service {
@@ -556,6 +557,7 @@ impl Service {
                 .is_some(),
             Self::Guard => services.get::<crate::GuardServiceHandle>().is_some(),
             Self::Space => services.get::<crate::SpaceServiceHandle>().is_some(),
+            Self::FreeSpace => services.get::<crate::FreeSpaceServiceHandle>().is_some(),
         }
     }
 }

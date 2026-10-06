@@ -11,11 +11,11 @@
 
 use axioval_engine::Deviation;
 use axioval_engine::template::{
-    Allowance, Applies, Bound, Count, Effect, End, Every, Group, Guard, ItemCheck, ItemTest,
+    Allowance, Any, Applies, Bound, Count, Effect, End, Every, Group, Guard, ItemCheck, ItemTest,
     ItemUnit, Items, Judge, Least, On, OnNull, OpenItems, Operand, Requirement, Rows, Spread,
     TogetherJudge, Truths, When,
 };
-use axioval_engine::{MeasuredMember, Measurement, MemberValue, RuleContext};
+use axioval_engine::{MeasuredMember, Measurement, MemberValue};
 use axioval_ir::contract::{ParameterValue, ScalarValue};
 use axioval_ir::{Evidence, NotEvaluatedReason, Object, ObjectId};
 
@@ -125,6 +125,7 @@ impl<'p, 't> Scope<'_, 'p, 't> {
             When::Empty { field } => {
                 matches!(field_of(field), Field::Objects(objects) if objects.is_empty())
             }
+            When::Unknown { field } => matches!(field_of(field), Field::Undecided(_)),
         }
     }
 
@@ -548,11 +549,10 @@ pub(super) fn judge_items(
     plan: &Plan<'_>,
     items: &Items,
     read: &Read,
-    context: &RuleContext<'_>,
+    quiet: bool,
     object: &Object,
     leaves: &ObjectLeaves<'_>,
 ) -> Vec<Outcome> {
-    let _ = context;
     if !applies(plan, &items.applies) {
         return Vec::new();
     }
@@ -567,13 +567,16 @@ pub(super) fn judge_items(
         chosen: Vec::new(),
         unit: ItemUnit::Length,
     };
-    let list = super::unstated_dropped_list(items.list, &plan.constants);
+    let list = leaves.written_list(items.list, || {
+        super::unstated_dropped_list(items.list, &plan.constants)
+    });
     let listed = leaves.bound_members(&list);
     let (members, evidence) = match listed.as_ref() {
         Ok((members, evidence)) => (members, evidence),
         Err((reason, why)) => {
             return match items.refused {
-                // Open for the reason the list was refused.
+                // The object is open already: a refusal adds nothing.
+                Some(_) if quiet => Vec::new(),
                 Some(message) => {
                     let mut scope = scope;
                     scope.named("why", why.clone());
@@ -605,6 +608,7 @@ pub(super) fn judge_items(
             }
             TogetherJudge::Count(count) => judge_count(&scope, count, &present, evidence, object),
             TogetherJudge::Least(least) => judge_least(&scope, least, &present, evidence, object),
+            TogetherJudge::Any(any) => judge_any(&scope, any, &present, evidence, object),
         }];
     }
     let mut outcomes = Vec::new();
@@ -1258,6 +1262,62 @@ fn judge_truths(
     }
     scope.named("items", unknown.join(truths.joiner));
     open(scope.render(truths.undecided))
+}
+
+/// At least one item meets the requirement: one holding passes; else the
+/// first item left open opens the check; else the failing items are one
+/// finding.
+fn judge_any(
+    scope: &Scope<'_, '_, '_>,
+    any: &Any,
+    present: &[&MeasuredMember],
+    listed: &[Evidence],
+    object: &Object,
+) -> Outcome {
+    let mut scope = scope.with(None);
+    let count = present.len();
+    let mut failing = Vec::new();
+    let mut related = Vec::new();
+    let mut opened = None;
+    for (index, member) in present.iter().enumerate() {
+        let mut item = scope.with(Some(member));
+        item.place = Some((index + 1, count));
+        if item.holds(&any.holds) {
+            return Outcome::Passed;
+        }
+        if opened.is_some() {
+            continue;
+        }
+        if let Some(case) = any.open.iter().find(|case| item.holds(&case.when)) {
+            if let Some(Field::Undecided(why)) = case.why.map(|name| field(member, name)) {
+                item.named("why", why.to_owned());
+            }
+            opened = Some(item.render(case.message));
+            continue;
+        }
+        if item.holds(&any.fails) {
+            failing.push(item.render(any.item));
+            for id in objects(Some(member), any.related) {
+                if !related.contains(&id) {
+                    related.push(id);
+                }
+            }
+        }
+    }
+    if let Some(message) = opened {
+        return open(message);
+    }
+    if failing.is_empty() {
+        return Outcome::Passed;
+    }
+    scope.named("failing", failing.join(", "));
+    Outcome::Finding {
+        message: scope.render(any.fail),
+        evidence: cited(&scope, listed, object),
+        related,
+        deviation: None,
+        severity: None,
+    }
 }
 
 /// The spread of the items' numbers against a tolerance.

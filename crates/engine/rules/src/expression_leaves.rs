@@ -103,7 +103,26 @@ pub(crate) struct ObjectLeaves<'a> {
     /// Member lists a template's checks read, by their name as written,
     /// each measured once for the object.
     lists: RefCell<Vec<(Arc<str>, Arc<Listed>)>>,
+    /// Properties of the object resolved now, each resolved once however
+    /// often an expression reads it, where `cached`.
+    resolved: RefCell<Vec<ResolvedRead>>,
+    /// Whether properties are kept once resolved: where values compose
+    /// reads of what other values read.
+    cached: bool,
+    /// Measured values naming the rule's parameters read for an object,
+    /// each measured once however often the object's values read it.
+    measured: RefCell<Vec<(ObjectId, Arc<str>, BoundPrefetched)>>,
 }
+
+/// A property resolved for an object (the object in scope, or the subject
+/// read through it): the object, its set and name, and what the source
+/// states (`None`: absent) with its evidence, or why it cannot be read.
+type ResolvedRead = (
+    ObjectId,
+    Option<Arc<str>>,
+    Arc<str>,
+    Result<(Option<axioval_ir::PropertyValue>, Vec<Evidence>), (NotEvaluatedReason, String)>,
+);
 
 /// A measured member list as a template's checks read it: its members and
 /// the evidence of the measurement they come from, or why it cannot be
@@ -125,6 +144,9 @@ impl<'a> ObjectLeaves<'a> {
             parameters,
             reasons: RefCell::new(Vec::new()),
             stated: RefCell::new(smallvec::SmallVec::new()),
+            resolved: RefCell::new(Vec::new()),
+            cached: false,
+            measured: RefCell::new(Vec::new()),
             fields: None,
             listed: Vec::new(),
             prefetched: Prefetch::new(),
@@ -157,6 +179,9 @@ impl<'a> ObjectLeaves<'a> {
             parameters: self.parameters,
             reasons: RefCell::new(Vec::new()),
             stated: RefCell::new(smallvec::SmallVec::new()),
+            resolved: RefCell::new(Vec::new()),
+            cached: false,
+            measured: RefCell::new(Vec::new()),
             fields: None,
             listed: Vec::new(),
             prefetched: Prefetch::new(),
@@ -181,6 +206,9 @@ impl<'a> ObjectLeaves<'a> {
             parameters: self.parameters,
             reasons: RefCell::new(Vec::new()),
             stated: RefCell::new(smallvec::SmallVec::new()),
+            resolved: RefCell::new(Vec::new()),
+            cached: false,
+            measured: RefCell::new(Vec::new()),
             fields: Some(member),
             listed: Vec::new(),
             prefetched: Prefetch::new(),
@@ -204,6 +232,13 @@ impl<'a> ObjectLeaves<'a> {
 
     /// The same leaves, measured values naming the rule's parameters read
     /// ahead in a batch.
+    /// Keeps each property once resolved, for values that read again what
+    /// other values read.
+    pub(crate) fn with_cached_reads(mut self, cached: bool) -> Self {
+        self.cached = cached;
+        self
+    }
+
     pub(crate) fn with_bound(mut self, bound: Vec<BoundPrefetched>) -> Self {
         self.bound = bound;
         self
@@ -227,6 +262,19 @@ impl<'a> ObjectLeaves<'a> {
     /// references bound to the rule's parameters and the anchor) measured
     /// of the object, once per object however many checks read it. A
     /// refusal states why without the list's name and the object.
+    /// The list a template writes as `list`, as `write` writes it for the
+    /// rule: once per rule where the rule's arguments are known.
+    pub(crate) fn written_list(
+        &self,
+        list: &'static str,
+        write: impl FnOnce() -> String,
+    ) -> Arc<str> {
+        match self.arguments {
+            Some(arguments) => arguments.written(list, write),
+            None => Arc::from(write()),
+        }
+    }
+
     pub(crate) fn bound_members(&self, list: &str) -> Arc<Listed> {
         if let Some((_, listed)) = self
             .lists
@@ -259,21 +307,24 @@ impl<'a> ObjectLeaves<'a> {
         axioval_engine::measured_members_bound(self.context.services, &self.object.id, &call)
             .map_err(|error| {
                 let (reason, message) = crate::selection::property_error(error);
-                let prefix = format!("`{}` of {}: ", call.name(), self.object.id);
                 let message = message
                     .strip_prefix("property evidence conflicts: ")
                     .unwrap_or(&message);
                 let message = message
-                    .strip_prefix(&format!("`{}` value ", axioval_ir::MEASURED_SET))
+                    .strip_prefix("`")
+                    .and_then(|rest| rest.strip_prefix(axioval_ir::MEASURED_SET))
+                    .and_then(|rest| rest.strip_prefix("` value "))
                     .unwrap_or(message);
-                // A list of a source names the source, not the object.
-                let message = message.strip_prefix(&prefix).unwrap_or_else(|| {
-                    message
-                        .strip_prefix(&format!("`{}` of ", call.name()))
-                        .and_then(|rest| rest.split_once(": "))
-                        .map_or(message, |(_, why)| why)
-                });
-                (reason, message.to_owned())
+                // The list's own words: after `` `<name>` of <subject>: ``
+                // (an object, or a source for a list of a source), matched
+                // without formatting the subject.
+                let why = message
+                    .strip_prefix('`')
+                    .and_then(|rest| rest.strip_prefix(call.name()))
+                    .and_then(|rest| rest.strip_prefix("` of "))
+                    .and_then(|rest| rest.split_once(": "))
+                    .map_or(message, |(_, why)| why);
+                (reason, why.to_owned())
             })
     }
 
@@ -418,9 +469,25 @@ impl<'a> ObjectLeaves<'a> {
     /// measured through the run's measured values; one that cannot be
     /// bound leaves it unread for its reason.
     fn bound_measured(&mut self, name: &str, mut call: axioval_ir::measured::MeasuredCall) -> Leaf {
-        let read = match self.bound.iter().position(|(read, _)| &**read == name) {
-            Some(index) => self.bound.swap_remove(index).1,
-            None => self.read_bound(name, &mut call),
+        let known = self
+            .measured
+            .borrow()
+            .iter()
+            .find(|(object, read, _)| *object == self.object.id && &**read == name)
+            .map(|(_, _, (_, read))| read.clone());
+        let read = if let Some(read) = known {
+            read
+        } else {
+            let read = match self.bound.iter().position(|(read, _)| &**read == name) {
+                Some(index) => self.bound.swap_remove(index).1,
+                None => self.read_bound(name, &mut call),
+            };
+            self.measured.borrow_mut().push((
+                self.object.id.clone(),
+                Arc::from(name),
+                (Arc::from(name), read.clone()),
+            ));
+            read
         };
         self.bound_leaf(name, read)
     }
@@ -796,6 +863,7 @@ impl ExpressionContext for ObjectLeaves<'_> {
         spent
     }
 
+    #[allow(clippy::too_many_lines)]
     fn property(&mut self, set: Option<&str>, name: &str) -> Leaf {
         if set == Some(axioval_ir::MEMBER_SET) {
             return self.member_field(name);
@@ -837,11 +905,43 @@ impl ExpressionContext for ObjectLeaves<'_> {
         }
         // The value as the source states it (`None`: stated absent) and
         // the evidence cited, read ahead in a batch or resolved now.
+        // A property this object read already is read again as it was,
+        // its exact evidence cited once.
+        let known = self
+            .resolved
+            .borrow()
+            .iter()
+            .filter(|_| self.cached)
+            .find(|(read_object, read_set, read_name, _)| {
+                *read_object == self.object.id && read_set.as_deref() == set && &**read_name == name
+            })
+            .map(|(_, _, _, read)| match read {
+                Ok((stated, evidence)) => Ok((
+                    stated
+                        .as_ref()
+                        .map_or(Ok(Value::Null), Value::from_property),
+                    if evidence.iter().all(|evidence| evidence.exact) {
+                        Vec::new()
+                    } else {
+                        evidence.clone()
+                    },
+                )),
+                Err(error) => Err(error.clone()),
+            });
+        if let Some(known) = known {
+            return match known {
+                Ok((value, evidence)) => Leaf { value, evidence },
+                Err((reason, message)) => {
+                    self.reasons.borrow_mut().push(reason);
+                    Leaf::unreadable(message)
+                }
+            };
+        }
         let (key, read) =
-            match self.prefetched.iter().position(|(read_set, read_name, _)| {
+            if let Some(index) = self.prefetched.iter().position(|(read_set, read_name, _)| {
                 read_set.as_deref() == set && &**read_name == name
             }) {
-                Some(index) => {
+                {
                     let (read_set, read_name, read) = self.prefetched.swap_remove(index);
                     let read = read.map(|read| match read {
                         MeasuredRead::Value(value, evidence) => {
@@ -851,18 +951,28 @@ impl ExpressionContext for ObjectLeaves<'_> {
                     });
                     ((read_set, read_name), read)
                 }
-                None => (
-                    (set.map(Arc::from), Arc::from(name)),
-                    resolve(self.context, self.object, PropertyRef { set, name }).map(|resolved| {
-                        match resolved {
+            } else {
+                {
+                    let key: (Option<Arc<str>>, Arc<str>) = (set.map(Arc::from), Arc::from(name));
+                    let read = resolve(self.context, self.object, PropertyRef { set, name }).map(
+                        |resolved| match resolved {
                             Resolved::Present(property) => (
                                 Some(property.value),
                                 property.evidence.into_iter().collect(),
                             ),
                             Resolved::Absent(evidence) => (None, vec![evidence]),
-                        }
-                    }),
-                ),
+                        },
+                    );
+                    if self.cached {
+                        self.resolved.borrow_mut().push((
+                            self.object.id.clone(),
+                            key.0.clone(),
+                            key.1.clone(),
+                            read.clone(),
+                        ));
+                    }
+                    (key, read)
+                }
             };
         match read {
             Ok((stated, evidence)) => {

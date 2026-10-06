@@ -83,6 +83,26 @@ pub(crate) fn every_object_of_kinds(
     Ok(found)
 }
 
+/// [`selection`], borrowed from the call where a selection is bound into
+/// it: a provider reading it for every object copies nothing.
+///
+/// # Errors
+///
+/// As [`selection`].
+pub(crate) fn selection_cow<'c>(
+    context: &RuleContext<'_>,
+    call: &'c MeasuredCall,
+    key: &str,
+) -> Result<
+    Option<std::borrow::Cow<'c, axioval_ir::measured::MeasuredSelection>>,
+    PropertyResolutionError,
+> {
+    if let Some(MeasuredArgument::Objects(selection)) = call.argument(key) {
+        return Ok(Some(std::borrow::Cow::Borrowed(selection)));
+    }
+    selection(context, call, key, None).map(|selection| selection.map(std::borrow::Cow::Owned))
+}
+
 /// The objects the [`Objects`](axioval_ir::measured::MeasuredParameterKind::Objects)
 /// argument `key` names, `None` where the call states none: the objects
 /// a rule's selector picked (or the anchor), as bound into the call, or
@@ -111,6 +131,7 @@ pub(crate) fn selection(
                 matched,
                 undecided: BTreeSet::new(),
                 first_undecided: None,
+                reasons: std::collections::BTreeMap::new(),
             })
         }
         Some(_) => return Err(PropertyResolutionError::InvalidRequest),

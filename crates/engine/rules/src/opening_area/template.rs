@@ -59,17 +59,20 @@ fn agrees() -> serde_json::Value {
     json!({"kind": "implies",
         "antecedent": {"kind": "or", "operands": [
             {"kind": "isDefined", "operand": gross},
-            {"kind": "isDefined", "operand": net}],
-            "label": "it states a side area"},
-        "consequent": {"kind": "compare", "operator": "lessThanOrEquals",
+            {"kind": "isDefined", "operand": net}]},
+        "consequent": {"kind": "if", "branches": [{
+            "when": {"kind": "and", "operands": [
+                {"kind": "isDefined", "operand": gross},
+                {"kind": "isDefined", "operand": net}]},
+            "then": {"kind": "compare", "operator": "lessThanOrEquals",
             "left": absolute(json!({"kind": "subtract",
                 "left": measured(VOIDED),
-                "right": {"kind": "subtract", "left": gross, "right": net,
-                    "label": "gross less net"}})),
+                "right": {"kind": "subtract", "left": gross, "right": net}})),
             "right": {"kind": "add",
                 "left": {"kind": "parameter", "name": "area_tolerance"},
-                "right": rounding(&[absolute(gross), absolute(net), measured(VOIDED)])},
-            "label": "its openings take the difference"}})
+                "right": rounding(&[absolute(gross), absolute(net), measured(VOIDED)])}}}],
+            // One side alone: the difference is unknown, nothing measured.
+            "else": {"kind": "null"}}})
 }
 
 /// `opening-area`, rebuilt as a composition with its outside contract kept.

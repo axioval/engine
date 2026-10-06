@@ -28,10 +28,10 @@ macro_rules! openings {
     };
 }
 
-/// The openings counted on the host's middle plane.
-pub(crate) const COUNT: &str = openings!("opening_count");
 /// The area they take from it.
 pub(crate) const VOIDED: &str = openings!("opening_area");
+/// The area they take, citing the openings that take it.
+const TAKEN: &str = concat!(openings!("opening_area"), ";cites=counted");
 /// The host's face there.
 const FACE: &str = "middle_face_area;length_axis=@length_axis;height_axis=@height_axis";
 
@@ -68,7 +68,7 @@ pub(crate) fn openings_declaration() -> Vec<Check> {
         // them.
         Check::Arguments {
             when: &[],
-            value: COUNT,
+            value: VOIDED,
         },
     ]
 }
@@ -100,8 +100,7 @@ pub(crate) fn rounding(areas: &[serde_json::Value]) -> serde_json::Value {
     json!({"kind": "multiply",
         "left": {"kind": "literal", "value": {"type": "number",
             "value": crate::opening_zone::face::ROUNDING}},
-        "right": sum,
-        "label": "rounding allowance"})
+        "right": sum})
 }
 
 /// The truth that the host is not empty: where an opening takes area from
@@ -110,17 +109,15 @@ pub(crate) fn rounding(areas: &[serde_json::Value]) -> serde_json::Value {
 fn kept() -> serde_json::Value {
     json!({"kind": "implies",
         "antecedent": {"kind": "compare", "operator": "greaterThan",
-            "left": measured(COUNT),
-            "right": {"kind": "literal", "value": {"type": "integer", "value": 0}},
-            "label": "an opening takes area from its middle plane"},
+            "left": measured(TAKEN),
+            "right": {"kind": "literal", "value": {"type": "quantity", "value": 0.0, "unit": "m2"}}},
         "consequent": {"kind": "compare", "operator": "lessThan",
-            "left": measured(VOIDED),
+            "left": measured(TAKEN),
             "right": {"kind": "subtract",
                 "left": {"kind": "subtract",
                     "left": measured(FACE),
                     "right": {"kind": "parameter", "name": "area_tolerance"}},
-                "right": rounding(&[measured(FACE), measured(VOIDED)])},
-            "label": "its openings leave part of its face"}})
+                "right": rounding(&[measured(FACE), measured(TAKEN)])}}})
 }
 
 /// `empty-host`, rebuilt as a composition with its outside contract kept.
@@ -151,13 +148,12 @@ pub(crate) fn template() -> Template {
         forms: vec![Form {
             when: &[],
             values: vec![
+                value("voided", &measured(TAKEN)),
                 value("kept", &kept()),
-                value("count", &measured(COUNT)),
-                value("voided", &measured(VOIDED)),
                 value("face", &measured(FACE)),
             ],
             decision: Decision::Holds { value: "kept" },
-            fail: "host is empty: its openings ({count:cited_ids}) void {voided:m2} of its \
+            fail: "host is empty: its openings ({voided:cited_ids}) void {voided:m2} of its \
                    {face:m2} face",
             undecided: "whether its openings void its face cannot be decided from the \
                         measured areas",
@@ -165,7 +161,7 @@ pub(crate) fn template() -> Template {
             table: None,
             scope: None,
             derived: Vec::new(),
-            related: Some("count"),
+            related: Some("voided"),
             checks: Vec::new(),
             unless: Vec::new(),
             grading: None,
@@ -181,7 +177,7 @@ mod tests {
     #[test]
     fn its_expressions_are_well_formed() {
         let template = super::template();
-        assert_eq!(template.forms[0].values.len(), 4);
+        assert_eq!(template.forms[0].values.len(), 3);
         let _: Expression = template.forms[0].requirement();
     }
 

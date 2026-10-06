@@ -75,6 +75,7 @@ mod property_value;
 mod quantity_takeoff;
 mod recess_width;
 mod refine;
+mod related_count;
 mod relative_count;
 mod same_container;
 mod selection;
@@ -121,7 +122,6 @@ pub use coordinate_consistency::{
 };
 pub use corridor_end_openings::CorridorEndOpenings;
 pub use counterpart_coverage::CounterpartCoverage;
-pub use counts::RelatedCount;
 pub use distance::Distance;
 pub use door_swing_direction::DoorSwing;
 pub use effective_coverage::EffectiveCoverage;
@@ -158,6 +158,7 @@ pub use property_value::PropertyValueConstraint;
 pub use quantity_takeoff::{QuantityTakeoff, TAKEOFF_TABLE};
 pub use recess_width::RecessWidth;
 pub use refine::Refiner;
+pub use related_count::RelatedCount;
 pub use relative_count::RelativeCount;
 pub use same_container::SameContainer;
 pub use shelf_capacity::ShelfCapacity;
@@ -182,6 +183,7 @@ pub mod reference {
     pub use crate::object_count::reference::ObjectCount;
     pub use crate::plan_area::reference::PlanAreaRange;
     pub use crate::property_predicate::reference::PropertyPredicate;
+    pub use crate::related_count::reference::RelatedCount;
     pub use crate::triangle_count::reference::TriangleCountLimit;
 }
 /// XML Schema patterns (as IDS and `property-value` write them) in `regex`

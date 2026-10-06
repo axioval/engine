@@ -24189,7 +24189,287 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "grades": true,
+        "name": "related-count",
+        "declaration": [
+          {
+            "kind": "kind",
+            "parameter": "minimum"
+          },
+          {
+            "kind": "kind",
+            "parameter": "maximum"
+          },
+          {
+            "kind": "anyOf",
+            "parameters": [
+              "minimum",
+              "maximum"
+            ],
+            "message": "minimum or maximum is required"
+          },
+          {
+            "kind": "nonNegative",
+            "parameters": [
+              "minimum"
+            ],
+            "message": "minimum is negative"
+          },
+          {
+            "kind": "nonNegative",
+            "parameters": [
+              "maximum"
+            ],
+            "message": "maximum is negative"
+          },
+          {
+            "kind": "ordered",
+            "low": "minimum",
+            "high": "maximum",
+            "message": "minimum exceeds maximum"
+          },
+          {
+            "kind": "kind",
+            "parameter": "related_selector"
+          },
+          {
+            "kind": "traversal",
+            "with": [],
+            "message": ""
+          },
+          {
+            "kind": "path",
+            "parameter": "same_ends"
+          }
+        ],
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "count",
+                "expression": {
+                  "kind": "aggregate",
+                  "function": "count",
+                  "over": {
+                    "kind": "selector",
+                    "selector": {
+                      "kind": "expression",
+                      "expression": {
+                        "kind": "parameter",
+                        "name": "related_selector"
+                      }
+                    }
+                  },
+                  "label": "related objects"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "count",
+              "minimum": [
+                {
+                  "sign": "plus",
+                  "operand": {
+                    "kind": "parameter",
+                    "name": "minimum"
+                  }
+                }
+              ],
+              "maximum": [
+                {
+                  "sign": "plus",
+                  "operand": {
+                    "kind": "parameter",
+                    "name": "maximum"
+                  }
+                }
+              ],
+              "rounding": []
+            },
+            "fail": "{count:least} related object(s) {relation}; required {required}",
+            "undecided": "{count:least} related object(s) {relation} and {undecided} more that may count; required {required}",
+            "members": {
+              "selector": "related_selector",
+              "undecided": {
+                "kind": "widen"
+              },
+              "everyWhenUnstated": true,
+              "sameEnds": "same_ends"
+            }
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "compare",
+                  "operator": "greaterThanOrEquals",
+                  "left": {
+                    "kind": "aggregate",
+                    "function": "count",
+                    "over": {
+                      "kind": "selector",
+                      "selector": {
+                        "kind": "expression",
+                        "expression": {
+                          "kind": "parameter",
+                          "name": "related_selector"
+                        }
+                      }
+                    },
+                    "label": "related objects"
+                  },
+                  "right": {
+                    "kind": "parameter",
+                    "name": "minimum"
+                  },
+                  "label": "at least the lower bound"
+                },
+                {
+                  "kind": "compare",
+                  "operator": "lessThanOrEquals",
+                  "left": {
+                    "kind": "aggregate",
+                    "function": "count",
+                    "over": {
+                      "kind": "selector",
+                      "selector": {
+                        "kind": "expression",
+                        "expression": {
+                          "kind": "parameter",
+                          "name": "related_selector"
+                        }
+                      }
+                    },
+                    "label": "related objects"
+                  },
+                  "right": {
+                    "kind": "parameter",
+                    "name": "maximum"
+                  },
+                  "label": "at most the upper bound"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.compare",
+                      "label": "at least the lower bound",
+                      "fields": {
+                        "operator": "greaterThanOrEquals"
+                      },
+                      "inputs": {
+                        "left": {
+                          "block": {
+                            "type": "expression.aggregate",
+                            "label": "related objects",
+                            "fields": {
+                              "function": "count"
+                            },
+                            "inputs": {
+                              "over": {
+                                "block": {
+                                  "type": "source.selector",
+                                  "inputs": {
+                                    "selector": {
+                                      "block": {
+                                        "type": "selector.expression",
+                                        "inputs": {
+                                          "expression": {
+                                            "block": {
+                                              "type": "expression.parameter",
+                                              "fields": {
+                                                "name": "related_selector"
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "right": {
+                          "block": {
+                            "type": "expression.parameter",
+                            "fields": {
+                              "name": "minimum"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.compare",
+                      "label": "at most the upper bound",
+                      "fields": {
+                        "operator": "lessThanOrEquals"
+                      },
+                      "inputs": {
+                        "left": {
+                          "block": {
+                            "type": "expression.aggregate",
+                            "label": "related objects",
+                            "fields": {
+                              "function": "count"
+                            },
+                            "inputs": {
+                              "over": {
+                                "block": {
+                                  "type": "source.selector",
+                                  "inputs": {
+                                    "selector": {
+                                      "block": {
+                                        "type": "selector.expression",
+                                        "inputs": {
+                                          "expression": {
+                                            "block": {
+                                              "type": "expression.parameter",
+                                              "fields": {
+                                                "name": "related_selector"
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "right": {
+                          "block": {
+                            "type": "expression.parameter",
+                            "fields": {
+                              "name": "maximum"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.relative-count",

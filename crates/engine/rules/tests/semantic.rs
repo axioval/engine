@@ -14,7 +14,7 @@ use axioval_ir::NotEvaluatedReason;
 use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector};
 use axioval_ir::{Evidence, ObjectId, PropertyValue};
 use axioval_rules::{
-    ConsistentValue, ManualIssue, NameSequence, NumberingConsistency, RelatedCount, RelativeCount,
+    ConsistentValue, ManualIssue, NameSequence, NumberingConsistency, RelativeCount,
     SelectorConformance, UniqueValue, register_builtins,
 };
 use common::{
@@ -499,6 +499,12 @@ mod related_count {
 
     const ID: &str = "axioval:capability.related-count";
 
+    /// `related-count`, held to the implementation it replaced on every fixture.
+    const RELATED_COUNT: common::Held = common::Held(
+        &axioval_rules::RelatedCount,
+        &axioval_rules::reference::RelatedCount,
+    );
+
     fn rooms() -> Model {
         Model::default()
             .object("r1", "room")
@@ -526,7 +532,7 @@ mod related_count {
     #[test]
     fn bounds_are_inclusive_and_only_selected_objects_count() {
         let evaluation = rooms().evaluate(
-            &RelatedCount,
+            &RELATED_COUNT,
             &rule(
                 ID,
                 kind("room"),
@@ -565,7 +571,7 @@ mod related_count {
             precision: None,
         };
         let evaluation = model.evaluate(
-            &RelatedCount,
+            &RELATED_COUNT,
             &rule(
                 ID,
                 kind("room"),
@@ -581,7 +587,7 @@ mod related_count {
         assert!(evaluation.findings().is_empty());
         assert!(evaluation.not_evaluated_outcomes().is_empty());
         let minimum = rooms().unreadable("d1").evaluate(
-            &RelatedCount,
+            &RELATED_COUNT,
             &rule(
                 ID,
                 kind("room"),
@@ -618,7 +624,7 @@ mod related_count {
             .object("b", "building")
             .object("s1", "slab");
         let evaluation = model.evaluate(
-            &RelatedCount,
+            &RELATED_COUNT,
             &rule(
                 ID,
                 kind("building"),
@@ -684,7 +690,7 @@ mod related_count {
             parameters
         };
         let evaluation = entrances().evaluate(
-            &RelatedCount,
+            &RELATED_COUNT,
             &rule(
                 ID,
                 matches("Pset", "Operation", "REVOLVING"),
@@ -703,7 +709,7 @@ mod related_count {
         assert!(unevaluated(&evaluation).is_empty());
         // Without it, any swing door of the lobby would do.
         let evaluation = entrances().evaluate(
-            &RelatedCount,
+            &RELATED_COUNT,
             &rule(
                 ID,
                 matches("Pset", "Operation", "REVOLVING"),
@@ -719,7 +725,7 @@ mod related_count {
             .edge("adjacent", "s3", "hall")
             .unreadable("s3");
         let evaluation = model.evaluate(
-            &RelatedCount,
+            &RELATED_COUNT,
             &rule(
                 ID,
                 matches("Pset", "Operation", "REVOLVING"),
@@ -743,11 +749,157 @@ mod related_count {
 
     #[test]
     fn a_bound_is_required() {
-        let evaluation = rooms().evaluate(&RelatedCount, &rule(ID, kind("room"), doors(vec![])));
+        let evaluation = rooms().evaluate(&RELATED_COUNT, &rule(ID, kind("room"), doors(vec![])));
         assert_eq!(
             unevaluated(&evaluation),
             [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
         );
+    }
+
+    /// Doors that may be fire-rated: rated, not rated, or unreadable.
+    fn rated(model: Model, ratings: &[u8]) -> Model {
+        ratings
+            .iter()
+            .zip(["d1", "d2", "d3"])
+            .fold(model, |model, (rating, door)| match rating {
+                1 | 2 => model.value(
+                    door,
+                    "Pset",
+                    "FireRated",
+                    PropertyValue::Boolean(*rating == 1),
+                ),
+                3 => model.unreadable(door),
+                _ => model,
+            })
+    }
+
+    fn fire_rated() -> Selector {
+        Selector::property(
+            Some("Pset".into()),
+            "FireRated",
+            ComparisonOperator::Equals,
+            Some(common::boolean(true)),
+        )
+    }
+
+    /// The rule forked from the template, an `expression` rule, reaches its
+    /// verdicts: undecided members widen the count in both. Members
+    /// everywhere in the anchor's source and shared ends have no
+    /// aggregate form, and such a rule is not forked.
+    #[test]
+    fn the_forked_rule_reaches_the_templates_verdicts() {
+        use axioval_rules::templates::{Fork, ForkError, fork};
+        for ratings in [[0, 0, 0], [1, 2, 3], [3, 3, 1], [1, 1, 2]] {
+            for (minimum, maximum) in [(Some(1), None), (None, Some(1)), (Some(1), Some(2))] {
+                for filter in [None, Some(fire_rated())] {
+                    let mut parameters = vec![("relationship", string("bounds"))];
+                    if let Some(filter) = filter {
+                        parameters.push(("related_selector", selector(filter)));
+                    }
+                    if let Some(minimum) = minimum {
+                        parameters.push(("minimum", integer(minimum)));
+                    }
+                    if let Some(maximum) = maximum {
+                        parameters.push(("maximum", integer(maximum)));
+                    }
+                    let bound = rule(ID, kind("room"), parameters);
+                    let template = rated(rooms(), &ratings).evaluate(&RELATED_COUNT, &bound);
+                    let forked = fork(&axioval_rules::RelatedCount, &bound).unwrap();
+                    let mut expression_rule = bound.clone();
+                    expression_rule.capability = Fork::CAPABILITY.into();
+                    expression_rule.parameters = forked.parameters();
+                    let forked = rated(rooms(), &ratings)
+                        .evaluate(&axioval_rules::ExpressionRequirement, &expression_rule);
+                    let parity = axioval_rules::parity::compare_evaluations(
+                        ("template", &template),
+                        ("fork", &forked),
+                    );
+                    assert!(
+                        parity.holds(),
+                        "{ratings:?} {minimum:?} {maximum:?}\n{}",
+                        parity.diff()
+                    );
+                }
+            }
+        }
+        for parameters in [
+            vec![("minimum", integer(1))],
+            vec![
+                ("minimum", integer(1)),
+                ("relationship", string("bounds")),
+                ("same_ends", common::strings(&["bounds:backward"])),
+            ],
+        ] {
+            assert!(matches!(
+                fork(
+                    &axioval_rules::RelatedCount,
+                    &rule(ID, kind("room"), parameters)
+                ),
+                Err(ForkError::Inexpressible(_))
+            ));
+        }
+    }
+
+    /// Generated rooms and doors: doors bounding random rooms, some
+    /// fire-rated, some unreadable, counted along the relationship or in
+    /// the whole source, with or without a filter, shared ends and bounds.
+    /// The template is held to the implementation it replaced on each.
+    mod generated {
+        use super::*;
+        use proptest::prelude::*;
+
+        proptest! {
+            #![proptest_config(ProptestConfig::with_cases(128))]
+
+            #[test]
+            fn generated_counts_hold_parity(
+                bounds in proptest::collection::vec((0usize..3, 0usize..3), 0..6),
+                ratings in [0u8..4, 0u8..4, 0u8..4],
+                minimum in proptest::option::of(0i64..4),
+                maximum in proptest::option::of(0i64..4),
+                along in any::<bool>(),
+                filter in 0u8..3,
+                ends in any::<bool>(),
+                anchors_are_doors in any::<bool>(),
+            ) {
+                let rooms = ["r1", "r2", "r3"];
+                let doors = ["d1", "d2", "d3"];
+                let model = bounds.iter().fold(
+                    Model::default()
+                        .object("r1", "room")
+                        .object("r2", "room")
+                        .object("r3", "room")
+                        .object("d1", "door")
+                        .object("d2", "door")
+                        .object("d3", "door"),
+                    |model, (room, door)| model.edge("bounds", rooms[*room], doors[*door]),
+                );
+                let model = rated(model, &ratings);
+                let mut parameters = Vec::new();
+                if along {
+                    parameters.push(("relationship", string("bounds")));
+                    if anchors_are_doors {
+                        parameters.push(("direction", string("backward")));
+                    }
+                }
+                match filter {
+                    1 => parameters.push(("related_selector", selector(kind("door")))),
+                    2 => parameters.push(("related_selector", selector(fire_rated()))),
+                    _ => {}
+                }
+                if ends {
+                    parameters.push(("same_ends", common::strings(&["bounds:backward"])));
+                }
+                if let Some(minimum) = minimum {
+                    parameters.push(("minimum", integer(minimum)));
+                }
+                if let Some(maximum) = maximum {
+                    parameters.push(("maximum", integer(maximum)));
+                }
+                let anchors = if anchors_are_doors { "door" } else { "room" };
+                model.evaluate(&RELATED_COUNT, &rule(ID, kind(anchors), parameters));
+            }
+        }
     }
 }
 

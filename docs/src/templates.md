@@ -177,6 +177,23 @@ with `object-count: {count:least} object(s) match the selection {place}
 and {undecided} more may; required {required:exactly}`, each undecided
 object open for its own reason.
 
+### `related-count`
+
+| Form | When | Values | Decision |
+| --- | --- | --- | --- |
+| one | always | `count` = the count of the anchor's members (`related_selector`, every object where unstated) | `count` within `minimum` and `maximum`, no rounding, graded |
+
+Members are reached along the rule's traversal, or everywhere in the
+anchor's source, kept to those sharing their ends with `same_ends`, and
+widened by the undecided ones (`UndecidedMembers::Widen`). The
+declaration checks both bounds' kinds, that one is stated, that neither
+is negative, their order, the selector's kind, the traversal and the
+`same_ends` path. The finding reads `{count:least} related object(s)
+{relation}; required {required}` (`via bounds`, `in the same source`, `…
+with the same ends via bounds:backward`); a straddled bound leaves the
+anchor open with `{count:least} related object(s) {relation} and
+{undecided} more that may count; required {required}`.
+
 ### `property-predicate`
 
 | Form | When | Values | Decision |
@@ -412,6 +429,15 @@ kinds, readable and unreadable ratings and declared disciplines, counted
 by kind or rating, per source or across sources, with or without bounds;
 and by the `counts` case, whose `object-count` rules were recorded before
 the switch. It is never forked.
+
+`related-count` is held to `related_count/reference.rs`
+(`axioval_rules::reference::RelatedCount`) the same way: every fixture of
+its module in `tests/semantic.rs` and of `tests/relationship_paths.rs`
+through `common::Held`; generated rooms and doors, bounded at random,
+some doors fire-rated or unreadable, counted along the relationship or in
+the whole source, with or without a filter, shared ends and bounds; the
+`related-count` rules of the `counts` case, recorded before the switch;
+and its fork, which reaches its verdicts on every fixture it forks.
 
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the

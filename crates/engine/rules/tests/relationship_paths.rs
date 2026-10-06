@@ -5,10 +5,16 @@ mod common;
 
 use axioval_ir::NotEvaluatedReason;
 use axioval_ir::contract::{ComparisonOperator, Selector};
-use axioval_rules::RelatedCount;
+
 use common::{Model, findings, integer, kind, rule, selector, string, strings, unevaluated};
 
 const ID: &str = "axioval:capability.related-count";
+
+/// `related-count`, held to the implementation it replaced on every fixture.
+const RELATED_COUNT: common::Held = common::Held(
+    &axioval_rules::RelatedCount,
+    &axioval_rules::reference::RelatedCount,
+);
 
 /// Fire wall `w1` has two openings; `o1` holds an EI30 door, `o2` a plain
 /// one. Wall `w2` holds a plain door but is no fire wall.
@@ -57,7 +63,7 @@ fn unrated_doors() -> Selector {
 #[test]
 fn a_path_reaches_the_doors_filling_a_walls_openings() {
     let evaluation = walls().evaluate(
-        &RelatedCount,
+        &RELATED_COUNT,
         &rule(
             ID,
             Selector::Property {
@@ -81,7 +87,7 @@ fn a_path_reaches_the_doors_filling_a_walls_openings() {
     assert!(evaluation.findings().is_empty());
     let fire_walls = walls().text("w1", "Pset", "IsFireWall", "yes");
     let evaluation = fire_walls.evaluate(
-        &RelatedCount,
+        &RELATED_COUNT,
         &rule(
             ID,
             Selector::Property {
@@ -122,7 +128,7 @@ fn a_path_reaches_the_doors_filling_a_walls_openings() {
 fn a_path_walks_backwards_too() {
     // From each door back to the wall it sits in.
     let evaluation = walls().evaluate(
-        &RelatedCount,
+        &RELATED_COUNT,
         &rule(
             ID,
             kind("door"),
@@ -156,7 +162,7 @@ fn a_path_and_a_single_relationship_are_exclusive() {
         ],
         vec![("path", strings(&[])), ("maximum", integer(0))],
     ] {
-        let evaluation = walls().evaluate(&RelatedCount, &rule(ID, kind("wall"), parameters));
+        let evaluation = walls().evaluate(&RELATED_COUNT, &rule(ID, kind("wall"), parameters));
         assert_eq!(
             unevaluated(&evaluation),
             [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]

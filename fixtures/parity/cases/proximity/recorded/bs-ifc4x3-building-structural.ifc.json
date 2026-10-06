@@ -1,0 +1,748 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:vertical-below:ifc-step:bs-ifc4x3-building-structural.ifc/#175:ifc-step:bs-ifc4x3-building-structural.ifc/#112",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "616bdbfb-02c8-5d0c-b132-10fb1152f965",
+      "message": "1 counterpart(s) lie within 3.0000 m, 2 required",
+      "object_id": {
+        "local_id": "#175",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#112",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-at-least",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:vertical-below:ifc-step:bs-ifc4x3-building-structural.ifc/#213:ifc-step:bs-ifc4x3-building-structural.ifc/#69",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "fc44bfe6-f7ea-5dd4-995e-425c4124d7d8",
+      "message": "1 counterpart(s) lie within 3.0000 m, 2 required",
+      "object_id": {
+        "local_id": "#213",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#69",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-at-least",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc4x3-building-structural.ifc/#112:ifc-step:bs-ifc4x3-building-structural.ifc/#147",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:db64895488aad4eab082c8292f5632145b0fc864c0642d4fe667404882bacf27:relationship-scan:IfcRelContainedInSpatialStructure:3",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:db64895488aad4eab082c8292f5632145b0fc864c0642d4fe667404882bacf27:relationship:#53",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "6081cb88-b97a-5fb3-994e-ea45158baad9",
+      "message": "nearest counterpart ifc-step:bs-ifc4x3-building-structural.ifc/#147 is at horizontal distance 0.0000 m, closer than the required 0.2000 m",
+      "object_id": {
+        "local_id": "#112",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#147",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-overlapping",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc4x3-building-structural.ifc/#147:ifc-step:bs-ifc4x3-building-structural.ifc/#112",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:db64895488aad4eab082c8292f5632145b0fc864c0642d4fe667404882bacf27:relationship-scan:IfcRelContainedInSpatialStructure:3",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:db64895488aad4eab082c8292f5632145b0fc864c0642d4fe667404882bacf27:relationship:#53",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "f135d4d4-6b29-50c3-812f-f34c643b2589",
+      "message": "nearest counterpart ifc-step:bs-ifc4x3-building-structural.ifc/#112 is at horizontal distance 0.0000 m, closer than the required 0.2000 m",
+      "object_id": {
+        "local_id": "#147",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#112",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-overlapping",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:minimum_3d:ifc-step:bs-ifc4x3-building-structural.ifc/#112:ifc-step:bs-ifc4x3-building-structural.ifc/#147",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "37ad0656-ff81-55ca-9a74-402741bdbc50",
+      "message": "nearest counterpart ifc-step:bs-ifc4x3-building-structural.ifc/#147 is at distance 0.0000 m, closer than the required 0.1000 m",
+      "object_id": {
+        "local_id": "#112",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#147",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-walls-nearest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:minimum_3d:ifc-step:bs-ifc4x3-building-structural.ifc/#147:ifc-step:bs-ifc4x3-building-structural.ifc/#112",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "a1a66eaf-e05c-50e2-a480-f9c5cf07c6ea",
+      "message": "nearest counterpart ifc-step:bs-ifc4x3-building-structural.ifc/#112 is at distance 0.0000 m, closer than the required 0.1000 m",
+      "object_id": {
+        "local_id": "#147",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#112",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-walls-nearest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:minimum_3d:ifc-step:bs-ifc4x3-building-structural.ifc/#175:ifc-step:bs-ifc4x3-building-structural.ifc/#112",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "625f06d7-f9e2-55a8-bc47-5d75deca79a5",
+      "message": "nearest counterpart ifc-step:bs-ifc4x3-building-structural.ifc/#112 is at distance 0.0000 m, closer than the required 0.1000 m",
+      "object_id": {
+        "local_id": "#175",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#112",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-walls-nearest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:minimum_3d:ifc-step:bs-ifc4x3-building-structural.ifc/#197:ifc-step:bs-ifc4x3-building-structural.ifc/#147",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "7f5224e6-f7aa-5117-90eb-a99dbd9cedca",
+      "message": "nearest counterpart ifc-step:bs-ifc4x3-building-structural.ifc/#147 is at distance 0.0000 m, closer than the required 0.1000 m",
+      "object_id": {
+        "local_id": "#197",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#147",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-walls-nearest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:minimum_3d:ifc-step:bs-ifc4x3-building-structural.ifc/#213:ifc-step:bs-ifc4x3-building-structural.ifc/#69",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "a021a643-ee62-5296-a629-daa555c91ca7",
+      "message": "nearest counterpart ifc-step:bs-ifc4x3-building-structural.ifc/#69 is at distance 0.0000 m, closer than the required 0.1000 m",
+      "object_id": {
+        "local_id": "#213",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#69",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-walls-nearest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:minimum_3d:ifc-step:bs-ifc4x3-building-structural.ifc/#229:ifc-step:bs-ifc4x3-building-structural.ifc/#147",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "108c01e7-c6dc-57c9-87eb-509492f2873f",
+      "message": "nearest counterpart ifc-step:bs-ifc4x3-building-structural.ifc/#147 is at distance 0.0000 m, closer than the required 0.1000 m",
+      "object_id": {
+        "local_id": "#229",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#147",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-walls-nearest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:minimum_3d:ifc-step:bs-ifc4x3-building-structural.ifc/#245:ifc-step:bs-ifc4x3-building-structural.ifc/#147",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "167961c0-ab0b-506f-8fe4-73f4896b1867",
+      "message": "nearest counterpart ifc-step:bs-ifc4x3-building-structural.ifc/#147 is at distance 0.0000 m, closer than the required 0.1000 m",
+      "object_id": {
+        "local_id": "#245",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#147",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-walls-nearest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:minimum_3d:ifc-step:bs-ifc4x3-building-structural.ifc/#261:ifc-step:bs-ifc4x3-building-structural.ifc/#147",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "8aa87a57-d5d2-5a63-9ea7-3189772fe091",
+      "message": "nearest counterpart ifc-step:bs-ifc4x3-building-structural.ifc/#147 is at distance 0.0000 m, closer than the required 0.1000 m",
+      "object_id": {
+        "local_id": "#261",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#147",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-walls-nearest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:minimum_3d:ifc-step:bs-ifc4x3-building-structural.ifc/#69:ifc-step:bs-ifc4x3-building-structural.ifc/#197",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "a285e380-29d4-5cc8-a8b7-cb6cb1f92274",
+      "message": "nearest counterpart ifc-step:bs-ifc4x3-building-structural.ifc/#197 is at distance 0.0000 m, closer than the required 0.1000 m",
+      "object_id": {
+        "local_id": "#69",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#197",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-walls-nearest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:minimum_3d:ifc-step:bs-ifc4x3-building-structural.ifc/#93:ifc-step:bs-ifc4x3-building-structural.ifc/#197",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "878feb3a-56d5-5fc1-80c9-691e04a27870",
+      "message": "nearest counterpart ifc-step:bs-ifc4x3-building-structural.ifc/#197 is at distance 0.0000 m, closer than the required 0.1000 m",
+      "object_id": {
+        "local_id": "#93",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#197",
+          "source": {
+            "document": "bs-ifc4x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-walls-nearest",
+      "severity": "warning"
+    }
+  ],
+  "not_evaluated": [
+    {
+      "message": "holds between 0 and 1 inner elements, so its count cannot be judged",
+      "object_id": {
+        "local_id": "#112",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "holds between 0 and 4 inner elements, so its count cannot be judged",
+      "object_id": {
+        "local_id": "#147",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "its cover to ifc-step:bs-ifc4x3-building-structural.ifc/#112 is not checked: the volume shared with ifc-step:bs-ifc4x3-building-structural.ifc/#112 is not measured, so whether it lies inside cannot be decided",
+      "object_id": {
+        "local_id": "#175",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "its cover to ifc-step:bs-ifc4x3-building-structural.ifc/#147 is not checked: the volume shared with ifc-step:bs-ifc4x3-building-structural.ifc/#147 is not measured, so whether it lies inside cannot be decided",
+      "object_id": {
+        "local_id": "#197",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "its cover to ifc-step:bs-ifc4x3-building-structural.ifc/#69 is not checked: the volume shared with ifc-step:bs-ifc4x3-building-structural.ifc/#69 is not measured, so whether it lies inside cannot be decided",
+      "object_id": {
+        "local_id": "#197",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "its cover to ifc-step:bs-ifc4x3-building-structural.ifc/#93 is not checked: the volume shared with ifc-step:bs-ifc4x3-building-structural.ifc/#93 is not measured, so whether it lies inside cannot be decided",
+      "object_id": {
+        "local_id": "#197",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "its cover to ifc-step:bs-ifc4x3-building-structural.ifc/#69 is not checked: the volume shared with ifc-step:bs-ifc4x3-building-structural.ifc/#69 is not measured, so whether it lies inside cannot be decided",
+      "object_id": {
+        "local_id": "#213",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "its cover to ifc-step:bs-ifc4x3-building-structural.ifc/#147 is not checked: the volume shared with ifc-step:bs-ifc4x3-building-structural.ifc/#147 is not measured, so whether it lies inside cannot be decided",
+      "object_id": {
+        "local_id": "#229",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "its cover to ifc-step:bs-ifc4x3-building-structural.ifc/#69 is not checked: the volume shared with ifc-step:bs-ifc4x3-building-structural.ifc/#69 is not measured, so whether it lies inside cannot be decided",
+      "object_id": {
+        "local_id": "#229",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "its cover to ifc-step:bs-ifc4x3-building-structural.ifc/#147 is not checked: the volume shared with ifc-step:bs-ifc4x3-building-structural.ifc/#147 is not measured, so whether it lies inside cannot be decided",
+      "object_id": {
+        "local_id": "#245",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "its cover to ifc-step:bs-ifc4x3-building-structural.ifc/#69 is not checked: the volume shared with ifc-step:bs-ifc4x3-building-structural.ifc/#69 is not measured, so whether it lies inside cannot be decided",
+      "object_id": {
+        "local_id": "#245",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "its cover to ifc-step:bs-ifc4x3-building-structural.ifc/#93 is not checked: the volume shared with ifc-step:bs-ifc4x3-building-structural.ifc/#93 is not measured, so whether it lies inside cannot be decided",
+      "object_id": {
+        "local_id": "#245",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "its cover to ifc-step:bs-ifc4x3-building-structural.ifc/#147 is not checked: the volume shared with ifc-step:bs-ifc4x3-building-structural.ifc/#147 is not measured, so whether it lies inside cannot be decided",
+      "object_id": {
+        "local_id": "#261",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "its cover to ifc-step:bs-ifc4x3-building-structural.ifc/#69 is not checked: the volume shared with ifc-step:bs-ifc4x3-building-structural.ifc/#69 is not measured, so whether it lies inside cannot be decided",
+      "object_id": {
+        "local_id": "#261",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "its cover to ifc-step:bs-ifc4x3-building-structural.ifc/#93 is not checked: the volume shared with ifc-step:bs-ifc4x3-building-structural.ifc/#93 is not measured, so whether it lies inside cannot be decided",
+      "object_id": {
+        "local_id": "#261",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "holds between 0 and 5 inner elements, so its count cannot be judged",
+      "object_id": {
+        "local_id": "#69",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "holds between 0 and 3 inner elements, so its count cannot be judged",
+      "object_id": {
+        "local_id": "#93",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    }
+  ],
+  "rules": [
+    {
+      "checked": 6,
+      "failed": 0,
+      "not_evaluated": 10,
+      "rule_id": "containment-cover",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "containment-furniture",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 6,
+      "failed": 2,
+      "not_evaluated": 0,
+      "rule_id": "distance-at-least",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "distance-none-closer",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 4,
+      "failed": 2,
+      "not_evaluated": 0,
+      "rule_id": "distance-overlapping",
+      "status": "failed"
+    },
+    {
+      "checked": 10,
+      "failed": 10,
+      "not_evaluated": 0,
+      "rule_id": "distance-walls-nearest",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "visibility-at-least",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 6,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "visibility-none",
+      "status": "passed"
+    }
+  ]
+}

@@ -1,0 +1,370 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-structural.ifc/#309:ifc-step:bs-ifc2x3-building-structural.ifc/#463",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:relationship-scan:IfcRelContainedInSpatialStructure:2",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:relationship:#42",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-diameter:ifc-step:bs-ifc2x3-building-structural.ifc/#153",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "28a7d0b2-42c1-5a44-ac9a-adf7972d57a6",
+      "message": "no two of its 3 exits are far enough apart: ifc-step:bs-ifc2x3-building-structural.ifc/#309 and ifc-step:bs-ifc2x3-building-structural.ifc/#463 are 1.6031 m apart between closest points; required at least 3.1223 m (0.6 × the longest plan diagonal of 5.2038 m)",
+      "object_id": {
+        "local_id": "#153",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#309",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#463",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    }
+  ],
+  "not_evaluated": [
+    {
+      "message": "centre line: the walls beside ifc-step:bs-ifc2x3-building-structural.ifc/#1012 cannot be measured: plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-structural.ifc/#463 cannot be computed",
+      "object_id": {
+        "local_id": "#1012",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-nearest"
+    },
+    {
+      "message": "centre line: the walls beside ifc-step:bs-ifc2x3-building-structural.ifc/#1054 cannot be measured: plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-structural.ifc/#463 cannot be computed",
+      "object_id": {
+        "local_id": "#1054",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-nearest"
+    },
+    {
+      "message": "centre line: the walls beside ifc-step:bs-ifc2x3-building-structural.ifc/#837 cannot be measured: plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-structural.ifc/#463 cannot be computed",
+      "object_id": {
+        "local_id": "#837",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-nearest"
+    },
+    {
+      "message": "centre line: the walls beside ifc-step:bs-ifc2x3-building-structural.ifc/#886 cannot be measured: plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-structural.ifc/#463 cannot be computed",
+      "object_id": {
+        "local_id": "#886",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-nearest"
+    },
+    {
+      "message": "centre line: the walls beside ifc-step:bs-ifc2x3-building-structural.ifc/#928 cannot be measured: plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-structural.ifc/#463 cannot be computed",
+      "object_id": {
+        "local_id": "#928",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-nearest"
+    },
+    {
+      "message": "centre line: the walls beside ifc-step:bs-ifc2x3-building-structural.ifc/#970 cannot be measured: plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-structural.ifc/#463 cannot be computed",
+      "object_id": {
+        "local_id": "#970",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-nearest"
+    },
+    {
+      "message": "the longest plan diagonal cannot be measured: plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-structural.ifc/#463 cannot be computed",
+      "object_id": {
+        "local_id": "#463",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "exit-slabs-closest"
+    },
+    {
+      "message": "the longest plan diagonal cannot be measured: plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-structural.ifc/#685 cannot be computed",
+      "object_id": {
+        "local_id": "#685",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "exit-slabs-closest"
+    },
+    {
+      "message": "the shared plan section cannot be measured: plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-structural.ifc/#463 cannot be computed",
+      "object_id": {
+        "local_id": "#36",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "light-well-contents"
+    },
+    {
+      "message": "ifc-step:bs-ifc2x3-building-structural.ifc/#36 reaches no space through IfcRelAggregates",
+      "object_id": {
+        "local_id": "#36",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "light-well-storeys"
+    },
+    {
+      "message": "the recesses of ifc-step:bs-ifc2x3-building-structural.ifc/#463 cannot be measured: plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-structural.ifc/#463 cannot be computed",
+      "object_id": {
+        "local_id": "#463",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "recess-slabs"
+    },
+    {
+      "message": "the recesses of ifc-step:bs-ifc2x3-building-structural.ifc/#685 cannot be measured: plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-structural.ifc/#685 cannot be computed",
+      "object_id": {
+        "local_id": "#685",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "recess-slabs"
+    },
+    {
+      "message": "minimum spacing: whether every parallel pair stands 1 m apart is unknown: the axes of ifc-step:bs-ifc2x3-building-structural.ifc/#463 are unknown: plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-structural.ifc/#463 cannot be computed",
+      "object_id": {
+        "local_id": "#36",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "wall-spacing-beams"
+    },
+    {
+      "message": "ifc-step:bs-ifc2x3-building-structural.ifc/#36 reaches no footprint object, so it has no gross footprint to cover",
+      "object_id": {
+        "local_id": "#36",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "wall-spacing-walls"
+    },
+    {
+      "message": "minimum spacing: whether every parallel pair stands 2 m apart is unknown: the axes of ifc-step:bs-ifc2x3-building-structural.ifc/#685 are unknown: plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-structural.ifc/#685 cannot be computed; the axes of ifc-step:bs-ifc2x3-building-structural.ifc/#463 are unknown: plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-structural.ifc/#463 cannot be computed",
+      "object_id": {
+        "local_id": "#36",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "wall-spacing-walls"
+    }
+  ],
+  "rules": [
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "centre-line-against-wall",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "centre-line-both",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 6,
+      "failed": 0,
+      "not_evaluated": 6,
+      "rule_id": "centre-line-nearest",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "exit-centres-flag",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "exit-closest",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "exit-farthest-default",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 4,
+      "failed": 1,
+      "not_evaluated": 2,
+      "rule_id": "exit-slabs-closest",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "light-well-contents",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "light-well-storeys",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "light-well-zones",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "parking-filter",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "parking-oriented",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "parking-sizes",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 2,
+      "rule_id": "recess-slabs",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "recess-spaces",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "wall-spacing-beams",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "wall-spacing-walls",
+      "status": "not_evaluated"
+    }
+  ]
+}

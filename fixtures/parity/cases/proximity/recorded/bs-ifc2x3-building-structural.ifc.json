@@ -1,0 +1,1744 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:vertical-below:ifc-step:bs-ifc2x3-building-structural.ifc/#837:ifc-step:bs-ifc2x3-building-structural.ifc/#463",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "616bdbfb-02c8-5d0c-b132-10fb1152f965",
+      "message": "1 counterpart(s) lie within 3.0000 m, 2 required",
+      "object_id": {
+        "local_id": "#837",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#463",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-at-least",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:vertical-below:ifc-step:bs-ifc2x3-building-structural.ifc/#928:ifc-step:bs-ifc2x3-building-structural.ifc/#153",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "fc44bfe6-f7ea-5dd4-995e-425c4124d7d8",
+      "message": "1 counterpart(s) lie within 3.0000 m, 2 required",
+      "object_id": {
+        "local_id": "#928",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#153",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-at-least",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-structural.ifc/#463:ifc-step:bs-ifc2x3-building-structural.ifc/#685",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:relationship-scan:IfcRelContainedInSpatialStructure:2",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:relationship:#42",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "a8039542-5a0d-59bb-b300-e6d5e097a1cc",
+      "message": "nearest counterpart ifc-step:bs-ifc2x3-building-structural.ifc/#685 is at horizontal distance 0.0000 m, closer than the required 0.2000 m",
+      "object_id": {
+        "local_id": "#463",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#685",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-overlapping",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-structural.ifc/#685:ifc-step:bs-ifc2x3-building-structural.ifc/#463",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:relationship-scan:IfcRelContainedInSpatialStructure:2",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:25c09f1ea35dbf51e88b8829c423b9ce13a8264e69c620e932859772937aa25b:relationship:#42",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "58526c07-04c3-594d-bf95-da0e0f062b3b",
+      "message": "nearest counterpart ifc-step:bs-ifc2x3-building-structural.ifc/#463 is at horizontal distance 0.0000 m, closer than the required 0.2000 m",
+      "object_id": {
+        "local_id": "#685",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#463",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-overlapping",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:minimum_3d:ifc-step:bs-ifc2x3-building-structural.ifc/#1012:ifc-step:bs-ifc2x3-building-structural.ifc/#153",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "502f6660-385d-52a4-bf98-c8947d57a318",
+      "message": "nearest counterpart ifc-step:bs-ifc2x3-building-structural.ifc/#153 is at distance 0.0000 m, closer than the required 0.1000 m",
+      "object_id": {
+        "local_id": "#1012",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#153",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-walls-nearest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:minimum_3d:ifc-step:bs-ifc2x3-building-structural.ifc/#1054:ifc-step:bs-ifc2x3-building-structural.ifc/#153",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "82228018-5980-5ce8-a545-d34c324de3e1",
+      "message": "nearest counterpart ifc-step:bs-ifc2x3-building-structural.ifc/#153 is at distance 0.0000 m, closer than the required 0.1000 m",
+      "object_id": {
+        "local_id": "#1054",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#153",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-walls-nearest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:minimum_3d:ifc-step:bs-ifc2x3-building-structural.ifc/#153:ifc-step:bs-ifc2x3-building-structural.ifc/#1012",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "4e1460f6-1634-56b8-8f5f-53fcadbce4b8",
+      "message": "nearest counterpart ifc-step:bs-ifc2x3-building-structural.ifc/#1012 is at distance 0.0000 m, closer than the required 0.1000 m",
+      "object_id": {
+        "local_id": "#153",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#1012",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-walls-nearest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:minimum_3d:ifc-step:bs-ifc2x3-building-structural.ifc/#309:ifc-step:bs-ifc2x3-building-structural.ifc/#1012",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "fcef898e-0ff2-599d-a714-c63361ccb6e3",
+      "message": "nearest counterpart ifc-step:bs-ifc2x3-building-structural.ifc/#1012 is at distance 0.0000 m, closer than the required 0.1000 m",
+      "object_id": {
+        "local_id": "#309",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#1012",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-walls-nearest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:minimum_3d:ifc-step:bs-ifc2x3-building-structural.ifc/#463:ifc-step:bs-ifc2x3-building-structural.ifc/#685",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "ab0878c5-eacc-5e21-a336-831dda0e96f9",
+      "message": "nearest counterpart ifc-step:bs-ifc2x3-building-structural.ifc/#685 is at distance 0.0000 m, closer than the required 0.1000 m",
+      "object_id": {
+        "local_id": "#463",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#685",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-walls-nearest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:minimum_3d:ifc-step:bs-ifc2x3-building-structural.ifc/#685:ifc-step:bs-ifc2x3-building-structural.ifc/#1012",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "f5811f6f-e3c9-5aed-8649-04a385300e09",
+      "message": "nearest counterpart ifc-step:bs-ifc2x3-building-structural.ifc/#1012 is at distance 0.0000 m, closer than the required 0.1000 m",
+      "object_id": {
+        "local_id": "#685",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#1012",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-walls-nearest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:minimum_3d:ifc-step:bs-ifc2x3-building-structural.ifc/#837:ifc-step:bs-ifc2x3-building-structural.ifc/#463",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "0912322c-08d5-550c-bc07-e7c2222e7fdd",
+      "message": "nearest counterpart ifc-step:bs-ifc2x3-building-structural.ifc/#463 is at distance 0.0000 m, closer than the required 0.1000 m",
+      "object_id": {
+        "local_id": "#837",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#463",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-walls-nearest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:minimum_3d:ifc-step:bs-ifc2x3-building-structural.ifc/#886:ifc-step:bs-ifc2x3-building-structural.ifc/#153",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "e3f7a951-27e9-50da-b31b-375e3a15d17f",
+      "message": "nearest counterpart ifc-step:bs-ifc2x3-building-structural.ifc/#153 is at distance 0.0000 m, closer than the required 0.1000 m",
+      "object_id": {
+        "local_id": "#886",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#153",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-walls-nearest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:minimum_3d:ifc-step:bs-ifc2x3-building-structural.ifc/#928:ifc-step:bs-ifc2x3-building-structural.ifc/#153",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "5dae87f6-c4dc-5301-961b-9f2a268ee907",
+      "message": "nearest counterpart ifc-step:bs-ifc2x3-building-structural.ifc/#153 is at distance 0.0000 m, closer than the required 0.1000 m",
+      "object_id": {
+        "local_id": "#928",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#153",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-walls-nearest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:minimum_3d:ifc-step:bs-ifc2x3-building-structural.ifc/#970:ifc-step:bs-ifc2x3-building-structural.ifc/#153",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "c32a9133-d407-5133-ad93-5c07fb978588",
+      "message": "nearest counterpart ifc-step:bs-ifc2x3-building-structural.ifc/#153 is at distance 0.0000 m, closer than the required 0.1000 m",
+      "object_id": {
+        "local_id": "#970",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#153",
+          "source": {
+            "document": "bs-ifc2x3-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-walls-nearest",
+      "severity": "warning"
+    }
+  ],
+  "not_evaluated": [
+    {
+      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not checked: the volume shared with ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not measured, so whether it lies inside cannot be decided",
+      "object_id": {
+        "local_id": "#1012",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#309 is not checked: the volume shared with ifc-step:bs-ifc2x3-building-structural.ifc/#309 is not measured, so whether it lies inside cannot be decided",
+      "object_id": {
+        "local_id": "#1012",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not checked: the volume shared with ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not measured, so whether it lies inside cannot be decided",
+      "object_id": {
+        "local_id": "#1054",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#309 is not checked: the volume shared with ifc-step:bs-ifc2x3-building-structural.ifc/#309 is not measured, so whether it lies inside cannot be decided",
+      "object_id": {
+        "local_id": "#1054",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#685 is not checked: whether it lies in ifc-step:bs-ifc2x3-building-structural.ifc/#685 cannot be decided: the shared volume is 0.0000 to 1.0000 of the smaller body, ratio 0.5000",
+      "object_id": {
+        "local_id": "#1054",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "holds between 0 and 5 inner elements, so its count cannot be judged",
+      "object_id": {
+        "local_id": "#153",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "holds between 0 and 3 inner elements, so its count cannot be judged",
+      "object_id": {
+        "local_id": "#309",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "holds between 0 and 1 inner elements, so its count cannot be judged",
+      "object_id": {
+        "local_id": "#463",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "holds between 0 and 3 inner elements, so its count cannot be judged",
+      "object_id": {
+        "local_id": "#685",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#463 is not checked: whether it lies in ifc-step:bs-ifc2x3-building-structural.ifc/#463 cannot be decided: the shared volume is 0.0000 to 1.0000 of the smaller body, ratio 0.5000",
+      "object_id": {
+        "local_id": "#837",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not checked: the volume shared with ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not measured, so whether it lies inside cannot be decided",
+      "object_id": {
+        "local_id": "#886",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#309 is not checked: the volume shared with ifc-step:bs-ifc2x3-building-structural.ifc/#309 is not measured, so whether it lies inside cannot be decided",
+      "object_id": {
+        "local_id": "#886",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#685 is not checked: whether it lies in ifc-step:bs-ifc2x3-building-structural.ifc/#685 cannot be decided: the shared volume is 0.0000 to 1.0000 of the smaller body, ratio 0.5000",
+      "object_id": {
+        "local_id": "#886",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not checked: the volume shared with ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not measured, so whether it lies inside cannot be decided",
+      "object_id": {
+        "local_id": "#928",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not checked: the volume shared with ifc-step:bs-ifc2x3-building-structural.ifc/#153 is not measured, so whether it lies inside cannot be decided",
+      "object_id": {
+        "local_id": "#970",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "its cover to ifc-step:bs-ifc2x3-building-structural.ifc/#685 is not checked: whether it lies in ifc-step:bs-ifc2x3-building-structural.ifc/#685 cannot be decided: the shared volume is 0.0000 to 1.0000 of the smaller body, ratio 0.5000",
+      "object_id": {
+        "local_id": "#970",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#1012",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "containment-furniture"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#1054",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "containment-furniture"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#1067",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "containment-furniture"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#1069",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "containment-furniture"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#1168",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "containment-furniture"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#1261",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "containment-furniture"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#1263",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "containment-furniture"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#13",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "containment-furniture"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#1306",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "containment-furniture"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#1308",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "containment-furniture"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#151",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "containment-furniture"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#153",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "containment-furniture"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#18",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "containment-furniture"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#25",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "containment-furniture"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#307",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "containment-furniture"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#309",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "containment-furniture"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#36",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "containment-furniture"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#39",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "containment-furniture"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#461",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "containment-furniture"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#463",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "containment-furniture"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#526",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "containment-furniture"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#528",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "containment-furniture"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#683",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "containment-furniture"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#685",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "containment-furniture"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#828",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "containment-furniture"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#835",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "containment-furniture"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#837",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "containment-furniture"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#886",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "containment-furniture"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#928",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "containment-furniture"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#970",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "containment-furniture"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#1012",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "distance-none-closer"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#1054",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "distance-none-closer"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#1067",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "distance-none-closer"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#1069",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "distance-none-closer"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#1168",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "distance-none-closer"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#1261",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "distance-none-closer"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#1263",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "distance-none-closer"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#13",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "distance-none-closer"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#1306",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "distance-none-closer"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#1308",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "distance-none-closer"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#151",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "distance-none-closer"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#153",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "distance-none-closer"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#18",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "distance-none-closer"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#25",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "distance-none-closer"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#307",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "distance-none-closer"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#309",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "distance-none-closer"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#36",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "distance-none-closer"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#39",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "distance-none-closer"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#461",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "distance-none-closer"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#463",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "distance-none-closer"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#526",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "distance-none-closer"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#528",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "distance-none-closer"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#683",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "distance-none-closer"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#685",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "distance-none-closer"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#828",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "distance-none-closer"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#835",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "distance-none-closer"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#837",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "distance-none-closer"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#886",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "distance-none-closer"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#928",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "distance-none-closer"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#970",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "distance-none-closer"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#1067",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "visibility-none"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#1069",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "visibility-none"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#1168",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "visibility-none"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#1261",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "visibility-none"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#1263",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "visibility-none"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#13",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "visibility-none"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#1306",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "visibility-none"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#1308",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "visibility-none"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#151",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "visibility-none"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#153",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "visibility-none"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#18",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "visibility-none"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#25",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "visibility-none"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#307",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "visibility-none"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#309",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "visibility-none"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#36",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "visibility-none"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#39",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "visibility-none"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#461",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "visibility-none"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#463",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "visibility-none"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#526",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "visibility-none"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#528",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "visibility-none"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#683",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "visibility-none"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#685",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "visibility-none"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#828",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "visibility-none"
+    },
+    {
+      "message": "`IfcDuctSegment` is not an IFC2X3 entity",
+      "object_id": {
+        "local_id": "#835",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "visibility-none"
+    }
+  ],
+  "rules": [
+    {
+      "checked": 6,
+      "failed": 0,
+      "not_evaluated": 10,
+      "rule_id": "containment-cover",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 30,
+      "rule_id": "containment-furniture",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 6,
+      "failed": 2,
+      "not_evaluated": 0,
+      "rule_id": "distance-at-least",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 30,
+      "rule_id": "distance-none-closer",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 4,
+      "failed": 2,
+      "not_evaluated": 0,
+      "rule_id": "distance-overlapping",
+      "status": "failed"
+    },
+    {
+      "checked": 10,
+      "failed": 10,
+      "not_evaluated": 0,
+      "rule_id": "distance-walls-nearest",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "visibility-at-least",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 6,
+      "failed": 0,
+      "not_evaluated": 24,
+      "rule_id": "visibility-none",
+      "status": "not_evaluated"
+    }
+  ]
+}

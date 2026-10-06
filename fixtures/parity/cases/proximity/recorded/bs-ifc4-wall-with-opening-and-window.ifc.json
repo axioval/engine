@@ -1,0 +1,157 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-wall-with-opening-and-window.ifc/#102:ifc-step:bs-ifc4-wall-with-opening-and-window.ifc/#45",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "e40582b1-ebcc-58ce-8ecb-f1530a1376b3",
+      "message": "lies in no outer element: none shares 0.9000 of the smaller body's volume",
+      "object_id": {
+        "local_id": "#102",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "containment-furniture",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:vertical-below:ifc-step:bs-ifc4-wall-with-opening-and-window.ifc/#102:ifc-step:bs-ifc4-wall-with-opening-and-window.ifc/#45",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "c5f71c62-a44a-581f-b90d-c6cadf21c044",
+      "message": "1 counterpart(s) lie within 3.0000 m, 2 required",
+      "object_id": {
+        "local_id": "#102",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#45",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-at-least",
+      "severity": "warning"
+    },
+    {
+      "evidence": [],
+      "id": "fddc4038-82ad-504c-afee-e261512715f4",
+      "message": "no counterpart lies within 8.0000 m",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "distance-walls-nearest",
+      "severity": "warning"
+    }
+  ],
+  "not_evaluated": [
+    {
+      "message": "holds between 0 and 1 inner elements, so its count cannot be judged",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    },
+    {
+      "message": "the requested object occupies no material; pairs involving this object were not checked",
+      "object_id": {
+        "local_id": "#80",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-cover"
+    }
+  ],
+  "rules": [
+    {
+      "checked": 2,
+      "failed": 0,
+      "not_evaluated": 2,
+      "rule_id": "containment-cover",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "containment-furniture",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "distance-at-least",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "distance-none-closer",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "distance-overlapping",
+      "status": "passed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "distance-walls-nearest",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "visibility-at-least",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "visibility-none",
+      "status": "nothing_selected"
+    }
+  ]
+}

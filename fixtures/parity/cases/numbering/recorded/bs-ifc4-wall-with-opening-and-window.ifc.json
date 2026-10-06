@@ -1,0 +1,148 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:attribute:#38:Elevation",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:attribute:#38:Name",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "283a5275-157b-502d-ad8c-4e18c6ec5b93",
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `Default Building Storey` is not a whole number",
+      "object_id": {
+        "local_id": "#38",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "storey-names",
+      "severity": "warning"
+    }
+  ],
+  "not_evaluated": [
+    {
+      "message": "ifc-step:bs-ifc4-wall-with-opening-and-window.ifc/#45 has no numeric axioval:attributes.axioval:parity.public.numbering.elevation (absent), so the order is unknown",
+      "object_id": {
+        "local_id": "#38",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "element-names"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `Wall for Test Example` does not match the pattern",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `Default Building Storey` does not match the pattern",
+      "object_id": {
+        "local_id": "#38",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "space-numbers"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `Default Building Storey` does not match the pattern",
+      "object_id": {
+        "local_id": "#38",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "storey-numbers"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `Wall for Test Example` does not match the pattern",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "wall-numbers-across"
+    }
+  ],
+  "rules": [
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "element-names",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "slab-numbers-storey",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "space-names",
+      "status": "passed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "space-numbers",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "storey-names",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "storey-numbers",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "wall-numbers-across",
+      "status": "not_evaluated"
+    }
+  ]
+}

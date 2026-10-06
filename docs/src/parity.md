@@ -218,6 +218,22 @@ every object leaving out the bottom storey), `counterpart-coverage` (in
 plan and height, and in the elevation with a frame's infill),
 `effective-coverage` (grown and by travel) and `external-wall-validation`
 over every public model, before they are rebuilt as templates (#282).
+The cases `spans`, `proximity` and `numbering` record the plan-span,
+distance and layout capabilities before they are rebuilt as templates
+(#283): `spans` holds `centre-line-distance` (both sides, the nearest and
+against a wall), `recess-width` (spaces, and slabs, walls and columns),
+`light-well` (zones, storeys of spaces and storeys of their contents),
+`exit-separation` (closest points, centres under an unknown flag, and
+farthest points with a flag default), `wall-spacing` (walls with
+footprints, beams) and `parking-bay` (sizes, orientation to aisles with
+obstructions, and the filter mode); `proximity` holds `distance` (nearest,
+none closer, at least a count, and overlapping in height within a
+container), `containment` (counts with orphans, and cover bands over
+combined outer elements) and `component-visibility` (at least two targets,
+and none); `numbering`, unmeshed, holds `name-sequence` (storeys of a
+building, spaces of a storey ordered by placement where they state no
+elevation, elements along a relationship) and `numbering-consistency`
+(per source, across sources and per storey).
 
 Each pair's evidence prints as one JSON line. That line is what the
 migration ledger records as a proof item, tagged `"kind": "parity"`; the

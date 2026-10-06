@@ -1,0 +1,25 @@
+{
+  "description": "centre-line-distance, recess-width, light-well, exit-separation, wall-spacing and parking-bay over every public model, recorded before they became templates (#283).",
+  "models": "*",
+  "pairs": [],
+  "recorded": [
+    {"rule": "recess-spaces", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "recess-slabs", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "light-well-zones", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "light-well-storeys", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "centre-line-both", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "centre-line-nearest", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "centre-line-against-wall", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "exit-closest", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "exit-centres-flag", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "exit-farthest-default", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "exit-slabs-closest", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "light-well-contents", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "wall-spacing-walls", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "wall-spacing-beams", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "parking-sizes", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "parking-oriented", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "parking-filter", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."}
+  ],
+  "divergences": []
+}

@@ -1,0 +1,364 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:parity.public.numbering",
+    "name": {
+      "default": "Public parity ruleset, names and numbers",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "name-sequence and numbering-consistency, recorded before they became templates.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "definitionPackages": [
+    "axioval:parity.public.numbering.definitions"
+  ],
+  "root": {
+    "id": "root",
+    "name": {
+      "default": "Names and numbers",
+      "translations": {}
+    },
+    "rules": [
+      {
+        "id": "storey-names",
+        "definitionId": "axioval:parity.public.numbering.name-sequence",
+        "name": {
+          "default": "storey-names",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.numbering.building",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "member_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.numbering.storey",
+              "includeSubtypes": true
+            }
+          },
+          "name": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.numbering.name"
+          },
+          "order": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.numbering.elevation"
+          }
+        }
+      },
+      {
+        "id": "space-names",
+        "definitionId": "axioval:parity.public.numbering.name-sequence",
+        "name": {
+          "default": "space-names",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.numbering.storey",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "member_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.numbering.space",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.numbering.slab",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.numbering.wall",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "name": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.numbering.name"
+          },
+          "order": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.numbering.elevation"
+          },
+          "first": {
+            "type": "integer",
+            "value": 0
+          },
+          "increment": {
+            "type": "integer",
+            "value": 1
+          },
+          "order_fallback": {
+            "type": "string",
+            "value": "placement_height"
+          },
+          "path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelAggregates:forward"
+            ]
+          }
+        }
+      },
+      {
+        "id": "element-names",
+        "definitionId": "axioval:parity.public.numbering.name-sequence",
+        "name": {
+          "default": "element-names",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.numbering.storey",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "member_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.numbering.wall",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.numbering.beam",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.numbering.slab",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "name": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.numbering.long-name"
+          },
+          "order": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.numbering.elevation"
+          },
+          "relationship": {
+            "type": "string",
+            "value": "IfcRelContainedInSpatialStructure"
+          },
+          "direction": {
+            "type": "string",
+            "value": "forward"
+          },
+          "first": {
+            "type": "integer",
+            "value": 2
+          },
+          "increment": {
+            "type": "integer",
+            "value": 2
+          }
+        }
+      },
+      {
+        "id": "space-numbers",
+        "definitionId": "axioval:parity.public.numbering.numbering-consistency",
+        "name": {
+          "default": "space-numbers",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "anyOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.numbering.space",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.numbering.storey",
+              "includeSubtypes": true
+            }
+          ]
+        },
+        "parameters": {
+          "property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.numbering.name"
+          },
+          "pattern": {
+            "type": "string",
+            "value": "\\D*(\\d+)\\D*"
+          },
+          "prefix_length": {
+            "type": "integer",
+            "value": 1
+          },
+          "gap_free": {
+            "type": "boolean",
+            "value": true
+          }
+        }
+      },
+      {
+        "id": "wall-numbers-across",
+        "definitionId": "axioval:parity.public.numbering.numbering-consistency",
+        "name": {
+          "default": "wall-numbers-across",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "anyOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.numbering.wall",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.numbering.beam",
+              "includeSubtypes": true
+            }
+          ]
+        },
+        "parameters": {
+          "property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.numbering.name"
+          },
+          "pattern": {
+            "type": "string",
+            "value": "[^0-9]*([0-9]+)[^0-9]*"
+          },
+          "gap_free": {
+            "type": "boolean",
+            "value": true
+          },
+          "across_sources": {
+            "type": "boolean",
+            "value": true
+          }
+        }
+      },
+      {
+        "id": "slab-numbers-storey",
+        "definitionId": "axioval:parity.public.numbering.numbering-consistency",
+        "name": {
+          "default": "slab-numbers-storey",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "anyOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.numbering.slab",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.numbering.wall",
+              "includeSubtypes": true
+            }
+          ]
+        },
+        "parameters": {
+          "property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.numbering.name"
+          },
+          "pattern": {
+            "type": "string",
+            "value": "[^0-9]*([0-9]+).*"
+          },
+          "prefix_length": {
+            "type": "integer",
+            "value": 2
+          },
+          "relationship": {
+            "type": "string",
+            "value": "IfcRelContainedInSpatialStructure"
+          },
+          "direction": {
+            "type": "string",
+            "value": "backward"
+          }
+        }
+      },
+      {
+        "id": "storey-numbers",
+        "definitionId": "axioval:parity.public.numbering.numbering-consistency",
+        "name": {
+          "default": "storey-numbers",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.numbering.storey",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.numbering.name"
+          },
+          "pattern": {
+            "type": "string",
+            "value": "([0-9]+) .*"
+          },
+          "gap_free": {
+            "type": "boolean",
+            "value": true
+          },
+          "prefix_length": {
+            "type": "integer",
+            "value": 1
+          },
+          "across_sources": {
+            "type": "boolean",
+            "value": true
+          }
+        }
+      }
+    ]
+  }
+}

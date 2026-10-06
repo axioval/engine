@@ -1,0 +1,2391 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "0e5a3fc1-259f-5139-9e82-ae8948269fe2",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#1014",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "2c0a0587-3946-5fb6-98d4-06e35bcb5225",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#108",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "cf752da8-5bb6-5634-9f27-22be1ed45d96",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#131",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "097d15e5-a74a-573a-8968-52f9184f3248",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#188",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "1975c06e-158e-5761-a416-20984fe6f0aa",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#207",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "ccba7690-8bc1-550c-910f-4ed6f52c68bb",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#276",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "68431566-3144-587c-b50b-591e086115e3",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#294",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "d27ed4b5-788a-5f75-a78c-31a9dd5d6421",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#323",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "6933b073-cab0-5979-ad79-b142f2f25f6c",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#337",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "4bbbcbea-6ae7-5ee6-bac9-ac5767ff8742",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#350",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "a4450dd5-ab2c-5c46-aa8e-7a4044c72ffe",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#363",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "a5ca7488-b78e-58cd-8d8b-7329b1d9c8fe",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#398",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "9f38eb88-5dd2-5b8d-b552-214c2a0e949b",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#412",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "e07f7ae6-d43a-5390-976a-0892b67d326a",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#460",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "1f4bdbd8-2e2a-5c8d-839e-49e6e7d77b8c",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#473",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "da29e54e-15c8-5e8d-abe8-b765eed58172",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#541",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "1aa5ae20-ea44-5ec3-8f16-880579a124c3",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#560",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "7352f444-3c91-5ee0-8e8b-c716a0d8f747",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#578",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "48fb3702-d1b2-56b5-b291-cfb65888a8be",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#596",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "f07ef162-4a0c-5e9b-9861-6f0b125296ac",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#61",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "375340df-73d2-55ad-9b0a-42a602ef17e2",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#645",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "c9f55926-5ec1-5ac8-9eb9-91466ea5507f",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#659",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "406be0aa-f0e7-5ce4-abfb-3aac37dffd14",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#672",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "f0512467-9ec9-55b8-8b72-b670cbfdb19b",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#685",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "4c86d07e-0dae-5c87-b7ce-ad5ec5e5dc5a",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#744",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "a4b9758a-27e5-5eb7-96aa-3ab9c9afaf82",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#761",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "6e37074e-f2a4-572a-976b-4769925bd04c",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#823",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "69ea2e51-ab0e-5048-af45-6d276af1a6b8",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#839",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "367228ee-7221-5373-8c9f-f581945d8ed2",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "00c8008d-b9b8-582b-837b-9238326d6bec",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#919",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "5242ce08-5321-5240-9678-7b0e1e369772",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#936",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:ebc5c85f6da454de08dc63675af242b6572682692682dff1a064a71b6bcd73e8:relationship-scan:IfcRelContainedInSpatialStructure:8",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "2c847270-416b-5f29-9e85-a52e716d168c",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#998",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#1014",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "9f012ac9-1321-5f2b-b58b-d44ff6cb2255",
+      "message": "height is 0.12 m; at least 2 m",
+      "object_id": {
+        "local_id": "#1014",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#108",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "a0c92ade-db60-5b12-8ecf-494a773c14e6",
+      "message": "height is 0.25 m; at least 2 m",
+      "object_id": {
+        "local_id": "#108",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc4-infra-road.ifc/#108:(-1.350000,22.338269):unique",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "d10f413e-179f-5c67-bda7-ccba3e88bb42",
+      "message": "width along the bay's own axes is 1.8 m; at least 2.3 m",
+      "object_id": {
+        "local_id": "#108",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#131",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "fdfea947-e2d2-5d5b-947a-efe569eeaad5",
+      "message": "height is 0.12 m; at least 2 m",
+      "object_id": {
+        "local_id": "#131",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc4-infra-road.ifc/#131:(-1.350000,22.338269):unique",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "07fd7c0c-bc83-59b3-a810-ecf7f0109a74",
+      "message": "width along the bay's own axes is 1.8 m; at least 2.3 m",
+      "object_id": {
+        "local_id": "#131",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#188",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "84b61779-4b49-57b9-800e-6d765e16a7c5",
+      "message": "height is 0.08 m; at least 2 m",
+      "object_id": {
+        "local_id": "#188",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#207",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "96e23251-6f07-50e4-9b69-284237e88f8b",
+      "message": "height is 0.04 m; at least 2 m",
+      "object_id": {
+        "local_id": "#207",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#276",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "f4e46e2c-ef65-532d-a2a9-0217a5d728d6",
+      "message": "height is 0.25 m; at least 2 m",
+      "object_id": {
+        "local_id": "#276",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#294",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "957cd332-93ec-5327-87f7-81a533d812f2",
+      "message": "height is 0.12 m; at least 2 m",
+      "object_id": {
+        "local_id": "#294",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#323",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "09886df3-86a6-5707-9125-4973bcd54b4a",
+      "message": "height is 0.08 m; at least 2 m",
+      "object_id": {
+        "local_id": "#323",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc4-infra-road.ifc/#323:(-1.350000,22.338269):unique",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "737a3b03-0193-5217-874b-d62669864c54",
+      "message": "width along the bay's own axes is 1.8 m; at least 2.3 m",
+      "object_id": {
+        "local_id": "#323",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#337",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "da8e2085-957f-53f7-88ae-5e2290517676",
+      "message": "height is 0.04 m; at least 2 m",
+      "object_id": {
+        "local_id": "#337",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc4-infra-road.ifc/#337:(-1.350000,22.338269):unique",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "6002bd40-39cd-565a-9885-4e0f5e13943f",
+      "message": "width along the bay's own axes is 1.8 m; at least 2.3 m",
+      "object_id": {
+        "local_id": "#337",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "0495c841-490a-5c54-b11e-143e8b3d90bf",
+      "message": "height is 0.25 m; at least 2 m",
+      "object_id": {
+        "local_id": "#350",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc4-infra-road.ifc/#350:(-1.350000,22.338269):unique",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "34e28d78-7fd7-5308-8cd1-cc9d29bb212f",
+      "message": "width along the bay's own axes is 1.8 m; at least 2.3 m",
+      "object_id": {
+        "local_id": "#350",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "c5e9083d-afe7-59ac-9cce-7eb8d1fc1909",
+      "message": "height is 0.12 m; at least 2 m",
+      "object_id": {
+        "local_id": "#363",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc4-infra-road.ifc/#363:(-1.350000,22.338269):unique",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "1748169a-72dc-5e2b-bf48-a979c8c9eeb7",
+      "message": "width along the bay's own axes is 1.8 m; at least 2.3 m",
+      "object_id": {
+        "local_id": "#363",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "b4b90c2a-f026-5d15-aa14-e347582ad379",
+      "message": "height is 0.08 m; at least 2 m",
+      "object_id": {
+        "local_id": "#398",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#412",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "3bb633c9-93ae-51ab-b1dd-8788d26d3e6d",
+      "message": "height is 0.04 m; at least 2 m",
+      "object_id": {
+        "local_id": "#412",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "a23dbec5-f810-54a0-a295-0536131b4ffb",
+      "message": "height is 0.25 m; at least 2 m",
+      "object_id": {
+        "local_id": "#460",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "95eaba76-4620-51dd-9686-eb95fd047353",
+      "message": "height is 0.12 m; at least 2 m",
+      "object_id": {
+        "local_id": "#473",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#541",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "10f32b44-8ae3-56b5-9ec0-33eacdbae7d9",
+      "message": "height is 0.12 m; at least 2 m",
+      "object_id": {
+        "local_id": "#541",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "1f74d476-d281-500f-9e83-1ff4fc9009b7",
+      "message": "height is 0.08 m; at least 2 m",
+      "object_id": {
+        "local_id": "#560",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc4-infra-road.ifc/#560:(9.796215,25.655847):unique",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "f7290f40-12f0-59a8-9c89-b5bff5360261",
+      "message": "length along the bay's own axes is 3.6 m; at least 4 m",
+      "object_id": {
+        "local_id": "#560",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#578",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "2441e972-f753-5411-beba-24677563e060",
+      "message": "height is 0.3958 m; at least 2 m",
+      "object_id": {
+        "local_id": "#578",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#596",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "cee68eea-25c3-5a34-bf80-4d120f9b361c",
+      "message": "height is 0.04 m; at least 2 m",
+      "object_id": {
+        "local_id": "#596",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc4-infra-road.ifc/#596:(9.792751,25.653847):unique",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "d729bc2d-c7dd-5d5f-b95f-19bdfb98ee39",
+      "message": "length along the bay's own axes is 3.6 m; at least 4 m",
+      "object_id": {
+        "local_id": "#596",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "1fd4eac2-b3d9-520e-9957-98db4cb2b6e5",
+      "message": "height is 0.08 m; at least 2 m",
+      "object_id": {
+        "local_id": "#61",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc4-infra-road.ifc/#61:(-1.350000,22.338269):unique",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "02ba5740-5bb8-5946-a29e-958fcdedd44c",
+      "message": "width along the bay's own axes is 1.8 m; at least 2.3 m",
+      "object_id": {
+        "local_id": "#61",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#645",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "0581550b-9922-5df7-a907-2b8df3a151a0",
+      "message": "height is 0.12 m; at least 2 m",
+      "object_id": {
+        "local_id": "#645",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#659",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "03cee5ab-504e-56dc-ba26-ae64205b14d6",
+      "message": "height is 0.08 m; at least 2 m",
+      "object_id": {
+        "local_id": "#659",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc4-infra-road.ifc/#659:(24.844801,34.344153):unique",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "d05a7dc3-3506-5239-8f65-6b14a662fbc5",
+      "message": "length along the bay's own axes is 3.6 m; at least 4 m",
+      "object_id": {
+        "local_id": "#659",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#672",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "37a76519-51bb-5d73-8498-dc38084971ae",
+      "message": "height is 0.3958 m; at least 2 m",
+      "object_id": {
+        "local_id": "#672",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#685",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "a489f28f-5625-533b-8cba-47759ce44b43",
+      "message": "height is 0.04 m; at least 2 m",
+      "object_id": {
+        "local_id": "#685",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc4-infra-road.ifc/#685:(24.848265,34.346153):unique",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "e0d8dba7-37a6-588f-a85c-a75c747c1bce",
+      "message": "length along the bay's own axes is 3.6 m; at least 4 m",
+      "object_id": {
+        "local_id": "#685",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#744",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "586aad14-b954-5222-8dc7-d9d808ef9e67",
+      "message": "height is 0.08 m; at least 2 m",
+      "object_id": {
+        "local_id": "#744",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#761",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "d1213121-bf27-567f-9f2d-80ea6f4604a8",
+      "message": "height is 0.04 m; at least 2 m",
+      "object_id": {
+        "local_id": "#761",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#823",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "69be2bd8-a1a3-5aec-867e-6022379f45bf",
+      "message": "height is 0.25 m; at least 2 m",
+      "object_id": {
+        "local_id": "#823",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#839",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "d3495ad3-037c-5f63-a033-2237fce46db8",
+      "message": "height is 0.12 m; at least 2 m",
+      "object_id": {
+        "local_id": "#839",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#85",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "ccbafae9-d396-5b1d-958d-ab5dc86c9fd8",
+      "message": "height is 0.04 m; at least 2 m",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc4-infra-road.ifc/#85:(-1.350000,22.338269):unique",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "82d34fa6-64b7-5212-8f0d-913ba38d4832",
+      "message": "width along the bay's own axes is 1.8 m; at least 2.3 m",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#919",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "bca83355-d272-5302-8eda-66971e7d7fc6",
+      "message": "height is 0.08 m; at least 2 m",
+      "object_id": {
+        "local_id": "#919",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#936",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "01a80b01-c7f3-5e19-8e24-f7f6069b8853",
+      "message": "height is 0.04 m; at least 2 m",
+      "object_id": {
+        "local_id": "#936",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-infra-road.ifc/#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "6231bc7f-438a-53b1-8f55-932f84448a9b",
+      "message": "height is 0.25 m; at least 2 m",
+      "object_id": {
+        "local_id": "#998",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    }
+  ],
+  "not_evaluated": [
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc4-infra-road.ifc/#1014 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#1014",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc4-infra-road.ifc/#108 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#108",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc4-infra-road.ifc/#131 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#131",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc4-infra-road.ifc/#188 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#188",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc4-infra-road.ifc/#207 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#207",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc4-infra-road.ifc/#276 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#276",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc4-infra-road.ifc/#294 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#294",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc4-infra-road.ifc/#323 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#323",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc4-infra-road.ifc/#337 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#337",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc4-infra-road.ifc/#350 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#350",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc4-infra-road.ifc/#363 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#363",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc4-infra-road.ifc/#398 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#398",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc4-infra-road.ifc/#412 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#412",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc4-infra-road.ifc/#460 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#460",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc4-infra-road.ifc/#473 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#473",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc4-infra-road.ifc/#541 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#541",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc4-infra-road.ifc/#560 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#560",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc4-infra-road.ifc/#578 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#578",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc4-infra-road.ifc/#596 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#596",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc4-infra-road.ifc/#61 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#61",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc4-infra-road.ifc/#645 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#645",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc4-infra-road.ifc/#659 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#659",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc4-infra-road.ifc/#672 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#672",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc4-infra-road.ifc/#685 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#685",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc4-infra-road.ifc/#744 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#744",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: the walls beside ifc-step:bs-ifc4-infra-road.ifc/#761 cannot be measured: plan span unavailable: the least-area rectangle of ifc-step:bs-ifc4-infra-road.ifc/#761 is tied, so its sides are not the footprint's own",
+      "object_id": {
+        "local_id": "#761",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc4-infra-road.ifc/#823 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#823",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc4-infra-road.ifc/#839 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#839",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc4-infra-road.ifc/#85 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc4-infra-road.ifc/#919 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#919",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc4-infra-road.ifc/#936 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#936",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc4-infra-road.ifc/#998 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#998",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "length along the bay's own axes is 20 m; at most 6 m, if the bound applies to it: its orientation may be parallel or unclear (the centres of ifc-step:bs-ifc4-infra-road.ifc/#1014 and ifc-step:bs-ifc4-infra-road.ifc/#919 are too close to tell where one lies from the other; the centres of ifc-step:bs-ifc4-infra-road.ifc/#1014 and ifc-step:bs-ifc4-infra-road.ifc/#936 are too close to tell where one lies from the other; the centres of ifc-step:bs-ifc4-infra-road.ifc/#1014 and ifc-step:bs-ifc4-infra-road.ifc/#998 are too close to tell where one lies from the other)",
+      "object_id": {
+        "local_id": "#1014",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "parking-filter"
+    },
+    {
+      "message": "length along the bay's own axes is 20 m; at most 6 m, if the bound applies to it: its orientation may be parallel or unclear (ifc-step:bs-ifc4-infra-road.ifc/#761 may be a neighbour within reach; several orientations enclose ifc-step:bs-ifc4-infra-road.ifc/#761 with the least area; the centres of ifc-step:bs-ifc4-infra-road.ifc/#744 and ifc-step:bs-ifc4-infra-road.ifc/#761 are too close to tell where one lies from the other; the centres of ifc-step:bs-ifc4-infra-road.ifc/#744 and ifc-step:bs-ifc4-infra-road.ifc/#823 are too close to tell where one lies from the other; the centres of ifc-step:bs-ifc4-infra-road.ifc/#744 and ifc-step:bs-ifc4-infra-road.ifc/#839 are too close to tell where one lies from the other)",
+      "object_id": {
+        "local_id": "#744",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "parking-filter"
+    },
+    {
+      "message": "its own axes are unknown: several orientations enclose ifc-step:bs-ifc4-infra-road.ifc/#761 with the least area; its orientation may be parallel or perpendicular or angled or unclear (ifc-step:bs-ifc4-infra-road.ifc/#645 may be a neighbour within reach; ifc-step:bs-ifc4-infra-road.ifc/#659 may be a neighbour within reach; ifc-step:bs-ifc4-infra-road.ifc/#672 may be a neighbour within reach; ifc-step:bs-ifc4-infra-road.ifc/#685 may be a neighbour within reach; ifc-step:bs-ifc4-infra-road.ifc/#744 may be a neighbour within reach; ifc-step:bs-ifc4-infra-road.ifc/#823 may be a neighbour within reach; ifc-step:bs-ifc4-infra-road.ifc/#839 may be a neighbour within reach; several orientations enclose ifc-step:bs-ifc4-infra-road.ifc/#761 with the least area)",
+      "object_id": {
+        "local_id": "#761",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "parking-filter"
+    },
+    {
+      "message": "length along the bay's own axes is 20 m; at most 6 m, if the bound applies to it: its orientation may be parallel or unclear (ifc-step:bs-ifc4-infra-road.ifc/#761 may be a neighbour within reach; several orientations enclose ifc-step:bs-ifc4-infra-road.ifc/#761 with the least area; the centres of ifc-step:bs-ifc4-infra-road.ifc/#823 and ifc-step:bs-ifc4-infra-road.ifc/#744 are too close to tell where one lies from the other; the centres of ifc-step:bs-ifc4-infra-road.ifc/#823 and ifc-step:bs-ifc4-infra-road.ifc/#761 are too close to tell where one lies from the other; the centres of ifc-step:bs-ifc4-infra-road.ifc/#823 and ifc-step:bs-ifc4-infra-road.ifc/#839 are too close to tell where one lies from the other)",
+      "object_id": {
+        "local_id": "#823",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "parking-filter"
+    },
+    {
+      "message": "length along the bay's own axes is 20 m; at most 6 m, if the bound applies to it: its orientation may be parallel or unclear (ifc-step:bs-ifc4-infra-road.ifc/#761 may be a neighbour within reach; several orientations enclose ifc-step:bs-ifc4-infra-road.ifc/#761 with the least area; the centres of ifc-step:bs-ifc4-infra-road.ifc/#839 and ifc-step:bs-ifc4-infra-road.ifc/#744 are too close to tell where one lies from the other; the centres of ifc-step:bs-ifc4-infra-road.ifc/#839 and ifc-step:bs-ifc4-infra-road.ifc/#761 are too close to tell where one lies from the other; the centres of ifc-step:bs-ifc4-infra-road.ifc/#839 and ifc-step:bs-ifc4-infra-road.ifc/#823 are too close to tell where one lies from the other)",
+      "object_id": {
+        "local_id": "#839",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "parking-filter"
+    },
+    {
+      "message": "length along the bay's own axes is 20 m; at most 6 m, if the bound applies to it: its orientation may be parallel or unclear (the centres of ifc-step:bs-ifc4-infra-road.ifc/#919 and ifc-step:bs-ifc4-infra-road.ifc/#1014 are too close to tell where one lies from the other; the centres of ifc-step:bs-ifc4-infra-road.ifc/#919 and ifc-step:bs-ifc4-infra-road.ifc/#936 are too close to tell where one lies from the other; the centres of ifc-step:bs-ifc4-infra-road.ifc/#919 and ifc-step:bs-ifc4-infra-road.ifc/#998 are too close to tell where one lies from the other)",
+      "object_id": {
+        "local_id": "#919",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "parking-filter"
+    },
+    {
+      "message": "length along the bay's own axes is 20 m; at most 6 m, if the bound applies to it: its orientation may be parallel or unclear (the centres of ifc-step:bs-ifc4-infra-road.ifc/#936 and ifc-step:bs-ifc4-infra-road.ifc/#1014 are too close to tell where one lies from the other; the centres of ifc-step:bs-ifc4-infra-road.ifc/#936 and ifc-step:bs-ifc4-infra-road.ifc/#919 are too close to tell where one lies from the other; the centres of ifc-step:bs-ifc4-infra-road.ifc/#936 and ifc-step:bs-ifc4-infra-road.ifc/#998 are too close to tell where one lies from the other)",
+      "object_id": {
+        "local_id": "#936",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "parking-filter"
+    },
+    {
+      "message": "length along the bay's own axes is 20 m; at most 6 m, if the bound applies to it: its orientation may be parallel or unclear (the centres of ifc-step:bs-ifc4-infra-road.ifc/#998 and ifc-step:bs-ifc4-infra-road.ifc/#1014 are too close to tell where one lies from the other; the centres of ifc-step:bs-ifc4-infra-road.ifc/#998 and ifc-step:bs-ifc4-infra-road.ifc/#919 are too close to tell where one lies from the other; the centres of ifc-step:bs-ifc4-infra-road.ifc/#998 and ifc-step:bs-ifc4-infra-road.ifc/#936 are too close to tell where one lies from the other)",
+      "object_id": {
+        "local_id": "#998",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "parking-filter"
+    },
+    {
+      "message": "its own axes are unknown: several orientations enclose ifc-step:bs-ifc4-infra-road.ifc/#761 with the least area",
+      "object_id": {
+        "local_id": "#761",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "parking-oriented"
+    },
+    {
+      "message": "whether the bay is parallel to an aisle is unknown: several orientations enclose ifc-step:bs-ifc4-infra-road.ifc/#761 with the least area; several orientations enclose ifc-step:bs-ifc4-infra-road.ifc/#761 with the least area; several orientations enclose ifc-step:bs-ifc4-infra-road.ifc/#761 with the least area; several orientations enclose ifc-step:bs-ifc4-infra-road.ifc/#761 with the least area; several orientations enclose ifc-step:bs-ifc4-infra-road.ifc/#761 with the least area; several orientations enclose ifc-step:bs-ifc4-infra-road.ifc/#761 with the least area; several orientations enclose ifc-step:bs-ifc4-infra-road.ifc/#761 with the least area",
+      "object_id": {
+        "local_id": "#761",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "parking-oriented"
+    },
+    {
+      "message": "its own axes are unknown: several orientations enclose ifc-step:bs-ifc4-infra-road.ifc/#761 with the least area",
+      "object_id": {
+        "local_id": "#761",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "parking-sizes"
+    }
+  ],
+  "rules": [
+    {
+      "checked": 32,
+      "failed": 0,
+      "not_evaluated": 32,
+      "rule_id": "centre-line-against-wall",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "centre-line-both",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "centre-line-nearest",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "exit-centres-flag",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "exit-closest",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 32,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "exit-farthest-default",
+      "status": "passed"
+    },
+    {
+      "checked": 32,
+      "failed": 32,
+      "not_evaluated": 0,
+      "rule_id": "exit-slabs-closest",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "light-well-contents",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "light-well-storeys",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "light-well-zones",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 32,
+      "failed": 0,
+      "not_evaluated": 8,
+      "rule_id": "parking-filter",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 32,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "parking-oriented",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 32,
+      "failed": 32,
+      "not_evaluated": 1,
+      "rule_id": "parking-sizes",
+      "status": "failed"
+    },
+    {
+      "checked": 32,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "recess-slabs",
+      "status": "passed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "recess-spaces",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "wall-spacing-beams",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "wall-spacing-walls",
+      "status": "nothing_selected"
+    }
+  ]
+}

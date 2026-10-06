@@ -1,0 +1,87 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#45:Elevation",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#45:Name",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "f194627c-69c1-5021-9f24-c4038bd3ab99",
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `00 groundfloor` is not a whole number",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-building-hvac.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "storey-names",
+      "severity": "warning"
+    }
+  ],
+  "not_evaluated": [],
+  "rules": [
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "element-names",
+      "status": "passed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "slab-numbers-storey",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "space-names",
+      "status": "passed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "space-numbers",
+      "status": "passed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "storey-names",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-numbers",
+      "status": "passed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "wall-numbers-across",
+      "status": "nothing_selected"
+    }
+  ]
+}

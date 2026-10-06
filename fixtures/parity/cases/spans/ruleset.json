@@ -1,0 +1,1088 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:parity.public.spans",
+    "name": {
+      "default": "Public parity ruleset, plan spans and layouts",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "centre-line-distance, recess-width, light-well, exit-separation, wall-spacing and parking-bay, recorded before they became templates.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "definitionPackages": [
+    "axioval:parity.public.spans.definitions"
+  ],
+  "root": {
+    "id": "root",
+    "name": {
+      "default": "Plan spans and layouts",
+      "translations": {}
+    },
+    "rules": [
+      {
+        "id": "recess-spaces",
+        "definitionId": "axioval:parity.public.spans.recess-width",
+        "name": {
+          "default": "recess-spaces",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.spans.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "requirements": {
+            "type": "table",
+            "value": [
+              {
+                "maximum_depth_metres": {
+                  "type": "number",
+                  "value": 1.0
+                },
+                "minimum_width_metres": {
+                  "type": "number",
+                  "value": 1.0
+                }
+              },
+              {
+                "minimum_depth_metres": {
+                  "type": "number",
+                  "value": 1.0
+                },
+                "minimum_width_per_depth": {
+                  "type": "number",
+                  "value": 1.0
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "recess-slabs",
+        "definitionId": "axioval:parity.public.spans.recess-width",
+        "name": {
+          "default": "recess-slabs",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "anyOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.spans.slab",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.spans.wall",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.spans.column",
+              "includeSubtypes": true
+            }
+          ]
+        },
+        "parameters": {
+          "requirements": {
+            "type": "table",
+            "value": [
+              {
+                "maximum_depth_metres": {
+                  "type": "number",
+                  "value": 0.5
+                },
+                "minimum_width_metres": {
+                  "type": "number",
+                  "value": 0.6
+                }
+              },
+              {
+                "minimum_depth_metres": {
+                  "type": "number",
+                  "value": 0.5
+                },
+                "maximum_depth_metres": {
+                  "type": "number",
+                  "value": 3.0
+                },
+                "minimum_width_metres": {
+                  "type": "number",
+                  "value": 1.0
+                },
+                "minimum_width_per_depth": {
+                  "type": "number",
+                  "value": 0.8
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "light-well-zones",
+        "definitionId": "axioval:parity.public.spans.light-well",
+        "name": {
+          "default": "light-well-zones",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.spans.zone",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "member_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelAssignsToGroup:forward"
+            ]
+          },
+          "requirements": {
+            "type": "table",
+            "value": [
+              {
+                "maximum_height_metres": {
+                  "type": "number",
+                  "value": 10.0
+                },
+                "minimum_area_square_metres": {
+                  "type": "number",
+                  "value": 4.0
+                },
+                "minimum_width_metres": {
+                  "type": "number",
+                  "value": 1.5
+                }
+              },
+              {
+                "minimum_area_square_metres": {
+                  "type": "number",
+                  "value": 12.0
+                },
+                "minimum_width_metres": {
+                  "type": "number",
+                  "value": 3.0
+                }
+              }
+            ]
+          },
+          "gap_tolerance_metres": {
+            "type": "number",
+            "value": 0.05
+          }
+        }
+      },
+      {
+        "id": "light-well-storeys",
+        "definitionId": "axioval:parity.public.spans.light-well",
+        "name": {
+          "default": "light-well-storeys",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.spans.storey",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "member_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelAggregates:forward"
+            ]
+          },
+          "requirements": {
+            "type": "table",
+            "value": [
+              {
+                "minimum_area_square_metres": {
+                  "type": "number",
+                  "value": 200.0
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "centre-line-both",
+        "definitionId": "axioval:parity.public.spans.centre-line-distance",
+        "name": {
+          "default": "centre-line-both",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.spans.furniture",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "wall_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.spans.wall",
+              "includeSubtypes": true
+            }
+          },
+          "centre_line": {
+            "type": "string",
+            "value": "long"
+          },
+          "sides": {
+            "type": "string",
+            "value": "both"
+          },
+          "minimum": {
+            "type": "quantity",
+            "value": 0.2,
+            "unit": "m"
+          },
+          "maximum": {
+            "type": "quantity",
+            "value": 2.0,
+            "unit": "m"
+          },
+          "reach": {
+            "type": "quantity",
+            "value": 5.0,
+            "unit": "m"
+          }
+        }
+      },
+      {
+        "id": "centre-line-nearest",
+        "definitionId": "axioval:parity.public.spans.centre-line-distance",
+        "name": {
+          "default": "centre-line-nearest",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "anyOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.spans.furniture",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.spans.column",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.spans.beam",
+              "includeSubtypes": true
+            }
+          ]
+        },
+        "parameters": {
+          "wall_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.spans.wall",
+              "includeSubtypes": true
+            }
+          },
+          "centre_line": {
+            "type": "string",
+            "value": "short"
+          },
+          "sides": {
+            "type": "string",
+            "value": "nearest"
+          },
+          "minimum": {
+            "type": "quantity",
+            "value": 0.4,
+            "unit": "m"
+          },
+          "reach": {
+            "type": "quantity",
+            "value": 3.0,
+            "unit": "m"
+          },
+          "inset": {
+            "type": "quantity",
+            "value": 0.1,
+            "unit": "m"
+          }
+        }
+      },
+      {
+        "id": "centre-line-against-wall",
+        "definitionId": "axioval:parity.public.spans.centre-line-distance",
+        "name": {
+          "default": "centre-line-against-wall",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "anyOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.spans.furniture",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.spans.slab",
+              "includeSubtypes": true
+            }
+          ]
+        },
+        "parameters": {
+          "wall_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spans.wall",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spans.slab",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "centre_line": {
+            "type": "string",
+            "value": "against-wall"
+          },
+          "sides": {
+            "type": "string",
+            "value": "both"
+          },
+          "maximum": {
+            "type": "quantity",
+            "value": 1.0,
+            "unit": "m"
+          },
+          "reach": {
+            "type": "quantity",
+            "value": 4.0,
+            "unit": "m"
+          }
+        }
+      },
+      {
+        "id": "exit-closest",
+        "definitionId": "axioval:parity.public.spans.exit-separation",
+        "name": {
+          "default": "exit-closest",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.spans.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "exit_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelAggregates:backward",
+              "IfcRelContainedInSpatialStructure:forward"
+            ]
+          },
+          "exit_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.spans.wall",
+              "includeSubtypes": true
+            }
+          },
+          "minimum_exits": {
+            "type": "integer",
+            "value": 2
+          }
+        }
+      },
+      {
+        "id": "exit-centres-flag",
+        "definitionId": "axioval:parity.public.spans.exit-separation",
+        "name": {
+          "default": "exit-centres-flag",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.spans.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "exit_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelAggregates:backward",
+              "IfcRelContainedInSpatialStructure:forward"
+            ]
+          },
+          "exit_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spans.wall",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spans.furniture",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "fraction": {
+            "type": "number",
+            "value": 0.4
+          },
+          "flag": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.spans.sprinklered"
+          },
+          "flagged_fraction": {
+            "type": "number",
+            "value": 0.25
+          },
+          "separation": {
+            "type": "string",
+            "value": "centres"
+          },
+          "pairs": {
+            "type": "string",
+            "value": "all"
+          }
+        }
+      },
+      {
+        "id": "exit-farthest-default",
+        "definitionId": "axioval:parity.public.spans.exit-separation",
+        "name": {
+          "default": "exit-farthest-default",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "anyOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.spans.space",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.spans.slab",
+              "includeSubtypes": true
+            }
+          ]
+        },
+        "parameters": {
+          "exit_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelContainedInSpatialStructure:backward",
+              "IfcRelContainedInSpatialStructure:forward"
+            ]
+          },
+          "exit_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spans.wall",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spans.slab",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spans.beam",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "fraction": {
+            "type": "number",
+            "value": 0.5
+          },
+          "flag_sources": {
+            "type": "table",
+            "value": [
+              {
+                "property": {
+                  "type": "string",
+                  "value": "axioval:parity.public.spans.sprinklered"
+                }
+              },
+              {
+                "property": {
+                  "type": "string",
+                  "value": "axioval:parity.public.spans.sprinklered"
+                },
+                "path": {
+                  "type": "string",
+                  "value": "IfcRelContainedInSpatialStructure:backward"
+                }
+              }
+            ]
+          },
+          "flag_default": {
+            "type": "boolean",
+            "value": true
+          },
+          "flagged_fraction": {
+            "type": "number",
+            "value": 0.95
+          },
+          "separation": {
+            "type": "string",
+            "value": "farthest"
+          },
+          "pairs": {
+            "type": "string",
+            "value": "all"
+          }
+        }
+      },
+      {
+        "id": "exit-slabs-closest",
+        "definitionId": "axioval:parity.public.spans.exit-separation",
+        "name": {
+          "default": "exit-slabs-closest",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "anyOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.spans.slab",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.spans.wall",
+              "includeSubtypes": true
+            }
+          ]
+        },
+        "parameters": {
+          "exit_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelContainedInSpatialStructure:backward",
+              "IfcRelContainedInSpatialStructure:forward"
+            ]
+          },
+          "exit_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spans.wall",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spans.beam",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spans.column",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "fraction": {
+            "type": "number",
+            "value": 0.6
+          },
+          "pairs": {
+            "type": "string",
+            "value": "any"
+          },
+          "minimum_exits": {
+            "type": "integer",
+            "value": 3
+          }
+        }
+      },
+      {
+        "id": "light-well-contents",
+        "definitionId": "axioval:parity.public.spans.light-well",
+        "name": {
+          "default": "light-well-contents",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.spans.storey",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "member_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelContainedInSpatialStructure:forward"
+            ]
+          },
+          "requirements": {
+            "type": "table",
+            "value": [
+              {
+                "maximum_height_metres": {
+                  "type": "number",
+                  "value": 3.0
+                },
+                "minimum_area_square_metres": {
+                  "type": "number",
+                  "value": 1.0
+                }
+              },
+              {
+                "minimum_width_metres": {
+                  "type": "number",
+                  "value": 0.5
+                }
+              }
+            ]
+          },
+          "gap_tolerance_metres": {
+            "type": "number",
+            "value": 0.0
+          }
+        }
+      },
+      {
+        "id": "wall-spacing-walls",
+        "definitionId": "axioval:parity.public.spans.wall-spacing",
+        "name": {
+          "default": "wall-spacing-walls",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.spans.storey",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "members": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.spans.wall",
+              "includeSubtypes": true
+            }
+          },
+          "member_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelContainedInSpatialStructure:forward"
+            ]
+          },
+          "angle_tolerance": {
+            "type": "quantity",
+            "value": 5.0,
+            "unit": "deg"
+          },
+          "minimum": {
+            "type": "quantity",
+            "value": 2.0,
+            "unit": "m"
+          },
+          "maximum": {
+            "type": "quantity",
+            "value": 12.0,
+            "unit": "m"
+          },
+          "footprints": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spans.space",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spans.slab",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "footprint_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelAggregates:forward"
+            ]
+          },
+          "uncovered_above": {
+            "type": "quantity",
+            "value": 1.0,
+            "unit": "m2"
+          }
+        }
+      },
+      {
+        "id": "wall-spacing-beams",
+        "definitionId": "axioval:parity.public.spans.wall-spacing",
+        "name": {
+          "default": "wall-spacing-beams",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.spans.storey",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "members": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spans.beam",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spans.wall",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "member_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelContainedInSpatialStructure:forward"
+            ]
+          },
+          "angle_tolerance": {
+            "type": "quantity",
+            "value": 2.0,
+            "unit": "deg"
+          },
+          "minimum": {
+            "type": "quantity",
+            "value": 1.0,
+            "unit": "m"
+          }
+        }
+      },
+      {
+        "id": "parking-sizes",
+        "definitionId": "axioval:parity.public.spans.parking-bay",
+        "name": {
+          "default": "parking-sizes",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "anyOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.spans.space",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.spans.slab",
+              "includeSubtypes": true
+            }
+          ]
+        },
+        "parameters": {
+          "min_width": {
+            "type": "quantity",
+            "value": 2.3,
+            "unit": "m"
+          },
+          "max_width": {
+            "type": "quantity",
+            "value": 10.0,
+            "unit": "m"
+          },
+          "min_length": {
+            "type": "quantity",
+            "value": 4.0,
+            "unit": "m"
+          },
+          "max_length": {
+            "type": "quantity",
+            "value": 25.0,
+            "unit": "m"
+          },
+          "min_height": {
+            "type": "quantity",
+            "value": 2.0,
+            "unit": "m"
+          },
+          "max_height": {
+            "type": "quantity",
+            "value": 4.0,
+            "unit": "m"
+          }
+        }
+      },
+      {
+        "id": "parking-oriented",
+        "definitionId": "axioval:parity.public.spans.parking-bay",
+        "name": {
+          "default": "parking-oriented",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "anyOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.spans.space",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.spans.slab",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.spans.furniture",
+              "includeSubtypes": true
+            }
+          ]
+        },
+        "parameters": {
+          "min_width": {
+            "type": "quantity",
+            "value": 1.0,
+            "unit": "m"
+          },
+          "aisles": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spans.slab",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spans.space",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "aisle_reach": {
+            "type": "quantity",
+            "value": 5.0,
+            "unit": "m"
+          },
+          "orientation": {
+            "type": "string",
+            "value": "parallel"
+          },
+          "angle_tolerance": {
+            "type": "quantity",
+            "value": 5.0,
+            "unit": "deg"
+          },
+          "obstacles": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spans.wall",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spans.column",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spans.beam",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spans.furniture",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "obstruction_reach": {
+            "type": "quantity",
+            "value": 0.5,
+            "unit": "m"
+          },
+          "end_obstructions": {
+            "type": "string",
+            "value": "one"
+          },
+          "side_obstructions": {
+            "type": "string",
+            "value": "none"
+          },
+          "side_zone_length": {
+            "type": "quantity",
+            "value": 2.0,
+            "unit": "m"
+          }
+        }
+      },
+      {
+        "id": "parking-filter",
+        "definitionId": "axioval:parity.public.spans.parking-bay",
+        "name": {
+          "default": "parking-filter",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "anyOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.spans.slab",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.spans.space",
+              "includeSubtypes": true
+            }
+          ]
+        },
+        "parameters": {
+          "min_width": {
+            "type": "quantity",
+            "value": 2.0,
+            "unit": "m"
+          },
+          "max_length": {
+            "type": "quantity",
+            "value": 6.0,
+            "unit": "m"
+          },
+          "applies_when": {
+            "type": "string",
+            "value": "filter"
+          },
+          "orientations": {
+            "type": "stringList",
+            "value": [
+              "parallel",
+              "perpendicular"
+            ]
+          },
+          "neighbour_reach": {
+            "type": "quantity",
+            "value": 10.0,
+            "unit": "m"
+          },
+          "angle_tolerance": {
+            "type": "quantity",
+            "value": 10.0,
+            "unit": "deg"
+          },
+          "obstacles": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spans.wall",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spans.column",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "obstruction_reach": {
+            "type": "quantity",
+            "value": 0.3,
+            "unit": "m"
+          },
+          "end_states": {
+            "type": "stringList",
+            "value": [
+              "none",
+              "one"
+            ]
+          },
+          "side_states": {
+            "type": "stringList",
+            "value": [
+              "none"
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,248 @@
+{
+  "findings": [],
+  "not_evaluated": [
+    {
+      "message": "ifc-step:bs-ifc4x3-building-structural.ifc/#112 has no numeric axioval:attributes.axioval:parity.public.numbering.elevation (absent), so the order is unknown",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "element-names"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `house - outer wall - house front right` does not match the pattern",
+      "object_id": {
+        "local_id": "#112",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `house - inner wall` does not match the pattern",
+      "object_id": {
+        "local_id": "#147",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `house - outer wall - house back` does not match the pattern",
+      "object_id": {
+        "local_id": "#69",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `house - outer wall - house front` does not match the pattern",
+      "object_id": {
+        "local_id": "#93",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "ifc-step:bs-ifc4x3-building-structural.ifc/#45 has no numeric axioval:attributes.axioval:parity.public.numbering.elevation (absent), so the order is unknown",
+      "object_id": {
+        "local_id": "#35",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "storey-names"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `house - outer wall - house front right` does not match the pattern",
+      "object_id": {
+        "local_id": "#112",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "wall-numbers-across"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `house - inner wall` does not match the pattern",
+      "object_id": {
+        "local_id": "#147",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "wall-numbers-across"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `girder` does not match the pattern",
+      "object_id": {
+        "local_id": "#175",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "wall-numbers-across"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `girder` does not match the pattern",
+      "object_id": {
+        "local_id": "#197",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "wall-numbers-across"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `girder` does not match the pattern",
+      "object_id": {
+        "local_id": "#213",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "wall-numbers-across"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `girder` does not match the pattern",
+      "object_id": {
+        "local_id": "#229",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "wall-numbers-across"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `girder` does not match the pattern",
+      "object_id": {
+        "local_id": "#245",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "wall-numbers-across"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `girder` does not match the pattern",
+      "object_id": {
+        "local_id": "#261",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "wall-numbers-across"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `house - outer wall - house back` does not match the pattern",
+      "object_id": {
+        "local_id": "#69",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "wall-numbers-across"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `house - outer wall - house front` does not match the pattern",
+      "object_id": {
+        "local_id": "#93",
+        "source": {
+          "document": "bs-ifc4x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "wall-numbers-across"
+    }
+  ],
+  "rules": [
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "element-names",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 4,
+      "rule_id": "slab-numbers-storey",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "space-names",
+      "status": "passed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "space-numbers",
+      "status": "passed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "storey-names",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-numbers",
+      "status": "passed"
+    },
+    {
+      "checked": 10,
+      "failed": 0,
+      "not_evaluated": 10,
+      "rule_id": "wall-numbers-across",
+      "status": "not_evaluated"
+    }
+  ]
+}

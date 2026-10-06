@@ -1,0 +1,108 @@
+{
+  "findings": [
+    {
+      "evidence": [],
+      "id": "90378f35-41ec-5184-a1de-3a52e25bbb7f",
+      "message": "0 counterpart(s) lie within 3.0000 m, 2 required",
+      "object_id": {
+        "local_id": "#71",
+        "source": {
+          "document": "bs-ifc4-column-straight-rectangle-tessellation.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "distance-at-least",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "plan-centre:ifc-step:bs-ifc4-column-straight-rectangle-tessellation.ifc/#71:(10.972800,7.315200):inside",
+          "source": {
+            "document": "bs-ifc4-column-straight-rectangle-tessellation.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-column-straight-rectangle-tessellation.ifc/#71",
+          "source": {
+            "document": "bs-ifc4-column-straight-rectangle-tessellation.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "d3b103b6-9f16-5737-9152-a36f0ca496e7",
+      "message": "0 target(s) within 10 m of the eye 1.6 m above the base of ifc-step:bs-ifc4-column-straight-rectangle-tessellation.ifc/#71 are in view; required at least 2",
+      "object_id": {
+        "local_id": "#71",
+        "source": {
+          "document": "bs-ifc4-column-straight-rectangle-tessellation.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "visibility-at-least",
+      "severity": "warning"
+    }
+  ],
+  "not_evaluated": [],
+  "rules": [
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "containment-cover",
+      "status": "passed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "containment-furniture",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "distance-at-least",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "distance-none-closer",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "distance-overlapping",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "distance-walls-nearest",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "visibility-at-least",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "visibility-none",
+      "status": "nothing_selected"
+    }
+  ]
+}

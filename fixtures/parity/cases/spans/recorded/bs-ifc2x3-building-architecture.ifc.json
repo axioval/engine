@@ -1,0 +1,1643 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc2x3-building-architecture.ifc/#215:(7.850000,6.300000):unique",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "plan-side-distances:ifc-step:bs-ifc2x3-building-architecture.ifc/#215:reach=5:inset=0",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "a8bde4c7-8b59-5a0d-80c0-b23a996a266a",
+      "message": "centre line beside the +second side: too far: 4.65 m from ifc-step:bs-ifc2x3-building-architecture.ifc/#415, more than the maximum 2 m",
+      "object_id": {
+        "local_id": "#215",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#415",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "centre-line-both",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc2x3-building-architecture.ifc/#215:(7.850000,6.300000):unique",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "plan-side-distances:ifc-step:bs-ifc2x3-building-architecture.ifc/#215:reach=3:inset=0.1",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "91c169ba-86d6-56bc-9903-f0db501ca310",
+      "message": "centre line to the nearest wall: no wall nearby (none within 3 m)",
+      "object_id": {
+        "local_id": "#215",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "centre-line-nearest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#36:*:Sprinklered",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#44:*:Sprinklered",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:relationship-scan:IfcRelContainedInSpatialStructure:3",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:relationship:#58",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-diameter:ifc-step:bs-ifc2x3-building-architecture.ifc/#44",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-span:farthest:ifc-step:bs-ifc2x3-building-architecture.ifc/#319:ifc-step:bs-ifc2x3-building-architecture.ifc/#370",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-span:farthest:ifc-step:bs-ifc2x3-building-architecture.ifc/#319:ifc-step:bs-ifc2x3-building-architecture.ifc/#468",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-span:farthest:ifc-step:bs-ifc2x3-building-architecture.ifc/#370:ifc-step:bs-ifc2x3-building-architecture.ifc/#468",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "9389714f-92ed-5655-b5fd-4375f9165e4a",
+      "message": "exits ifc-step:bs-ifc2x3-building-architecture.ifc/#319 and ifc-step:bs-ifc2x3-building-architecture.ifc/#370 are 6.2097 m apart between farthest points; ifc-step:bs-ifc2x3-building-architecture.ifc/#319 and ifc-step:bs-ifc2x3-building-architecture.ifc/#468 are 5.9176 m apart between farthest points; ifc-step:bs-ifc2x3-building-architecture.ifc/#370 and ifc-step:bs-ifc2x3-building-architecture.ifc/#468 are 4.0252 m apart between farthest points; required at least 7.2599 m (0.95 × the longest plan diagonal of 7.642 m, axioval:parity.public.spans.sprinklered nor axioval:parity.public.spans.sprinklered (via IfcRelContainedInSpatialStructure) not stated, default true)",
+      "object_id": {
+        "local_id": "#44",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#319",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#36",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#370",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#468",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "exit-farthest-default",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#319:ifc-step:bs-ifc2x3-building-architecture.ifc/#370",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:relationship-scan:IfcRelContainedInSpatialStructure:3",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:relationship:#58",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-diameter:ifc-step:bs-ifc2x3-building-architecture.ifc/#415",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "71a3a4f6-7745-563f-8365-051b67ed1af4",
+      "message": "no two of its 3 exits are far enough apart: ifc-step:bs-ifc2x3-building-architecture.ifc/#319 and ifc-step:bs-ifc2x3-building-architecture.ifc/#370 are 1.2 m apart between closest points; required at least 3.602 m (0.6 × the longest plan diagonal of 6.0033 m)",
+      "object_id": {
+        "local_id": "#415",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#319",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#370",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:relationship-scan:IfcRelContainedInSpatialStructure:3",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "65a2092a-8f43-5417-be6a-63d3680b4d98",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#555",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:relationship-scan:IfcRelContainedInSpatialStructure:3",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "b82c6e6c-4a4e-51a8-b3ec-837f89c325bc",
+      "message": "has 0 exit(s) via IfcRelContainedInSpatialStructure then IfcRelContainedInSpatialStructure; at least 3 required",
+      "object_id": {
+        "local_id": "#606",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "exit-slabs-closest",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#44:ifc-step:bs-ifc2x3-building-architecture.ifc/#319",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#44:ifc-step:bs-ifc2x3-building-architecture.ifc/#370",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#44:ifc-step:bs-ifc2x3-building-architecture.ifc/#415",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#44:ifc-step:bs-ifc2x3-building-architecture.ifc/#468",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc2x3-building-architecture.ifc/#44:(5.800000,5.900000):unique",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "95af9fe7-c711-5342-b87e-8fcf4cd21e96",
+      "message": "ifc-step:bs-ifc2x3-building-architecture.ifc/#468 stands within the bay, past none of its edges",
+      "object_id": {
+        "local_id": "#44",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#468",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "parking-filter",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#555:ifc-step:bs-ifc2x3-building-architecture.ifc/#415",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc2x3-building-architecture.ifc/#555:(3.900000,6.000000):unique",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "1ac63540-fdfb-53a2-97f9-27451599b75b",
+      "message": "ifc-step:bs-ifc2x3-building-architecture.ifc/#415 stands within the bay, past none of its edges",
+      "object_id": {
+        "local_id": "#555",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#415",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "parking-filter",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#606:ifc-step:bs-ifc2x3-building-architecture.ifc/#319",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#606:ifc-step:bs-ifc2x3-building-architecture.ifc/#370",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#606:ifc-step:bs-ifc2x3-building-architecture.ifc/#468",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc2x3-building-architecture.ifc/#606:(7.000000,6.000000):unique",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "1b4432cd-db5c-5e66-89f6-fd15b0e6da7e",
+      "message": "ifc-step:bs-ifc2x3-building-architecture.ifc/#319, ifc-step:bs-ifc2x3-building-architecture.ifc/#370, ifc-step:bs-ifc2x3-building-architecture.ifc/#468 stand within the bay, past none of its edges",
+      "object_id": {
+        "local_id": "#606",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#319",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#370",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#468",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "parking-filter",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#215:ifc-step:bs-ifc2x3-building-architecture.ifc/#183",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#215:ifc-step:bs-ifc2x3-building-architecture.ifc/#370",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#215:ifc-step:bs-ifc2x3-building-architecture.ifc/#44",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#215:ifc-step:bs-ifc2x3-building-architecture.ifc/#468",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#215:ifc-step:bs-ifc2x3-building-architecture.ifc/#606",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc2x3-building-architecture.ifc/#215:(7.850000,6.300000):unique",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "d08e1214-c0a9-5565-98d5-cb87134d5fc7",
+      "message": "1 of its sides obstructed by ifc-step:bs-ifc2x3-building-architecture.ifc/#370, ifc-step:bs-ifc2x3-building-architecture.ifc/#468, none allowed",
+      "object_id": {
+        "local_id": "#215",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#370",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#468",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "parking-oriented",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc2x3-building-architecture.ifc/#215:(7.850000,6.300000):unique",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "fc7cf829-22b2-587d-8d19-8db42e111490",
+      "message": "width along the bay's own axes is 0.6 m; at least 1 m",
+      "object_id": {
+        "local_id": "#215",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-oriented",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#44:ifc-step:bs-ifc2x3-building-architecture.ifc/#215",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#44:ifc-step:bs-ifc2x3-building-architecture.ifc/#319",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#44:ifc-step:bs-ifc2x3-building-architecture.ifc/#370",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#44:ifc-step:bs-ifc2x3-building-architecture.ifc/#415",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#44:ifc-step:bs-ifc2x3-building-architecture.ifc/#468",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc2x3-building-architecture.ifc/#44:(5.800000,5.900000):unique",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "86846ce4-b6b7-5eb7-94f4-366d44f8dc41",
+      "message": "2 of its ends obstructed by ifc-step:bs-ifc2x3-building-architecture.ifc/#319, ifc-step:bs-ifc2x3-building-architecture.ifc/#370, ifc-step:bs-ifc2x3-building-architecture.ifc/#415, one allowed",
+      "object_id": {
+        "local_id": "#44",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#319",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#370",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#415",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "parking-oriented",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#44:ifc-step:bs-ifc2x3-building-architecture.ifc/#215",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#44:ifc-step:bs-ifc2x3-building-architecture.ifc/#319",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#44:ifc-step:bs-ifc2x3-building-architecture.ifc/#370",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#44:ifc-step:bs-ifc2x3-building-architecture.ifc/#415",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#44:ifc-step:bs-ifc2x3-building-architecture.ifc/#468",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc2x3-building-architecture.ifc/#44:(5.800000,5.900000):unique",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "14ec2c1e-5eca-5a73-b7a4-4bfbc9bfd41c",
+      "message": "2 of its sides obstructed by ifc-step:bs-ifc2x3-building-architecture.ifc/#370, ifc-step:bs-ifc2x3-building-architecture.ifc/#415, none allowed",
+      "object_id": {
+        "local_id": "#44",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#370",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#415",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "parking-oriented",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#44:ifc-step:bs-ifc2x3-building-architecture.ifc/#215",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#44:ifc-step:bs-ifc2x3-building-architecture.ifc/#319",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#44:ifc-step:bs-ifc2x3-building-architecture.ifc/#370",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#44:ifc-step:bs-ifc2x3-building-architecture.ifc/#415",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#44:ifc-step:bs-ifc2x3-building-architecture.ifc/#468",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc2x3-building-architecture.ifc/#44:(5.800000,5.900000):unique",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "3592f662-9d74-58ca-adc8-cd57922a569b",
+      "message": "ifc-step:bs-ifc2x3-building-architecture.ifc/#215, ifc-step:bs-ifc2x3-building-architecture.ifc/#468 stand within the bay, past none of its edges",
+      "object_id": {
+        "local_id": "#44",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#215",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#468",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "parking-oriented",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#555:ifc-step:bs-ifc2x3-building-architecture.ifc/#415",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc2x3-building-architecture.ifc/#555:(3.900000,6.000000):unique",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "75dc174c-2a99-5c4d-9838-37f2ca837275",
+      "message": "ifc-step:bs-ifc2x3-building-architecture.ifc/#415 stands within the bay, past none of its edges",
+      "object_id": {
+        "local_id": "#555",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#415",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "parking-oriented",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#606:ifc-step:bs-ifc2x3-building-architecture.ifc/#215",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#606:ifc-step:bs-ifc2x3-building-architecture.ifc/#319",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#606:ifc-step:bs-ifc2x3-building-architecture.ifc/#370",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#606:ifc-step:bs-ifc2x3-building-architecture.ifc/#468",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc2x3-building-architecture.ifc/#606:(7.000000,6.000000):unique",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "9adad047-8612-5a17-b64e-3021a8f1a6b5",
+      "message": "ifc-step:bs-ifc2x3-building-architecture.ifc/#215, ifc-step:bs-ifc2x3-building-architecture.ifc/#319, ifc-step:bs-ifc2x3-building-architecture.ifc/#370, ifc-step:bs-ifc2x3-building-architecture.ifc/#468 stand within the bay, past none of its edges",
+      "object_id": {
+        "local_id": "#606",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#215",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#319",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#370",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#468",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "parking-oriented",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc2x3-building-architecture.ifc/#44",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "e5e3bc39-a3cd-5eaa-9dc2-d8f06149c1e8",
+      "message": "height is 0.25 m; at least 2 m",
+      "object_id": {
+        "local_id": "#44",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc2x3-building-architecture.ifc/#606",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "ec281337-8183-504b-8cff-fa94de25ca90",
+      "message": "height is 4.2243 m; at most 4 m",
+      "object_id": {
+        "local_id": "#606",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "parking-sizes",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "plan-recess:ifc-step:bs-ifc2x3-building-architecture.ifc/#44:(3.200000,5.000000)-(3.200000,4.800000):depth",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-recess:ifc-step:bs-ifc2x3-building-architecture.ifc/#44:(3.200000,5.000000)-(3.200000,4.800000):width",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-recesses:ifc-step:bs-ifc2x3-building-architecture.ifc/#44:5",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "fa7b7094-8c15-5d98-9db4-bff119a536f3",
+      "message": "recess at (3.200, 5.000)-(3.200, 4.800) is 0.2 m wide and 1.4 m deep; row 1 requires at least 1.12 m",
+      "object_id": {
+        "local_id": "#44",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "recess-slabs",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "plan-recess:ifc-step:bs-ifc2x3-building-architecture.ifc/#44:(8.400000,7.600000)-(8.400000,8.300000):depth",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-recess:ifc-step:bs-ifc2x3-building-architecture.ifc/#44:(8.400000,7.600000)-(8.400000,8.300000):width",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-recesses:ifc-step:bs-ifc2x3-building-architecture.ifc/#44:5",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "09ea087b-e7ba-5ef3-b45a-89c7a4e17637",
+      "message": "recess at (8.400, 7.600)-(8.400, 8.300) is 0.7 m wide and 0.7 m deep; row 1 requires at least 1 m",
+      "object_id": {
+        "local_id": "#44",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "recess-slabs",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#370:ifc-step:bs-ifc2x3-building-architecture.ifc/#468",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc2x3-building-architecture.ifc/#370:(8.500000,6.900000):unique",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc2x3-building-architecture.ifc/#468:(8.162000,6.900000):unique",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "2c19234b-d73a-5e49-90a3-6b2e77a104dc",
+      "message": "ifc-step:bs-ifc2x3-building-architecture.ifc/#370 and ifc-step:bs-ifc2x3-building-architecture.ifc/#468 are parallel and 0.226 m apart in plan; at least 1 m required",
+      "object_id": {
+        "local_id": "#36",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#370",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#468",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "wall-spacing-beams",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc2x3-building-architecture.ifc/#370:ifc-step:bs-ifc2x3-building-architecture.ifc/#468",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc2x3-building-architecture.ifc/#370:(8.500000,6.900000):unique",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc2x3-building-architecture.ifc/#468:(8.162000,6.900000):unique",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "7682eea2-123d-51f5-9d75-63b24bac0a02",
+      "message": "ifc-step:bs-ifc2x3-building-architecture.ifc/#370 and ifc-step:bs-ifc2x3-building-architecture.ifc/#468 are parallel and 0.226 m apart in plan; at least 2 m required",
+      "object_id": {
+        "local_id": "#36",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#370",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#468",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "wall-spacing-walls",
+      "severity": "warning"
+    }
+  ],
+  "not_evaluated": [
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc2x3-building-architecture.ifc/#215 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#215",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc2x3-building-architecture.ifc/#44 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#44",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc2x3-building-architecture.ifc/#555 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#555",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "centre line: front not decided: no side of ifc-step:bs-ifc2x3-building-architecture.ifc/#606 is surely nearer a wall than the others",
+      "object_id": {
+        "local_id": "#606",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "centre-line-against-wall"
+    },
+    {
+      "message": "the longest plan diagonal cannot be measured: plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#183 cannot be computed",
+      "object_id": {
+        "local_id": "#183",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "exit-centres-flag"
+    },
+    {
+      "message": "the longest plan diagonal cannot be measured: plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#296 cannot be computed",
+      "object_id": {
+        "local_id": "#296",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "exit-centres-flag"
+    },
+    {
+      "message": "the longest plan diagonal cannot be measured: plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#183 cannot be computed",
+      "object_id": {
+        "local_id": "#183",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "exit-closest"
+    },
+    {
+      "message": "the longest plan diagonal cannot be measured: plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#296 cannot be computed",
+      "object_id": {
+        "local_id": "#296",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "exit-closest"
+    },
+    {
+      "message": "vertical extent unavailable: ifc-step:bs-ifc2x3-building-architecture.ifc/#460 has a body that was not measured: no body representation",
+      "object_id": {
+        "local_id": "#36",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "light-well-contents"
+    },
+    {
+      "message": "the shared plan section cannot be measured: plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#183 cannot be computed",
+      "object_id": {
+        "local_id": "#36",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "light-well-storeys"
+    },
+    {
+      "message": "the shared plan section cannot be measured: plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#183 cannot be computed",
+      "object_id": {
+        "local_id": "#179",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "light-well-zones"
+    },
+    {
+      "message": "plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#183 cannot be computed; its orientation may be parallel or perpendicular or angled or unclear (plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#183 cannot be computed); its obstructed ends are unknown: plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#183 cannot be computed; its obstructed sides are unknown: plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#183 cannot be computed",
+      "object_id": {
+        "local_id": "#183",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "parking-filter"
+    },
+    {
+      "message": "plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#296 cannot be computed; its orientation may be parallel or perpendicular or angled or unclear (plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#296 cannot be computed); its obstructed ends are unknown: plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#296 cannot be computed; its obstructed sides are unknown: plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#296 cannot be computed",
+      "object_id": {
+        "local_id": "#296",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "parking-filter"
+    },
+    {
+      "message": "length along the bay's own axes is 6.6 m; at most 6 m, if the bound applies to it: its orientation may be parallel or perpendicular or angled or unclear (the axes of ifc-step:bs-ifc2x3-building-architecture.ifc/#183 are unknown: plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#183 cannot be computed; the axes of ifc-step:bs-ifc2x3-building-architecture.ifc/#296 are unknown: plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#296 cannot be computed)",
+      "object_id": {
+        "local_id": "#555",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "parking-filter"
+    },
+    {
+      "message": "length along the bay's own axes is 6.6 m; at most 6 m, if the bound applies to it: its orientation may be parallel or perpendicular or angled or unclear (the axes of ifc-step:bs-ifc2x3-building-architecture.ifc/#183 are unknown: plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#183 cannot be computed; the axes of ifc-step:bs-ifc2x3-building-architecture.ifc/#296 are unknown: plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#296 cannot be computed)",
+      "object_id": {
+        "local_id": "#606",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "parking-filter"
+    },
+    {
+      "message": "plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#183 cannot be computed",
+      "object_id": {
+        "local_id": "#183",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "parking-oriented"
+    },
+    {
+      "message": "plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#183 cannot be computed",
+      "object_id": {
+        "local_id": "#183",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "parking-oriented"
+    },
+    {
+      "message": "plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#183 cannot be computed",
+      "object_id": {
+        "local_id": "#183",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "parking-oriented"
+    },
+    {
+      "message": "how many of its ends are obstructed is unknown, one allowed: ifc-step:bs-ifc2x3-building-architecture.ifc/#183, ifc-step:bs-ifc2x3-building-architecture.ifc/#44, ifc-step:bs-ifc2x3-building-architecture.ifc/#468, ifc-step:bs-ifc2x3-building-architecture.ifc/#606 may obstruct them",
+      "object_id": {
+        "local_id": "#215",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "parking-oriented"
+    },
+    {
+      "message": "plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#296 cannot be computed",
+      "object_id": {
+        "local_id": "#296",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "parking-oriented"
+    },
+    {
+      "message": "plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#296 cannot be computed",
+      "object_id": {
+        "local_id": "#296",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "parking-oriented"
+    },
+    {
+      "message": "plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#296 cannot be computed",
+      "object_id": {
+        "local_id": "#296",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "parking-oriented"
+    },
+    {
+      "message": "plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#183 cannot be computed",
+      "object_id": {
+        "local_id": "#183",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "parking-sizes"
+    },
+    {
+      "message": "plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#296 cannot be computed",
+      "object_id": {
+        "local_id": "#296",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "parking-sizes"
+    },
+    {
+      "message": "the recesses of ifc-step:bs-ifc2x3-building-architecture.ifc/#183 cannot be measured: plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#183 cannot be computed",
+      "object_id": {
+        "local_id": "#183",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "recess-spaces"
+    },
+    {
+      "message": "the recesses of ifc-step:bs-ifc2x3-building-architecture.ifc/#296 cannot be measured: plan span unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#296 cannot be computed",
+      "object_id": {
+        "local_id": "#296",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "recess-spaces"
+    },
+    {
+      "message": "plan area unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#183 cannot be computed",
+      "object_id": {
+        "local_id": "#36",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "wall-spacing-walls"
+    },
+    {
+      "message": "plan area unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#296 cannot be computed",
+      "object_id": {
+        "local_id": "#36",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "wall-spacing-walls"
+    },
+    {
+      "message": "minimum spacing: whether every parallel pair stands 2 m apart is unknown: ifc-step:bs-ifc2x3-building-architecture.ifc/#319 and ifc-step:bs-ifc2x3-building-architecture.ifc/#370 may be closer than 2 m (1.2 m)",
+      "object_id": {
+        "local_id": "#36",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "wall-spacing-walls"
+    }
+  ],
+  "rules": [
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 4,
+      "rule_id": "centre-line-against-wall",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "centre-line-both",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "centre-line-nearest",
+      "status": "failed"
+    },
+    {
+      "checked": 2,
+      "failed": 0,
+      "not_evaluated": 2,
+      "rule_id": "exit-centres-flag",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 2,
+      "failed": 0,
+      "not_evaluated": 2,
+      "rule_id": "exit-closest",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 5,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "exit-farthest-default",
+      "status": "failed"
+    },
+    {
+      "checked": 7,
+      "failed": 3,
+      "not_evaluated": 0,
+      "rule_id": "exit-slabs-closest",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "light-well-contents",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "light-well-storeys",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "light-well-zones",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 5,
+      "failed": 3,
+      "not_evaluated": 4,
+      "rule_id": "parking-filter",
+      "status": "failed"
+    },
+    {
+      "checked": 6,
+      "failed": 4,
+      "not_evaluated": 3,
+      "rule_id": "parking-oriented",
+      "status": "failed"
+    },
+    {
+      "checked": 5,
+      "failed": 2,
+      "not_evaluated": 2,
+      "rule_id": "parking-sizes",
+      "status": "failed"
+    },
+    {
+      "checked": 7,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "recess-slabs",
+      "status": "failed"
+    },
+    {
+      "checked": 2,
+      "failed": 0,
+      "not_evaluated": 2,
+      "rule_id": "recess-spaces",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "wall-spacing-beams",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 1,
+      "rule_id": "wall-spacing-walls",
+      "status": "failed"
+    }
+  ]
+}

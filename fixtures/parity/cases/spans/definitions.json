@@ -1,0 +1,861 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:parity.public.spans.definitions",
+    "name": {
+      "default": "Public parity definitions, plan spans and layouts",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "Terms for holding centre-line-distance, recess-width, light-well, exit-separation, wall-spacing and parking-bay to the outcomes recorded before they became templates.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "objectTypes": {
+    "axioval:parity.public.spans.space": {
+      "id": "axioval:parity.public.spans.space",
+      "name": {
+        "default": "space",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcSpace"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcSpace"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcSpace"
+        }
+      ]
+    },
+    "axioval:parity.public.spans.wall": {
+      "id": "axioval:parity.public.spans.wall",
+      "name": {
+        "default": "wall",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcWall"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcWall"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcWall"
+        }
+      ]
+    },
+    "axioval:parity.public.spans.slab": {
+      "id": "axioval:parity.public.spans.slab",
+      "name": {
+        "default": "slab",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcSlab"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcSlab"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcSlab"
+        }
+      ]
+    },
+    "axioval:parity.public.spans.zone": {
+      "id": "axioval:parity.public.spans.zone",
+      "name": {
+        "default": "zone",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcZone"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcZone"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcZone"
+        }
+      ]
+    },
+    "axioval:parity.public.spans.furniture": {
+      "id": "axioval:parity.public.spans.furniture",
+      "name": {
+        "default": "furniture",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcFurnishingElement"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcFurnishingElement"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcFurnishingElement"
+        }
+      ]
+    },
+    "axioval:parity.public.spans.beam": {
+      "id": "axioval:parity.public.spans.beam",
+      "name": {
+        "default": "beam",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcBeam"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcBeam"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcBeam"
+        }
+      ]
+    },
+    "axioval:parity.public.spans.column": {
+      "id": "axioval:parity.public.spans.column",
+      "name": {
+        "default": "column",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcColumn"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcColumn"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcColumn"
+        }
+      ]
+    },
+    "axioval:parity.public.spans.storey": {
+      "id": "axioval:parity.public.spans.storey",
+      "name": {
+        "default": "storey",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcBuildingStorey"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcBuildingStorey"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcBuildingStorey"
+        }
+      ]
+    },
+    "axioval:parity.public.spans.window": {
+      "id": "axioval:parity.public.spans.window",
+      "name": {
+        "default": "window",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcWindow"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcWindow"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcWindow"
+        }
+      ]
+    },
+    "axioval:parity.public.spans.duct": {
+      "id": "axioval:parity.public.spans.duct",
+      "name": {
+        "default": "duct",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcDuctSegment"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcDuctSegment"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcDuctSegment"
+        }
+      ]
+    }
+  },
+  "properties": {
+    "axioval:parity.public.spans.sprinklered": {
+      "id": "axioval:parity.public.spans.sprinklered",
+      "name": {
+        "default": "sprinklered",
+        "translations": {}
+      },
+      "valueKind": "boolean",
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "Sprinklered"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "Sprinklered"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "Sprinklered"
+        }
+      ]
+    }
+  },
+  "propertySets": {},
+  "definitions": {
+    "axioval:parity.public.spans.recess-width": {
+      "id": "axioval:parity.public.spans.recess-width",
+      "name": {
+        "default": "recess-width",
+        "translations": {}
+      },
+      "capability": "axioval:capability.recess-width",
+      "parameters": {
+        "requirements": {
+          "id": "requirements",
+          "name": {
+            "default": "requirements",
+            "translations": {}
+          },
+          "kind": "table",
+          "required": true,
+          "columns": [
+            {
+              "id": "minimum_depth_metres",
+              "kind": "number",
+              "name": {
+                "default": "minimum_depth_metres",
+                "translations": {}
+              },
+              "required": false
+            },
+            {
+              "id": "maximum_depth_metres",
+              "kind": "number",
+              "name": {
+                "default": "maximum_depth_metres",
+                "translations": {}
+              },
+              "required": false
+            },
+            {
+              "id": "minimum_width_metres",
+              "kind": "number",
+              "name": {
+                "default": "minimum_width_metres",
+                "translations": {}
+              },
+              "required": false
+            },
+            {
+              "id": "minimum_width_per_depth",
+              "kind": "number",
+              "name": {
+                "default": "minimum_width_per_depth",
+                "translations": {}
+              },
+              "required": false
+            }
+          ]
+        }
+      }
+    },
+    "axioval:parity.public.spans.light-well": {
+      "id": "axioval:parity.public.spans.light-well",
+      "name": {
+        "default": "light-well",
+        "translations": {}
+      },
+      "capability": "axioval:capability.light-well",
+      "parameters": {
+        "member_path": {
+          "id": "member_path",
+          "name": {
+            "default": "member_path",
+            "translations": {}
+          },
+          "kind": "stringList",
+          "required": true
+        },
+        "requirements": {
+          "id": "requirements",
+          "name": {
+            "default": "requirements",
+            "translations": {}
+          },
+          "kind": "table",
+          "required": true,
+          "columns": [
+            {
+              "id": "maximum_height_metres",
+              "kind": "number",
+              "name": {
+                "default": "maximum_height_metres",
+                "translations": {}
+              },
+              "required": false
+            },
+            {
+              "id": "minimum_area_square_metres",
+              "kind": "number",
+              "name": {
+                "default": "minimum_area_square_metres",
+                "translations": {}
+              },
+              "required": false
+            },
+            {
+              "id": "minimum_width_metres",
+              "kind": "number",
+              "name": {
+                "default": "minimum_width_metres",
+                "translations": {}
+              },
+              "required": false
+            }
+          ]
+        },
+        "gap_tolerance_metres": {
+          "id": "gap_tolerance_metres",
+          "name": {
+            "default": "gap_tolerance_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": false
+        }
+      }
+    },
+    "axioval:parity.public.spans.centre-line-distance": {
+      "id": "axioval:parity.public.spans.centre-line-distance",
+      "name": {
+        "default": "centre-line-distance",
+        "translations": {}
+      },
+      "capability": "axioval:capability.centre-line-distance",
+      "parameters": {
+        "wall_selector": {
+          "id": "wall_selector",
+          "name": {
+            "default": "wall_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": true
+        },
+        "centre_line": {
+          "id": "centre_line",
+          "name": {
+            "default": "centre_line",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": true
+        },
+        "sides": {
+          "id": "sides",
+          "name": {
+            "default": "sides",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": true
+        },
+        "minimum": {
+          "id": "minimum",
+          "name": {
+            "default": "minimum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "maximum": {
+          "id": "maximum",
+          "name": {
+            "default": "maximum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "reach": {
+          "id": "reach",
+          "name": {
+            "default": "reach",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": true
+        },
+        "inset": {
+          "id": "inset",
+          "name": {
+            "default": "inset",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        }
+      }
+    },
+    "axioval:parity.public.spans.exit-separation": {
+      "id": "axioval:parity.public.spans.exit-separation",
+      "name": {
+        "default": "exit-separation",
+        "translations": {}
+      },
+      "capability": "axioval:capability.exit-separation",
+      "parameters": {
+        "exit_path": {
+          "id": "exit_path",
+          "name": {
+            "default": "exit_path",
+            "translations": {}
+          },
+          "kind": "stringList",
+          "required": true
+        },
+        "exit_selector": {
+          "id": "exit_selector",
+          "name": {
+            "default": "exit_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": true
+        },
+        "fraction": {
+          "id": "fraction",
+          "name": {
+            "default": "fraction",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": false
+        },
+        "flag": {
+          "id": "flag",
+          "name": {
+            "default": "flag",
+            "translations": {}
+          },
+          "kind": "propertyReference",
+          "required": false
+        },
+        "flag_path": {
+          "id": "flag_path",
+          "name": {
+            "default": "flag_path",
+            "translations": {}
+          },
+          "kind": "stringList",
+          "required": false
+        },
+        "flagged_fraction": {
+          "id": "flagged_fraction",
+          "name": {
+            "default": "flagged_fraction",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": false
+        },
+        "flag_sources": {
+          "id": "flag_sources",
+          "name": {
+            "default": "flag_sources",
+            "translations": {}
+          },
+          "kind": "table",
+          "required": false,
+          "columns": [
+            {
+              "id": "property_set",
+              "kind": "string",
+              "name": {
+                "default": "property_set",
+                "translations": {}
+              },
+              "required": false
+            },
+            {
+              "id": "property",
+              "kind": "string",
+              "name": {
+                "default": "property",
+                "translations": {}
+              },
+              "required": true
+            },
+            {
+              "id": "path",
+              "kind": "string",
+              "name": {
+                "default": "path",
+                "translations": {}
+              },
+              "required": false
+            }
+          ]
+        },
+        "flag_default": {
+          "id": "flag_default",
+          "name": {
+            "default": "flag_default",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "separation": {
+          "id": "separation",
+          "name": {
+            "default": "separation",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
+        "pairs": {
+          "id": "pairs",
+          "name": {
+            "default": "pairs",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
+        "minimum_exits": {
+          "id": "minimum_exits",
+          "name": {
+            "default": "minimum_exits",
+            "translations": {}
+          },
+          "kind": "integer",
+          "required": false
+        }
+      }
+    },
+    "axioval:parity.public.spans.wall-spacing": {
+      "id": "axioval:parity.public.spans.wall-spacing",
+      "name": {
+        "default": "wall-spacing",
+        "translations": {}
+      },
+      "capability": "axioval:capability.wall-spacing",
+      "parameters": {
+        "members": {
+          "id": "members",
+          "name": {
+            "default": "members",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": true
+        },
+        "member_path": {
+          "id": "member_path",
+          "name": {
+            "default": "member_path",
+            "translations": {}
+          },
+          "kind": "stringList",
+          "required": true
+        },
+        "angle_tolerance": {
+          "id": "angle_tolerance",
+          "name": {
+            "default": "angle_tolerance",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": true
+        },
+        "minimum": {
+          "id": "minimum",
+          "name": {
+            "default": "minimum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "maximum": {
+          "id": "maximum",
+          "name": {
+            "default": "maximum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "footprints": {
+          "id": "footprints",
+          "name": {
+            "default": "footprints",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "footprint_path": {
+          "id": "footprint_path",
+          "name": {
+            "default": "footprint_path",
+            "translations": {}
+          },
+          "kind": "stringList",
+          "required": false
+        },
+        "uncovered_above": {
+          "id": "uncovered_above",
+          "name": {
+            "default": "uncovered_above",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        }
+      }
+    },
+    "axioval:parity.public.spans.parking-bay": {
+      "id": "axioval:parity.public.spans.parking-bay",
+      "name": {
+        "default": "parking-bay",
+        "translations": {}
+      },
+      "capability": "axioval:capability.parking-bay",
+      "parameters": {
+        "min_width": {
+          "id": "min_width",
+          "name": {
+            "default": "min_width",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "max_width": {
+          "id": "max_width",
+          "name": {
+            "default": "max_width",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "min_length": {
+          "id": "min_length",
+          "name": {
+            "default": "min_length",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "max_length": {
+          "id": "max_length",
+          "name": {
+            "default": "max_length",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "min_height": {
+          "id": "min_height",
+          "name": {
+            "default": "min_height",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "max_height": {
+          "id": "max_height",
+          "name": {
+            "default": "max_height",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "aisles": {
+          "id": "aisles",
+          "name": {
+            "default": "aisles",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "aisle_reach": {
+          "id": "aisle_reach",
+          "name": {
+            "default": "aisle_reach",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "orientation": {
+          "id": "orientation",
+          "name": {
+            "default": "orientation",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
+        "angle_tolerance": {
+          "id": "angle_tolerance",
+          "name": {
+            "default": "angle_tolerance",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "obstacles": {
+          "id": "obstacles",
+          "name": {
+            "default": "obstacles",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "obstruction_reach": {
+          "id": "obstruction_reach",
+          "name": {
+            "default": "obstruction_reach",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "end_obstructions": {
+          "id": "end_obstructions",
+          "name": {
+            "default": "end_obstructions",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
+        "side_obstructions": {
+          "id": "side_obstructions",
+          "name": {
+            "default": "side_obstructions",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
+        "applies_when": {
+          "id": "applies_when",
+          "name": {
+            "default": "applies_when",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
+        "orientations": {
+          "id": "orientations",
+          "name": {
+            "default": "orientations",
+            "translations": {}
+          },
+          "kind": "stringList",
+          "required": false
+        },
+        "end_states": {
+          "id": "end_states",
+          "name": {
+            "default": "end_states",
+            "translations": {}
+          },
+          "kind": "stringList",
+          "required": false
+        },
+        "side_states": {
+          "id": "side_states",
+          "name": {
+            "default": "side_states",
+            "translations": {}
+          },
+          "kind": "stringList",
+          "required": false
+        },
+        "side_zone_length": {
+          "id": "side_zone_length",
+          "name": {
+            "default": "side_zone_length",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "neighbour_reach": {
+          "id": "neighbour_reach",
+          "name": {
+            "default": "neighbour_reach",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        }
+      }
+    }
+  }
+}

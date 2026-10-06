@@ -1,0 +1,440 @@
+{
+  "findings": [],
+  "not_evaluated": [
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `road - base course` does not match the pattern",
+      "object_id": {
+        "local_id": "#1014",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `road - parking - subgrade` does not match the pattern",
+      "object_id": {
+        "local_id": "#108",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `road parking - base course` does not match the pattern",
+      "object_id": {
+        "local_id": "#131",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `road - asphalt binder course` does not match the pattern",
+      "object_id": {
+        "local_id": "#188",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `road - asphalt surface course` does not match the pattern",
+      "object_id": {
+        "local_id": "#207",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `road - subgrade` does not match the pattern",
+      "object_id": {
+        "local_id": "#276",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `road - base course` does not match the pattern",
+      "object_id": {
+        "local_id": "#294",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `asphalt binder course - road - parking` does not match the pattern",
+      "object_id": {
+        "local_id": "#323",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `road - parking - asphalt surface course` does not match the pattern",
+      "object_id": {
+        "local_id": "#337",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `road - parking - subgrade` does not match the pattern",
+      "object_id": {
+        "local_id": "#350",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `road parking - base course` does not match the pattern",
+      "object_id": {
+        "local_id": "#363",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `road - asphalt binder course` does not match the pattern",
+      "object_id": {
+        "local_id": "#398",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `road - asphalt surface course` does not match the pattern",
+      "object_id": {
+        "local_id": "#412",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `road - subgrade` does not match the pattern",
+      "object_id": {
+        "local_id": "#460",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `road - base course` does not match the pattern",
+      "object_id": {
+        "local_id": "#473",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `road base course - bridge road` does not match the pattern",
+      "object_id": {
+        "local_id": "#541",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `bridge road - road asphalt binder course` does not match the pattern",
+      "object_id": {
+        "local_id": "#560",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `road subgrade - bridge road` does not match the pattern",
+      "object_id": {
+        "local_id": "#578",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `road asphalt surface course - bridge road` does not match the pattern",
+      "object_id": {
+        "local_id": "#596",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `asphalt binder course - road - parking` does not match the pattern",
+      "object_id": {
+        "local_id": "#61",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `road base course - bridge road` does not match the pattern",
+      "object_id": {
+        "local_id": "#645",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `bridge road - road asphalt binder course` does not match the pattern",
+      "object_id": {
+        "local_id": "#659",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `road subgrade - bridge road` does not match the pattern",
+      "object_id": {
+        "local_id": "#672",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `road asphalt surface course - bridge road` does not match the pattern",
+      "object_id": {
+        "local_id": "#685",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `road - asphalt binder course` does not match the pattern",
+      "object_id": {
+        "local_id": "#744",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `road - asphalt surface course` does not match the pattern",
+      "object_id": {
+        "local_id": "#761",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `road - subgrade` does not match the pattern",
+      "object_id": {
+        "local_id": "#823",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `road - base course` does not match the pattern",
+      "object_id": {
+        "local_id": "#839",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `road - parking - asphalt surface course` does not match the pattern",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `road - asphalt binder course` does not match the pattern",
+      "object_id": {
+        "local_id": "#919",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `road - asphalt surface course` does not match the pattern",
+      "object_id": {
+        "local_id": "#936",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    },
+    {
+      "message": "axioval:attributes.axioval:parity.public.numbering.name `road - subgrade` does not match the pattern",
+      "object_id": {
+        "local_id": "#998",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-numbers-storey"
+    }
+  ],
+  "rules": [
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "element-names",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 32,
+      "failed": 0,
+      "not_evaluated": 32,
+      "rule_id": "slab-numbers-storey",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "space-names",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "space-numbers",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 5,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-names",
+      "status": "passed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "storey-numbers",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "wall-numbers-across",
+      "status": "nothing_selected"
+    }
+  ]
+}

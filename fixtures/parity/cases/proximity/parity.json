@@ -1,0 +1,16 @@
+{
+  "description": "distance, containment and component-visibility over every public model, recorded before they became templates (#283).",
+  "models": "*",
+  "pairs": [],
+  "recorded": [
+    {"rule": "distance-walls-nearest", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "distance-none-closer", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "distance-at-least", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "distance-overlapping", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "containment-furniture", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "containment-cover", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "visibility-at-least", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "visibility-none", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."}
+  ],
+  "divergences": []
+}

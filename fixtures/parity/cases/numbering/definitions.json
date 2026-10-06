@@ -1,0 +1,425 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:parity.public.numbering.definitions",
+    "name": {
+      "default": "Public parity definitions, names and numbers",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "Terms for holding name-sequence and numbering-consistency to the outcomes recorded before they became templates.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "objectTypes": {
+    "axioval:parity.public.numbering.space": {
+      "id": "axioval:parity.public.numbering.space",
+      "name": {
+        "default": "space",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcSpace"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcSpace"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcSpace"
+        }
+      ]
+    },
+    "axioval:parity.public.numbering.wall": {
+      "id": "axioval:parity.public.numbering.wall",
+      "name": {
+        "default": "wall",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcWall"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcWall"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcWall"
+        }
+      ]
+    },
+    "axioval:parity.public.numbering.slab": {
+      "id": "axioval:parity.public.numbering.slab",
+      "name": {
+        "default": "slab",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcSlab"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcSlab"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcSlab"
+        }
+      ]
+    },
+    "axioval:parity.public.numbering.beam": {
+      "id": "axioval:parity.public.numbering.beam",
+      "name": {
+        "default": "beam",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcBeam"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcBeam"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcBeam"
+        }
+      ]
+    },
+    "axioval:parity.public.numbering.storey": {
+      "id": "axioval:parity.public.numbering.storey",
+      "name": {
+        "default": "storey",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcBuildingStorey"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcBuildingStorey"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcBuildingStorey"
+        }
+      ]
+    },
+    "axioval:parity.public.numbering.building": {
+      "id": "axioval:parity.public.numbering.building",
+      "name": {
+        "default": "building",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcBuilding"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcBuilding"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcBuilding"
+        }
+      ]
+    }
+  },
+  "properties": {
+    "axioval:parity.public.numbering.name": {
+      "id": "axioval:parity.public.numbering.name",
+      "name": {
+        "default": "name",
+        "translations": {}
+      },
+      "valueKind": "string",
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "Name"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "Name"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "Name"
+        }
+      ]
+    },
+    "axioval:parity.public.numbering.long-name": {
+      "id": "axioval:parity.public.numbering.long-name",
+      "name": {
+        "default": "long-name",
+        "translations": {}
+      },
+      "valueKind": "string",
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "LongName"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "LongName"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "LongName"
+        }
+      ]
+    },
+    "axioval:parity.public.numbering.elevation": {
+      "id": "axioval:parity.public.numbering.elevation",
+      "name": {
+        "default": "elevation",
+        "translations": {}
+      },
+      "valueKind": "quantity",
+      "unitDimension": "length",
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "Elevation"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "Elevation"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "Elevation"
+        }
+      ]
+    }
+  },
+  "propertySets": {},
+  "definitions": {
+    "axioval:parity.public.numbering.name-sequence": {
+      "id": "axioval:parity.public.numbering.name-sequence",
+      "name": {
+        "default": "name-sequence",
+        "translations": {}
+      },
+      "capability": "axioval:capability.name-sequence",
+      "parameters": {
+        "member_selector": {
+          "id": "member_selector",
+          "name": {
+            "default": "member_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": true
+        },
+        "name": {
+          "id": "name",
+          "name": {
+            "default": "name",
+            "translations": {}
+          },
+          "kind": "propertyReference",
+          "required": true
+        },
+        "order": {
+          "id": "order",
+          "name": {
+            "default": "order",
+            "translations": {}
+          },
+          "kind": "propertyReference",
+          "required": true
+        },
+        "first": {
+          "id": "first",
+          "name": {
+            "default": "first",
+            "translations": {}
+          },
+          "kind": "integer",
+          "required": false
+        },
+        "increment": {
+          "id": "increment",
+          "name": {
+            "default": "increment",
+            "translations": {}
+          },
+          "kind": "integer",
+          "required": false
+        },
+        "order_fallback": {
+          "id": "order_fallback",
+          "name": {
+            "default": "order_fallback",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
+        "relationship": {
+          "id": "relationship",
+          "name": {
+            "default": "relationship",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
+        "direction": {
+          "id": "direction",
+          "name": {
+            "default": "direction",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
+        "follow_chain": {
+          "id": "follow_chain",
+          "name": {
+            "default": "follow_chain",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "path": {
+          "id": "path",
+          "name": {
+            "default": "path",
+            "translations": {}
+          },
+          "kind": "stringList",
+          "required": false
+        },
+        "skip_absent_relationship_ends": {
+          "id": "skip_absent_relationship_ends",
+          "name": {
+            "default": "skip_absent_relationship_ends",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        }
+      }
+    },
+    "axioval:parity.public.numbering.numbering-consistency": {
+      "id": "axioval:parity.public.numbering.numbering-consistency",
+      "name": {
+        "default": "numbering-consistency",
+        "translations": {}
+      },
+      "capability": "axioval:capability.numbering-consistency",
+      "parameters": {
+        "property": {
+          "id": "property",
+          "name": {
+            "default": "property",
+            "translations": {}
+          },
+          "kind": "propertyReference",
+          "required": true
+        },
+        "pattern": {
+          "id": "pattern",
+          "name": {
+            "default": "pattern",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": true
+        },
+        "prefix_length": {
+          "id": "prefix_length",
+          "name": {
+            "default": "prefix_length",
+            "translations": {}
+          },
+          "kind": "integer",
+          "required": false
+        },
+        "gap_free": {
+          "id": "gap_free",
+          "name": {
+            "default": "gap_free",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "across_sources": {
+          "id": "across_sources",
+          "name": {
+            "default": "across_sources",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "relationship": {
+          "id": "relationship",
+          "name": {
+            "default": "relationship",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
+        "direction": {
+          "id": "direction",
+          "name": {
+            "default": "direction",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
+        "follow_chain": {
+          "id": "follow_chain",
+          "name": {
+            "default": "follow_chain",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "path": {
+          "id": "path",
+          "name": {
+            "default": "path",
+            "translations": {}
+          },
+          "kind": "stringList",
+          "required": false
+        },
+        "skip_absent_relationship_ends": {
+          "id": "skip_absent_relationship_ends",
+          "name": {
+            "default": "skip_absent_relationship_ends",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        }
+      }
+    }
+  }
+}

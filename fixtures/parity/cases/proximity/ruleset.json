@@ -1,0 +1,607 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:parity.public.proximity",
+    "name": {
+      "default": "Public parity ruleset, distances and visibility",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "distance, containment and component-visibility, recorded before they became templates.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "definitionPackages": [
+    "axioval:parity.public.proximity.definitions"
+  ],
+  "root": {
+    "id": "root",
+    "name": {
+      "default": "Distances and visibility",
+      "translations": {}
+    },
+    "rules": [
+      {
+        "id": "distance-walls-nearest",
+        "definitionId": "axioval:parity.public.proximity.distance",
+        "name": {
+          "default": "distance-walls-nearest",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "anyOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.proximity.wall",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.proximity.beam",
+              "includeSubtypes": true
+            }
+          ]
+        },
+        "parameters": {
+          "counterparts": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.proximity.wall",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.proximity.beam",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.proximity.column",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "minimum_metres": {
+            "type": "number",
+            "value": 0.1
+          },
+          "maximum_metres": {
+            "type": "number",
+            "value": 8.0
+          }
+        }
+      },
+      {
+        "id": "distance-none-closer",
+        "definitionId": "axioval:parity.public.proximity.distance",
+        "name": {
+          "default": "distance-none-closer",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "anyOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.proximity.furniture",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.proximity.slab",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.proximity.duct",
+              "includeSubtypes": true
+            }
+          ]
+        },
+        "parameters": {
+          "counterparts": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.proximity.wall",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.proximity.slab",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "minimum_metres": {
+            "type": "number",
+            "value": 0.05
+          },
+          "mode": {
+            "type": "string",
+            "value": "none_closer_than"
+          },
+          "projection": {
+            "type": "string",
+            "value": "horizontal"
+          }
+        }
+      },
+      {
+        "id": "distance-at-least",
+        "definitionId": "axioval:parity.public.proximity.distance",
+        "name": {
+          "default": "distance-at-least",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "anyOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.proximity.beam",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.proximity.column",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.proximity.window",
+              "includeSubtypes": true
+            }
+          ]
+        },
+        "parameters": {
+          "counterparts": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.proximity.wall",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.proximity.slab",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "maximum_metres": {
+            "type": "number",
+            "value": 3.0
+          },
+          "mode": {
+            "type": "string",
+            "value": "at_least"
+          },
+          "count": {
+            "type": "integer",
+            "value": 2
+          },
+          "projection": {
+            "type": "string",
+            "value": "vertical"
+          },
+          "vertical_direction": {
+            "type": "string",
+            "value": "below"
+          }
+        }
+      },
+      {
+        "id": "distance-overlapping",
+        "definitionId": "axioval:parity.public.proximity.distance",
+        "name": {
+          "default": "distance-overlapping",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "anyOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.proximity.wall",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.proximity.slab",
+              "includeSubtypes": true
+            }
+          ]
+        },
+        "parameters": {
+          "counterparts": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.proximity.slab",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.proximity.wall",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.proximity.furniture",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "minimum_metres": {
+            "type": "number",
+            "value": 0.2
+          },
+          "projection": {
+            "type": "string",
+            "value": "horizontal"
+          },
+          "elevation_overlap": {
+            "type": "string",
+            "value": "overlapping"
+          },
+          "elevation_offset_metres": {
+            "type": "number",
+            "value": 0.5
+          },
+          "container_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.proximity.storey",
+              "includeSubtypes": true
+            }
+          },
+          "relationship": {
+            "type": "string",
+            "value": "IfcRelContainedInSpatialStructure"
+          },
+          "direction": {
+            "type": "string",
+            "value": "backward"
+          }
+        }
+      },
+      {
+        "id": "containment-furniture",
+        "definitionId": "axioval:parity.public.proximity.containment",
+        "name": {
+          "default": "containment-furniture",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "anyOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.proximity.furniture",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.proximity.duct",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.proximity.window",
+              "includeSubtypes": true
+            }
+          ]
+        },
+        "parameters": {
+          "counterparts": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.proximity.space",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.proximity.wall",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "minimum_volume_ratio": {
+            "type": "number",
+            "value": 0.9
+          },
+          "report_orphans": {
+            "type": "boolean",
+            "value": true
+          },
+          "maximum_count": {
+            "type": "integer",
+            "value": 3
+          }
+        }
+      },
+      {
+        "id": "containment-cover",
+        "definitionId": "axioval:parity.public.proximity.containment",
+        "name": {
+          "default": "containment-cover",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "anyOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.proximity.window",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.proximity.opening",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.proximity.column",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.proximity.beam",
+              "includeSubtypes": true
+            }
+          ]
+        },
+        "parameters": {
+          "counterparts": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.proximity.wall",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.proximity.slab",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "minimum_volume_ratio": {
+            "type": "number",
+            "value": 0.5
+          },
+          "combine_adjacent": {
+            "type": "boolean",
+            "value": true
+          },
+          "cover": {
+            "type": "table",
+            "value": [
+              {
+                "faces": {
+                  "type": "string",
+                  "value": "any"
+                },
+                "side": {
+                  "type": "string",
+                  "value": "inside"
+                },
+                "minimum_metres": {
+                  "type": "number",
+                  "value": 0.0
+                }
+              },
+              {
+                "faces": {
+                  "type": "string",
+                  "value": "top"
+                },
+                "side": {
+                  "type": "string",
+                  "value": "outside"
+                },
+                "maximum_metres": {
+                  "type": "number",
+                  "value": 0.05
+                }
+              }
+            ]
+          },
+          "minimum_count": {
+            "type": "integer",
+            "value": 1
+          }
+        }
+      },
+      {
+        "id": "visibility-at-least",
+        "definitionId": "axioval:parity.public.proximity.component-visibility",
+        "name": {
+          "default": "visibility-at-least",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "anyOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.proximity.furniture",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.proximity.column",
+              "includeSubtypes": true
+            }
+          ]
+        },
+        "parameters": {
+          "targets": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.proximity.wall",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.proximity.window",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "blockers": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.proximity.wall",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.proximity.slab",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "eye_height": {
+            "type": "quantity",
+            "value": 1.6,
+            "unit": "m"
+          },
+          "radius": {
+            "type": "quantity",
+            "value": 10.0,
+            "unit": "m"
+          },
+          "mode": {
+            "type": "string",
+            "value": "at-least"
+          },
+          "minimum": {
+            "type": "integer",
+            "value": 2
+          }
+        }
+      },
+      {
+        "id": "visibility-none",
+        "definitionId": "axioval:parity.public.proximity.component-visibility",
+        "name": {
+          "default": "visibility-none",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "anyOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.proximity.furniture",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.proximity.duct",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.proximity.beam",
+              "includeSubtypes": true
+            }
+          ]
+        },
+        "parameters": {
+          "targets": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.proximity.slab",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.proximity.space",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "blockers": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.proximity.wall",
+              "includeSubtypes": true
+            }
+          },
+          "eye_height": {
+            "type": "quantity",
+            "value": 1.2,
+            "unit": "m"
+          },
+          "radius": {
+            "type": "quantity",
+            "value": 6.0,
+            "unit": "m"
+          },
+          "mode": {
+            "type": "string",
+            "value": "none"
+          }
+        }
+      }
+    ]
+  }
+}

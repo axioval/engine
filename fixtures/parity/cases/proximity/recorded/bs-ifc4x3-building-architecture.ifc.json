@@ -1,0 +1,845 @@
+{
+  "findings": [
+    {
+      "evidence": [],
+      "id": "27b86cdb-ee96-5b8c-9ba2-425deb4163ff",
+      "message": "holds 0 inner elements, fewer than the minimum 1",
+      "object_id": {
+        "local_id": "#158",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "containment-cover",
+      "severity": "warning"
+    },
+    {
+      "evidence": [],
+      "id": "3e851f2a-d6f0-5eca-87be-90f9e19c3571",
+      "message": "holds 0 inner elements, fewer than the minimum 1",
+      "object_id": {
+        "local_id": "#182",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "containment-cover",
+      "severity": "warning"
+    },
+    {
+      "evidence": [],
+      "id": "219c8734-2db0-5e49-8df5-6b2b0e79dbe6",
+      "message": "holds 0 inner elements, fewer than the minimum 1",
+      "object_id": {
+        "local_id": "#201",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "containment-cover",
+      "severity": "warning"
+    },
+    {
+      "evidence": [],
+      "id": "6e421f46-8e01-5559-92f4-c6203812049c",
+      "message": "holds 0 inner elements, fewer than the minimum 1",
+      "object_id": {
+        "local_id": "#228",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "containment-cover",
+      "severity": "warning"
+    },
+    {
+      "evidence": [],
+      "id": "2053e92e-2aa7-5fa3-8926-43be30724c6b",
+      "message": "holds 0 inner elements, fewer than the minimum 1",
+      "object_id": {
+        "local_id": "#261",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "containment-cover",
+      "severity": "warning"
+    },
+    {
+      "evidence": [],
+      "id": "282554e2-73bc-5e08-9ba0-2fb3fcaaeae1",
+      "message": "holds 0 inner elements, fewer than the minimum 1",
+      "object_id": {
+        "local_id": "#285",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "containment-cover",
+      "severity": "warning"
+    },
+    {
+      "evidence": [],
+      "id": "1a5d7385-0be2-541a-bf83-f57be255b742",
+      "message": "holds 0 inner elements, fewer than the minimum 1",
+      "object_id": {
+        "local_id": "#53",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "containment-cover",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc4x3-building-architecture.ifc/#116:ifc-step:bs-ifc4x3-building-architecture.ifc/#228",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc4x3-building-architecture.ifc/#116:ifc-step:bs-ifc4x3-building-architecture.ifc/#285",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc4x3-building-architecture.ifc/#116:ifc-step:bs-ifc4x3-building-architecture.ifc/#53",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "8ded4743-24b8-5f4e-b9ab-dceef78a0311",
+      "message": "3 counterpart(s) closer than the required 0.0500 m; nearest ifc-step:bs-ifc4x3-building-architecture.ifc/#228 at horizontal distance 0.0000 m",
+      "object_id": {
+        "local_id": "#116",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#228",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#285",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#53",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-none-closer",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc4x3-building-architecture.ifc/#261:ifc-step:bs-ifc4x3-building-architecture.ifc/#201",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc4x3-building-architecture.ifc/#261:ifc-step:bs-ifc4x3-building-architecture.ifc/#285",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc4x3-building-architecture.ifc/#261:ifc-step:bs-ifc4x3-building-architecture.ifc/#53",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "2ec66d70-ec4d-5f53-bea5-5dbc0a68be17",
+      "message": "3 counterpart(s) closer than the required 0.0500 m; nearest ifc-step:bs-ifc4x3-building-architecture.ifc/#201 at horizontal distance 0.0000 m",
+      "object_id": {
+        "local_id": "#261",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#201",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#285",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#53",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-none-closer",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc4x3-building-architecture.ifc/#285:ifc-step:bs-ifc4x3-building-architecture.ifc/#158",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc4x3-building-architecture.ifc/#285:ifc-step:bs-ifc4x3-building-architecture.ifc/#182",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc4x3-building-architecture.ifc/#285:ifc-step:bs-ifc4x3-building-architecture.ifc/#228",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc4x3-building-architecture.ifc/#285:ifc-step:bs-ifc4x3-building-architecture.ifc/#261",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc4x3-building-architecture.ifc/#285:ifc-step:bs-ifc4x3-building-architecture.ifc/#53",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "aff038ee-a317-5144-8bde-fdb0a25d9868",
+      "message": "5 counterpart(s) closer than the required 0.0500 m; nearest ifc-step:bs-ifc4x3-building-architecture.ifc/#158 at horizontal distance 0.0000 m",
+      "object_id": {
+        "local_id": "#285",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#158",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#182",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#228",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#261",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#53",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-none-closer",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc4x3-building-architecture.ifc/#53:ifc-step:bs-ifc4x3-building-architecture.ifc/#158",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc4x3-building-architecture.ifc/#53:ifc-step:bs-ifc4x3-building-architecture.ifc/#182",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc4x3-building-architecture.ifc/#53:ifc-step:bs-ifc4x3-building-architecture.ifc/#201",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc4x3-building-architecture.ifc/#53:ifc-step:bs-ifc4x3-building-architecture.ifc/#228",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc4x3-building-architecture.ifc/#53:ifc-step:bs-ifc4x3-building-architecture.ifc/#261",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc4x3-building-architecture.ifc/#53:ifc-step:bs-ifc4x3-building-architecture.ifc/#285",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "4a8bab06-20fd-545e-86f3-aa499f9a983f",
+      "message": "6 counterpart(s) closer than the required 0.0500 m; nearest ifc-step:bs-ifc4x3-building-architecture.ifc/#158 at horizontal distance 0.0000 m",
+      "object_id": {
+        "local_id": "#53",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#158",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#182",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#201",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#228",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#261",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#285",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-none-closer",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc4x3-building-architecture.ifc/#158:ifc-step:bs-ifc4x3-building-architecture.ifc/#53",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:relationship-scan:IfcRelContainedInSpatialStructure:4",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:relationship:#67",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "07ecb933-18a9-545e-876f-a837a7ca0be5",
+      "message": "nearest counterpart ifc-step:bs-ifc4x3-building-architecture.ifc/#53 is at horizontal distance 0.0000 m, closer than the required 0.2000 m",
+      "object_id": {
+        "local_id": "#158",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#53",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-overlapping",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc4x3-building-architecture.ifc/#182:ifc-step:bs-ifc4x3-building-architecture.ifc/#53",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:relationship-scan:IfcRelContainedInSpatialStructure:4",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:relationship:#67",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "9e99222f-7864-5fb4-9d2c-7ec85b2d0c6e",
+      "message": "nearest counterpart ifc-step:bs-ifc4x3-building-architecture.ifc/#53 is at horizontal distance 0.0000 m, closer than the required 0.2000 m",
+      "object_id": {
+        "local_id": "#182",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#53",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-overlapping",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc4x3-building-architecture.ifc/#201:ifc-step:bs-ifc4x3-building-architecture.ifc/#53",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:relationship-scan:IfcRelContainedInSpatialStructure:4",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:relationship:#67",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "4bd2bf92-0c82-575d-ab96-3b05fca98591",
+      "message": "nearest counterpart ifc-step:bs-ifc4x3-building-architecture.ifc/#53 is at horizontal distance 0.0000 m, closer than the required 0.2000 m",
+      "object_id": {
+        "local_id": "#201",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#53",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-overlapping",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc4x3-building-architecture.ifc/#228:ifc-step:bs-ifc4x3-building-architecture.ifc/#53",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:relationship-scan:IfcRelContainedInSpatialStructure:4",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:relationship:#67",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "7ebbcf44-6a1f-5ebe-863c-c321246a8d76",
+      "message": "nearest counterpart ifc-step:bs-ifc4x3-building-architecture.ifc/#53 is at horizontal distance 0.0000 m, closer than the required 0.2000 m",
+      "object_id": {
+        "local_id": "#228",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#53",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-overlapping",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:distance:horizontal:ifc-step:bs-ifc4x3-building-architecture.ifc/#53:ifc-step:bs-ifc4x3-building-architecture.ifc/#158",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:relationship-scan:IfcRelContainedInSpatialStructure:4",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:relationship:#67",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "405b4e37-4821-581a-8265-5e5cbb20da80",
+      "message": "nearest counterpart ifc-step:bs-ifc4x3-building-architecture.ifc/#158 is at horizontal distance 0.0000 m, closer than the required 0.2000 m",
+      "object_id": {
+        "local_id": "#53",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#158",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "distance-overlapping",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "line-of-sight:(7.850000151377542,6.299999999999996,1.2):ifc-step:bs-ifc4x3-building-architecture.ifc/#135:visible",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "line-of-sight:(7.850000151377542,6.299999999999996,1.2):ifc-step:bs-ifc4x3-building-architecture.ifc/#261:visible",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "line-of-sight:(7.850000151377542,6.299999999999996,1.2):ifc-step:bs-ifc4x3-building-architecture.ifc/#285:visible",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "line-of-sight:(7.850000151377542,6.299999999999996,1.2):ifc-step:bs-ifc4x3-building-architecture.ifc/#53:visible",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "line-of-sight:(7.850000151377542,6.299999999999996,1.2):ifc-step:bs-ifc4x3-building-architecture.ifc/#85:visible",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-centre:ifc-step:bs-ifc4x3-building-architecture.ifc/#116:(7.850000,6.300000):inside",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4x3-building-architecture.ifc/#116",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "e7be03ec-aa98-515d-8ac4-e9ab817a5353",
+      "message": "5 target(s) within 6 m of the eye 1.2 m above the base of ifc-step:bs-ifc4x3-building-architecture.ifc/#116 are in view, none allowed: ifc-step:bs-ifc4x3-building-architecture.ifc/#135, ifc-step:bs-ifc4x3-building-architecture.ifc/#261, ifc-step:bs-ifc4x3-building-architecture.ifc/#285, ifc-step:bs-ifc4x3-building-architecture.ifc/#53, ifc-step:bs-ifc4x3-building-architecture.ifc/#85",
+      "object_id": {
+        "local_id": "#116",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#135",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#261",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#285",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#53",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#85",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "visibility-none",
+      "severity": "warning"
+    }
+  ],
+  "not_evaluated": [
+    {
+      "message": "the volume shared with ifc-step:bs-ifc4x3-building-architecture.ifc/#228 is not measured, so whether it lies inside cannot be decided",
+      "object_id": {
+        "local_id": "#116",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "containment-furniture"
+    }
+  ],
+  "rules": [
+    {
+      "checked": 0,
+      "failed": 7,
+      "not_evaluated": 0,
+      "rule_id": "containment-cover",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "containment-furniture",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "distance-at-least",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 4,
+      "failed": 4,
+      "not_evaluated": 0,
+      "rule_id": "distance-none-closer",
+      "status": "failed"
+    },
+    {
+      "checked": 7,
+      "failed": 5,
+      "not_evaluated": 0,
+      "rule_id": "distance-overlapping",
+      "status": "failed"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "distance-walls-nearest",
+      "status": "passed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "visibility-at-least",
+      "status": "passed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "visibility-none",
+      "status": "failed"
+    }
+  ]
+}

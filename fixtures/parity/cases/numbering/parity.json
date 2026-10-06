@@ -1,0 +1,16 @@
+{
+  "description": "name-sequence and numbering-consistency over every public model, unmeshed, recorded before they became templates (#283).",
+  "models": "*",
+  "geometry": false,
+  "pairs": [],
+  "recorded": [
+    {"rule": "storey-names", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "space-names", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "element-names", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "space-numbers", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "wall-numbers-across", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "slab-numbers-storey", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "storey-numbers", "comparison": "contract", "reason": "the plan-span, distance and layout capabilities become templates (#283); the outcomes their implementation reported, recorded before it was replaced, are the contract."}
+  ],
+  "divergences": []
+}

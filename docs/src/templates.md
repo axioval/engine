@@ -31,8 +31,9 @@ and `selector-conformance` follow `unique-value` as group decisions, and
 `property-value` judges XML Schema facets, `property-requirements`
 requirements tables and `property-comparison` candidates against a target
 (#287): every generic judge now runs as a template; `ramp-geometry` is the
-first judging the items of measured lists one by one
-([#280](https://github.com/axioval/engine/issues/280)).
+first judging the items of measured lists one by one, and
+`stair-geometry` the first judging the parts of what it selects as objects
+of their own ([#280](https://github.com/axioval/engine/issues/280)).
 
 ## The outside contract
 
@@ -441,11 +442,17 @@ reports nothing where another check already did. Each item is judged by
   item (a truth field, a `null`, a number exactly or surely below a value,
   an empty objects field).
 
-`Together` judges every item in one outcome instead: `every` number in a
-range, named `riser {index} of {count}` among the items whose field is
-stated, the failing ones in one finding graded by the worst and the open
-ones grouped or each on its own; every truth (`truths`); or the `spread`
-of the numbers (the largest less the smallest) against a tolerance.
+`Together` judges every item in one outcome instead, only the items whose
+field `present` is stated and where its `when` conditions hold: `every`
+number in a range, named `riser {index} of {count}` among them, the failing
+ones in one finding graded by the worst and the open ones grouped or each
+on its own (a number surely within `zero` of zero is no item: a straight
+tread is no winder); every truth (`truths`); the `spread` of the numbers
+(the largest less the smallest) against a tolerance; their `count` within
+bounds (`{count}`); or their `least` against a minimum, the least between
+the least lower and the least upper end, at the item of least upper end
+(`{least}`, `{at}`), an unmeasured item (`{unknown}`) only able to lower
+it.
 `Passing` opens the check where every item passed and a condition holds
 (`undecided`): once, or per item of another list grouping them by a key
 (each stretch whose rails all pass). Messages read item fields
@@ -461,8 +468,21 @@ The declaration checks the stair and ramp templates add are `positive` (a
 length above zero), `needs` (where a check is declared every parameter it
 needs is stated, and none of them without one), `below` (two lengths in
 order), `requiresValue` (a parameter only with another's string value),
-`requiresDeclared` (only with a declared one) and `rows` (each row of a
-table states its columns as required).
+`requiresDeclared` (only with a declared one), `rows` (each row of a
+table states its columns as required), `angle` (a plane angle of at least
+zero), `valueRequires` (a string value needing other parameters),
+`togetherExcept` (stated together but for an exception) and `anyRequires`
+(any of some declared needs another). Booleans, integers and tables are
+read as the capabilities read them, a value of another type refused.
+
+**Parts.** A form deciding `Decision::Parts` (`Parts`) reaches each
+selected object's parts, the objects a selector parameter picks along a
+path parameter, and judges each part once, by the first object reaching
+it: its `values` first (one that cannot be read leaves the part open
+once), then its `checks`, every outcome on the part; its measured values
+name that object as `@anchor`. The form's own values and checks then judge
+the object. A path the object cannot be read along leaves it open. Such a
+form is never forked.
 
 ### `object-count`
 
@@ -787,6 +807,36 @@ word what they found; the template judges the numbers. Their counts
 (`obstructed_end_spaces`, `landing_door_conflicts`, `handrail_breaks`,
 `rails_over_surfaces`) sum the same items rather than running the
 capability.
+
+### `stair-geometry`
+
+Two forms. With `stair_path`, `Decision::Parts`: each stair's flights
+(`stair_flights` along `stair_path`) judged once as parts, by every flight
+check below, their tactile strips and landing clear widths knowing which
+ends lie between two of the stair's flights (`stair=@anchor`); then the
+stair by its rise (`stairs`: the rise from its lowest flight's base to its
+highest flight's top, a pass open where a flight may be missing), the
+handrail across its landings (`stair_continuity`, a search) and its least
+clear width (`stair_clear_widths`, `least`). Otherwise each flight, its
+`flight_rise` read first (one that cannot be measured is open once):
+
+| Check | List | Judgement |
+| --- | --- | --- |
+| `riser_*`, `going_*`, `nosing_*`, `step_length_*` | `steps` | `every` riser, going, nosing, step (`2r + g`, three times the allowance) in its range |
+| `minimum_risers`, `maximum_risers` | `steps` | their `count` |
+| `maximum_rise`, `width_*` | `flights` | the flight's rise and width (open where a tread fills no rectangle) |
+| `riser_tolerance`, `going_tolerance` | `steps` | the `spread` of the risers and goings |
+| `winder_angle_*` | `steps` | `every` winder angle at most the maximum; on a turning flight, every winder (no straight tread) at least the minimum |
+| `forbid_open_risers` | `steps` | the `truths` of the open risers |
+| headroom, landings, doors, end spaces, clearance below, handrails | as `ramp-geometry`'s, of the flight | as `ramp-geometry`'s |
+| `tactile_*` | `tactile_strips` | the searches' answers, an intermediate end only with `tactile_on_intermediate_landings` |
+| clear widths | `clear_widths` | the flight's and each landing's at least their minimum; the `least` of all at least `total_clear_width_minimum` |
+
+The declaration keeps the capability's checks, words and order, the
+whole-stair mode's included. Per-object parameters are evaluated per
+object first, as before. The defect counts sum the same items:
+`missing_tactile_strips` the strips (an intermediate end only with
+`intermediate=yes`), `handrail_breaks` of a whole stair its breaks.
 
 ## Binding and running a rule
 
@@ -1114,6 +1164,14 @@ random slope limits, tolerances, widths and landing minimums; and by the
 service's refusals). It is never forked. A selector whose objects cannot
 all be listed leaves each check open once, worded as the binding words it,
 where the capability left each end open naming the selection (D24).
+
+`stair-geometry` is held the same way to
+`axioval_rules::reference::StairGeometry`: every flight and whole-stair
+fixture of `tests/stair_geometry.rs`; generated flights of random risers,
+margins, widths and landings under random step, count, rise, tolerance,
+width and landing bounds; and the `stair-geometry` rules of the case
+`stairs`, recorded before the switch. Both references are compiled only
+with `parity-reference` (`stair_geometry/reference.rs`).
 
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the

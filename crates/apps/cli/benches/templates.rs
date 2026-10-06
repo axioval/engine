@@ -157,6 +157,11 @@ const PAIRS: &[Pair] = &[
         case: "stairs",
         reference: |registry| registry.replace(axioval::rules::reference::RampGeometry),
     },
+    Pair {
+        capability: "axioval:capability.stair-geometry",
+        case: "stairs",
+        reference: |registry| registry.replace(axioval::rules::reference::StairGeometry),
+    },
 ];
 
 /// Warm-up runs per side before measuring.

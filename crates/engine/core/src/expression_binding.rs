@@ -128,6 +128,11 @@ fn references(name: &str, parameters: &BTreeMap<String, ParameterValue>) -> Resu
                 matches!(value, ParameterValue::Selector { .. }),
                 "a selector",
             ),
+            ParameterReference::Property => (
+                matches!(value, ParameterValue::PropertyReference { .. }),
+                "a property reference",
+            ),
+            ParameterReference::Table => (matches!(value, ParameterValue::Table { .. }), "a table"),
         };
         if !fits {
             return Err(format!("{}, which is not {what}", stated()));

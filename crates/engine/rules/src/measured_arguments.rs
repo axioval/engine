@@ -4,9 +4,9 @@
 //!
 //! A selector parameter binds to the objects it picks, surely or not, read
 //! once per rule through the run's one selection ([`select_objects`]) and
-//! sorted by source-qualified identity; a length, path or text binds to the
-//! value the parameter states, checked against the measured parameter's
-//! kind. A reference that cannot be bound (a parameter the rule does not
+//! sorted by source-qualified identity; a length, path, text, property
+//! reference or table binds to the value the parameter states, checked
+//! against the measured parameter's kind. A reference that cannot be bound (a parameter the rule does not
 //! state, of another kind or not realisable, or a selection whose objects
 //! cannot all be listed) leaves the value not evaluated, never a default.
 
@@ -158,11 +158,23 @@ fn bound(
             _,
         ) => return Err(not("a string")),
         (
-            MeasuredParameterKind::Vector
-            | MeasuredParameterKind::Property
-            | MeasuredParameterKind::Polygon,
-            _,
-        ) => return Err(invalid(format!("{reference} names no value of a rule"))),
+            MeasuredParameterKind::Property,
+            ParameterValue::PropertyReference {
+                property_set,
+                property,
+            },
+        ) => MeasuredArgument::Property {
+            set: property_set.clone(),
+            name: property.clone(),
+        },
+        (MeasuredParameterKind::Property, _) => return Err(not("a property reference")),
+        (MeasuredParameterKind::Table, ParameterValue::Table { value: rows }) => {
+            MeasuredArgument::Table(rows.clone())
+        }
+        (MeasuredParameterKind::Table, _) => return Err(not("a table")),
+        (MeasuredParameterKind::Vector | MeasuredParameterKind::Polygon, _) => {
+            return Err(invalid(format!("{reference} names no value of a rule")));
+        }
     })
 }
 
@@ -211,4 +223,72 @@ pub(crate) fn bind(
             .map_err(|error| (NotEvaluatedReason::InvalidDeclaration, error.to_string()))?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use axioval_engine::{RuleContext, ServiceRegistry};
+    use axioval_ir::contract::{ParameterValue, TableRow};
+    use axioval_ir::measured::{MeasuredArgument, MeasuredParameterKind};
+    use axioval_ir::{NotEvaluatedReason, Project};
+
+    use super::bound;
+
+    /// A property reference and a table bind as the rule states them, and
+    /// a parameter of another kind is the rule's invalid declaration.
+    #[test]
+    fn a_property_or_a_table_binds_as_stated() {
+        let project = Project::new(Vec::new()).unwrap();
+        let services = ServiceRegistry::new();
+        let context = RuleContext {
+            project: &project,
+            services: &services,
+        };
+        let property = ParameterValue::PropertyReference {
+            property: "Width".into(),
+            property_set: Some("Attributes".into()),
+        };
+        assert_eq!(
+            bound(
+                &context,
+                None,
+                MeasuredParameterKind::Property,
+                "overall",
+                &property
+            ),
+            Ok(MeasuredArgument::Property {
+                set: Some("Attributes".into()),
+                name: "Width".into()
+            })
+        );
+        let rows = vec![TableRow::from([(
+            "width".to_owned(),
+            ParameterValue::Number { value: 1.0 },
+        )])];
+        assert_eq!(
+            bound(
+                &context,
+                None,
+                MeasuredParameterKind::Table,
+                "rows",
+                &ParameterValue::Table {
+                    value: rows.clone()
+                }
+            ),
+            Ok(MeasuredArgument::Table(rows))
+        );
+        assert_eq!(
+            bound(
+                &context,
+                None,
+                MeasuredParameterKind::Table,
+                "overall",
+                &property
+            ),
+            Err((
+                NotEvaluatedReason::InvalidDeclaration,
+                "`@overall` is not a table".into()
+            ))
+        );
+    }
 }

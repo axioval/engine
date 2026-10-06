@@ -177,6 +177,10 @@ pub enum ParameterReference {
     String,
     /// A `selector`, bound to the objects it picks; or `@anchor`.
     Selector,
+    /// A `propertyReference`, bound to the property it names.
+    Property,
+    /// A `table`, bound to its rows as stated.
+    Table,
 }
 
 /// What a measured parameter's value is.
@@ -207,6 +211,9 @@ pub enum MeasuredParameterKind {
     /// match), the objects a selector parameter of the rule picks
     /// (`@name`), or the anchor the rule checks (`@anchor`).
     Objects,
+    /// A table of the rule reading the value, named only as `@name`: its
+    /// rows as the rule states them.
+    Table,
 }
 
 impl MeasuredParameterKind {
@@ -219,7 +226,9 @@ impl MeasuredParameterKind {
             Self::Path => Some(ParameterReference::StringList),
             Self::Choice { .. } | Self::Text | Self::SourceKind => Some(ParameterReference::String),
             Self::Objects => Some(ParameterReference::Selector),
-            Self::Vector | Self::Property | Self::Polygon => None,
+            Self::Property => Some(ParameterReference::Property),
+            Self::Table => Some(ParameterReference::Table),
+            Self::Vector | Self::Polygon => None,
         }
     }
 }
@@ -325,6 +334,11 @@ impl MeasuredCall {
                     MeasuredArgument::SourceKind(_)
                 )
                 | (MeasuredParameterKind::Objects, MeasuredArgument::Objects(_))
+                | (
+                    MeasuredParameterKind::Property,
+                    MeasuredArgument::Property { .. }
+                )
+                | (MeasuredParameterKind::Table, MeasuredArgument::Table(_))
         );
         if !fits {
             return Err(invalid("the bound value is not of the parameter's kind"));
@@ -395,6 +409,8 @@ pub enum MeasuredArgument {
     Anchor,
     /// The objects a reference picked, bound.
     Objects(MeasuredSelection),
+    /// The rows of a table a reference named, bound.
+    Table(Vec<crate::contract::TableRow>),
 }
 
 impl MeasuredArgument {
@@ -708,6 +724,11 @@ fn argument(kind: MeasuredParameterKind, value: &str) -> Result<MeasuredArgument
             }
             MeasuredArgument::Polygon(vertices)
         }
+        MeasuredParameterKind::Table => {
+            return Err(format!(
+                "`{value}` is no table; a table is named only as a rule parameter, `@name`"
+            ));
+        }
     })
 }
 
@@ -926,6 +947,37 @@ mod tests {
             call.argument("doors"),
             Some(&MeasuredArgument::SourceKind("IfcDoor".into()))
         );
+    }
+
+    #[test]
+    fn a_property_of_the_rule_binds_as_stated() {
+        let mut call =
+            parse("door_clear_width;stated=@clear_width;overall=Attributes/OverallWidth").unwrap();
+        assert_eq!(
+            call.argument("stated"),
+            Some(&MeasuredArgument::Parameter("clear_width".into()))
+        );
+        assert_eq!(
+            call.argument("overall"),
+            Some(&MeasuredArgument::Property {
+                set: Some("Attributes".into()),
+                name: "OverallWidth".into()
+            })
+        );
+        // Bound only to a property.
+        assert!(
+            call.bind("stated", MeasuredArgument::Text("x".into()))
+                .is_err()
+        );
+        call.bind(
+            "stated",
+            MeasuredArgument::Property {
+                set: None,
+                name: "ClearWidth".into(),
+            },
+        )
+        .unwrap();
+        assert!(call.is_bound());
     }
 
     #[test]

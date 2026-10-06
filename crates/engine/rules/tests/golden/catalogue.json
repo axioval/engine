@@ -32980,7 +32980,8 @@
               "language": "de",
               "text": "Die angegebene lichte Höhe der Tür."
             }
-          ]
+          ],
+          "references": "property"
         },
         {
           "key": "overall",
@@ -32997,7 +32998,8 @@
               "language": "de",
               "text": "Die angegebene Gesamthöhe der Tür."
             }
-          ]
+          ],
+          "references": "property"
         },
         {
           "key": "lining",
@@ -33014,7 +33016,8 @@
               "language": "de",
               "text": "Die angegebene Sturzbekleidung."
             }
-          ]
+          ],
+          "references": "property"
         },
         {
           "key": "threshold",
@@ -33031,7 +33034,8 @@
               "language": "de",
               "text": "Die angegebene Schwellenhöhe."
             }
-          ]
+          ],
+          "references": "property"
         }
       ],
       "dimension": "length",
@@ -33085,7 +33089,8 @@
               "language": "de",
               "text": "Die angegebene lichte Breite der Tür."
             }
-          ]
+          ],
+          "references": "property"
         },
         {
           "key": "from_leaves",
@@ -33124,7 +33129,8 @@
               "language": "de",
               "text": "Die angegebene Gesamtbreite der Tür."
             }
-          ]
+          ],
+          "references": "property"
         },
         {
           "key": "deduction",
@@ -35574,7 +35580,8 @@
               "language": "de",
               "text": "Die Länge, in der jedes Geschoss seine Höhenlage angibt, etwa `Levels/Elevation`."
             }
-          ]
+          ],
+          "references": "property"
         },
         {
           "key": "anchor",
@@ -37361,7 +37368,8 @@
               "language": "de",
               "text": "Die Länge, in der jedes Geschoss seine Höhenlage angibt, etwa `Levels/Elevation`."
             }
-          ]
+          ],
+          "references": "property"
         },
         {
           "key": "anchor",
@@ -39446,7 +39454,8 @@
               "language": "de",
               "text": "Die angegebene Schwellenhöhe der Tür."
             }
-          ]
+          ],
+          "references": "property"
         },
         {
           "key": "measure",

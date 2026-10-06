@@ -52,9 +52,9 @@ rules crate (`body_extent/template.rs`):
 | `name` | How rule-scoped messages name the capability (`body-extent: …`). |
 | `refusals` | Where a refused declaration and missing services are reported: `rule` (the default, once, before anything is selected, after the name) or `objects` (for each selected object, worded as the check states it, as capabilities that judged their declaration per object reported it). |
 | `defaults` | Values optional parameters take when unstated (`tolerance` 0 m). |
-| `declaration` | `Check`s over the rule's parameters, in order: `choice` (a string among options), `length` (a non-negative length), `count` (an integer of at least zero, stated where the descriptor requires it), `kind` (a parameter of its descriptor's kind, placed where the capability read it so refusals keep their order), `nonNegative` (numbers of at least zero), `traversal` (a valid `relationship` or `path`, declared only with one of the named parameters, or anywhere where it names none), `exclusive`, `anyOf`, `requires`, `ordered` (numbers, integers or quantities, as the descriptor types them), `disciplines` (a non-empty list of valid disciplines), `path` (a valid relationship path), `tolerance` (the rule's tolerance parameters valid together), `required` (a parameter stated, of its kind), `finite` (each parameter stated as a finite `number`, above or at least a bound where given), `increasing` (both numbers, the first below the second). The first failing check leaves the rule not evaluated as an invalid declaration, worded as the capability worded it. |
+| `declaration` | `Check`s over the rule's parameters, in order: `excludes` (where a mode is stated, no string parameter of a list states an option it does not combine with), `arguments` (where a mode is stated, the rule parameters a measured value names, checked as stated by the value's own argument check: a declaration, such as a table of rows, only the measurement knows how to read), `choice` (a string among options), `length` (a non-negative length), `count` (an integer of at least zero, stated where the descriptor requires it), `kind` (a parameter of its descriptor's kind, placed where the capability read it so refusals keep their order), `nonNegative` (numbers of at least zero), `traversal` (a valid `relationship` or `path`, declared only with one of the named parameters, or anywhere where it names none), `exclusive`, `anyOf`, `requires`, `ordered` (numbers, integers or quantities, as the descriptor types them), `disciplines` (a non-empty list of valid disciplines), `path` (a valid relationship path), `tolerance` (the rule's tolerance parameters valid together), `required` (a parameter stated, of its kind), `finite` (each parameter stated as a finite `number`, above or at least a bound where given), `increasing` (both numbers, the first below the second). The first failing check leaves the rule not evaluated as an invalid declaration, worded as the capability worded it. |
 | `services` | The host services the values need (`Service`: `object-frame`, `vertical-extent`, `triangle-count`), and the message leaving the whole rule open without them, before anything is selected. |
-| `texts` | Named message parts, optionally conditional: `Condition::Positive` (a parameter above zero), `Condition::Inexact` (a value read from evidence that is not exact, such as a count of a tessellation), `Condition::Equals` (a string parameter or its default is a value), `Condition::Zero` (a value's lower end is zero: nothing surely counted). Several texts may share a name, each under its own condition: the first that holds is rendered (`plan area` or `facade area` by `measure`). |
+| `texts` | Named message parts, optionally conditional: `Condition::Positive` (a parameter above zero), `Condition::Inexact` (a value read from evidence that is not exact, such as a count of a tessellation), `Condition::Equals` (a string parameter or its default is a value), `Condition::Zero` (a value's lower end is zero: nothing surely counted), `Condition::All` (every one of several) and `Condition::Not`. Several texts may share a name, each under its own condition: the first that holds is rendered (`plan area` or `facade area` by `measure`). |
 | `forms` | The compositions. The first form whose `when` parameters are all stated applies. |
 
 A `Form` holds:
@@ -68,14 +68,17 @@ A `Form` holds:
 - `members`: where the form judges anchors through members (`Members`):
   the selector parameter picking them and what undecided members leave;
 - `table`: the report table it fills (`Table`: a name and columns, each a
-  value under an id that may name a text), one row per selected object
-  whose values were read, passing or not;
+  value under an id that may name a text, in a quantity's dimension or a
+  plain number, `template::NUMBER`), one row per selected object whose
+  values were read, passing or not;
 - `scope`: where the form decides when not for each selected object
   (`Scopes`): each source, or the whole project;
 - `related`: the value whose measured reads' cited objects a finding
   relates (the doors a shelf length was measured with; see
-  [rule parameters as arguments](./derived.md#rule-parameters-and-the-anchor-as-arguments));
-  without it, the decided members, if any;
+  [rule parameters as arguments](./derived.md#rule-parameters-and-the-anchor-as-arguments)),
+  or `members:<selector>`, the members one population surely picked (a
+  ratio's numerator); without it, the decided members of every population,
+  if any;
 - `checks`: further decisions (`FormCheck`: values, decision, `fail`,
   `undecided`, `related`), judged in order after the form's values are read
   and before the form's own decision, each its own finding or not-evaluated
@@ -132,8 +135,10 @@ is cited. Members the selector cannot decide leave the anchor as
 keeps only a value surely above its maximum and leaves the anchor
 otherwise not evaluated with its message (`{undecided}` the count,
 `{relation}` how they are reached), and the anchor has no row: its value
-is known only from below. `widen` makes them possible members of the
-aggregate instead: a count runs from the members surely picked to every
+is known only from below. `open` leaves the anchor open with its message
+as soon as any member of any population is undecided, before anything is
+read: a ratio is never judged over members that may be there. `widen`
+makes them possible members of the aggregate instead: a count runs from the members surely picked to every
 member that may be (as the evaluator widens any aggregate), and the
 decision judges that interval, a verdict standing only where they cannot
 change it. A member's value that cannot be read leaves the anchor open
@@ -151,11 +156,24 @@ intervals, as the capabilities computed them. A ratio whose denominator
 may be zero has no upper bound (infinity), where the evaluator's
 division refuses a divisor holding zero, so a minimum it surely exceeds
 still decides; a denominator surely zero leaves the object open with
-`zero`. A form with derived values is not forked; one with further
-populations forks each into an aggregate along the same path, filtered by
-its selector. `tests/template_features.rs` holds both to a small
-template of its own until `area-ratio` and `relative-count` are rebuilt
-on them.
+`zero`. A form with derived values is not forked (its requirement, for the
+catalogue, states a ratio as a division and a difference as a
+subtraction); one with further populations forks each into an aggregate
+along the same path, filtered by its selector.
+`tests/template_features.rs` holds them to small templates of their own.
+
+**Member checks.** `Members::checks` judge each member of the first
+population on its own, the member in scope (`MemberCheck`: values, a
+`Within` decision, `fail`, `undecided`, `open`), just before the anchor
+reads the value the check names (`before`), and only where the anchor is
+judged that far. A member whose first value is `null` or cannot be read is
+not judged (the value the anchor reads refuses it where it must); a later
+value that cannot be read leaves the member open (`open`, `{why}`). A
+member found is a finding on the member relating the anchor, and one left
+open is open, each reported once however many anchors reach it; once the
+value `before` is read, an anchor with a member found is open as invalid
+evidence (`failed`: `{failed}` how many, `{first}` the first): a light
+area stated larger than its window, say.
 
 `Members::every_when_unstated` reads an unstated selector parameter as
 every object (`Selector::All`) rather than refusing the rule.
@@ -467,7 +485,8 @@ states it; `{minimum:fixed3}`: a constant, or a value known as one point,
 with three decimals; `{length:upper3}`: a value's upper end, or a
 constant, with three decimals), `{bound}` (the bound a `Within` failed or straddled, a length:
 `at least 0.26 m`), `{bound:plain}` (the bound as declared: `at least 6`),
-`{why}`, and an anchor's `{undecided}` and `{relation}`; a `Compare`
+`{why}`, an anchor's `{undecided}` and `{relation}`, and a value's lower
+end to two decimals (`{numerator:least2}`: `0.66`); a `Compare`
 form also reads `{target}` (the stated target as the rule declares it,
 after a space: ` 250 mm`, `` `F30` ``, ` [F30, F90]`) and
 `{tolerance:suffix}` (` (within tolerance 0.01)`, nothing when exact).

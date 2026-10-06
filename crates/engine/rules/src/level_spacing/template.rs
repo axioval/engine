@@ -433,6 +433,7 @@ pub(crate) fn template() -> Template {
                 every_when_unstated: false,
                 same_ends: None,
                 more: &[],
+                checks: Vec::new(),
             }),
             table: None,
             scope: None,

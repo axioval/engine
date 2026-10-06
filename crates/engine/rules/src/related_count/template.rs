@@ -51,6 +51,7 @@ fn form() -> Form {
             every_when_unstated: true,
             same_ends: Some("same_ends"),
             more: &[],
+            checks: Vec::new(),
         }),
         table: None,
         scope: None,

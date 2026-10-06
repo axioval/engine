@@ -238,6 +238,24 @@ pub enum Check {
         with: &'static [&'static str],
         message: &'static str,
     },
+    /// Where `when` is stated, no string parameter of `parameters` states
+    /// `value`: a mode that does not combine with one of their options.
+    Excludes {
+        when: &'static str,
+        parameters: &'static [&'static str],
+        value: &'static str,
+        message: &'static str,
+    },
+    /// Where every parameter of `when` is stated, the rule parameters the
+    /// measured value `value` names (`@name`) are checked as stated, under
+    /// the value's keys, by the value's own argument check (one its
+    /// provider declares, `measured_kinds::argument_check`): a declaration
+    /// only the measurement knows how to read, such as a table of rows,
+    /// refused once for the rule in the measurement's words.
+    Arguments {
+        when: &'static [&'static str],
+        value: &'static str,
+    },
 }
 
 /// The host services a template's values need, and the message leaving
@@ -309,6 +327,10 @@ pub enum Condition {
         parameter: &'static str,
         values: &'static [&'static str],
     },
+    /// Every one of `conditions` holds.
+    All { conditions: &'static [Condition] },
+    /// `condition` does not hold.
+    Not { condition: &'static Condition },
 }
 
 /// One composition of a template.
@@ -342,8 +364,9 @@ pub struct Form {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub derived: Vec<Derived>,
     /// The value whose measured reads' cited objects ([`Citation`]) a
-    /// finding relates (the doors a shelf length was measured with); none
-    /// relates the decided members, if any.
+    /// finding relates (the doors a shelf length was measured with), or
+    /// `members:<selector>`, the members one population surely picked;
+    /// none relates the decided members of every population, if any.
     ///
     /// [`Citation`]: crate::Citation
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -502,6 +525,40 @@ pub struct Members {
     /// with the first population's for `undecided`.
     #[serde(skip_serializing_if = "<[_]>::is_empty")]
     pub more: &'static [&'static str],
+    /// Judgements of each member of the first population on its own, made
+    /// just before the anchor reads the value each names.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub checks: Vec<MemberCheck>,
+}
+
+/// A judgement of each member of an anchor's first population on its own,
+/// the member in scope: a finding on the member relating the anchor (once
+/// per member, however many anchors reach it), or the member open.
+///
+/// It is made just before the anchor reads its value `before`, and only
+/// while the anchor is judged that far; once that value is read, an anchor
+/// with a member it found is left open as invalid evidence (`failed`:
+/// `{failed}` how many, `{first}` the first). A member whose first value
+/// is `null` or cannot be read is not judged (the value the anchor reads
+/// refuses it where it must); a later value that cannot be read leaves the
+/// member open (`open`, `{why}` its refusal).
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemberCheck {
+    /// The anchor's value before which members are judged.
+    pub before: &'static str,
+    /// The values read for each member, in order.
+    pub values: Vec<TemplateValue>,
+    /// How they decide: a `Within`.
+    pub decision: Decision,
+    /// The finding on a member where it fails.
+    pub fail: &'static str,
+    /// The member open where it cannot decide.
+    pub undecided: &'static str,
+    /// The member open where a value after the first cannot be read.
+    pub open: &'static str,
+    /// The anchor open where a member failed.
+    pub failed: &'static str,
 }
 
 impl Members {
@@ -541,6 +598,11 @@ pub enum UndecidedMembers {
     /// anchor open (members are ordered among each other): with
     /// `message`, `{why}` the first such object's refusal, for its reason.
     Refuse { message: &'static str },
+    /// Any member, of any population, the selector cannot decide leaves
+    /// the anchor open with `message` (`{undecided}` their count,
+    /// `{relation}` how they are reached) before any value is read: a value
+    /// over members that may be there is never judged.
+    Open { message: &'static str },
 }
 
 /// A report table a form fills: one row per selected object whose values
@@ -554,8 +616,14 @@ pub struct Table {
     pub columns: Vec<Column>,
 }
 
+/// The dimension of a [`Column`] holding a plain number (a ratio, a
+/// count): no SI base unit, which names no quantity's dimension.
+pub const NUMBER: axioval_ir::QuantityDimension =
+    axioval_ir::QuantityDimension::Other { exponents: [0; 7] };
+
 /// One column of a [`Table`]: a value of the form, under an id that may
-/// name a [`Text`] (`{column}`), in a quantity's dimension.
+/// name a [`Text`] (`{column}`), in a quantity's dimension, or a plain
+/// number ([`NUMBER`]).
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Column {
@@ -1045,15 +1113,7 @@ impl Form {
     /// `value` (its name and expression) first.
     #[must_use]
     pub fn requirement_with(&self, value: &dyn Fn(&str, &Expression) -> Expression) -> Expression {
-        let inline = |values: &[&TemplateValue], name: &str| {
-            values.iter().find(|step| step.name == name).map_or_else(
-                || Expression::Derived {
-                    name: name.to_owned(),
-                    label: None,
-                },
-                |step| value(step.name, &step.expression),
-            )
-        };
+        let inline = |values: &[&TemplateValue], name: &str| self.inlined(values, name, value);
         let own: Vec<&TemplateValue> = self.values.iter().collect();
         let decided = self.decision.expression(&|name| inline(&own, name));
         if self.checks.is_empty() {
@@ -1071,6 +1131,46 @@ impl Form {
         Expression::And {
             operands,
             label: None,
+        }
+    }
+
+    /// The value `name` as an expression: a value read, inlined; a value
+    /// derived from them, as the arithmetic it states (a ratio as a
+    /// division, which a block editor shows, though the runner divides by
+    /// a denominator that may be zero where the evaluator refuses); any
+    /// other name as a derived value of that name.
+    fn inlined(
+        &self,
+        values: &[&TemplateValue],
+        name: &str,
+        value: &dyn Fn(&str, &Expression) -> Expression,
+    ) -> Expression {
+        if let Some(step) = values.iter().find(|step| step.name == name) {
+            return value(step.name, &step.expression);
+        }
+        let derived = self.derived.iter().find(|derived| match derived {
+            Derived::Difference(difference) => difference.name == name,
+            Derived::Ratio { name: ratio, .. } => *ratio == name,
+        });
+        match derived {
+            Some(Derived::Difference(difference)) => Expression::Subtract {
+                left: boxed(self.inlined(values, difference.minuend, value)),
+                right: boxed(self.inlined(values, difference.subtrahend, value)),
+                label: Some(name.to_owned()),
+            },
+            Some(Derived::Ratio {
+                numerator,
+                denominator,
+                ..
+            }) => Expression::Divide {
+                left: boxed(self.inlined(values, numerator, value)),
+                right: boxed(self.inlined(values, denominator, value)),
+                label: Some(name.to_owned()),
+            },
+            None => Expression::Derived {
+                name: name.to_owned(),
+                label: None,
+            },
         }
     }
 }

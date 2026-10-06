@@ -97,6 +97,7 @@ fn members_form() -> Form {
             every_when_unstated: false,
             same_ends: None,
             more: &[],
+            checks: Vec::new(),
         }),
         table: Some(areas()),
         scope: None,

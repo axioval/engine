@@ -1,6 +1,6 @@
-//! Template features no rebuilt capability uses yet, held to what their
-//! documentation says on small templates of their own: two member
-//! populations, and a ratio whose denominator may be zero.
+//! Template features held to what their documentation says on small
+//! templates of their own: two member populations, a ratio whose
+//! denominator may be zero, and what `area-ratio` composes besides.
 #![allow(missing_docs)]
 
 mod common;
@@ -76,6 +76,7 @@ fn template() -> Template {
                 every_when_unstated: false,
                 same_ends: None,
                 more: &["denominator_selector"],
+                checks: Vec::new(),
             }),
             table: None,
             scope: None,
@@ -199,4 +200,268 @@ fn a_derived_value_is_not_forked() {
         ),
         Err(ForkError::Inexpressible(_))
     ));
+}
+
+/// Members that leave an anchor open before anything is read, members
+/// judged on their own, findings relating one population, a plain-number
+/// column, composed text conditions and a mode excluding an option: what
+/// `area-ratio` composes, on a small template of their own.
+mod checked {
+    use super::*;
+    use axioval_engine::template::{Check, Column, Condition, MemberCheck, NUMBER, Table, Text};
+    use axioval_ir::contract::ComparisonOperator;
+    use axioval_ir::{PropertyValue, QuantityDimension, ReportColumnKind};
+
+    const ID: &str = "test:checked-share";
+
+    const MANY: Condition = Condition::All {
+        conditions: &[
+            Condition::Not {
+                condition: &Condition::Zero { value: "windows" },
+            },
+            Condition::Not {
+                condition: &Condition::Zero { value: "walls" },
+            },
+        ],
+    };
+
+    fn stated(name: &'static str, property: &str) -> TemplateValue {
+        TemplateValue {
+            name,
+            expression: Expression::Property {
+                property_set: Some("Pset".into()),
+                property: property.into(),
+                of: None,
+                label: None,
+            },
+            expect: None,
+            absent: None,
+            mismatch: None,
+        }
+    }
+
+    /// Windows per wall of each room, each window no wider than `widest`.
+    fn template() -> Template {
+        let mut template = super::template();
+        template.id = ID;
+        template.parameters.extend([
+            ParameterDescriptor::optional("widest", ParameterType::Number),
+            ParameterDescriptor::optional("mode", ParameterType::String),
+            ParameterDescriptor::optional("strict", ParameterType::Boolean),
+        ]);
+        template.declaration = vec![Check::Excludes {
+            when: "strict",
+            parameters: &["mode"],
+            value: "loose",
+            message: "a strict rule is never loose",
+        }];
+        template.texts = vec![
+            Text {
+                name: "both",
+                when: Some(MANY),
+                text: " (both counted)",
+            },
+            Text {
+                name: "both",
+                when: None,
+                text: "",
+            },
+        ];
+        let form = &mut template.forms[0];
+        form.fail = "{windows:least} window(s) to {walls:least} wall(s){both}; required \
+                     {required}";
+        form.related = Some("members:numerator_selector");
+        form.table = Some(Table {
+            name: "shares",
+            columns: vec![
+                Column {
+                    id: "windows",
+                    value: "windows",
+                    dimension: NUMBER,
+                },
+                Column {
+                    id: "share",
+                    value: "share",
+                    dimension: NUMBER,
+                },
+            ],
+        });
+        let members = form.members.as_mut().unwrap();
+        members.undecided = UndecidedMembers::Open {
+            message: "{undecided} member(s) {relation} are undecided",
+        };
+        members.checks = vec![MemberCheck {
+            before: "walls",
+            values: vec![stated("width", "Width")],
+            decision: Decision::Within {
+                value: "width",
+                minimum: None,
+                maximum: Some(vec![Term::plus(Operand::Parameter("widest"))]),
+                rounding: Vec::new(),
+            },
+            fail: "the window is {width:area} wide; required {bound:plain}",
+            undecided: "the window's width straddles {bound:plain}",
+            open: "the window's width cannot be read: {why}",
+            failed: "{failed} window(s), first {first}, are too wide",
+        }];
+        template
+    }
+
+    fn sized(model: Model, window: &str, width: f64) -> Model {
+        model.value(
+            window,
+            "Pset",
+            "Width",
+            PropertyValue::Quantity {
+                value: width,
+                dimension: QuantityDimension::Length,
+            },
+        )
+    }
+
+    /// An undecided member leaves its anchor open before any value is read,
+    /// worded with the count and the relation.
+    #[test]
+    fn an_undecided_member_leaves_the_anchor_open_first() {
+        let templated = Templated::new(template());
+        let external = Selector::property(
+            Some("Pset".into()),
+            "External",
+            ComparisonOperator::Equals,
+            Some(common::boolean(true)),
+        );
+        let mut declared = parameters(vec![("maximum", number(5.0))]);
+        declared[1] = ("denominator_selector", selector(external));
+        let evaluation = rooms()
+            .unreadable("x1")
+            .evaluate(&templated, &rule(ID, kind("room"), declared));
+        let open: Vec<(String, String)> = evaluation
+            .not_evaluated_outcomes()
+            .iter()
+            .map(|outcome| {
+                (
+                    outcome.object_id().unwrap().local_id.clone(),
+                    outcome.message().to_owned(),
+                )
+            })
+            .collect();
+        assert!(
+            open.contains(&("r1".into(), "1 member(s) via bounds are undecided".into())),
+            "{open:?}"
+        );
+    }
+
+    /// A finding relates the one population named, the composed texts
+    /// hold, and the table's columns are plain numbers.
+    #[test]
+    fn a_finding_relates_the_named_population_and_numbers_are_tabled() {
+        let templated = Templated::new(template());
+        let evaluation = rooms().evaluate(
+            &templated,
+            &rule(ID, kind("room"), parameters(vec![("maximum", number(1.0))])),
+        );
+        assert_eq!(
+            findings(&evaluation),
+            [(
+                "r1".to_owned(),
+                "2 window(s) to 1 wall(s) (both counted); required at most 1".to_owned()
+            )]
+        );
+        let related: Vec<&str> = evaluation.findings()[0]
+            .related
+            .iter()
+            .map(|object| object.local_id.as_str())
+            .collect();
+        assert_eq!(related, ["w1", "w2"], "the windows only");
+        let table = &evaluation.tables()[0];
+        assert!(
+            table
+                .columns()
+                .iter()
+                .all(|column| matches!(column.kind, ReportColumnKind::Number))
+        );
+    }
+
+    /// A member failing its check is a finding on the member relating the
+    /// anchor, reported once however many anchors reach it; the anchor is
+    /// open once the value the check precedes is read.
+    #[test]
+    fn members_are_judged_on_their_own_and_found_once() {
+        let templated = Templated::new(template());
+        let model = sized(sized(rooms(), "w1", 2.0), "w2", 0.5).edge("bounds", "r2", "w1");
+        let evaluation = model.evaluate(
+            &templated,
+            &rule(
+                ID,
+                kind("room"),
+                parameters(vec![("maximum", number(5.0)), ("widest", number(1.0))]),
+            ),
+        );
+        assert_eq!(
+            findings(&evaluation),
+            [(
+                "w1".to_owned(),
+                "the window is 2 wide; required at most 1".to_owned()
+            )]
+        );
+        assert_eq!(
+            evaluation.findings()[0].related[0].local_id,
+            "r1",
+            "the anchor that judged it first"
+        );
+        let mut open: Vec<(String, String)> = evaluation
+            .not_evaluated_outcomes()
+            .iter()
+            .map(|outcome| {
+                (
+                    outcome.object_id().unwrap().local_id.clone(),
+                    outcome.message().to_owned(),
+                )
+            })
+            .collect();
+        open.sort();
+        assert_eq!(
+            open,
+            [
+                (
+                    "r1".to_owned(),
+                    "1 window(s), first test:model/w1, are too wide".to_owned()
+                ),
+                (
+                    "r2".to_owned(),
+                    "1 window(s), first test:model/w1, are too wide".to_owned()
+                ),
+                (
+                    "r3".to_owned(),
+                    "the room has no wall via bounds".to_owned()
+                ),
+            ]
+        );
+    }
+
+    /// A mode excludes an option where it is stated.
+    #[test]
+    fn a_mode_excludes_an_option() {
+        let templated = Templated::new(template());
+        let evaluation = rooms().evaluate(
+            &templated,
+            &rule(
+                ID,
+                kind("room"),
+                parameters(vec![
+                    ("maximum", number(5.0)),
+                    ("strict", common::boolean(true)),
+                    ("mode", string("loose")),
+                ]),
+            ),
+        );
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+        assert_eq!(
+            evaluation.not_evaluated_outcomes()[0].message(),
+            "window-share: a strict rule is never loose"
+        );
+    }
 }

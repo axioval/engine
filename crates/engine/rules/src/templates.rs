@@ -14,6 +14,7 @@ use std::sync::{Arc, Mutex};
 mod compare;
 mod each;
 mod groups;
+mod members;
 mod scopes;
 
 use axioval_engine::expression::{
@@ -160,6 +161,8 @@ struct Bound {
     each: Vec<Vec<Expression>>,
     /// Each of the form's checks' value expressions, bound likewise.
     checks: Vec<Vec<Expression>>,
+    /// Each of the form's member checks' value expressions, bound likewise.
+    member_checks: Vec<Vec<Expression>>,
 }
 
 impl std::ops::Deref for Plan<'_> {
@@ -182,6 +185,23 @@ impl Plan<'_> {
             .values
             .iter()
             .zip(&self.bound.checks[index])
+    }
+
+    /// The form's member checks, each with its value steps, bound.
+    fn member_checks(
+        &self,
+    ) -> impl Iterator<
+        Item = (
+            &axioval_engine::template::MemberCheck,
+            Vec<(&TemplateValue, &Expression)>,
+        ),
+    > {
+        self.form
+            .members
+            .iter()
+            .flat_map(|members| &members.checks)
+            .zip(&self.bound.member_checks)
+            .map(|(check, expressions)| (check, check.values.iter().zip(expressions).collect()))
     }
 }
 
@@ -472,7 +492,52 @@ fn check(check: &Check, rule: &CompiledRule, template: &Template) -> Result<(), 
                 _ => Err(invalid(*message)),
             }
         }
+        Check::Excludes {
+            when,
+            parameters,
+            value,
+            message,
+        } => {
+            if !stated(rule, when) {
+                return Ok(());
+            }
+            for name in *parameters {
+                if Parameters(rule).string(name)? == Some(*value) {
+                    return Err(invalid(*message));
+                }
+            }
+            Ok(())
+        }
+        Check::Arguments { when, value } => {
+            if when.iter().all(|name| stated(rule, name)) {
+                arguments_checked(rule, value)
+            } else {
+                Ok(())
+            }
+        }
     }
+}
+
+/// The rule parameters the measured value `value` names, as stated and
+/// keyed by the value's keys, checked by the value's own argument check.
+fn arguments_checked(rule: &CompiledRule, value: &str) -> Result<(), Unavailable> {
+    use axioval_ir::measured::MeasuredArgument;
+    let call = axioval_ir::measured::parse(value)
+        .map_err(|error| invalid(format!("the template's value `{value}`: {error}")))?;
+    let Some(check) = crate::measured_kinds::argument_check(call.name()) else {
+        return Ok(());
+    };
+    let stated = call
+        .references()
+        .filter_map(|(key, argument)| match argument {
+            MeasuredArgument::Parameter(name) => rule
+                .parameters
+                .get(name)
+                .map(|stated| (key.to_owned(), stated.clone())),
+            _ => None,
+        })
+        .collect();
+    check(&stated)
 }
 
 /// The parameter `name` where stated as a `number`.
@@ -854,6 +919,18 @@ fn bind(template: &Template, rule: &CompiledRule) -> Result<Bound, Unavailable> 
                 .collect()
         })
         .collect();
+    let member_checks = form
+        .members
+        .iter()
+        .flat_map(|members| &members.checks)
+        .map(|check| {
+            check
+                .values
+                .iter()
+                .map(|step| bound(&step.expression, &constants))
+                .collect()
+        })
+        .collect();
     Ok(Bound {
         form: index,
         constants,
@@ -861,6 +938,7 @@ fn bind(template: &Template, rule: &CompiledRule) -> Result<Bound, Unavailable> 
         comparison,
         each,
         checks,
+        member_checks,
     })
 }
 
@@ -1158,6 +1236,7 @@ fn render(plan: &Plan<'_>, read: &Read, template: &str) -> String {
     out
 }
 
+#[allow(clippy::too_many_lines)]
 fn placeholder(plan: &Plan<'_>, read: &Read, key: &str) -> Option<String> {
     // The format follows the last colon: `member:height:length` formats
     // the member's value `height`.
@@ -1206,8 +1285,12 @@ fn placeholder(plan: &Plan<'_>, read: &Read, key: &str) -> Option<String> {
         "" | "exactly" if name == "required" => read
             .bounds
             .and_then(|(minimum, maximum)| requirement(minimum, maximum, format == "exactly")),
-        // What surely counts: the value's lower end.
-        "least" => match read.values.get(name) {
+        // What surely counts: the value's lower end, or that to two
+        // decimals, as the ratio capabilities showed the areas divided.
+        "least" | "least2" => match read.values.get(name) {
+            Some(Value::Number { value, .. }) if format == "least2" => {
+                Some(((value.lower * 100.0).round() / 100.0).to_string())
+            }
             Some(Value::Number { value, .. }) => Some(value.lower.to_string()),
             _ => None,
         },
@@ -1295,6 +1378,10 @@ fn holds(plan: &Plan<'_>, read: &Read, condition: Option<Condition>) -> bool {
             read.values.get(value),
             Some(Value::Number { value, .. }) if value.lower == 0.0
         ),
+        Some(Condition::All { conditions }) => conditions
+            .iter()
+            .all(|condition| holds(plan, read, Some(*condition))),
+        Some(Condition::Not { condition }) => !holds(plan, read, Some(*condition)),
     }
 }
 
@@ -1348,6 +1435,9 @@ struct Scope<'t> {
     /// The further populations (`Members::more`), each its selector
     /// parameter and the objects it picks; an unstated one picks none.
     more: Vec<(&'t str, Option<Population>)>,
+    /// What member checks found about members, not yet reported, and the
+    /// members already reported, each once however many anchors reach it.
+    judged: members::Judged,
 }
 
 impl<'t> Scope<'t> {
@@ -1397,6 +1487,7 @@ impl<'t> Scope<'t> {
             traversal: Parameters(rule).traversal()?,
             ends,
             more,
+            judged: members::Judged::default(),
         }))
     }
 
@@ -1763,9 +1854,12 @@ fn judge_object(
         .with_arguments(arguments);
     let mut read = Read::default();
     let mut members = None;
+    // Each population's members surely picked, the first population's first.
+    let mut populations: Vec<(&str, Vec<ObjectId>)> = Vec::new();
     if let Some(scope) = scope {
         match scope.tally(context, object) {
             Ok(mut tally) => {
+                populations.push((scope.members.selector, tally.decided.clone()));
                 read.named.insert("relation", scope.relation());
                 // Undecided members widen the aggregate only where the
                 // form says they may.
@@ -1799,34 +1893,98 @@ fn judge_object(
                         Members::source(name),
                         candidates(context, &further.decided, possible),
                     );
+                    populations.push((name, further.decided.clone()));
                     tally.undecided += further.undecided;
                     tally.decided.extend(further.decided);
                     tally.possible.extend(further.possible);
                     tally.evidence.extend(further.evidence);
                 }
                 read.named.insert("undecided", tally.undecided.to_string());
+                if tally.undecided > 0
+                    && let UndecidedMembers::Open { message } = &scope.members.undecided
+                {
+                    // A value over members that may be there is never judged.
+                    return Outcome::Open(
+                        NotEvaluatedReason::IncompleteEvidence,
+                        render(plan, &read, message),
+                    )
+                    .into();
+                }
                 members = Some(tally);
             }
             Err((reason, message)) => return Outcome::Open(reason, message).into(),
         }
     }
-    if let Some(outcome) = read_values(
-        plan,
-        plan.values(),
-        &|name| judges_stated(decision, name),
-        context,
-        object,
-        &mut leaves,
-        &mut read,
-    ) {
-        return outcome.into();
+    for (index, value) in plan.values().enumerate() {
+        // Members judged on their own before this value, where a check
+        // says so; an anchor with a member found is open once it is read.
+        let found = match (scope, populations.first()) {
+            (Some(scope), Some((_, first))) => members::judge(
+                plan,
+                scope,
+                (context, arguments),
+                rule,
+                object,
+                first,
+                index,
+            ),
+            _ => None,
+        };
+        if let Some(outcome) = read_values(
+            plan,
+            std::iter::once(value),
+            &|name| judges_stated(decision, name),
+            context,
+            object,
+            &mut leaves,
+            &mut read,
+        ) {
+            // A finding on a stated absence cites what reached the members.
+            return match (outcome, &members) {
+                (
+                    Outcome::Finding {
+                        message,
+                        mut evidence,
+                        related,
+                        deviation,
+                    },
+                    Some(tally),
+                ) => {
+                    evidence.extend(tally.evidence.iter().cloned());
+                    Outcome::Finding {
+                        message,
+                        evidence,
+                        related,
+                        deviation,
+                    }
+                }
+                (outcome, _) => outcome,
+            }
+            .into();
+        }
+        if let Some((message, failed, first)) = found {
+            read.named.insert("failed", failed.to_string());
+            read.named.insert("first", first.to_string());
+            return Outcome::Open(
+                NotEvaluatedReason::InvalidEvidence,
+                render(plan, &read, message),
+            )
+            .into();
+        }
     }
     if let Some(outcome) = derive(plan, &mut read) {
         return outcome.into();
     }
     let undecided = members.as_ref().map_or(0, |members| members.undecided);
     let related = match plan.form.related {
-        Some(value) => cited(&read, value),
+        Some(value) => match value.strip_prefix("members:") {
+            Some(selector) => populations
+                .iter()
+                .find(|(name, _)| *name == selector)
+                .map(|(_, decided)| decided.clone())
+                .unwrap_or_default(),
+            None => cited(&read, value),
+        },
         None => members
             .as_ref()
             .map(|members| members.decided.clone())
@@ -1958,7 +2116,12 @@ fn report_table(plan: &Plan<'_>, rule: &CompiledRule) -> Option<ReportTable> {
         .columns
         .iter()
         .map(|column| {
-            ReportColumn::quantity(render(plan, &Read::default(), column.id), column.dimension)
+            let id = render(plan, &Read::default(), column.id);
+            if column.dimension == axioval_engine::template::NUMBER {
+                ReportColumn::number(id)
+            } else {
+                ReportColumn::quantity(id, column.dimension)
+            }
         })
         .collect();
     ReportTable::new(rule.id.clone(), table.name, columns).ok()
@@ -2094,6 +2257,13 @@ pub(crate) fn run(
             if let (Some(table), Some(row)) = (&mut table, row) {
                 // Selected objects are distinct, so rows never collide.
                 let _ = table.push_row(object.id.clone(), row);
+            }
+            if let Some(scope) = &scope {
+                for (member, outcome) in scope.judged.take() {
+                    if let Some(member) = crate::selection::object_by_id(context, &member) {
+                        push(&mut evaluation, rule, member, outcome);
+                    }
+                }
             }
             for outcome in checks.into_iter().chain([outcome]) {
                 push(&mut evaluation, rule, object, outcome);

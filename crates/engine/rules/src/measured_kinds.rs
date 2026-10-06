@@ -7,6 +7,20 @@ use axioval_engine::{PropertyResolutionError, RuleContext, TypeHierarchyServiceH
 use axioval_ir::ObjectId;
 use axioval_ir::measured::{MeasuredArgument, MeasuredCall};
 
+/// A provider's check of the rule parameters a measured value names, as
+/// the rule states them and keyed by the value's keys: what a template's
+/// `Check::Arguments` refuses once per rule.
+pub(crate) type ArgumentCheck = fn(
+    &std::collections::BTreeMap<String, axioval_ir::contract::ParameterValue>,
+) -> Result<(), crate::support::Unavailable>;
+
+/// The argument check the provider of the measured value `name` declares,
+/// if any: a declaration only the measurement knows how to read.
+pub(crate) fn argument_check(name: &str) -> Option<ArgumentCheck> {
+    let _ = name;
+    None
+}
+
 /// The project's objects of the `,`-separated source kinds `key` names,
 /// `object` left out: subtypes included where the source declares a type
 /// hierarchy, kinds matched exactly where it declares none.

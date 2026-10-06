@@ -36,12 +36,14 @@ use serde::Serialize;
 use crate::ParameterDescriptor;
 
 mod items;
+mod parts;
 
 pub use items::{
     Allowance, Bound, Choice, Count, Effect, Every, Group, Groups, Guard, ItemCheck, ItemTest,
     ItemText, ItemUnit, Items, Judge, Least, On, OnNull, OpenItems, Passing, Range, Requirement,
     RowColumn, Rows, Spread, Together, TogetherJudge, Truths, When,
 };
+pub use parts::Parts;
 
 /// Four units in the last place of the largest magnitude a comparison
 /// involves: decimal coordinates and lengths read in binary differ from
@@ -868,6 +870,9 @@ pub enum Decision {
     /// failing test its own outcome), or together in one outcome
     /// ([`Items`]). Only a form's check uses it.
     Items(Box<Items>),
+    /// The parts of each selected object judged as objects of their own,
+    /// then the object by the form's values and checks ([`Parts`]).
+    Parts(Box<Parts>),
 }
 
 /// Members read and judged one by one: what [`Decision::Each`] decides.
@@ -1789,6 +1794,12 @@ impl Decision {
                 }
             }
             Self::Items(items) => items.expression(),
+            // Each part is judged by its checks, which the form's
+            // requirement does not inline: what the anchor's checks require.
+            Self::Parts(_) => Expression::Literal {
+                value: ScalarValue::Boolean { value: true },
+                label: Some("each part judged".into()),
+            },
             Self::Unique { value: subject, .. } => {
                 // No other object the rule selects in the scope states the
                 // checked object's value: at most one, itself, does.

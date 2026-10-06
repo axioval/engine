@@ -191,6 +191,13 @@ impl<'a> ObjectLeaves<'a> {
         self
     }
 
+    /// The same leaves of a part of `subject`, the rule's checked object a
+    /// measured value names as `@anchor`.
+    pub(crate) fn with_subject(mut self, subject: &'a Object) -> Self {
+        self.subject = subject;
+        self
+    }
+
     /// The same leaves, binding measured values' references through
     /// `arguments`, read once per rule.
     pub(crate) fn with_arguments(mut self, arguments: &'a Arguments) -> Self {

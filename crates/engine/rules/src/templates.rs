@@ -18,6 +18,7 @@ pub(crate) mod facets;
 mod groups;
 mod items;
 mod members;
+mod parts;
 mod proportion;
 mod requirements;
 mod scopes;
@@ -1814,12 +1815,31 @@ fn judge_checks(
     object: &Object,
     leaves: &mut ObjectLeaves<'_>,
 ) -> Vec<Outcome> {
+    judge_checks_in(
+        plan,
+        (&plan.form.checks, &plan.bound.checks),
+        read,
+        context,
+        object,
+        leaves,
+    )
+}
+
+/// [`judge_checks`] of `checks`, their values bound in `values`.
+fn judge_checks_in(
+    plan: &Plan<'_>,
+    (checks, values): (&[axioval_engine::template::FormCheck], &[Vec<Expression>]),
+    read: &Read,
+    context: &RuleContext<'_>,
+    object: &Object,
+    leaves: &mut ObjectLeaves<'_>,
+) -> Vec<Outcome> {
     let mut outcomes = Vec::new();
-    for (index, check) in plan.form.checks.iter().enumerate() {
+    for (check, bound) in checks.iter().zip(values) {
         let mut checked = read.clone();
         if let Some(outcome) = read_values(
             plan,
-            plan.check_values(index),
+            check.values.iter().zip(bound),
             &|_| false,
             context,
             object,
@@ -2515,6 +2535,7 @@ fn run_apart(
 ) -> Option<CapabilityEvaluation> {
     Some(match &plan.form.decision {
         Decision::Each(each) => each::run(plan, each, context, rule),
+        Decision::Parts(parts) => parts::run(plan, parts, context, rule),
         Decision::Unique { value, unique } => groups::run(plan, value, unique, context, rule),
         Decision::Consistent {
             key,
@@ -2881,6 +2902,13 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
         return Err(ForkError::Inexpressible(
             "items of a measured list judged one by one, each its own outcome, have no \
              expression form"
+                .to_owned(),
+        ));
+    }
+    if matches!(plan.form.decision, Decision::Parts(_)) {
+        return Err(ForkError::Inexpressible(
+            "an expression rule judges the objects it selects, not their parts as objects of \
+             their own"
                 .to_owned(),
         ));
     }

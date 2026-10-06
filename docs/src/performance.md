@@ -325,3 +325,14 @@ sides once per object, as the capability did.
 binds the target and blocker selections once per rule, where the
 capability selected them per rule as well, and asks the line-of-sight
 service exactly what the capability asked.
+`coordinate-consistency` and `external-wall-validation` (#291) run the
+`storeys` case's `coordinates` rule and the `coverage` case's
+`external-walls` rule. On the public models neither has more than one
+source or a derivable envelope, so both leave the rule open before
+judging a scope: `coordinate-consistency` runs at 1.02 to 1.09× its
+reference (peak heap 1.00 to 1.05×) on every input above the floor and
+`external-wall-validation` at 1.00 to 1.24× (peak heap 1.00 to 1.10×), the
+generated fixture's 1.24× the cost of selecting before reading the
+declaration and its value once per rule; the small models, under the
+floor, hold together. Each derivation of the envelope is asked of the
+service once per run, however many values and rules read it.

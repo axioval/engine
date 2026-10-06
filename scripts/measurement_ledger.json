@@ -397,7 +397,7 @@
         "plan_diameter"
       ]
     },
-    "external_wall_validation::evaluate::measure_envelope_membership": {
+    "external_wall_validation::reference::evaluate::measure_envelope_membership": {
       "count": 1,
       "providedBy": [
         "bounds_envelope",

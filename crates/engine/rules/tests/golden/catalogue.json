@@ -14043,7 +14043,1138 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "external-wall-validation",
+        "refusals": "selected",
+        "declaration": [
+          {
+            "kind": "required",
+            "parameter": "derivations"
+          },
+          {
+            "kind": "declaresListed",
+            "parameters": [
+              "derivations"
+            ],
+            "message": "`derivations` names no derivation"
+          },
+          {
+            "kind": "listed",
+            "parameter": "derivations",
+            "options": [
+              "all-spaces",
+              "gross-area-groups"
+            ],
+            "unknown": "envelope derivation `{value}` must be 'all-spaces' or 'gross-area-groups'",
+            "repeated": "`derivations` lists `{value}` twice"
+          },
+          {
+            "kind": "kind",
+            "parameter": "bounding_selector"
+          },
+          {
+            "kind": "kind",
+            "parameter": "gross_area_group_selector"
+          },
+          {
+            "kind": "kind",
+            "parameter": "gross_area_group_path"
+          },
+          {
+            "kind": "together",
+            "parameters": [
+              "gross_area_group_selector",
+              "gross_area_group_path"
+            ],
+            "message": "declare `gross_area_group_selector` and `gross_area_group_path` together"
+          },
+          {
+            "kind": "path",
+            "parameter": "gross_area_group_path"
+          },
+          {
+            "kind": "listedNeeds",
+            "parameter": "derivations",
+            "needs": [
+              {
+                "value": "all-spaces",
+                "parameters": [
+                  "bounding_selector"
+                ],
+                "message": "the all-spaces derivation needs `bounding_selector`"
+              },
+              {
+                "value": "gross-area-groups",
+                "parameters": [
+                  "gross_area_group_selector",
+                  "gross_area_group_path"
+                ],
+                "message": "the gross-area-groups derivation needs `gross_area_group_selector` and `gross_area_group_path`"
+              }
+            ]
+          }
+        ],
+        "services": {
+          "needs": [
+            "envelope-membership"
+          ],
+          "message": "envelope-membership service is not registered"
+        },
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "declared",
+                "expression": {
+                  "kind": "property",
+                  "propertySet": "axioval:measured",
+                  "property": "external_declarations;derivations=@derivations;bounding=@bounding_selector;groups=@gross_area_group_selector;group_path=@gross_area_group_path;objects=@selection"
+                }
+              },
+              {
+                "name": "one",
+                "expression": {
+                  "kind": "literal",
+                  "value": {
+                    "type": "integer",
+                    "value": 1
+                  }
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "declared",
+              "minimum": [
+                {
+                  "sign": "plus",
+                  "operand": {
+                    "kind": "value",
+                    "name": "one"
+                  }
+                }
+              ],
+              "rounding": []
+            },
+            "fail": "no selected object is declared external: the model declares no envelope",
+            "undecided": "no selected object is declared external, but {declared:upper0} state neither external nor internal or could not be measured",
+            "scope": {
+              "across": "",
+              "sources": "occupied",
+              "needs": {
+                "kind": "not",
+                "condition": {
+                  "kind": "all",
+                  "conditions": [
+                    {
+                      "kind": "not",
+                      "condition": {
+                        "kind": "measured",
+                        "value": "all_spaces"
+                      }
+                    },
+                    {
+                      "kind": "not",
+                      "condition": {
+                        "kind": "measured",
+                        "value": "gross_area_groups"
+                      }
+                    }
+                  ]
+                }
+              },
+              "messages": {
+                "source": "in source `{source}`",
+                "project": "in the project",
+                "noSource": "external-wall-validation: the run checks no source",
+                "noDiscipline": "external-wall-validation: no source plays {disciplines}",
+                "undeclared": "external-wall-validation: `{source}` declares no discipline",
+                "undeclaredMember": "external-wall-validation: `{source}` declares no discipline",
+                "unlisted": "external-wall-validation: the objects of `{source}` cannot be listed: {why}",
+                "noDisciplines": "external-wall-validation: source disciplines are not available"
+              }
+            },
+            "related": "declared",
+            "checks": [
+              {
+                "values": [
+                  {
+                    "name": "declared_all",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "declared_external;derivation=all-spaces;bounding=@bounding_selector"
+                    }
+                  },
+                  {
+                    "name": "on_all",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "on_envelope;derivation=all-spaces;bounding=@bounding_selector"
+                    }
+                  }
+                ],
+                "decision": {
+                  "kind": "within",
+                  "value": "on_all",
+                  "minimum": [
+                    {
+                      "sign": "plus",
+                      "operand": {
+                        "kind": "value",
+                        "name": "declared_all"
+                      }
+                    }
+                  ],
+                  "rounding": []
+                },
+                "fail": "declared external but not on the all-spaces envelope",
+                "undecided": "declared external but not on the all-spaces envelope",
+                "grading": {
+                  "bands": [
+                    {
+                      "severity": "warning"
+                    }
+                  ]
+                },
+                "applies": {
+                  "condition": {
+                    "kind": "all",
+                    "conditions": [
+                      {
+                        "kind": "lists",
+                        "parameter": "derivations",
+                        "value": "all-spaces"
+                      },
+                      {
+                        "kind": "measured",
+                        "value": "all_spaces"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "values": [
+                  {
+                    "name": "declared_all",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "declared_external;derivation=all-spaces;bounding=@bounding_selector"
+                    }
+                  },
+                  {
+                    "name": "on_all",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "on_envelope;derivation=all-spaces;bounding=@bounding_selector"
+                    }
+                  },
+                  {
+                    "name": "source",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "external_declarations;derivations=@derivations;bounding=@bounding_selector;groups=@gross_area_group_selector;group_path=@gross_area_group_path;objects=@selection"
+                    }
+                  }
+                ],
+                "decision": {
+                  "kind": "within",
+                  "value": "on_all",
+                  "maximum": [
+                    {
+                      "sign": "plus",
+                      "operand": {
+                        "kind": "value",
+                        "name": "declared_all"
+                      }
+                    }
+                  ],
+                  "rounding": []
+                },
+                "fail": "on the all-spaces envelope but not declared external",
+                "undecided": "on the all-spaces envelope but not declared external",
+                "grading": {
+                  "bands": [
+                    {
+                      "severity": "warning"
+                    }
+                  ]
+                },
+                "applies": {
+                  "condition": {
+                    "kind": "all",
+                    "conditions": [
+                      {
+                        "kind": "lists",
+                        "parameter": "derivations",
+                        "value": "all-spaces"
+                      },
+                      {
+                        "kind": "measured",
+                        "value": "all_spaces"
+                      }
+                    ]
+                  }
+                },
+                "unless": {
+                  "kind": "below",
+                  "value": "source",
+                  "than": 0.5
+                },
+                "quiet": true
+              },
+              {
+                "values": [
+                  {
+                    "name": "declared_gross",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "declared_external;derivation=gross-area-groups;groups=@gross_area_group_selector;group_path=@gross_area_group_path"
+                    }
+                  },
+                  {
+                    "name": "on_gross",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "on_envelope;derivation=gross-area-groups;groups=@gross_area_group_selector;group_path=@gross_area_group_path"
+                    }
+                  }
+                ],
+                "decision": {
+                  "kind": "within",
+                  "value": "on_gross",
+                  "minimum": [
+                    {
+                      "sign": "plus",
+                      "operand": {
+                        "kind": "value",
+                        "name": "declared_gross"
+                      }
+                    }
+                  ],
+                  "rounding": []
+                },
+                "fail": "declared external but not on the gross-area-groups envelope",
+                "undecided": "declared external but not on the gross-area-groups envelope",
+                "grading": {
+                  "bands": [
+                    {
+                      "severity": "warning"
+                    }
+                  ]
+                },
+                "applies": {
+                  "condition": {
+                    "kind": "all",
+                    "conditions": [
+                      {
+                        "kind": "lists",
+                        "parameter": "derivations",
+                        "value": "gross-area-groups"
+                      },
+                      {
+                        "kind": "measured",
+                        "value": "gross_area_groups"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "values": [
+                  {
+                    "name": "declared_gross",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "declared_external;derivation=gross-area-groups;groups=@gross_area_group_selector;group_path=@gross_area_group_path"
+                    }
+                  },
+                  {
+                    "name": "on_gross",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "on_envelope;derivation=gross-area-groups;groups=@gross_area_group_selector;group_path=@gross_area_group_path"
+                    }
+                  },
+                  {
+                    "name": "source",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "external_declarations;derivations=@derivations;bounding=@bounding_selector;groups=@gross_area_group_selector;group_path=@gross_area_group_path;objects=@selection"
+                    }
+                  }
+                ],
+                "decision": {
+                  "kind": "within",
+                  "value": "on_gross",
+                  "maximum": [
+                    {
+                      "sign": "plus",
+                      "operand": {
+                        "kind": "value",
+                        "name": "declared_gross"
+                      }
+                    }
+                  ],
+                  "rounding": []
+                },
+                "fail": "on the gross-area-groups envelope but not declared external",
+                "undecided": "on the gross-area-groups envelope but not declared external",
+                "grading": {
+                  "bands": [
+                    {
+                      "severity": "warning"
+                    }
+                  ]
+                },
+                "applies": {
+                  "condition": {
+                    "kind": "all",
+                    "conditions": [
+                      {
+                        "kind": "lists",
+                        "parameter": "derivations",
+                        "value": "gross-area-groups"
+                      },
+                      {
+                        "kind": "measured",
+                        "value": "gross_area_groups"
+                      }
+                    ]
+                  }
+                },
+                "unless": {
+                  "kind": "below",
+                  "value": "source",
+                  "than": 0.5
+                },
+                "quiet": true
+              },
+              {
+                "values": [
+                  {
+                    "name": "on_all",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "on_envelope;derivation=all-spaces;bounding=@bounding_selector"
+                    }
+                  },
+                  {
+                    "name": "on_gross",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "on_envelope;derivation=gross-area-groups;groups=@gross_area_group_selector;group_path=@gross_area_group_path"
+                    }
+                  },
+                  {
+                    "name": "bounds_all",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "bounds_envelope;derivation=all-spaces;bounding=@bounding_selector"
+                    }
+                  },
+                  {
+                    "name": "bounds_gross",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "bounds_envelope;derivation=gross-area-groups;groups=@gross_area_group_selector;group_path=@gross_area_group_path"
+                    }
+                  }
+                ],
+                "decision": {
+                  "kind": "within",
+                  "value": "on_all",
+                  "minimum": [
+                    {
+                      "sign": "plus",
+                      "operand": {
+                        "kind": "value",
+                        "name": "on_gross"
+                      }
+                    }
+                  ],
+                  "rounding": []
+                },
+                "fail": "on the gross-area-groups envelope but not on the all-spaces envelope",
+                "undecided": "on the gross-area-groups envelope but not on the all-spaces envelope",
+                "grading": {
+                  "bands": [
+                    {
+                      "severity": "warning"
+                    }
+                  ]
+                },
+                "applies": {
+                  "condition": {
+                    "kind": "all",
+                    "conditions": [
+                      {
+                        "kind": "all",
+                        "conditions": [
+                          {
+                            "kind": "lists",
+                            "parameter": "derivations",
+                            "value": "all-spaces"
+                          },
+                          {
+                            "kind": "measured",
+                            "value": "all_spaces"
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "all",
+                        "conditions": [
+                          {
+                            "kind": "lists",
+                            "parameter": "derivations",
+                            "value": "gross-area-groups"
+                          },
+                          {
+                            "kind": "measured",
+                            "value": "gross_area_groups"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                },
+                "unless": {
+                  "kind": "not",
+                  "condition": {
+                    "kind": "all",
+                    "conditions": [
+                      {
+                        "kind": "not",
+                        "condition": {
+                          "kind": "above",
+                          "value": "bounds_all",
+                          "than": 0.5
+                        }
+                      },
+                      {
+                        "kind": "not",
+                        "condition": {
+                          "kind": "above",
+                          "value": "bounds_gross",
+                          "than": 0.5
+                        }
+                      }
+                    ]
+                  }
+                },
+                "quiet": true
+              },
+              {
+                "values": [
+                  {
+                    "name": "on_all",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "on_envelope;derivation=all-spaces;bounding=@bounding_selector"
+                    }
+                  },
+                  {
+                    "name": "on_gross",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "on_envelope;derivation=gross-area-groups;groups=@gross_area_group_selector;group_path=@gross_area_group_path"
+                    }
+                  },
+                  {
+                    "name": "bounds_all",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "bounds_envelope;derivation=all-spaces;bounding=@bounding_selector"
+                    }
+                  },
+                  {
+                    "name": "bounds_gross",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "bounds_envelope;derivation=gross-area-groups;groups=@gross_area_group_selector;group_path=@gross_area_group_path"
+                    }
+                  }
+                ],
+                "decision": {
+                  "kind": "within",
+                  "value": "on_all",
+                  "maximum": [
+                    {
+                      "sign": "plus",
+                      "operand": {
+                        "kind": "value",
+                        "name": "on_gross"
+                      }
+                    }
+                  ],
+                  "rounding": []
+                },
+                "fail": "on the all-spaces envelope but not on the gross-area-groups envelope",
+                "undecided": "on the all-spaces envelope but not on the gross-area-groups envelope",
+                "grading": {
+                  "bands": [
+                    {
+                      "severity": "warning"
+                    }
+                  ]
+                },
+                "applies": {
+                  "condition": {
+                    "kind": "all",
+                    "conditions": [
+                      {
+                        "kind": "all",
+                        "conditions": [
+                          {
+                            "kind": "lists",
+                            "parameter": "derivations",
+                            "value": "all-spaces"
+                          },
+                          {
+                            "kind": "measured",
+                            "value": "all_spaces"
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "all",
+                        "conditions": [
+                          {
+                            "kind": "lists",
+                            "parameter": "derivations",
+                            "value": "gross-area-groups"
+                          },
+                          {
+                            "kind": "measured",
+                            "value": "gross_area_groups"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                },
+                "unless": {
+                  "kind": "not",
+                  "condition": {
+                    "kind": "all",
+                    "conditions": [
+                      {
+                        "kind": "not",
+                        "condition": {
+                          "kind": "above",
+                          "value": "bounds_all",
+                          "than": 0.5
+                        }
+                      },
+                      {
+                        "kind": "not",
+                        "condition": {
+                          "kind": "above",
+                          "value": "bounds_gross",
+                          "than": 0.5
+                        }
+                      }
+                    ]
+                  }
+                },
+                "quiet": true
+              }
+            ],
+            "grading": {
+              "bands": [
+                {
+                  "severity": "error"
+                }
+              ]
+            },
+            "once": [
+              {
+                "value": {
+                  "name": "all_spaces",
+                  "expression": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "envelope_size;derivation=all-spaces;bounding=@bounding_selector"
+                  }
+                },
+                "applies": {
+                  "condition": {
+                    "kind": "lists",
+                    "parameter": "derivations",
+                    "value": "all-spaces"
+                  }
+                },
+                "refused": "all-spaces envelope: {why}",
+                "required": false
+              },
+              {
+                "value": {
+                  "name": "gross_area_groups",
+                  "expression": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "envelope_size;derivation=gross-area-groups;groups=@gross_area_group_selector;group_path=@gross_area_group_path"
+                  }
+                },
+                "applies": {
+                  "condition": {
+                    "kind": "lists",
+                    "parameter": "derivations",
+                    "value": "gross-area-groups"
+                  }
+                },
+                "refused": "gross-area-groups envelope: {why}",
+                "required": false
+              }
+            ]
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "and",
+                  "operands": [
+                    {
+                      "kind": "compare",
+                      "operator": "greaterThanOrEquals",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "on_envelope;derivation=all-spaces;bounding=@bounding_selector"
+                      },
+                      "right": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "declared_external;derivation=all-spaces;bounding=@bounding_selector"
+                      },
+                      "label": "at least the lower bound"
+                    }
+                  ]
+                },
+                {
+                  "kind": "and",
+                  "operands": [
+                    {
+                      "kind": "compare",
+                      "operator": "lessThanOrEquals",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "on_envelope;derivation=all-spaces;bounding=@bounding_selector"
+                      },
+                      "right": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "declared_external;derivation=all-spaces;bounding=@bounding_selector"
+                      },
+                      "label": "at most the upper bound"
+                    }
+                  ]
+                },
+                {
+                  "kind": "and",
+                  "operands": [
+                    {
+                      "kind": "compare",
+                      "operator": "greaterThanOrEquals",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "on_envelope;derivation=gross-area-groups;groups=@gross_area_group_selector;group_path=@gross_area_group_path"
+                      },
+                      "right": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "declared_external;derivation=gross-area-groups;groups=@gross_area_group_selector;group_path=@gross_area_group_path"
+                      },
+                      "label": "at least the lower bound"
+                    }
+                  ]
+                },
+                {
+                  "kind": "and",
+                  "operands": [
+                    {
+                      "kind": "compare",
+                      "operator": "lessThanOrEquals",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "on_envelope;derivation=gross-area-groups;groups=@gross_area_group_selector;group_path=@gross_area_group_path"
+                      },
+                      "right": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "declared_external;derivation=gross-area-groups;groups=@gross_area_group_selector;group_path=@gross_area_group_path"
+                      },
+                      "label": "at most the upper bound"
+                    }
+                  ]
+                },
+                {
+                  "kind": "and",
+                  "operands": [
+                    {
+                      "kind": "compare",
+                      "operator": "greaterThanOrEquals",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "on_envelope;derivation=all-spaces;bounding=@bounding_selector"
+                      },
+                      "right": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "on_envelope;derivation=gross-area-groups;groups=@gross_area_group_selector;group_path=@gross_area_group_path"
+                      },
+                      "label": "at least the lower bound"
+                    }
+                  ]
+                },
+                {
+                  "kind": "and",
+                  "operands": [
+                    {
+                      "kind": "compare",
+                      "operator": "lessThanOrEquals",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "on_envelope;derivation=all-spaces;bounding=@bounding_selector"
+                      },
+                      "right": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "on_envelope;derivation=gross-area-groups;groups=@gross_area_group_selector;group_path=@gross_area_group_path"
+                      },
+                      "label": "at most the upper bound"
+                    }
+                  ]
+                },
+                {
+                  "kind": "and",
+                  "operands": [
+                    {
+                      "kind": "compare",
+                      "operator": "greaterThanOrEquals",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "external_declarations;derivations=@derivations;bounding=@bounding_selector;groups=@gross_area_group_selector;group_path=@gross_area_group_path;objects=@selection"
+                      },
+                      "right": {
+                        "kind": "literal",
+                        "value": {
+                          "type": "integer",
+                          "value": 1
+                        }
+                      },
+                      "label": "at least the lower bound"
+                    }
+                  ]
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.and",
+                      "inputs": {
+                        "operands": {
+                          "blocks": [
+                            {
+                              "type": "expression.compare",
+                              "label": "at least the lower bound",
+                              "fields": {
+                                "operator": "greaterThanOrEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "measured.on_envelope",
+                                    "fields": {
+                                      "bounding": "@bounding_selector",
+                                      "derivation": "all-spaces"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "measured.declared_external",
+                                    "fields": {
+                                      "bounding": "@bounding_selector",
+                                      "derivation": "all-spaces"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.and",
+                      "inputs": {
+                        "operands": {
+                          "blocks": [
+                            {
+                              "type": "expression.compare",
+                              "label": "at most the upper bound",
+                              "fields": {
+                                "operator": "lessThanOrEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "measured.on_envelope",
+                                    "fields": {
+                                      "bounding": "@bounding_selector",
+                                      "derivation": "all-spaces"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "measured.declared_external",
+                                    "fields": {
+                                      "bounding": "@bounding_selector",
+                                      "derivation": "all-spaces"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.and",
+                      "inputs": {
+                        "operands": {
+                          "blocks": [
+                            {
+                              "type": "expression.compare",
+                              "label": "at least the lower bound",
+                              "fields": {
+                                "operator": "greaterThanOrEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "measured.on_envelope",
+                                    "fields": {
+                                      "derivation": "gross-area-groups",
+                                      "group_path": "@gross_area_group_path",
+                                      "groups": "@gross_area_group_selector"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "measured.declared_external",
+                                    "fields": {
+                                      "derivation": "gross-area-groups",
+                                      "group_path": "@gross_area_group_path",
+                                      "groups": "@gross_area_group_selector"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.and",
+                      "inputs": {
+                        "operands": {
+                          "blocks": [
+                            {
+                              "type": "expression.compare",
+                              "label": "at most the upper bound",
+                              "fields": {
+                                "operator": "lessThanOrEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "measured.on_envelope",
+                                    "fields": {
+                                      "derivation": "gross-area-groups",
+                                      "group_path": "@gross_area_group_path",
+                                      "groups": "@gross_area_group_selector"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "measured.declared_external",
+                                    "fields": {
+                                      "derivation": "gross-area-groups",
+                                      "group_path": "@gross_area_group_path",
+                                      "groups": "@gross_area_group_selector"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.and",
+                      "inputs": {
+                        "operands": {
+                          "blocks": [
+                            {
+                              "type": "expression.compare",
+                              "label": "at least the lower bound",
+                              "fields": {
+                                "operator": "greaterThanOrEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "measured.on_envelope",
+                                    "fields": {
+                                      "bounding": "@bounding_selector",
+                                      "derivation": "all-spaces"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "measured.on_envelope",
+                                    "fields": {
+                                      "derivation": "gross-area-groups",
+                                      "group_path": "@gross_area_group_path",
+                                      "groups": "@gross_area_group_selector"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.and",
+                      "inputs": {
+                        "operands": {
+                          "blocks": [
+                            {
+                              "type": "expression.compare",
+                              "label": "at most the upper bound",
+                              "fields": {
+                                "operator": "lessThanOrEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "measured.on_envelope",
+                                    "fields": {
+                                      "bounding": "@bounding_selector",
+                                      "derivation": "all-spaces"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "measured.on_envelope",
+                                    "fields": {
+                                      "derivation": "gross-area-groups",
+                                      "group_path": "@gross_area_group_path",
+                                      "groups": "@gross_area_group_selector"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.and",
+                      "inputs": {
+                        "operands": {
+                          "blocks": [
+                            {
+                              "type": "expression.compare",
+                              "label": "at least the lower bound",
+                              "fields": {
+                                "operator": "greaterThanOrEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "measured.external_declarations",
+                                    "fields": {
+                                      "bounding": "@bounding_selector",
+                                      "derivations": "@derivations",
+                                      "group_path": "@gross_area_group_path",
+                                      "groups": "@gross_area_group_selector",
+                                      "objects": "@selection"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.literal",
+                                    "fields": {
+                                      "value": {
+                                        "type": "integer",
+                                        "value": 1
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.free-floor-circle",

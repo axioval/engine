@@ -42,7 +42,11 @@ the first of the plan-span capabilities
 ([#283](https://github.com/axioval/engine/issues/283)), judging the items
 of a measured list against a row its provider selects from the rule's
 table, and `light-well`, `centre-line-distance` and `component-visibility`
-follow.
+follow; `coordinate-consistency` is the first judging the sources themselves,
+against a reference read once per rule, and `external-wall-validation`
+the first leading one measurement to outcomes at source and at object
+level ([#291](https://github.com/axioval/engine/issues/291)): every
+capability of #282 now runs as a template.
 
 ## The outside contract
 
@@ -1184,6 +1188,33 @@ finite and not negative`), then reads `reference` and
 millimetre, a hundredth of a degree and an identical scale. Without the
 coordinate-system service the rule is open before anything is read.
 
+### `external-wall-validation`
+
+| Form | When | Once | Scopes | Values | Checks |
+| --- | --- | --- | --- | --- | --- |
+| one | always | `all_spaces` = `envelope_size;derivation=all-spaces;bounding=@bounding_selector`, where `derivations` lists `all-spaces`; `gross_area_groups` = `envelope_size;derivation=gross-area-groups;groups=@gross_area_group_selector;group_path=@gross_area_group_path`, where it lists `gross-area-groups` | each source holding a selected wall (`occupied`), where either derivation was measured | `declared` = `external_declarations;derivations=@derivations;…;objects=@selection`, at least `one` | per derivation measured: `on_envelope` at least `declared_external` (`declared external but not on the {derivation} envelope`); at most it, unless the source declares nothing (`on the {derivation} envelope but not declared external`, quiet); with both: `on_envelope` of one at least and at most the other's, unless the object bounds either (`bounds_envelope`) |
+
+Refusals wait for the selection (`selected`): a rule selecting nothing
+says nothing, and otherwise the declaration is refused once after
+`external-wall-validation:` in the capability's order and words
+(`derivations` required and listing one, each option as stated and once
+(`listed`), the selectors' and path's kinds, the group selector and path
+together and the path valid, then what each listed derivation needs, in the
+list's order (`listedNeeds`)); without the envelope-membership service the
+rule is open (`envelope-membership service is not registered`). Each
+listed derivation is measured once, in the list's order: one that cannot
+be derived (an undecided or empty bounding selection, groups without
+members along the path, a service refusing it) leaves the rule open with
+`{derivation} envelope: {why}` and is never read again. Each source
+holding a selected wall is then judged: none declared external is an
+error on the source (`no selected object is declared external: the model
+declares no envelope`), relating nothing, and walls whose declaration is
+unknown leave it open (`… but {declared:upper0} state neither external
+nor internal or could not be measured`). Each selected wall is judged per
+derivation, each failing check a warning of its own: a wall whose
+declaration is unknown is open once per derivation (`not compared with the
+{derivation} envelope: …`), its other checks quiet.
+
 ## Binding and running a rule
 
 The rules crate's `templates` module runs a template
@@ -1630,6 +1661,17 @@ all, under random tolerances and requirements; and by the `coordinates`
 rule of the `storeys` case, recorded before the switch. It is never
 forked; its measured values `coordinate_shift` and the rest, now values
 of a source, still reach its verdicts as expressions over each object.
+
+`external-wall-validation` is held to
+`external_wall_validation/reference.rs`
+(`axioval_rules::reference::ExternalWallValidation`) through
+`common::Held` on every fixture of `tests/external_wall_validation.rs`,
+every message asserted word for word, the service asked once per
+derivation; by generated walls in two sources declared, derived and of
+unknown declaration at random, under one or both derivations in either
+order, bounded by decided, undecided or empty selections, with the
+service answering or refusing; and by the `external-walls` rule of the
+`coverage` case, recorded before the switch. It is never forked (D30).
 
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the

@@ -46,10 +46,16 @@ impl Stub {
             derived.iter().map(|o| id(o)).collect(),
         )))
     }
+    /// Each distinct request, in the order first asked: the template and
+    /// the implementation it is held to each ask once per derivation.
     fn asked(&self) -> Vec<(EnvelopeDerivation, Vec<String>)> {
-        self.asked
-            .lock()
-            .unwrap()
+        let mut distinct: Vec<EnvelopeMembershipRequest> = Vec::new();
+        for request in self.asked.lock().unwrap().iter() {
+            if !distinct.contains(request) {
+                distinct.push(request.clone());
+            }
+        }
+        distinct
             .iter()
             .map(|request| {
                 (
@@ -124,10 +130,18 @@ fn gross_area(
     parameters
 }
 
+/// The template, held to the implementation it replaced on every
+/// evaluation (`Parity::contract()`).
+const HELD: common::Held = common::Held(
+    &ExternalWallValidation,
+    &axioval_rules::reference::ExternalWallValidation,
+);
+
 fn run(model: Model, stub: &Arc<Stub>, rule: &CompiledRule) -> CapabilityEvaluation {
-    let handle = EnvelopeMembershipServiceHandle::new(stub.clone());
-    model.evaluate_with(&ExternalWallValidation, rule, |services| {
-        services.register(handle).unwrap();
+    model.evaluate_measured(&HELD, rule, |services| {
+        services
+            .register(EnvelopeMembershipServiceHandle::new(stub.clone()))
+            .unwrap();
     })
 }
 
@@ -495,8 +509,16 @@ fn every_finding_carries_its_evidence() {
     let outcome = run(model(), &Stub::sets(&["w1"], &["w2"]), &all_spaces());
     assert!(!outcome.findings().is_empty());
     for finding in outcome.findings() {
-        assert_eq!(finding.evidence.len(), 1);
-        assert!(finding.evidence[0].exact);
+        // The envelope's evidence, beside the values read from it.
+        assert!(
+            finding
+                .evidence
+                .iter()
+                .any(|evidence| evidence.locator == "envelope:all-spaces"),
+            "{:?}",
+            finding.evidence
+        );
+        assert!(finding.evidence.iter().all(|evidence| evidence.exact));
     }
 }
 
@@ -517,11 +539,15 @@ fn unavailable_or_unsupported_measurement_is_not_a_pass() {
 
 #[test]
 fn missing_service_is_neither_a_pass_nor_a_violation() {
-    let outcome = model().evaluate(&ExternalWallValidation, &all_spaces());
+    let outcome = model().evaluate_measured(&HELD, &all_spaces(), |_| {});
     assert!(outcome.findings().is_empty());
     assert_eq!(
         unevaluated(&outcome),
         [("-".to_owned(), NotEvaluatedReason::MissingService)]
+    );
+    assert_eq!(
+        outcome.not_evaluated_outcomes()[0].message(),
+        "envelope-membership service is not registered"
     );
 }
 
@@ -546,6 +572,254 @@ fn undeclared_walls_are_not_evaluated_and_unselected_objects_are_ignored() {
             .message()
             .contains("all-spaces")
     );
+}
+
+/// Nothing selected leaves nothing to say, whatever the declaration: the
+/// capability selected before it read its declaration.
+#[test]
+fn nothing_selected_refuses_nothing() {
+    let stub = Stub::sets(&[], &[]);
+    let outcome = run(
+        model(),
+        &stub,
+        &rule(
+            ID,
+            kind("door"),
+            vec![("derivations", strings(&["whole-building"]))],
+        ),
+    );
+    assert!(outcome.findings().is_empty());
+    assert!(outcome.not_evaluated_outcomes().is_empty());
+}
+
+/// Every message, word for word, as the capability worded it.
+#[test]
+fn messages_are_worded_as_the_capability_worded_them() {
+    let messages = |outcome: &CapabilityEvaluation| {
+        let mut messages: Vec<String> = outcome
+            .findings()
+            .iter()
+            .map(|finding| finding.message.clone())
+            .chain(
+                outcome
+                    .not_evaluated_outcomes()
+                    .iter()
+                    .map(|outcome| outcome.message().to_owned()),
+            )
+            .collect();
+        messages.sort();
+        messages
+    };
+    let both = walls(gross_area(vec![
+        ("derivations", strings(&["all-spaces", "gross-area-groups"])),
+        ("bounding_selector", selector(kind("space"))),
+    ]));
+    let stub = Arc::new(Stub {
+        answer: Ok((vec![id("w1")], vec![id("w2")])),
+        undeclared: vec![id("w3")],
+        groups_derived: Some(vec![id("w1"), id("w3")]),
+        asked: Mutex::new(Vec::new()),
+    });
+    assert_eq!(
+        messages(&run(model(), &stub, &both)),
+        [
+            "declared external but not on the all-spaces envelope",
+            "not compared with the all-spaces envelope: the model states neither external nor \
+             internal, or its body could not be measured",
+            "not compared with the gross-area-groups envelope: the model states neither \
+             external nor internal, or its body could not be measured",
+            "on the all-spaces envelope but not declared external",
+            "on the all-spaces envelope but not on the gross-area-groups envelope",
+            "on the gross-area-groups envelope but not on the all-spaces envelope",
+            "on the gross-area-groups envelope but not on the all-spaces envelope",
+        ]
+    );
+    for (parameters, message) in [
+        (
+            vec![("derivations", strings(&["all-spaces", "all-spaces"]))],
+            "external-wall-validation: `derivations` lists `all-spaces` twice",
+        ),
+        (
+            vec![("derivations", strings(&["whole-building"]))],
+            "external-wall-validation: envelope derivation `whole-building` must be \
+             'all-spaces' or 'gross-area-groups'",
+        ),
+        (
+            vec![("derivations", strings(&["gross-area-groups", "all-spaces"]))],
+            "external-wall-validation: the gross-area-groups derivation needs \
+             `gross_area_group_selector` and `gross_area_group_path`",
+        ),
+        (
+            vec![
+                ("derivations", strings(&["all-spaces"])),
+                ("gross_area_group_selector", selector(kind("zone"))),
+            ],
+            "external-wall-validation: declare `gross_area_group_selector` and \
+             `gross_area_group_path` together",
+        ),
+    ] {
+        assert_eq!(
+            messages(&run(model(), &Stub::sets(&[], &[]), &walls(parameters))),
+            [message]
+        );
+    }
+    assert_eq!(
+        messages(&run(
+            model(),
+            &Stub::new(Err(EnvelopeMembershipError::Unavailable)),
+            &all_spaces()
+        )),
+        ["all-spaces envelope: envelope membership is unavailable for the requested derivation"]
+    );
+    assert_eq!(
+        messages(&run(model(), &Stub::sets(&[], &["w1"]), &all_spaces())),
+        ["no selected object is declared external: the model declares no envelope"]
+    );
+}
+
+/// Walls in two sources declared, derived and undeclared at random, under
+/// one or both derivations bounded by decided, undecided or empty
+/// selections, each held to the implementation the template replaced
+/// under `Parity::contract()`.
+mod generated {
+    use std::sync::{Arc, Mutex};
+
+    use axioval_engine::{
+        EnvelopeMembershipError, EnvelopeMembershipServiceHandle, ServiceRegistry,
+    };
+    use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector};
+    use axioval_ir::{ObjectId, SourceId};
+    use proptest::collection::vec;
+    use proptest::prelude::*;
+
+    use super::common::{Model, kind, rule, selector, strings};
+    use super::{ExternalWallValidation, ID, Stub};
+
+    /// One wall: its source (0 or 1), and whether the model declares it
+    /// external, the all-spaces derivation places it on the envelope, its
+    /// declaration is unknown, and the gross-area-groups derivation places
+    /// it on the envelope.
+    type Wall = (u32, bool, bool, bool, bool);
+
+    fn wall() -> impl Strategy<Value = Wall> {
+        (
+            0u32..2,
+            any::<bool>(),
+            any::<bool>(),
+            proptest::bool::weighted(0.2),
+            any::<bool>(),
+        )
+    }
+
+    fn wall_id(index: usize, document: u32) -> ObjectId {
+        ObjectId::new(
+            SourceId::new("test", if document == 0 { "model" } else { "other" }).unwrap(),
+            format!("w{index}"),
+        )
+        .unwrap()
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(128))]
+
+        #[test]
+        fn generated_walls_hold_parity(
+            walls in vec(wall(), 1..6),
+            derivations in 0u32..5,
+            bounding in 0u32..4,
+            groups in any::<bool>(),
+            failure in 0u32..6,
+            space_on_envelope in any::<bool>(),
+        ) {
+            let mut model = Model::default()
+                .object("s1", "space")
+                .object("s2", "space")
+                .object("z", "zone")
+                .edge("groups", "z", "s1")
+                .text("s1", "Pset", "Bounds", "yes");
+            if bounding == 2 {
+                model = model.unreadable("s2");
+            }
+            let (mut declared, mut derived, mut undeclared, mut gross) =
+                (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+            for (index, (document, external, on, unknown, on_gross)) in walls.iter().enumerate() {
+                model = model.object_in(
+                    if *document == 0 { "model" } else { "other" },
+                    &format!("w{index}"),
+                    "wall",
+                );
+                let object = wall_id(index, *document);
+                if *external {
+                    declared.push(object.clone());
+                }
+                if *on {
+                    derived.push(object.clone());
+                }
+                if *unknown {
+                    undeclared.push(object.clone());
+                }
+                if *on_gross {
+                    gross.push(object);
+                }
+            }
+            if space_on_envelope {
+                // A bounding space the derivation places on the envelope:
+                // the inside, never compared.
+                let space = super::id("s1");
+                derived.push(space.clone());
+                gross.push(space);
+            }
+            let stub = Arc::new(Stub {
+                answer: match failure {
+                    0 => Err(EnvelopeMembershipError::Unavailable),
+                    1 => Err(EnvelopeMembershipError::InexactEvidence),
+                    _ => Ok((declared, derived)),
+                },
+                undeclared,
+                groups_derived: Some(gross),
+                asked: Mutex::new(Vec::new()),
+            });
+            let listed: &[&str] = match derivations {
+                0 => &["all-spaces"],
+                1 => &["gross-area-groups"],
+                2 => &["all-spaces", "gross-area-groups"],
+                3 => &["gross-area-groups", "all-spaces"],
+                _ => &["all-spaces", "whole-building"],
+            };
+            let mut parameters: Vec<(&str, ParameterValue)> = vec![("derivations", strings(listed))];
+            match bounding {
+                0 => {}
+                1 => parameters.push(("bounding_selector", selector(kind("space")))),
+                2 => parameters.push((
+                    "bounding_selector",
+                    selector(Selector::property(
+                        Some("Pset".into()),
+                        "Bounds",
+                        ComparisonOperator::Exists,
+                        None,
+                    )),
+                )),
+                _ => parameters.push(("bounding_selector", selector(kind("courtyard")))),
+            }
+            if groups {
+                parameters.push(("gross_area_group_selector", selector(kind("zone"))));
+                parameters.push(("gross_area_group_path", strings(&["groups:forward"])));
+            }
+            let register = |services: &mut ServiceRegistry| {
+                services
+                    .register(EnvelopeMembershipServiceHandle::new(stub.clone()))
+                    .unwrap();
+            };
+            model.holding_contract(
+                &ExternalWallValidation,
+                &axioval_rules::reference::ExternalWallValidation,
+                &rule(ID, kind("wall"), parameters),
+                register,
+                &[],
+                0.0,
+            );
+        }
+    }
 }
 
 /// The envelope's evidence is exact and reviewable by contract: a

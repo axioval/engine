@@ -209,6 +209,11 @@ const PAIRS: &[Pair] = &[
             registry.replace(axioval::rules::reference::CoordinateConsistencyCheck)
         },
     },
+    Pair {
+        capability: "axioval:capability.external-wall-validation",
+        case: "coverage",
+        reference: |registry| registry.replace(axioval::rules::reference::ExternalWallValidation),
+    },
 ];
 
 /// Warm-up runs per side before measuring.

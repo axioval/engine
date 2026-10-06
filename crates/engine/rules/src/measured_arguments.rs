@@ -172,6 +172,24 @@ fn bound(
             MeasuredArgument::Table(rows.clone())
         }
         (MeasuredParameterKind::Table, _) => return Err(not("a table")),
+        (MeasuredParameterKind::Number { minimum }, value) => {
+            #[allow(clippy::cast_precision_loss)]
+            let number = match value {
+                ParameterValue::Number { value } => *value,
+                ParameterValue::Integer { value } => *value as f64,
+                _ => return Err(not("a number")),
+            };
+            if !(number.is_finite() && number >= minimum) {
+                return Err(invalid(format!(
+                    "{reference} is {number}, not a number of at least {minimum}"
+                )));
+            }
+            MeasuredArgument::Number(number)
+        }
+        (MeasuredParameterKind::Truth, ParameterValue::Boolean { value }) => {
+            MeasuredArgument::Truth(*value)
+        }
+        (MeasuredParameterKind::Truth, _) => return Err(not("a boolean")),
         (MeasuredParameterKind::Vector | MeasuredParameterKind::Polygon, _) => {
             return Err(invalid(format!("{reference} names no value of a rule")));
         }
@@ -289,6 +307,52 @@ mod tests {
                 NotEvaluatedReason::InvalidDeclaration,
                 "`@overall` is not a table".into()
             ))
+        );
+    }
+
+    /// A number binds at least its minimum, an integer as a number, and a
+    /// boolean as a truth.
+    #[test]
+    fn a_number_or_a_truth_binds_as_stated() {
+        let project = Project::new(Vec::new()).unwrap();
+        let services = ServiceRegistry::new();
+        let context = RuleContext {
+            project: &project,
+            services: &services,
+        };
+        let number = MeasuredParameterKind::Number { minimum: 0.0 };
+        assert_eq!(
+            bound(
+                &context,
+                None,
+                number,
+                "share",
+                &ParameterValue::Integer { value: 1 }
+            ),
+            Ok(MeasuredArgument::Number(1.0))
+        );
+        assert_eq!(
+            bound(
+                &context,
+                None,
+                number,
+                "share",
+                &ParameterValue::Number { value: -0.5 }
+            ),
+            Err((
+                NotEvaluatedReason::InvalidDeclaration,
+                "`@share` is -0.5, not a number of at least 0".into()
+            ))
+        );
+        assert_eq!(
+            bound(
+                &context,
+                None,
+                MeasuredParameterKind::Truth,
+                "chain",
+                &ParameterValue::Boolean { value: true }
+            ),
+            Ok(MeasuredArgument::Truth(true))
         );
     }
 }

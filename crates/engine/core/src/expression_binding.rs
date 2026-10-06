@@ -133,6 +133,16 @@ fn references(name: &str, parameters: &BTreeMap<String, ParameterValue>) -> Resu
                 "a property reference",
             ),
             ParameterReference::Table => (matches!(value, ParameterValue::Table { .. }), "a table"),
+            ParameterReference::Number => (
+                matches!(
+                    value,
+                    ParameterValue::Number { .. } | ParameterValue::Integer { .. }
+                ),
+                "a number",
+            ),
+            ParameterReference::Boolean => {
+                (matches!(value, ParameterValue::Boolean { .. }), "a boolean")
+            }
         };
         if !fits {
             return Err(format!("{}, which is not {what}", stated()));

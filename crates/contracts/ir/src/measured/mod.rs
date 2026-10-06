@@ -181,6 +181,10 @@ pub enum ParameterReference {
     Property,
     /// A `table`, bound to its rows as stated.
     Table,
+    /// A `number` or `integer`, bound to its value.
+    Number,
+    /// A `boolean`, bound to its truth.
+    Boolean,
 }
 
 /// What a measured parameter's value is.
@@ -214,6 +218,10 @@ pub enum MeasuredParameterKind {
     /// A table of the rule reading the value, named only as `@name`: its
     /// rows as the rule states them.
     Table,
+    /// A plain number, at least `minimum`, such as a share.
+    Number { minimum: f64 },
+    /// A truth, written `true` or `false`.
+    Truth,
 }
 
 impl MeasuredParameterKind {
@@ -228,6 +236,8 @@ impl MeasuredParameterKind {
             Self::Objects => Some(ParameterReference::Selector),
             Self::Property => Some(ParameterReference::Property),
             Self::Table => Some(ParameterReference::Table),
+            Self::Number { .. } => Some(ParameterReference::Number),
+            Self::Truth => Some(ParameterReference::Boolean),
             Self::Vector | Self::Polygon => None,
         }
     }
@@ -339,6 +349,11 @@ impl MeasuredCall {
                     MeasuredArgument::Property { .. }
                 )
                 | (MeasuredParameterKind::Table, MeasuredArgument::Table(_))
+                | (
+                    MeasuredParameterKind::Number { .. },
+                    MeasuredArgument::Number(_)
+                )
+                | (MeasuredParameterKind::Truth, MeasuredArgument::Truth(_))
         );
         if !fits {
             return Err(invalid("the bound value is not of the parameter's kind"));
@@ -411,6 +426,10 @@ pub enum MeasuredArgument {
     Objects(MeasuredSelection),
     /// The rows of a table a reference named, bound.
     Table(Vec<crate::contract::TableRow>),
+    /// A plain number.
+    Number(f64),
+    /// A truth.
+    Truth(bool),
 }
 
 impl MeasuredArgument {
@@ -638,6 +657,24 @@ fn reference(
     Ok(MeasuredArgument::Parameter(name.to_owned()))
 }
 
+/// The plain number or truth `value` states for a parameter of `kind`.
+fn plain(kind: MeasuredParameterKind, value: &str) -> Result<MeasuredArgument, String> {
+    match kind {
+        MeasuredParameterKind::Number { minimum } => Ok(MeasuredArgument::Number(
+            value
+                .parse::<f64>()
+                .ok()
+                .filter(|number| number.is_finite() && *number >= minimum)
+                .ok_or_else(|| format!("`{value}` is no number of at least {minimum}"))?,
+        )),
+        _ => match value.to_ascii_lowercase().as_str() {
+            "true" => Ok(MeasuredArgument::Truth(true)),
+            "false" => Ok(MeasuredArgument::Truth(false)),
+            _ => Err(format!("`{value}` is neither `true` nor `false`")),
+        },
+    }
+}
+
 /// The argument `value` states for a parameter of `kind`, or why it is
 /// none.
 fn argument(kind: MeasuredParameterKind, value: &str) -> Result<MeasuredArgument, String> {
@@ -723,6 +760,9 @@ fn argument(kind: MeasuredParameterKind, value: &str) -> Result<MeasuredArgument
                 return Err(format!("`{value}` is no simple polygon: {problem}"));
             }
             MeasuredArgument::Polygon(vertices)
+        }
+        MeasuredParameterKind::Number { .. } | MeasuredParameterKind::Truth => {
+            return plain(kind, value);
         }
         MeasuredParameterKind::Table => {
             return Err(format!(

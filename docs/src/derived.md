@@ -453,6 +453,8 @@ parameter's `references`):
 | `objects` | a `selector`; or `@anchor` |
 | `property` | a `propertyReference` |
 | `table` | a `table`, its rows as stated; a `table` parameter is written only as a reference |
+| `number` | a `number` or `integer`, at least the parameter's minimum |
+| `truth` | a `boolean` |
 
 A `vector` or `polygon` takes none, and only an `objects`
 parameter takes `@anchor`. An `objects` parameter (the objects a value is
@@ -469,7 +471,7 @@ anything is measured (`MeasuredCall::bind`): a selector to the objects it
 picks (`MeasuredSelection`: those surely picked and those it cannot
 decide, each sorted by source-qualified identity, read once per rule
 through the run's one selection), the anchor to itself, a length, path,
-text, property reference or table to the value stated. The provider receives the bound call, never the
+text, property reference, table, number or truth to the value stated. The provider receives the bound call, never the
 selector, and decides what undecided objects leave (`shelf_length` leaves a
 space open where an undecided door may reach it). A reference that cannot
 be bound (a parameter of another kind or not realisable, a selection whose

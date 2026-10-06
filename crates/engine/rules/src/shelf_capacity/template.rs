@@ -174,6 +174,8 @@ fn form() -> Form {
         members: None,
         table: None,
         scope: None,
+        unless: Vec::new(),
+        grading: None,
         derived: Vec::new(),
         // The doors and openings whose clearances were kept free.
         related: Some("length"),
@@ -185,6 +187,7 @@ fn form() -> Form {
             undecided: "clear height {height:length} may or may not reach the shelving's \
                             top elevation {top_elevation_metres:length}",
             related: None,
+            grading: None,
         }],
     }
 }

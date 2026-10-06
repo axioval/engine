@@ -60,11 +60,11 @@ rules crate (`body_extent/template.rs`):
 | `id`, `parameters` | The capability's id and descriptor, unchanged. |
 | `grades` | Whether findings are graded (the descriptor's `grades_deviation`): each states how far its value misses the bound it fails, measured from the declared bound, never the widened one, for the runtime's severity bands. |
 | `name` | How rule-scoped messages name the capability (`body-extent: …`). |
-| `refusals` | Where a refused declaration and missing services are reported: `rule` (the default, once, before anything is selected, after the name) or `objects` (for each selected object, worded as the check states it, as capabilities that judged their declaration per object reported it). |
+| `refusals` | Where a refused declaration and missing services are reported: `rule` (the default, once, before anything is selected, after the name), `objects` (for each selected object, worded as the check states it, as capabilities that judged their declaration per object reported it) or `prefixed` (for each selected object, a refused declaration after a prefix: `slab-contact declaration is invalid: …`; missing services as stated). |
 | `defaults` | Values optional parameters take when unstated (`tolerance` 0 m). |
-| `declaration` | `Check`s over the rule's parameters, in order: `excludes` (where a mode is stated, no string parameter of a list states an option it does not combine with), `arguments` (where a mode is stated, the rule parameters a measured value names, checked as stated by the value's own argument check: a declaration, such as a table of rows, only the measurement knows how to read), `choice` (a string among options), `length` (a non-negative length), `count` (an integer of at least zero, stated where the descriptor requires it), `kind` (a parameter of its descriptor's kind, placed where the capability read it so refusals keep their order), `nonNegative` (numbers of at least zero), `traversal` (a valid `relationship` or `path`, declared only with one of the named parameters, or anywhere where it names none), `exclusive`, `anyOf`, `requires`, `ordered` (numbers, integers or quantities, as the descriptor types them), `disciplines` (a non-empty list of valid disciplines), `path` (a valid relationship path), `tolerance` (the rule's tolerance parameters valid together), `required` (a parameter stated, of its kind), `finite` (each parameter stated as a finite `number`, above or at least a bound where given), `increasing` (both numbers, the first below the second), `atMost` (each number stated at most a value: a share no greater than the whole). The first failing check leaves the rule not evaluated as an invalid declaration, worded as the capability worded it. |
-| `services` | The host services the values need (`Service`: `object-frame`, `vertical-extent`, `triangle-count`, `walking-surface`), and the message leaving the whole rule open without them, before anything is selected. |
-| `texts` | Named message parts, optionally conditional: `Condition::Positive` (a parameter above zero), `Condition::Inexact` (a value read from evidence that is not exact, such as a count of a tessellation), `Condition::Equals` (a string parameter or its default is a value), `Condition::Zero` (a value's lower end is zero: nothing surely counted), `Condition::All` (every one of several), `Condition::Not` and `Condition::Cites` (a value's measured reads cite an object: a search found a candidate). Several texts may share a name, each under its own condition: the first that holds is rendered (`plan area` or `facade area` by `measure`). |
+| `declaration` | `Check`s over the rule's parameters, in order: `excludes` (where a mode is stated, no string parameter of a list states an option it does not combine with), `arguments` (where a mode is stated, the rule parameters a measured value names, checked as stated by the value's own argument check: a declaration, such as a table of rows, only the measurement knows how to read), `choice` (a string among options), `length` (a non-negative length), `count` (an integer of at least zero, stated where the descriptor requires it), `kind` (a parameter of its descriptor's kind, placed where the capability read it so refusals keep their order), `nonNegative` (numbers of at least zero), `traversal` (a valid `relationship` or `path`, declared only with one of the named parameters, or anywhere where it names none), `exclusive`, `anyOf`, `requires`, `ordered` (numbers, integers or quantities, as the descriptor types them), `disciplines` (a non-empty list of valid disciplines), `path` (a valid relationship path), `tolerance` (the rule's tolerance parameters valid together), `required` (a parameter stated, of its kind), `finite` (each parameter stated as a finite `number`, above or at least a bound where given), `increasing` (both numbers, the first below the second), `atMost` (each number stated at most a value: a share no greater than the whole), `when` (a check that applies only where one of some boolean parameters is stated true: a declaration a mode needs only while it is on). The first failing check leaves the rule not evaluated as an invalid declaration, worded as the capability worded it. |
+| `services` | The host services the values need (`Service`: `object-frame`, `vertical-extent`, `triangle-count`, `walking-surface`, `contact`), and the message leaving the whole rule open without them, before anything is selected. |
+| `texts` | Named message parts, optionally conditional: `Condition::Positive` (a parameter above zero), `Condition::Inexact` (a value read from evidence that is not exact, such as a count of a tessellation), `Condition::Equals` (a string parameter or its default is a value), `Condition::Zero` (a value's lower end is zero: nothing surely counted), `Condition::All` (every one of several), `Condition::Not`, `Condition::Cites` (a value's measured reads cite an object: a search found a candidate), `Condition::Absent` (a value is `null`: a measurement found nothing near), `Condition::Below` and `Condition::Above` (a value surely below or above a number: its upper or lower end is). Several texts may share a name, each under its own condition: the first that holds is rendered (`plan area` or `facade area` by `measure`). |
 | `forms` | The compositions. The first form whose `when` parameters are all stated applies. |
 
 A `Form` holds:
@@ -94,7 +94,24 @@ A `Form` holds:
   and before the form's own decision, each its own finding or not-evaluated
   outcome: a capability reporting one per failed check (D1). A check's
   value that cannot be read leaves only that check open; a form value that
-  cannot be read leaves the object open once.
+  cannot be read leaves the object open once;
+- `unless`: values that leave an object unjudged (`Unless`), read before
+  anything else, each only where it `applies` (a boolean parameter stated
+  true): one surely true (`true`, or a number surely other than zero)
+  passes the object without reading or measuring anything further, one
+  surely false judges it on, one that may be either leaves it open with the
+  form's `undecided` message. A storey the rule leaves out is such a value.
+  Nothing is read ahead for a form with `unless` values, so an object left
+  unjudged is never measured. A rule forked from it passes the object where
+  a value that applies to the rule is other than zero (an `or`);
+- `grading`: the severity of the form's finding (`Grading`, also on a
+  check): `values` read once the decision fails (a `null` kept as one, a
+  value that cannot be read leaving the object open as refused), then the
+  severity of the first `Band` whose condition holds over the values, the
+  rule's own where none does. The finding's message may read the values
+  (`no contact` where the contact area is zero). Grading never changes
+  which findings exist; a template grading a deviation (`grades`) is graded
+  by the runtime's severity bands instead.
 
 **Rule parameters as arguments.** A value's measured name may hand the
 measurement the rule's own parameters and the anchor, `@name` and
@@ -885,8 +902,11 @@ with three decimals; `{length:upper3}`: a value's upper end, or a
 constant, with three decimals), `{bound}` (the bound a `Within` failed or straddled, a length:
 `at least 0.26 m`), `{bound:plain}` (the bound as declared: `at least 6`),
 `{why}`, an anchor's `{undecided}` and `{relation}`, and a value's lower
-end to two decimals (`{numerator:least2}`: `0.66`), and a share's upper
-end, at most 1, to four decimals (`{share:share}`: `0.4`); a `Compare`
+end to two decimals (`{numerator:least2}`: `0.66`), a share's upper
+end, at most 1, to four decimals (`{share:share}`: `0.4`), and a number
+with a fixed number of decimals: a value known as one point or a
+constant (`{minimum:fixed4}`: `0.5000`), or a value's lower or upper end
+(`{share:lower4}`, `{length:upper3}`); a `Compare`
 form also reads `{target}` (the stated target as the rule declares it,
 after a space: ` 250 mm`, `` `F30` ``, ` [F30, F90]`) and
 `{tolerance:suffix}` (` (within tolerance 0.01)`, nothing when exact).
@@ -1192,9 +1212,11 @@ addition data the runner interprets, never code per capability:
   `axioval_engine::comparison`, the one implementation the evaluator, the
   selectors, the judges and `Within` share (#287); `Compare` is the
   comparison judge the property judges build on.
-- **Grading** (built, `Template::grades`). A decision reports the
-  deviation from the declared bound, never the widened one; severity bands
-  stay the runtime's.
+- **Grading** (built, `Template::grades`; `Form::grading`). A decision
+  reports the deviation from the declared bound, never the widened one, for
+  the runtime's severity bands; a capability choosing its findings'
+  severities itself states them as bands chosen by conditions over values
+  read to grade the finding (#282).
 - **Rule parameters and the anchor as arguments** (built, #289). A value
   hands its measurement the rule's parameters or the anchor (`@name`,
   `@anchor`), typed by the registry and bound per object; a provider

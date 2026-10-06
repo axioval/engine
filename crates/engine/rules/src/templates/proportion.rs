@@ -244,6 +244,7 @@ pub(super) fn judged(
         Some((false, requirement)) => {
             read.named.insert("requirement", requirement);
             Outcome::Finding {
+                severity: None,
                 message: render(plan, &read, plan.form.fail),
                 evidence: read.evidence,
                 related,

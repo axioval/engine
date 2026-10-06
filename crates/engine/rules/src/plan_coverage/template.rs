@@ -118,6 +118,8 @@ pub(crate) fn template() -> Template {
             members: None,
             table: None,
             scope: None,
+            unless: Vec::new(),
+            grading: None,
             derived: Vec::new(),
             related: Some("share"),
             checks: Vec::new(),

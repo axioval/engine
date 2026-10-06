@@ -112,6 +112,10 @@ pub enum Refusals {
     /// differently per refusal reported it (`property-value parameters
     /// are invalid: …`).
     Worded,
+    /// For each selected object, as [`Refusals::Objects`], a refused
+    /// declaration worded after `prefix` and a colon (`slab-contact
+    /// declaration is invalid: …`); missing services are worded as stated.
+    Prefixed { prefix: &'static str },
 }
 
 impl Refusals {
@@ -360,6 +364,12 @@ pub enum Check {
         with: &'static str,
         message: &'static str,
     },
+    /// Where one of the boolean `flags` is stated true, `check`: a
+    /// declaration a mode needs only while it is on.
+    When {
+        flags: &'static [&'static str],
+        check: &'static Check,
+    },
 }
 
 /// What [`Check::Rows`] requires of one column of every row.
@@ -398,6 +408,7 @@ pub enum Service {
     VerticalExtent,
     TriangleCount,
     WalkingSurface,
+    Contact,
 }
 
 impl Service {
@@ -415,6 +426,7 @@ impl Service {
             Self::WalkingSurface => services
                 .get::<crate::WalkingSurfaceServiceHandle>()
                 .is_some(),
+            Self::Contact => services.get::<crate::ContactServiceHandle>().is_some(),
         }
     }
 }
@@ -460,6 +472,13 @@ pub enum Condition {
     /// The value's measured reads cite an object they were measured
     /// against ([`crate::Citation`]): a search found a candidate.
     Cites { value: &'static str },
+    /// The value is stated absent (`null`): a measurement found nothing,
+    /// such as no candidate near.
+    Absent { value: &'static str },
+    /// The value surely lies below `than`: its upper end does.
+    Below { value: &'static str, than: f64 },
+    /// The value surely lies above `than`: its lower end does.
+    Above { value: &'static str, than: f64 },
 }
 
 /// One composition of a template.
@@ -505,6 +524,50 @@ pub struct Form {
     /// not-evaluated outcome: a capability reporting one per failed check.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub checks: Vec<FormCheck>,
+    /// Values that leave an object unjudged, read before anything else, in
+    /// order, each only where it applies: one surely true passes the object
+    /// (a storey the rule leaves out).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub unless: Vec<Unless>,
+    /// How the form's finding is graded into a severity.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub grading: Option<Grading>,
+}
+
+/// A value that, surely true, leaves an object unjudged: read before the
+/// form's values, only where `applies` holds. A truth or a number counts:
+/// `true` or a number surely other than zero passes the object, `false` or
+/// a number surely zero judges it on, and one that may be either leaves it
+/// open with the form's `undecided` message. As any value, one stated
+/// absent is a missing-information finding and one that cannot be read
+/// leaves the object open, worded as it was refused.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Unless {
+    pub applies: Applies,
+    pub value: TemplateValue,
+}
+
+/// How a finding is graded: `values`, read once its decision fails (a
+/// `null` kept as one, a value that cannot be read leaving the object open
+/// as refused), then the severity of the first band whose condition holds,
+/// the rule's own where none does. Its messages may read the values.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Grading {
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub values: Vec<TemplateValue>,
+    pub bands: Vec<Band>,
+}
+
+/// The severity a graded finding takes where `when` holds (always,
+/// without one).
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Band {
+    pub severity: axioval_ir::Severity,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub when: Option<Condition>,
 }
 
 /// A further decision of a [`Form`]: its own values, read after the form's
@@ -524,6 +587,9 @@ pub struct FormCheck {
     /// The value whose measured reads' cited objects its finding relates.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub related: Option<&'static str>,
+    /// How its finding is graded into a severity.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub grading: Option<Grading>,
 }
 
 /// A value derived from values already read, in plain binary arithmetic
@@ -1563,6 +1629,46 @@ impl Form {
         let inline = |values: &[&TemplateValue], name: &str| self.inlined(values, name, value);
         let own: Vec<&TemplateValue> = self.values.iter().collect();
         let decided = self.decision.expression(&|name| inline(&own, name));
+        let decided = if self.unless.is_empty() {
+            decided
+        } else {
+            // An object a value leaves unjudged passes: each value surely
+            // other than zero, where its flags are on, or the decision.
+            let mut operands: Vec<Expression> = self
+                .unless
+                .iter()
+                .map(|unless| {
+                    let mut terms: Vec<Expression> = unless
+                        .applies
+                        .when
+                        .iter()
+                        .map(|flag| Expression::Parameter {
+                            name: (*flag).to_owned(),
+                            label: None,
+                        })
+                        .collect();
+                    terms.push(Expression::Compare {
+                        operator: ExpressionComparison::NotEquals,
+                        left: boxed(value(unless.value.name, &unless.value.expression)),
+                        right: boxed(Expression::Literal {
+                            value: ScalarValue::Integer { value: 0 },
+                            label: None,
+                        }),
+                        case_sensitive: true,
+                        label: Some(format!("unless {}", unless.value.name)),
+                    });
+                    Expression::And {
+                        operands: terms,
+                        label: None,
+                    }
+                })
+                .collect();
+            operands.push(decided);
+            Expression::Or {
+                operands,
+                label: None,
+            }
+        };
         if self.checks.is_empty() {
             return decided;
         }
@@ -2162,7 +2268,10 @@ mod tests {
                 fail: "",
                 undecided: "",
                 related: None,
+                grading: None,
             }],
+            unless: Vec::new(),
+            grading: None,
         };
         let Expression::And { operands, .. } = form.requirement() else {
             panic!("an `and` of the checks and the form's decision");

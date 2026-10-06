@@ -60,7 +60,7 @@ fn difference(minuend: Span, subtrahend: Span) -> Span {
 
 /// Whether `applies` holds for the rule: every `when` parameter stated (a
 /// boolean, or its default, true), one of `any`, and its condition.
-fn applies(plan: &Plan<'_>, applies: &Applies) -> bool {
+pub(super) fn applies(plan: &Plan<'_>, applies: &Applies) -> bool {
     let declared = |name: &&str| {
         !matches!(
             plan.constants.get(*name),

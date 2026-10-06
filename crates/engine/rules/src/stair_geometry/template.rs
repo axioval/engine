@@ -107,6 +107,7 @@ fn items(applies: Applies, list: &'static str) -> Items {
 
 fn check(items: Items) -> FormCheck {
     FormCheck {
+        grading: None,
         values: Vec::new(),
         decision: Decision::Items(Box::new(items)),
         fail: "",
@@ -1277,6 +1278,8 @@ pub(crate) fn ramp(parameters: Vec<ParameterDescriptor>) -> Template {
         }),
         texts: Vec::new(),
         forms: vec![Form {
+            grading: None,
+            unless: Vec::new(),
             when: &[],
             values: vec![measured("runs", "run_count")],
             // The ramp is measured: its checks judge it.
@@ -2065,6 +2068,8 @@ pub(crate) fn stair(parameters: Vec<ParameterDescriptor>) -> Template {
         ),
     ];
     let form = |when: &'static [&'static str], values, decision, checks| Form {
+        grading: None,
+        unless: Vec::new(),
         when,
         values,
         decision,

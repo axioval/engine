@@ -692,6 +692,7 @@ fn null(scope: &Scope<'_, '_, '_>, on: OnNull, listed: &[Evidence], object: &Obj
         OnNull::Skip => Stop::Here(None),
         OnNull::Open(message) => Stop::Here(Some(open(scope.render(message)))),
         OnNull::Fail(message) => Stop::Here(Some(Outcome::Finding {
+            severity: None,
             message: scope.render(message),
             evidence: cited(scope, listed, object),
             related: Vec::new(),
@@ -740,6 +741,7 @@ fn test_item(
                 return outcome;
             }
             Outcome::Finding {
+                severity: None,
                 message,
                 evidence: cited(scope, listed, object),
                 related: objects(scope.member, test.related),
@@ -940,6 +942,7 @@ fn judge_rows(
     if verdicts.iter().all(|verdict| *verdict == Some(false)) {
         let graded = scope.plan.template.grades;
         Outcome::Finding {
+            severity: None,
             message: scope.render(test.fail),
             evidence: cited(&scope, listed, object),
             related: objects(scope.member, test.related),
@@ -1040,6 +1043,7 @@ fn judge_every(
         scope.named("failing", failing.join(", "));
         let graded = scope.plan.template.grades && range.grade;
         return Outcome::Finding {
+            severity: None,
             message: scope.render(every.fail),
             evidence: cited(&scope, listed, object),
             related: Vec::new(),
@@ -1096,6 +1100,7 @@ fn judge_truths(
     if !failing.is_empty() {
         scope.named("failing", failing.join(", "));
         return Outcome::Finding {
+            severity: None,
             message: scope.render(truths.fail),
             evidence: cited(&scope, listed, object),
             related: Vec::new(),
@@ -1159,6 +1164,7 @@ fn judge_spread(
     match judge(lower, upper, None, Some(tolerance + allowance)) {
         Verdict::Pass => Outcome::Passed,
         Verdict::Fail(_) => Outcome::Finding {
+            severity: None,
             message: scope.render(spread.fail),
             evidence: cited(&scope, listed, object),
             related: Vec::new(),
@@ -1197,6 +1203,7 @@ fn judge_count(
     scope.named("count", present.len().to_string());
     scope.named("bound", bound_words(minimum, maximum, ItemUnit::Count));
     Outcome::Finding {
+        severity: None,
         message: scope.render(count.fail),
         evidence: cited(&scope, listed, object),
         related: Vec::new(),
@@ -1275,6 +1282,7 @@ fn judge_least(
     let allowance = least.times * slack(upper);
     match judge(lower, upper, Some(minimum - allowance), None) {
         Verdict::Fail(_) => Outcome::Finding {
+            severity: None,
             message: scope.render(least.fail),
             evidence,
             related,

@@ -80,6 +80,8 @@ fn template() -> Template {
             }),
             table: None,
             scope: None,
+            unless: Vec::new(),
+            grading: None,
             derived: vec![Derived::Ratio {
                 name: "share",
                 numerator: "windows",
@@ -463,5 +465,281 @@ mod checked {
             evaluation.not_evaluated_outcomes()[0].message(),
             "window-share: a strict rule is never loose"
         );
+    }
+}
+
+/// Values that leave an object unjudged, graded severities chosen by
+/// conditions over values read only once a finding stands, refusals per
+/// object after a prefix, a check while a flag is on and numbers shown with
+/// fixed decimals: what `slab-contact` composes, on a small template of its
+/// own.
+mod graded {
+    use super::*;
+    use axioval_engine::template::{
+        Applies, Band, Check, Condition, Grading, Refusals, Text, Unless,
+    };
+    use axioval_ir::{PropertyValue, Severity};
+
+    const ID: &str = "test:graded-share";
+
+    fn stated(name: &'static str, property: &str) -> TemplateValue {
+        TemplateValue {
+            name,
+            expression: Expression::Property {
+                property_set: Some("Pset".into()),
+                property: property.into(),
+                of: None,
+                label: None,
+            },
+            expect: None,
+            absent: None,
+            mismatch: None,
+        }
+    }
+
+    /// Each panel's share at least `minimum`, unless it is exempt where
+    /// exemptions are honoured; a shortfall graded by its gap.
+    fn template() -> Template {
+        Template {
+            id: ID,
+            parameters: vec![
+                ParameterDescriptor::required("minimum", ParameterType::Number),
+                ParameterDescriptor::optional("honour_exemptions", ParameterType::Boolean),
+                ParameterDescriptor::optional("exemption_note", ParameterType::String),
+            ],
+            grades: false,
+            name: "graded-share",
+            refusals: Refusals::Prefixed {
+                prefix: "graded-share declaration is invalid",
+            },
+            defaults: Vec::new(),
+            declaration: vec![
+                Check::Finite {
+                    parameters: &["minimum"],
+                    above: Some(0.0),
+                    at_least: None,
+                    message: "minimum must be positive",
+                },
+                Check::When {
+                    flags: &["honour_exemptions"],
+                    check: &Check::AnyOf {
+                        parameters: &["exemption_note"],
+                        message: "honouring exemptions needs `exemption_note`",
+                    },
+                },
+            ],
+            services: None,
+            texts: vec![
+                Text {
+                    name: "shortfall",
+                    when: Some(Condition::Zero { value: "share" }),
+                    text: "nothing shared",
+                },
+                Text {
+                    name: "shortfall",
+                    when: None,
+                    text: "share {share:lower4} below {minimum:fixed4}",
+                },
+            ],
+            forms: vec![Form {
+                when: &[],
+                values: vec![stated("share", "Share")],
+                decision: Decision::Within {
+                    value: "share",
+                    minimum: Some(vec![Term::plus(Operand::Parameter("minimum"))]),
+                    maximum: None,
+                    rounding: Vec::new(),
+                },
+                fail: "{shortfall}",
+                undecided: "the share straddles {bound:plain}",
+                members: None,
+                table: None,
+                scope: None,
+                unless: vec![Unless {
+                    applies: Applies {
+                        when: &["honour_exemptions"],
+                        any: &[],
+                        condition: None,
+                    },
+                    value: stated("exempt", "Exempt"),
+                }],
+                grading: Some(Grading {
+                    values: vec![stated("gap", "Gap")],
+                    bands: vec![
+                        Band {
+                            severity: Severity::Error,
+                            when: Some(Condition::Absent { value: "gap" }),
+                        },
+                        Band {
+                            severity: Severity::Info,
+                            when: Some(Condition::Below {
+                                value: "gap",
+                                than: 0.1,
+                            }),
+                        },
+                        Band {
+                            severity: Severity::Warning,
+                            when: Some(Condition::Above {
+                                value: "gap",
+                                than: 0.5,
+                            }),
+                        },
+                    ],
+                }),
+                derived: Vec::new(),
+                related: None,
+                checks: Vec::new(),
+            }],
+        }
+    }
+
+    fn panels() -> Model {
+        let number = PropertyValue::Decimal;
+        Model::default()
+            .object("full", "panel")
+            .value("full", "Pset", "Share", number(0.8))
+            .object("none", "panel")
+            .value("none", "Pset", "Share", number(0.0))
+            .value("none", "Pset", "Gap", PropertyValue::Null)
+            .object("near", "panel")
+            .value("near", "Pset", "Share", number(0.25))
+            .value("near", "Pset", "Gap", number(0.05))
+            .object("far", "panel")
+            .value("far", "Pset", "Share", number(0.25))
+            .value("far", "Pset", "Gap", number(0.7))
+            .object("between", "panel")
+            .value("between", "Pset", "Share", number(0.25))
+            .value("between", "Pset", "Gap", number(0.3))
+            .object("exempt", "panel")
+            .value("exempt", "Pset", "Share", number(0.1))
+            .value("exempt", "Pset", "Exempt", PropertyValue::Boolean(true))
+            .value("exempt", "Pset", "Gap", number(0.3))
+    }
+
+    fn severities(evaluation: &axioval_engine::CapabilityEvaluation) -> Vec<(String, Severity)> {
+        evaluation
+            .findings()
+            .iter()
+            .map(|finding| (common::subject(finding), finding.severity.clone()))
+            .collect()
+    }
+
+    /// A finding takes the severity of the first band whose condition holds
+    /// over the values read to grade it (`between`'s gap holds none, and
+    /// takes the rule's own); messages read them too.
+    #[test]
+    fn a_finding_is_graded_by_the_first_band_that_holds() {
+        let templated = Templated::new(template());
+        let evaluation = panels().evaluate(
+            &templated,
+            &rule(ID, kind("panel"), vec![("minimum", number(0.5))]),
+        );
+        let mut found = severities(&evaluation);
+        found.sort();
+        assert_eq!(
+            found,
+            [
+                ("between".to_owned(), Severity::Error),
+                ("exempt".to_owned(), Severity::Error),
+                ("far".to_owned(), Severity::Warning),
+                ("near".to_owned(), Severity::Info),
+                ("none".to_owned(), Severity::Error),
+            ]
+        );
+        let messages = findings(&evaluation);
+        assert!(messages.contains(&("none".to_owned(), "nothing shared".to_owned())));
+        assert!(messages.contains(&("near".to_owned(), "share 0.2500 below 0.5000".to_owned())));
+    }
+
+    /// A value surely true leaves its object unjudged where it applies, and
+    /// is not read where it does not.
+    #[test]
+    fn a_value_leaves_its_object_unjudged_where_it_applies() {
+        let templated = Templated::new(template());
+        let honoured = panels().evaluate(
+            &templated,
+            &rule(
+                ID,
+                kind("panel"),
+                vec![
+                    ("minimum", number(0.5)),
+                    ("honour_exemptions", common::boolean(true)),
+                    ("exemption_note", string("signed off")),
+                ],
+            ),
+        );
+        assert!(
+            severities(&honoured)
+                .iter()
+                .all(|(panel, _)| panel != "exempt")
+        );
+        // Where it applies, a value stated absent is a missing-information
+        // finding, as any value's.
+        assert!(
+            findings(&honoured)
+                .contains(&("near".to_owned(), "`exempt` is stated absent".to_owned())),
+            "{:?}",
+            findings(&honoured)
+        );
+    }
+
+    /// A refused declaration is reported for each object after the prefix,
+    /// and a check applies only while its flag is on.
+    #[test]
+    fn a_refusal_is_reported_per_object_after_its_prefix() {
+        let templated = Templated::new(template());
+        let refused = panels().evaluate(
+            &templated,
+            &rule(
+                ID,
+                kind("panel"),
+                vec![
+                    ("minimum", number(0.5)),
+                    ("honour_exemptions", common::boolean(true)),
+                ],
+            ),
+        );
+        assert_eq!(refused.not_evaluated_outcomes().len(), 6);
+        assert!(refused.not_evaluated_outcomes().iter().all(|outcome| {
+            outcome.reason() == &NotEvaluatedReason::InvalidDeclaration
+                && outcome.message()
+                    == "graded-share declaration is invalid: honouring exemptions needs \
+                        `exemption_note`"
+        }));
+        let off = panels().evaluate(
+            &templated,
+            &rule(
+                ID,
+                kind("panel"),
+                vec![
+                    ("minimum", number(0.5)),
+                    ("honour_exemptions", common::boolean(false)),
+                ],
+            ),
+        );
+        assert!(off.not_evaluated_outcomes().is_empty());
+    }
+
+    /// A rule forked from such a form passes an object a value leaves
+    /// unjudged.
+    #[test]
+    fn a_fork_passes_what_a_value_leaves_unjudged() {
+        let templated = Templated::new(template());
+        let forked = fork(
+            &templated,
+            &rule(
+                ID,
+                kind("panel"),
+                vec![
+                    ("minimum", number(0.5)),
+                    ("honour_exemptions", common::boolean(true)),
+                    ("exemption_note", string("signed off")),
+                ],
+            ),
+        )
+        .unwrap();
+        let text = serde_json::to_string(&forked.requirement).unwrap();
+        assert!(text.contains("unless exempt"), "{text}");
+        assert!(text.contains("\"kind\":\"or\""), "{text}");
     }
 }

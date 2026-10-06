@@ -296,6 +296,8 @@ fn form(light_areas: bool, members: bool) -> Form {
         }),
         table: Some(ratios()),
         scope: None,
+        unless: Vec::new(),
+        grading: None,
         derived: vec![Derived::Ratio {
             name: "ratio",
             numerator: "numerator",

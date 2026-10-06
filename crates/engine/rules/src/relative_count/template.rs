@@ -119,6 +119,8 @@ fn form(
     groups: Option<ProportionGroups>,
 ) -> Form {
     Form {
+        grading: None,
+        unless: Vec::new(),
         when,
         values,
         decision: Decision::Proportion(Box::new(Proportion {

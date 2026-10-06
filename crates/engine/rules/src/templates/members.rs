@@ -157,6 +157,7 @@ fn judge_member(
                 evidence: read.evidence,
                 related: vec![anchor.id.clone()],
                 deviation: None,
+                severity: None,
             })
         }
         Verdict::Undecided(bound) => {

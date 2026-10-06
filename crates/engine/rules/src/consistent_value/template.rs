@@ -104,6 +104,8 @@ pub(crate) fn template() -> Template {
         services: None,
         texts: Vec::new(),
         forms: vec![Form {
+            grading: None,
+            unless: Vec::new(),
             when: &[],
             values: vec![stated("key"), stated("value")],
             decision: Decision::Consistent {

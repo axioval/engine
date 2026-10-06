@@ -284,11 +284,12 @@ fn judge(
             evidence,
             related,
             deviation,
+            severity,
         } => {
             let mut finding = Finding::new(
                 rule.id.clone(),
                 scope,
-                crate::pairs::severity(rule),
+                severity.unwrap_or_else(|| crate::pairs::severity(rule)),
                 message,
             )
             .with_evidence(evidence)
@@ -382,6 +383,8 @@ mod tests {
                         no_disciplines: "no disciplines",
                     },
                 }),
+                unless: Vec::new(),
+                grading: None,
                 derived: Vec::new(),
                 related: None,
                 checks: Vec::new(),

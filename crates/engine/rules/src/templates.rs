@@ -37,7 +37,7 @@ use axioval_engine::{
 use axioval_ir::contract::{AggregateSource, Expression, ParameterValue, ScalarValue, Selector};
 use axioval_ir::{
     Evidence, NotEvaluatedReason, Object, ObjectId, PropertyValue, QuantityDimension, ReportColumn,
-    ReportTable, ReportValue,
+    ReportTable, ReportValue, Severity,
 };
 use serde_json::Value as Json;
 
@@ -171,6 +171,11 @@ struct Bound {
     checks: Vec<Vec<Expression>>,
     /// Each of the form's member checks' value expressions, bound likewise.
     member_checks: Vec<Vec<Expression>>,
+    /// Each of the form's `unless` values' expressions, bound likewise.
+    unless: Vec<Expression>,
+    /// The form's grading values' expressions, then each check's, bound
+    /// likewise.
+    grading: Vec<Vec<Expression>>,
 }
 
 impl std::ops::Deref for Plan<'_> {
@@ -622,6 +627,17 @@ fn check(check: &Check, rule: &CompiledRule, template: &Template) -> Result<(), 
         } => {
             if declaring.iter().any(|name| declared(rule, name)) && !stated(rule, with) {
                 Err(invalid(*message))
+            } else {
+                Ok(())
+            }
+        }
+        Check::When { flags, check: then } => {
+            let mut on = false;
+            for flag in *flags {
+                on |= Parameters(rule).boolean(flag)? == Some(true);
+            }
+            if on {
+                self::check(then, rule, template)
             } else {
                 Ok(())
             }
@@ -1130,6 +1146,21 @@ fn bind(template: &Template, rule: &CompiledRule) -> Result<Bound, Unavailable> 
                 .collect()
         })
         .collect();
+    let unless = form
+        .unless
+        .iter()
+        .map(|unless| bound(&unless.value.expression, &constants))
+        .collect();
+    let grading = std::iter::once(&form.grading)
+        .chain(form.checks.iter().map(|check| &check.grading))
+        .map(|grading| {
+            grading
+                .iter()
+                .flat_map(|grading| &grading.values)
+                .map(|step| bound(&step.expression, &constants))
+                .collect()
+        })
+        .collect();
     Ok(Bound {
         form: index,
         constants,
@@ -1139,6 +1170,8 @@ fn bind(template: &Template, rule: &CompiledRule) -> Result<Bound, Unavailable> 
         each,
         checks,
         member_checks,
+        unless,
+        grading,
     })
 }
 
@@ -1526,30 +1559,26 @@ fn placeholder(plan: &Plan<'_>, read: &Read, key: &str) -> Option<String> {
             }
             _ => None,
         },
-        // A number with three decimals: a constant, or a value known as one
-        // point.
-        "fixed3" => match read.values.get(name) {
-            Some(Value::Number { value, .. }) if value.lower.to_bits() == value.upper.to_bits() => {
-                Some(format!("{:.3}", value.upper))
+        // A number with a fixed number of decimals (`fixed3`): a constant,
+        // or a value known as one point; or a value's lower or upper end,
+        // or a constant (`lower4`, `upper3`): what a value surely below a
+        // minimum is shown as.
+        _ if decimals(format).is_some() => {
+            let (end, places) = decimals(format)?;
+            match read.values.get(name) {
+                Some(Value::Number { value, .. }) => match end {
+                    "fixed" if value.lower.to_bits() != value.upper.to_bits() => None,
+                    "lower" => Some(format!("{:.places$}", value.lower)),
+                    _ => Some(format!("{:.places$}", value.upper)),
+                },
+                Some(_) => None,
+                None => plan
+                    .constants
+                    .get(name)
+                    .and_then(Constant::number)
+                    .map(|value| format!("{value:.places$}")),
             }
-            Some(_) => None,
-            None => plan
-                .constants
-                .get(name)
-                .and_then(Constant::number)
-                .map(|value| format!("{value:.3}")),
-        },
-        // A value's upper end, or a constant, with three decimals: what a
-        // value surely below a minimum is shown as.
-        "upper3" => match read.values.get(name) {
-            Some(Value::Number { value, .. }) => Some(format!("{:.3}", value.upper)),
-            Some(_) => None,
-            None => plan
-                .constants
-                .get(name)
-                .and_then(Constant::number)
-                .map(|value| format!("{value:.3}")),
-        },
+        }
         "stated" => read
             .stated
             .get(name)
@@ -1562,6 +1591,18 @@ fn placeholder(plan: &Plan<'_>, read: &Read, key: &str) -> Option<String> {
             .or_else(|| read.values.get(name).map(ToString::to_string)),
         _ => None,
     }
+}
+
+/// A format showing a number with a fixed number of decimals, `fixed3`,
+/// `lower4` or `upper3`: which end of the value it shows, and how many.
+fn decimals(format: &str) -> Option<(&str, usize)> {
+    ["fixed", "lower", "upper"].into_iter().find_map(|end| {
+        format
+            .strip_prefix(end)
+            .and_then(|places| places.parse::<usize>().ok())
+            .filter(|places| *places <= 9)
+            .map(|places| (end, places))
+    })
 }
 
 /// Whether a text's condition holds.
@@ -1594,6 +1635,15 @@ fn holds(plan: &Plan<'_>, read: &Read, condition: Option<Condition>) -> bool {
             .related
             .iter()
             .any(|(name, objects)| *name == value && !objects.is_empty()),
+        Some(Condition::Absent { value }) => matches!(read.values.get(value), Some(Value::Null)),
+        Some(Condition::Below { value, than }) => matches!(
+            read.values.get(value),
+            Some(Value::Number { value, .. }) if value.upper < than
+        ),
+        Some(Condition::Above { value, than }) => matches!(
+            read.values.get(value),
+            Some(Value::Number { value, .. }) if value.lower > than
+        ),
     }
 }
 
@@ -1612,6 +1662,8 @@ enum Outcome {
         evidence: Vec<Evidence>,
         related: Vec<ObjectId>,
         deviation: Option<Deviation>,
+        /// The severity a grading gave it, in place of the rule's own.
+        severity: Option<Severity>,
     },
     Open(NotEvaluatedReason, String),
 }
@@ -1623,6 +1675,7 @@ impl Outcome {
             evidence,
             related: Vec::new(),
             deviation: None,
+            severity: None,
         }
     }
 }
@@ -1812,6 +1865,104 @@ struct Ahead {
     bound: Vec<BoundPrefetched>,
 }
 
+/// The form's `unless` values of `object`, each read where it applies:
+/// the outcome where one passes the object or leaves it open, `None` where
+/// the object is judged on.
+fn unless(
+    plan: &Plan<'_>,
+    context: &RuleContext<'_>,
+    object: &Object,
+    leaves: &mut ObjectLeaves<'_>,
+) -> Option<Outcome> {
+    for (index, unless) in plan.form.unless.iter().enumerate() {
+        if !each::applies(plan, &unless.applies) {
+            continue;
+        }
+        let mut read = Read::default();
+        if let Some(outcome) = read_values(
+            plan,
+            std::iter::once((&unless.value, &plan.bound.unless[index])),
+            &|_| false,
+            context,
+            object,
+            leaves,
+            &mut read,
+        ) {
+            return Some(outcome);
+        }
+        match read.values.get(unless.value.name) {
+            Some(Value::Boolean(true)) => return Some(Outcome::Passed),
+            Some(Value::Number { value, .. }) if value.lower > 0.0 || value.upper < 0.0 => {
+                return Some(Outcome::Passed);
+            }
+            Some(Value::Boolean(false)) => {}
+            Some(Value::Number { value, .. }) if value.lower == 0.0 && value.upper == 0.0 => {}
+            _ => {
+                return Some(Outcome::Open(
+                    NotEvaluatedReason::IncompleteEvidence,
+                    render(plan, &read, plan.form.undecided),
+                ));
+            }
+        }
+    }
+    None
+}
+
+/// Grades a finding the form (`index` 0) or its check `index − 1` is about
+/// to report: reads the grading's values into `read`, `null` kept, and
+/// returns the severity of the first band that holds; `Err` the outcome
+/// where a value cannot be read.
+fn grade(
+    plan: &Plan<'_>,
+    index: usize,
+    object: &Object,
+    leaves: &mut ObjectLeaves<'_>,
+    read: &mut Read,
+) -> Result<Option<Severity>, Outcome> {
+    let grading = if index == 0 {
+        plan.form.grading.as_ref()
+    } else {
+        plan.form.checks[index - 1].grading.as_ref()
+    };
+    let Some(grading) = grading else {
+        return Ok(None);
+    };
+    for (step, expression) in grading.values.iter().zip(&plan.bound.grading[index]) {
+        let (outcome, evidence) = read_step(expression, step.name, leaves);
+        let cited = leaves.take_related();
+        if !cited.is_empty() {
+            read.related.push((step.name, cited));
+        }
+        let before = read.evidence.len();
+        read.evidence.extend(evidence);
+        if read.evidence[before..]
+            .iter()
+            .any(|evidence| !evidence.exact)
+        {
+            read.inexact.insert(step.name, ());
+        }
+        match outcome {
+            Ok(value) => read.values.insert(step.name, value),
+            Err(why) => {
+                let reason = leaves
+                    .first_reason()
+                    .filter(|_| matches!(why.reason, Reason::Unreadable(_)))
+                    .unwrap_or_else(|| reason_of(&why));
+                let message = match &why.reason {
+                    Reason::Unreadable(message) => refusal(message, expression, object),
+                    other => other.to_string(),
+                };
+                return Err(Outcome::Open(reason, message));
+            }
+        }
+    }
+    Ok(grading
+        .bands
+        .iter()
+        .find(|band| band.when.is_none() || holds(plan, read, band.when))
+        .map(|band| band.severity.clone()))
+}
+
 /// Each of the form's checks judged on its own over `read` and its own
 /// values: an outcome per check, in order. A check's value that cannot be
 /// read leaves only that check open.
@@ -1842,7 +1993,10 @@ fn judge_checks_in(
     leaves: &mut ObjectLeaves<'_>,
 ) -> Vec<Outcome> {
     let mut outcomes = Vec::new();
-    for (check, bound) in checks.iter().zip(values) {
+    // The form's own checks are graded; checks of an item are not.
+    let graded_checks = std::ptr::eq(checks, plan.form.checks.as_slice());
+    for (position, (check, bound)) in checks.iter().zip(values).enumerate() {
+        let index = graded_checks.then_some(position + 1);
         let mut checked = read.clone();
         if let Some(outcome) = read_values(
             plan,
@@ -1878,15 +2032,53 @@ fn judge_checks_in(
             .related
             .map(|value| cited(&checked, value))
             .unwrap_or_default();
-        outcomes.push(ranged_as(
-            plan,
-            checked,
-            &judged,
-            related,
-            (check.fail, check.undecided),
+        let severity = match (&judged.verdict, index) {
+            (Verdict::Fail(_), Some(index)) => {
+                match grade(plan, index, object, leaves, &mut checked) {
+                    Ok(severity) => severity,
+                    Err(outcome) => {
+                        outcomes.push(outcome);
+                        continue;
+                    }
+                }
+            }
+            _ => None,
+        };
+        outcomes.push(graded(
+            ranged_as(
+                plan,
+                checked,
+                &judged,
+                related,
+                (check.fail, check.undecided),
+            ),
+            severity,
         ));
     }
     outcomes
+}
+
+/// `outcome` with the severity a grading gave it, if any.
+fn graded(outcome: Outcome, severity: Option<Severity>) -> Outcome {
+    match (outcome, severity) {
+        (
+            Outcome::Finding {
+                message,
+                evidence,
+                related,
+                deviation,
+                ..
+            },
+            Some(severity),
+        ) => Outcome::Finding {
+            message,
+            evidence,
+            related,
+            deviation,
+            severity: Some(severity),
+        },
+        (outcome, _) => outcome,
+    }
 }
 
 /// The candidates an aggregate over a form's members reads: `sure` and
@@ -2097,6 +2289,9 @@ fn judge_object(
         .with_prefetched(ahead.prefetched)
         .with_bound(ahead.bound)
         .with_arguments(arguments);
+    if let Some(outcome) = unless(plan, context, object, &mut leaves) {
+        return outcome.into();
+    }
     let mut read = Read::default();
     let mut members = None;
     // Each population's members surely picked, the first population's first.
@@ -2192,6 +2387,7 @@ fn judge_object(
                         mut evidence,
                         related,
                         deviation,
+                        severity,
                     },
                     Some(tally),
                 ) => {
@@ -2201,6 +2397,7 @@ fn judge_object(
                         evidence,
                         related,
                         deviation,
+                        severity,
                     }
                 }
                 (outcome, _) => outcome,
@@ -2317,7 +2514,21 @@ fn judge_object(
             };
         }
     }
-    let outcome = ranged(plan, read, &judged, related);
+    let severity = if matches!(judged.verdict, Verdict::Fail(_)) {
+        match grade(plan, 0, object, &mut leaves, &mut read) {
+            Ok(severity) => severity,
+            Err(outcome) => {
+                return Judgement {
+                    outcome,
+                    row,
+                    checks,
+                };
+            }
+        }
+    } else {
+        None
+    };
+    let outcome = graded(ranged(plan, read, &judged, related), severity);
     Judgement {
         outcome,
         row,
@@ -2359,6 +2570,7 @@ fn ranged_as(
                 } else {
                     None
                 },
+                severity: None,
             }
         }
         Verdict::Undecided(bound) => {
@@ -2401,7 +2613,7 @@ fn refused(
 ) -> CapabilityEvaluation {
     match template.refusals {
         Refusals::Rule | Refusals::Worded => CapabilityEvaluation::not_evaluated(reason, message),
-        Refusals::Objects => {
+        Refusals::Objects | Refusals::Prefixed { .. } => {
             let (selected, mut evaluation) = select_objects(context, &rule.selector);
             for object in selected {
                 evaluation.push_object_not_evaluated(
@@ -2429,11 +2641,13 @@ fn push(
             evidence,
             related,
             deviation,
+            severity,
         } => {
-            evaluation.push_finding_deviating(
-                finding(rule, &object.id, message, evidence, related),
-                deviation,
-            );
+            let mut found = finding(rule, &object.id, message, evidence, related);
+            if let Some(severity) = severity {
+                found.severity = severity;
+            }
+            evaluation.push_finding_deviating(found, deviation);
         }
         Outcome::Open(reason, message) => {
             evaluation.push_object_not_evaluated(object.id.clone(), reason, message);
@@ -2455,6 +2669,7 @@ pub(crate) fn run(
             let message = match template.refusals {
                 Refusals::Rule => format!("{}: {message}", template.name),
                 Refusals::Objects | Refusals::Worded => message,
+                Refusals::Prefixed { prefix } => format!("{prefix}: {message}"),
             };
             return refused(template, context, rule, reason, message);
         }
@@ -2489,12 +2704,24 @@ pub(crate) fn run(
     let arguments = Arguments::default();
     let mut table = report_table(&plan, rule);
     let (selected, mut evaluation) = select_objects(context, &rule.selector);
+    // An object a value may leave unjudged is measured no further than
+    // that value: nothing is read ahead for it.
+    let ahead = plan
+        .form
+        .unless
+        .is_empty()
+        .then_some(())
+        .and(selected.first().copied());
     let batched = batched(
         plan.values().map(|(_, expression)| expression),
         context,
-        selected.first().copied(),
+        ahead,
     );
-    let bound = bound_batched(&plan, context, rule, &arguments);
+    let bound = if plan.form.unless.is_empty() {
+        bound_batched(&plan, context, rule, &arguments)
+    } else {
+        Vec::new()
+    };
     for chunk in selected.chunks(BATCH) {
         let prefetched = prefetch(context, &batched, chunk);
         let bound_reads = prefetch_bound(context, &bound, chunk);
@@ -3021,6 +3248,24 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
             )
     };
     let own = effective(&plan).expression(&|name| inline(&values, name));
+    // An object a value applying to the rule leaves unjudged passes.
+    let unless: Vec<Expression> = plan
+        .form
+        .unless
+        .iter()
+        .zip(&plan.bound.unless)
+        .filter(|(unless, _)| each::applies(&plan, &unless.applies))
+        .map(|(unless, expression)| Expression::Compare {
+            operator: axioval_ir::contract::ExpressionComparison::NotEquals,
+            left: Box::new(expression.clone()),
+            right: Box::new(Expression::Literal {
+                value: ScalarValue::Integer { value: 0 },
+                label: None,
+            }),
+            case_sensitive: true,
+            label: Some(format!("unless {}", unless.value.name)),
+        })
+        .collect();
     // Every check is required beside the form's own decision, as the
     // template finds each on its own.
     let requirement = if plan.form.checks.is_empty() {
@@ -3046,6 +3291,14 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
         operands.push(own);
         Expression::And {
             operands,
+            label: None,
+        }
+    };
+    let requirement = if unless.is_empty() {
+        requirement
+    } else {
+        Expression::Or {
+            operands: unless.into_iter().chain([requirement]).collect(),
             label: None,
         }
     };

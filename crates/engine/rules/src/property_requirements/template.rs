@@ -41,6 +41,8 @@ pub(crate) fn template() -> Template {
         services: None,
         texts: Vec::new(),
         forms: vec![Form {
+            grading: None,
+            unless: Vec::new(),
             when: &[],
             values: Vec::new(),
             decision: Decision::Requirements(Box::new(REQUIREMENTS)),

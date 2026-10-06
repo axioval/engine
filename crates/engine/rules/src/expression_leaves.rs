@@ -369,7 +369,8 @@ impl<'a> ObjectLeaves<'a> {
     ) -> Leaf {
         let (written, read) = match self.bound.iter().position(|(read, _)| &**read == name) {
             Some(index) => {
-                let (written, read) = self.bound.swap_remove(index);
+                // Kept for a value read again, as by several checks.
+                let (written, read) = self.bound[index].clone();
                 (Some(written), read)
             }
             None => (

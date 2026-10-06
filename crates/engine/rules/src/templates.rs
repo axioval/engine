@@ -156,6 +156,9 @@ struct Plan<'t> {
 struct Bound {
     /// The form's place among the template's.
     form: usize,
+    /// The rule's parameters, those the template defaults added: what a
+    /// measured value's references bind.
+    parameters: BTreeMap<String, ParameterValue>,
     constants: BTreeMap<String, Constant>,
     /// Each value step's expression, the rule's parameters bound in, in the
     /// form's order.
@@ -631,6 +634,32 @@ fn check(check: &Check, rule: &CompiledRule, template: &Template) -> Result<(), 
                 Ok(())
             }
         }
+        Check::AmongEach {
+            parameter,
+            options,
+            message,
+        } => {
+            for listed in Parameters(rule).strings(parameter)?.unwrap_or_default() {
+                if !options.contains(&listed.trim()) {
+                    return Err(invalid(message.replace("{value}", listed)));
+                }
+            }
+            Ok(())
+        }
+        Check::DeclaresListed {
+            parameters,
+            message,
+        } => {
+            let listed = |name: &&str| match rule.parameters.get(*name) {
+                Some(ParameterValue::StringList { value }) => !value.is_empty(),
+                _ => declared(rule, name),
+            };
+            if parameters.iter().any(listed) {
+                Ok(())
+            } else {
+                Err(invalid(*message))
+            }
+        }
         Check::When { flags, check: then } => {
             let mut on = false;
             for flag in *flags {
@@ -1059,6 +1088,7 @@ fn slot(text: &str, constants: &BTreeMap<String, Constant>) -> Option<Slot> {
 
 /// Binds `rule` into `template`: checks its declaration, folds its
 /// parameters into constants and chooses its form.
+#[allow(clippy::too_many_lines)]
 fn bind(template: &Template, rule: &CompiledRule) -> Result<Bound, Unavailable> {
     for each in &template.declaration {
         check(each, rule, template)?;
@@ -1079,8 +1109,13 @@ fn bind(template: &Template, rule: &CompiledRule) -> Result<Bound, Unavailable> 
             constants.insert(descriptor.name.clone(), constant);
         }
     }
+    let mut parameters = rule.parameters.clone();
     for default in &template.defaults {
         if !constants.contains_key(default.parameter) {
+            parameters.insert(
+                default.parameter.to_owned(),
+                ParameterValue::from(default.value.clone()),
+            );
             let constant = match &default.value {
                 ScalarValue::Quantity { value, unit } => {
                     let (value, dimension) = crate::support::si_quantity(*value, unit)?;
@@ -1163,6 +1198,7 @@ fn bind(template: &Template, rule: &CompiledRule) -> Result<Bound, Unavailable> 
         .collect();
     Ok(Bound {
         form: index,
+        parameters,
         constants,
         expressions,
         comparison,
@@ -1370,10 +1406,31 @@ fn within(plan: &Plan<'_>, read: &Read, decision: &Decision) -> Option<Judged> {
     })
 }
 
+/// The value `value` against the value `reference` within `tolerance`
+/// ([`each::near`]): what a check's `Near` decision decides.
+fn near_judged(
+    plan: &Plan<'_>,
+    read: &Read,
+    (value, reference): (&'static str, &'static str),
+    tolerance: Operand,
+) -> Option<Judged> {
+    let (lower, upper) = interval(plan, read, Operand::Value(value))?;
+    let reference = interval(plan, read, Operand::Value(reference))?;
+    let (tolerance, _) = interval(plan, read, tolerance)?;
+    Some(Judged {
+        verdict: each::near((lower, upper), reference, tolerance),
+        lower,
+        upper,
+        minimum: None,
+        maximum: None,
+    })
+}
+
 /// Whether a value is of the kind `expect` names, judged on what the
 /// source states where it was read as stated.
 fn expected(expect: Expect, value: &Value, stated: Option<&Option<PropertyValue>>) -> bool {
     match expect {
+        Expect::Optional => true,
         Expect::Length => match stated {
             Some(Some(PropertyValue::Quantity {
                 value,
@@ -1553,6 +1610,17 @@ fn placeholder(plan: &Plan<'_>, read: &Read, key: &str) -> Option<String> {
         }
         // A share as the coverage capabilities showed it: the value's upper
         // end, at most the whole, to four decimals.
+        // The objects the value's measured reads were measured against.
+        "cited" => {
+            let cited = cited(read, name);
+            (!cited.is_empty()).then(|| {
+                cited
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+        }
         "share" => match read.values.get(name) {
             Some(Value::Number { value, .. }) => {
                 Some(((value.upper.min(1.0) * 1e4).round() / 1e4).to_string())
@@ -1643,6 +1711,11 @@ fn holds(plan: &Plan<'_>, read: &Read, condition: Option<Condition>) -> bool {
         Some(Condition::Above { value, than }) => matches!(
             read.values.get(value),
             Some(Value::Number { value, .. }) if value.lower > than
+        ),
+        Some(Condition::Lists { parameter, value }) => matches!(
+            plan.constants.get(parameter),
+            Some(Constant::Other(ParameterValue::StringList { value: listed }))
+                if listed.iter().any(|listed| listed.trim() == value)
         ),
     }
 }
@@ -2045,6 +2118,11 @@ fn judge_checks_in(
     let graded_checks = std::ptr::eq(checks, plan.form.checks.as_slice());
     for (position, (check, bound)) in checks.iter().zip(values).enumerate() {
         let index = graded_checks.then_some(position + 1);
+        if let Some(applies) = &check.applies
+            && !each::applies(plan, applies)
+        {
+            continue;
+        }
         let mut checked = read.clone();
         if let Some(outcome) = read_values(
             plan,
@@ -2065,7 +2143,15 @@ fn judge_checks_in(
             continue;
         }
         let decision = effective_of(plan, &check.decision);
-        let Some(judged) = within(plan, &checked, &decision) else {
+        let judged = match &decision {
+            Decision::Near {
+                value,
+                reference: axioval_engine::template::Reference::Value(reference),
+                tolerance,
+            } => near_judged(plan, &checked, (value, reference), *tolerance),
+            _ => within(plan, &checked, &decision),
+        };
+        let Some(judged) = judged else {
             outcomes.push(Outcome::Open(
                 NotEvaluatedReason::InvalidEvidence,
                 format!(
@@ -2213,6 +2299,10 @@ fn read_values<'v>(
             }
         }
         match outcome {
+            // Nothing to judge.
+            Ok(Value::Null) if step.expect == Some(Expect::Optional) => {
+                return Some(Outcome::Passed);
+            }
             Ok(Value::Null) => {
                 let message = step.absent.map_or_else(
                     || format!("`{}` is stated absent", step.name),
@@ -2345,7 +2435,7 @@ fn judge_object(
     object: &Object,
     ahead: Ahead,
 ) -> Judgement {
-    let mut leaves = ObjectLeaves::new(context, object, Some(&rule.parameters))
+    let mut leaves = ObjectLeaves::new(context, object, Some(&plan.bound.parameters))
         .with_prefetched(ahead.prefetched)
         .with_bound(ahead.bound)
         .with_arguments(arguments);
@@ -2682,7 +2772,7 @@ fn refused(
 ) -> CapabilityEvaluation {
     match template.refusals {
         Refusals::Rule | Refusals::Worded => CapabilityEvaluation::not_evaluated(reason, message),
-        Refusals::Objects | Refusals::Prefixed { .. } => {
+        Refusals::Objects | Refusals::Prefixed { .. } | Refusals::ServicesPerObject => {
             let (selected, mut evaluation) = select_objects(context, &rule.selector);
             for object in selected {
                 evaluation.push_object_not_evaluated(
@@ -2744,6 +2834,12 @@ pub(crate) fn run(
             // object is worded as the check states it.
             let message = match template.refusals {
                 Refusals::Rule => format!("{}: {message}", template.name),
+                Refusals::ServicesPerObject => {
+                    return CapabilityEvaluation::not_evaluated(
+                        reason,
+                        format!("{}: {message}", template.name),
+                    );
+                }
                 Refusals::Objects | Refusals::Worded => message,
                 Refusals::Prefixed { prefix } => format!("{prefix}: {message}"),
             };
@@ -2777,10 +2873,11 @@ pub(crate) fn run(
         }
     };
     let decision = effective(&plan);
-    let arguments = Arguments::default();
     let mut table = report_table(&plan, rule);
     let (selected, mut evaluation) = select_objects(context, &rule.selector);
-    let (batched, bound) = read_ahead(&plan, context, rule, &arguments, selected.first().copied());
+    // `@selection` is the selection just made.
+    let arguments = Arguments::of_rule(rule).selected(&selected, &evaluation);
+    let (batched, bound) = read_ahead(&plan, context, &arguments, selected.first().copied());
     for chunk in selected.chunks(BATCH) {
         let prefetched = prefetch(context, &batched, chunk);
         let bound_reads = prefetch_bound(context, &bound, chunk);
@@ -2858,10 +2955,13 @@ fn run_apart(
 fn read_ahead(
     plan: &Plan<'_>,
     context: &RuleContext<'_>,
-    rule: &CompiledRule,
     arguments: &Arguments,
     first: Option<&Object>,
 ) -> (Batched, Vec<(Arc<str>, axioval_engine::PreparedRead)>) {
+    // Nothing selected, nothing to read ahead.
+    if first.is_none() {
+        return (Vec::new(), Vec::new());
+    }
     let unless: Vec<&Expression> = plan
         .form
         .unless
@@ -2873,7 +2973,12 @@ fn read_ahead(
     if !unless.is_empty() {
         return (
             batched(unless.iter().copied(), context, first),
-            bound_batched(unless.into_iter(), context, rule, arguments),
+            bound_batched(
+                unless.into_iter(),
+                context,
+                &plan.bound.parameters,
+                arguments,
+            ),
         );
     }
     let batched = batched(
@@ -2902,7 +3007,7 @@ fn read_ahead(
                     .take(graded),
             ),
         context,
-        rule,
+        &plan.bound.parameters,
         arguments,
     );
     (batched, bound)
@@ -2950,7 +3055,7 @@ type Batched = Vec<(Option<Arc<str>>, Arc<str>)>;
 fn bound_batched<'e>(
     reads: impl Iterator<Item = &'e Expression>,
     context: &RuleContext<'_>,
-    rule: &CompiledRule,
+    parameters: &BTreeMap<String, ParameterValue>,
     arguments: &Arguments,
 ) -> Vec<(Arc<str>, axioval_engine::PreparedRead)> {
     let mut bound: Vec<(Arc<str>, axioval_engine::PreparedRead)> = Vec::new();
@@ -2979,7 +3084,7 @@ fn bound_batched<'e>(
         };
         if crate::measured_arguments::bind(
             context,
-            Some(&rule.parameters),
+            Some(parameters),
             Some(arguments),
             &anchor.id,
             &mut call,
@@ -3420,6 +3525,11 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
         }
     };
     let requirement = bound(&requirement, &plan.constants);
+    if measured_references(&requirement).contains(axioval_engine::template::SELECTION) {
+        return Err(ForkError::Inexpressible(
+            "a value measured over the rule's own selection has no expression form".to_owned(),
+        ));
+    }
     Ok(Fork {
         carried: carried(&requirement, rule),
         requirement,

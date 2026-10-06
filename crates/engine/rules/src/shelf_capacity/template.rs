@@ -180,6 +180,7 @@ fn form() -> Form {
         // The doors and openings whose clearances were kept free.
         related: Some("length"),
         checks: vec![FormCheck {
+            applies: None,
             values: vec![metres("height", "shelf_clear_height")],
             decision: at_least("height", "top_elevation_metres"),
             fail: "space too low for the shelving: clear height {height:length} below the \

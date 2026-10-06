@@ -116,6 +116,11 @@ pub enum Refusals {
     /// declaration worded after `prefix` and a colon (`slab-contact
     /// declaration is invalid: …`); missing services are worded as stated.
     Prefixed { prefix: &'static str },
+    /// A refused declaration once for the rule, after the name, as
+    /// [`Refusals::Rule`]; missing services for each selected object, as
+    /// [`Refusals::Objects`]: as capabilities that read their declaration
+    /// first and asked for their services once they had selected.
+    ServicesPerObject,
 }
 
 impl Refusals {
@@ -364,6 +369,19 @@ pub enum Check {
         with: &'static str,
         message: &'static str,
     },
+    /// Every string a string-list parameter lists, trimmed, is one of
+    /// `options`: otherwise `message`, `{value}` the string as listed.
+    AmongEach {
+        parameter: &'static str,
+        options: &'static [&'static str],
+        message: &'static str,
+    },
+    /// At least one of `parameters` is declared ([`Check::Declares`]), a
+    /// string list only where it lists one.
+    DeclaresListed {
+        parameters: &'static [&'static str],
+        message: &'static str,
+    },
     /// Where one of the boolean `flags` is stated true, `check`: a
     /// declaration a mode needs only while it is on.
     When {
@@ -409,6 +427,7 @@ pub enum Service {
     TriangleCount,
     WalkingSurface,
     Contact,
+    PlanArea,
 }
 
 impl Service {
@@ -427,6 +446,7 @@ impl Service {
                 .get::<crate::WalkingSurfaceServiceHandle>()
                 .is_some(),
             Self::Contact => services.get::<crate::ContactServiceHandle>().is_some(),
+            Self::PlanArea => services.get::<crate::PlanAreaServiceHandle>().is_some(),
         }
     }
 }
@@ -479,6 +499,11 @@ pub enum Condition {
     Below { value: &'static str, than: f64 },
     /// The value surely lies above `than`: its lower end does.
     Above { value: &'static str, than: f64 },
+    /// The string-list parameter lists `value`, trimmed.
+    Lists {
+        parameter: &'static str,
+        value: &'static str,
+    },
 }
 
 /// One composition of a template.
@@ -597,6 +622,9 @@ pub struct FormCheck {
     /// How its finding is graded into a severity.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub grading: Option<Grading>,
+    /// Where it applies; always without one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub applies: Option<Applies>,
 }
 
 /// A value derived from values already read, in plain binary arithmetic
@@ -859,6 +887,10 @@ pub struct TemplateValue {
 pub enum Expect {
     /// A finite length: a stated property must state a length quantity.
     Length,
+    /// Any value, `null` included: a value stated absent passes the form,
+    /// or the check, it belongs to without a finding (nothing to judge,
+    /// such as no slab above to measure to).
+    Optional,
 }
 
 /// How a form's values decide.
@@ -2265,6 +2297,7 @@ mod tests {
             derived: Vec::new(),
             related: Some("count"),
             checks: vec![FormCheck {
+                applies: None,
                 values: vec![value("height")],
                 decision: Decision::Within {
                     value: "height",

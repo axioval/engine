@@ -30,6 +30,8 @@ use crate::support::{Unavailable, invalid, si_quantity};
 /// parsed and bound (it binds alike for every object).
 #[derive(Default)]
 pub(crate) struct Arguments {
+    /// The rule's own selector, which `@selection` names in a template.
+    selector: Option<Selector>,
     selections: RefCell<BTreeMap<String, Result<Arc<MeasuredSelection>, Unavailable>>>,
     calls: RefCell<BTreeMap<String, Result<axioval_engine::PreparedRead, Unavailable>>>,
 }
@@ -86,6 +88,48 @@ pub(crate) fn selection_of(
 }
 
 impl Arguments {
+    /// What `rule`'s measured values bind: `@selection` the objects the
+    /// rule itself selects, where it states no parameter of that name.
+    pub(crate) fn of_rule(rule: &axioval_engine::CompiledRule) -> Self {
+        Self {
+            selector: Some(rule.selector.clone()),
+            ..Self::default()
+        }
+    }
+
+    /// The same, `@selection` the objects the rule selected already and
+    /// those whose selection `outcomes` leave undecided.
+    pub(crate) fn selected(
+        self,
+        selected: &[&axioval_ir::Object],
+        outcomes: &axioval_engine::CapabilityEvaluation,
+    ) -> Self {
+        let mut undecided = BTreeSet::new();
+        let mut first_undecided = None;
+        for outcome in outcomes.not_evaluated_outcomes() {
+            match outcome.object_id() {
+                Some(object) => {
+                    undecided.insert(object.clone());
+                    first_undecided.get_or_insert_with(|| {
+                        (outcome.reason().clone(), outcome.message().to_owned())
+                    });
+                }
+                // The selection cannot be listed whole: read it as bound.
+                None => return self,
+            }
+        }
+        self.selections.borrow_mut().insert(
+            axioval_engine::template::SELECTION.to_owned(),
+            Ok(Arc::new(MeasuredSelection {
+                parameter: axioval_engine::template::SELECTION.to_owned(),
+                matched: selected.iter().map(|object| object.id.clone()).collect(),
+                undecided,
+                first_undecided,
+            })),
+        );
+        self
+    }
+
     /// The measured name `name` parsed, bound and prepared for the rule,
     /// once per rule: `None` where it does not parse, binds nothing or
     /// names the anchor, which binds per object.
@@ -285,6 +329,19 @@ pub(crate) fn bind(
                         "`@{parameter}` names a rule parameter, which a selector never reads"
                     )));
                 };
+                // A template's own selection, as `@selection`.
+                if parameter == axioval_engine::template::SELECTION
+                    && !parameters.contains_key(parameter)
+                    && let Some(arguments) = arguments
+                    && let Some(selector) = &arguments.selector
+                {
+                    let selection = arguments.selection(context, parameter, selector)?;
+                    call.bind(key, MeasuredArgument::Objects(selection))
+                        .map_err(|error| {
+                            (NotEvaluatedReason::InvalidDeclaration, error.to_string())
+                        })?;
+                    continue;
+                }
                 let value = parameters.get(parameter).ok_or_else(|| {
                     invalid(format!("the rule states no parameter `{parameter}`"))
                 })?;

@@ -234,13 +234,7 @@ fn judge(
                     continue;
                 };
                 read.values.insert("reference", number((least, most)));
-                if least - upper > tolerance || lower - most > tolerance {
-                    Verdict::Fail(String::new())
-                } else if most - lower > tolerance || upper - least > tolerance {
-                    Verdict::Undecided(String::new())
-                } else {
-                    Verdict::Pass
-                }
+                near((lower, upper), (least, most), tolerance)
             }
             _ => continue,
         };
@@ -265,6 +259,19 @@ fn judge(
                 );
             }
         }
+    }
+}
+
+/// Whether `value` agrees with `reference` within `tolerance`: a finding
+/// where the two surely lie farther apart, undecided where they may, in
+/// plain binary arithmetic as the capabilities computed it.
+pub(super) fn near((lower, upper): Span, (least, most): Span, tolerance: f64) -> Verdict {
+    if least - upper > tolerance || lower - most > tolerance {
+        Verdict::Fail(String::new())
+    } else if most - lower > tolerance || upper - least > tolerance {
+        Verdict::Undecided(String::new())
+    } else {
+        Verdict::Pass
     }
 }
 

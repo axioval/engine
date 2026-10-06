@@ -107,6 +107,7 @@ fn items(applies: Applies, list: &'static str) -> Items {
 
 fn check(items: Items) -> FormCheck {
     FormCheck {
+        applies: None,
         grading: None,
         values: Vec::new(),
         decision: Decision::Items(Box::new(items)),

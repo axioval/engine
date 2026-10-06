@@ -745,3 +745,182 @@ mod graded {
         assert!(text.contains("\"kind\":\"or\""), "{text}");
     }
 }
+
+/// A value that may be stated absent, checks applying only where a string
+/// list names them, a check judging a value near another, the refusals a
+/// declaration words once while services are missed per object, and the
+/// declaration checks over a string list: what `slab-stack-spacing`
+/// composes, on a small template of its own.
+mod near {
+    use super::*;
+    use axioval_engine::template::{
+        Applies, Check, Condition, Expect, FormCheck, Reference, Refusals, Service, Services,
+    };
+    use axioval_ir::PropertyValue;
+
+    const ID: &str = "test:near-share";
+
+    fn stated(name: &'static str, property: &str, expect: Option<Expect>) -> TemplateValue {
+        TemplateValue {
+            name,
+            expression: Expression::Property {
+                property_set: Some("Pset".into()),
+                property: property.into(),
+                of: None,
+                label: None,
+            },
+            expect,
+            absent: None,
+            mismatch: None,
+        }
+    }
+
+    /// Each panel's height near its reference where `compare` lists
+    /// `height`; nothing judged where it states no height.
+    fn template(services: bool) -> Template {
+        Template {
+            id: ID,
+            parameters: vec![
+                ParameterDescriptor::optional("compare", ParameterType::StringList),
+                ParameterDescriptor::optional("tolerance", ParameterType::Number),
+            ],
+            grades: false,
+            name: "near-share",
+            refusals: Refusals::ServicesPerObject,
+            defaults: Vec::new(),
+            declaration: vec![
+                Check::AmongEach {
+                    parameter: "compare",
+                    options: &["height", "width"],
+                    message: "compare names `{value}`",
+                },
+                Check::DeclaresListed {
+                    parameters: &["compare"],
+                    message: "compare something",
+                },
+            ],
+            services: services.then(|| Services {
+                needs: vec![Service::PlanArea],
+                message: "no plan areas",
+            }),
+            texts: Vec::new(),
+            forms: vec![Form {
+                when: &[],
+                values: vec![stated("height", "Height", Some(Expect::Optional))],
+                decision: Decision::Within {
+                    value: "height",
+                    minimum: None,
+                    maximum: None,
+                    rounding: Vec::new(),
+                },
+                fail: "",
+                undecided: "",
+                members: None,
+                table: None,
+                scope: None,
+                unless: Vec::new(),
+                grading: None,
+                derived: Vec::new(),
+                related: None,
+                checks: vec![FormCheck {
+                    values: vec![stated("reference", "Reference", Some(Expect::Optional))],
+                    decision: Decision::Near {
+                        value: "height",
+                        reference: Reference::Value("reference"),
+                        tolerance: Operand::Parameter("tolerance"),
+                    },
+                    fail: "height {height} differs from {reference}",
+                    undecided: "height {height} may differ from {reference}",
+                    related: None,
+                    grading: None,
+                    applies: Some(Applies {
+                        when: &[],
+                        any: &[],
+                        condition: Some(Condition::Lists {
+                            parameter: "compare",
+                            value: "height",
+                        }),
+                    }),
+                }],
+            }],
+        }
+    }
+
+    fn panels() -> Model {
+        let number = PropertyValue::Decimal;
+        Model::default()
+            .object("near", "panel")
+            .value("near", "Pset", "Height", number(3.0))
+            .value("near", "Pset", "Reference", number(3.05))
+            .object("far", "panel")
+            .value("far", "Pset", "Height", number(3.0))
+            .value("far", "Pset", "Reference", number(3.5))
+            .object("bare", "panel")
+            .object("alone", "panel")
+            .value("alone", "Pset", "Height", number(3.0))
+    }
+
+    #[test]
+    fn a_check_judges_near_a_value_where_a_list_names_it() {
+        let templated = Templated::new(template(false));
+        let judged = |compare: &[&str]| {
+            panels().evaluate(
+                &templated,
+                &rule(
+                    ID,
+                    kind("panel"),
+                    vec![
+                        ("compare", common::strings(compare)),
+                        ("tolerance", number(0.1)),
+                    ],
+                ),
+            )
+        };
+        let height = judged(&["height"]);
+        assert_eq!(
+            findings(&height),
+            [("far".to_owned(), "height 3 differs from 3.5".to_owned())]
+        );
+        assert!(height.not_evaluated_outcomes().is_empty());
+        assert!(findings(&judged(&["width"])).is_empty());
+    }
+
+    #[test]
+    fn a_declaration_is_refused_once_and_services_per_object() {
+        let refused = panels().evaluate(
+            &Templated::new(template(false)),
+            &rule(
+                ID,
+                kind("panel"),
+                vec![("compare", common::strings(&[" depth"]))],
+            ),
+        );
+        assert_eq!(
+            refused.not_evaluated_outcomes()[0].message(),
+            "near-share: compare names ` depth`"
+        );
+        let empty = panels().evaluate(
+            &Templated::new(template(false)),
+            &rule(ID, kind("panel"), vec![("compare", common::strings(&[]))]),
+        );
+        assert_eq!(
+            unevaluated(&empty),
+            [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+        let unserved = panels().evaluate(
+            &Templated::new(template(true)),
+            &rule(
+                ID,
+                kind("panel"),
+                vec![("compare", common::strings(&["height"]))],
+            ),
+        );
+        assert_eq!(unserved.not_evaluated_outcomes().len(), 4);
+        assert!(
+            unserved
+                .not_evaluated_outcomes()
+                .iter()
+                .all(|outcome| outcome.message() == "no plan areas")
+        );
+    }
+}

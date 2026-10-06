@@ -338,6 +338,9 @@ pub enum Condition {
     All { conditions: &'static [Condition] },
     /// `condition` does not hold.
     Not { condition: &'static Condition },
+    /// The value's measured reads cite an object they were measured
+    /// against ([`crate::Citation`]): a search found a candidate.
+    Cites { value: &'static str },
 }
 
 /// One composition of a template.

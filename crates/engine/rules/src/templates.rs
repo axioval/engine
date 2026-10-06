@@ -1404,6 +1404,10 @@ fn holds(plan: &Plan<'_>, read: &Read, condition: Option<Condition>) -> bool {
             .iter()
             .all(|condition| holds(plan, read, Some(*condition))),
         Some(Condition::Not { condition }) => !holds(plan, read, Some(*condition)),
+        Some(Condition::Cites { value }) => read
+            .related
+            .iter()
+            .any(|(name, objects)| *name == value && !objects.is_empty()),
     }
 }
 

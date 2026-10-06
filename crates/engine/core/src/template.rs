@@ -739,6 +739,11 @@ pub enum Decision {
     /// resolves ([`FacetParameters`]): the property a rule names, or every
     /// property whose names match patterns.
     Facets(Box<FacetParameters>),
+    /// Every applicable row of a table of property requirements per object
+    /// ([`RequirementParameters`]): which properties it must, may or must
+    /// not carry, and the values they may hold, one finding per failing
+    /// row.
+    Requirements(Box<RequirementParameters>),
     /// The anchor's members ([`Form::members`]) read and judged one by
     /// one, against their neighbours, a reference prevailing among them,
     /// and their own nested members ([`Each`]). Findings are on the
@@ -1098,6 +1103,33 @@ pub struct FacetParameters {
     pub si_units: &'static str,
     pub target_refusal: &'static str,
     pub constraint_refusal: &'static str,
+}
+
+/// What [`Decision::Requirements`] reads of the rule.
+///
+/// `requirements` is the table: each row names a property (exactly, by a
+/// wildcard pattern or by XML Schema patterns over set and name) and
+/// states a `requirement` (`required`, `optional`, `forbidden`) or a
+/// `state` row's presence or value conditions (`value_like`, `one_of`,
+/// `one_of_like`, `contains`, a numeric range in a unit, optionally per a
+/// measured or stated area or volume and rounded, a date range),
+/// restricted by `applies_to`. `case_sensitive` folds text unless true;
+/// `area_property` and `volume_property` state the divisors a row's `per`
+/// may name; `group_by_value` makes the findings of one row, category and
+/// result that found one value one finding relating their objects; and
+/// `category_property` prefixes each finding with the object's category.
+/// Binding parses every row, refusing one as the capability did (`row
+/// <n>: …`). Each failing row is its own finding, worded by its result
+/// (`missing property`, `forbidden value`, `wrong value`, …).
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequirementParameters {
+    pub requirements: &'static str,
+    pub case_sensitive: &'static str,
+    pub area_property: &'static str,
+    pub volume_property: &'static str,
+    pub group_by_value: &'static str,
+    pub category_property: &'static str,
 }
 
 /// The parameters stating a [`Proportion`].
@@ -1693,6 +1725,15 @@ impl Decision {
                 name: format!("`{}` meets its facets", facets.property),
                 label: Some("the property meets its facets".into()),
             },
+            // A table's rows are judged per object, several findings each:
+            // the catalogue names the test the judge makes.
+            Self::Requirements(requirements) => Expression::Derived {
+                name: format!(
+                    "every applicable row of `{}` holds",
+                    requirements.requirements
+                ),
+                label: Some("the requirements table holds".into()),
+            },
             // The selector holds of the checked object: an expression has
             // no operator applying a selector to the object in scope, so the
             // catalogue names the test the runner makes.
@@ -2004,6 +2045,28 @@ mod tests {
         let json = serde_json::to_string(&branches[3].then).unwrap();
         assert!(json.contains("greaterThanOrEquals"), "{json}");
         assert!(json.contains("\"name\":\"required_unit\""), "{json}");
+    }
+
+    /// A requirements table names the test its judge makes, row by row.
+    #[test]
+    fn a_requirements_table_names_its_test() {
+        let decision = Decision::Requirements(Box::new(RequirementParameters {
+            requirements: "requirements",
+            case_sensitive: "case_sensitive",
+            area_property: "area_property",
+            volume_property: "volume_property",
+            group_by_value: "group_by_value",
+            category_property: "category_property",
+        }));
+        let value = |name: &str| Expression::Derived {
+            name: name.to_owned(),
+            label: None,
+        };
+        assert!(matches!(
+            decision.expression(&value),
+            Expression::Derived { name, .. }
+                if name == "every applicable row of `requirements` holds"
+        ));
     }
 
     /// A conformance decision names the selector test it makes, since no

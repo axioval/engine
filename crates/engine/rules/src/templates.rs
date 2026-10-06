@@ -17,6 +17,7 @@ pub(crate) mod facets;
 mod groups;
 mod members;
 mod proportion;
+mod requirements;
 mod scopes;
 
 use axioval_engine::expression::{
@@ -921,6 +922,9 @@ fn bind(template: &Template, rule: &CompiledRule) -> Result<Bound, Unavailable> 
         .collect();
     if let Decision::Facets(names) = &form.decision {
         facets::check(rule, names)?;
+    }
+    if let Decision::Requirements(names) = &form.decision {
+        requirements::bind(rule, names)?;
     }
     let proportion = match &form.decision {
         Decision::Proportion(decided) => Some(proportion::parse(rule, &decided.parameters)?),
@@ -2283,33 +2287,8 @@ pub(crate) fn run(
             services.message.to_owned(),
         );
     }
-    if let Decision::Each(each) = &plan.form.decision {
-        return each::run(&plan, each, context, rule);
-    }
-    if let Decision::Unique { value, unique } = &plan.form.decision {
-        return groups::run(&plan, value, unique, context, rule);
-    }
-    if let Decision::Consistent {
-        key,
-        value,
-        consistent,
-    } = &plan.form.decision
-    {
-        return groups::consistent(&plan, (key, value), consistent, context, rule);
-    }
-    if let Decision::Facets(names) = &plan.form.decision {
-        return facets::run(names, context, rule);
-    }
-    if let Decision::Conforms(conformance) = &plan.form.decision {
-        return groups::conforms(&plan, conformance, context, rule);
-    }
-    if let Decision::Proportion(decided) = &plan.form.decision
-        && let Some(groups) = &decided.groups
-    {
-        return proportion::groups(&plan, groups, context, rule);
-    }
-    if let Some(scopes) = &plan.form.scope {
-        return scopes::run(&plan, &effective(&plan), scopes, context, rule);
+    if let Some(evaluation) = run_apart(&plan, context, rule) {
+        return evaluation;
     }
     let scope = match Scope::of(&plan, context, rule) {
         Ok(scope) => scope,
@@ -2365,6 +2344,36 @@ pub(crate) fn run(
         evaluation.push_table(table);
     }
     evaluation
+}
+
+/// The evaluation of a form deciding otherwise than object by object over
+/// its values (members one by one, groups, facets, a requirements table,
+/// scopes); `None` for a form judged per selected object.
+fn run_apart(
+    plan: &Plan<'_>,
+    context: &RuleContext<'_>,
+    rule: &CompiledRule,
+) -> Option<CapabilityEvaluation> {
+    Some(match &plan.form.decision {
+        Decision::Each(each) => each::run(plan, each, context, rule),
+        Decision::Unique { value, unique } => groups::run(plan, value, unique, context, rule),
+        Decision::Consistent {
+            key,
+            value,
+            consistent,
+        } => groups::consistent(plan, (key, value), consistent, context, rule),
+        Decision::Facets(names) => facets::run(names, context, rule),
+        Decision::Requirements(names) => requirements::run(names, context, rule),
+        Decision::Conforms(conformance) => groups::conforms(plan, conformance, context, rule),
+        Decision::Proportion(decided) if decided.groups.is_some() => {
+            let groups = decided.groups.as_ref()?;
+            proportion::groups(plan, groups, context, rule)
+        }
+        _ => {
+            let scopes = plan.form.scope.as_ref()?;
+            scopes::run(plan, &effective(plan), scopes, context, rule)
+        }
+    })
 }
 
 /// How many objects' values are measured together: enough to share each
@@ -2709,6 +2718,7 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
             | Decision::Consistent { .. }
             | Decision::Conforms(_)
             | Decision::Facets(_)
+            | Decision::Requirements(_)
     ) {
         return Err(ForkError::Inexpressible(
             "an expression rule judges each object on its own, not against the values of its group"

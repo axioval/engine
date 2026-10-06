@@ -327,6 +327,22 @@ one comparison), the lengths and digits, under `optional`, `precision`,
 outcomes as the capability did. Its expression form names the test;
 a rule is never forked from it.
 
+`Decision::Requirements` is the requirements-table judge
+(`RequirementParameters`): every applicable row of a table per selected
+object, each naming a property exactly, by wildcard or by XML Schema
+patterns over set and name, and stating a requirement (`required`,
+`optional`, `forbidden`) or a state row's presence or value conditions
+(wildcards, lists, substrings, numeric ranges in a unit, per a measured
+or stated area or volume and rounded, date ranges), restricted by
+`applies_to`. Binding parses every row, refusing one as the capability
+did (`row <n>: …`, after the template's name). Each failing row is its own
+finding (divergence D1's several findings per object), worded by its
+result (`missing property`, `forbidden value`, `wrong value`, …), prefixed
+by the object's category where `category_property` names one, and one
+row's findings of one value merged with `group_by_value`. Divisors are
+measured through the plan-area readers every area capability shares. Its
+expression form names the test; a rule is never forked from it.
+
 `Decision::Each` judges an anchor's members one by one (`Each`), with
 three relations no aggregate states:
 

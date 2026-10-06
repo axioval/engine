@@ -24,6 +24,13 @@ use common::{
 
 const ID: &str = "axioval:capability.property-requirements";
 
+/// `property-requirements` runs as a template, held on every fixture to
+/// the implementation it replaced.
+const REQUIREMENTS: common::Held = common::Held(
+    &PropertyRequirements,
+    &axioval_rules::reference::PropertyRequirements,
+);
+
 /// A row from `(column, cell)` pairs; text cells are strings.
 fn row(cells: &[(&str, ParameterValue)]) -> TableRow {
     cells
@@ -37,7 +44,7 @@ fn requirements(rows: Vec<TableRow>) -> Vec<(&'static str, ParameterValue)> {
 }
 
 fn run(model: Model, parameters: Vec<(&str, ParameterValue)>) -> CapabilityEvaluation {
-    model.evaluate(&PropertyRequirements, &rule(ID, kind("wall"), parameters))
+    model.evaluate(&REQUIREMENTS, &rule(ID, kind("wall"), parameters))
 }
 
 fn length(metres: f64) -> PropertyValue {
@@ -333,7 +340,7 @@ fn a_range_divided_by_the_measured_area() {
         ("per", string("measured-area")),
     ]);
     let evaluation = model.evaluate_with(
-        &PropertyRequirements,
+        &REQUIREMENTS,
         &rule(
             ID,
             kind("wall"),
@@ -433,7 +440,7 @@ fn a_row_applies_to_an_exact_class_or_to_its_subtypes() {
         })
     };
     let evaluation = model.evaluate_with(
-        &PropertyRequirements,
+        &REQUIREMENTS,
         &rule(
             ID,
             Selector::All,
@@ -1656,7 +1663,7 @@ fn divided(per: &str) -> CapabilityEvaluation {
     bodies.faces.insert(id("w2"), 1.0);
     let bodies = Arc::new(bodies);
     masses().evaluate_with(
-        &PropertyRequirements,
+        &REQUIREMENTS,
         &rule(
             ID,
             kind("wall"),
@@ -1753,5 +1760,212 @@ fn malformed_bounds_are_invalid_declarations() {
             [("-".into(), NotEvaluatedReason::InvalidDeclaration)],
             "{cells:?}"
         );
+    }
+}
+
+/// Every refusal keeps its words, after the capability's name and the
+/// row it names.
+#[test]
+fn every_refusal_keeps_its_wording() {
+    let wall = || Model::default().object("w1", "wall");
+    let refusal = |parameters: Vec<(&str, ParameterValue)>| {
+        run(wall(), parameters)
+            .not_evaluated_outcomes()
+            .iter()
+            .map(|outcome| outcome.message().to_owned())
+            .collect::<Vec<_>>()
+    };
+    let named = |cells: &[(&str, ParameterValue)]| {
+        let mut all = vec![
+            ("property_set", string("Pset")),
+            ("property", string("Rating")),
+        ];
+        all.extend(cells.iter().cloned());
+        requirements(vec![row(&all)])
+    };
+    let cases: Vec<(Vec<(&str, ParameterValue)>, &str)> = vec![
+        (vec![], "parameter `requirements` is required"),
+        (
+            requirements(vec![row(&[("requirement", string("required"))])]),
+            "row 0: names neither a property set nor a property",
+        ),
+        (named(&[]), "row 0: declare `requirement` or `state`"),
+        (
+            named(&[
+                ("state", string("include")),
+                ("presence", string("defined")),
+                ("one_of", string("F30")),
+            ]),
+            "row 0: a `presence` takes no value condition",
+        ),
+        (
+            named(&[("state", string("include")), ("contains", string(""))]),
+            "row 0: `contains` is empty",
+        ),
+        (
+            named(&[
+                ("state", string("include")),
+                ("minimum", number(2.0)),
+                ("maximum", number(1.0)),
+            ]),
+            "row 0: minimum exceeds maximum",
+        ),
+        (
+            named(&[
+                ("state", string("include")),
+                ("minimum", number(1.0)),
+                ("unit", string("m")),
+                ("per", string("stated-area")),
+            ]),
+            "row 0: `per` `stated-area` needs `area_property`",
+        ),
+    ];
+    for (parameters, message) in cases {
+        assert_eq!(
+            refusal(parameters),
+            [format!("property-requirements: {message}")]
+        );
+    }
+}
+
+/// Generated walls stating text, numbers, lengths, lists, blanks, `null`
+/// or nothing in two sets, some unreadable, judged against generated rows
+/// of every statement (required, optional, forbidden, presences, wildcard
+/// and pattern names, value conditions, ranges in units, rounding), with
+/// and without grouping by value and a category. The template is held to
+/// the implementation it replaced on each.
+mod generated {
+    use super::*;
+    use proptest::prelude::*;
+
+    fn value(kind: u8) -> Option<PropertyValue> {
+        Some(match kind {
+            0 => PropertyValue::String("F30".into()),
+            1 => PropertyValue::String("f90".into()),
+            2 => PropertyValue::String(" ".into()),
+            3 => PropertyValue::Null,
+            4 => PropertyValue::Integer(3),
+            5 => PropertyValue::Decimal(2.54),
+            6 => length(0.2),
+            7 => length(0.249_96),
+            8 => PropertyValue::List(vec![
+                PropertyValue::String("F30".into()),
+                PropertyValue::String("F60".into()),
+            ]),
+            9 => PropertyValue::Boolean(true),
+            _ => return None,
+        })
+    }
+
+    fn requirement(which: u8) -> TableRow {
+        let named = |set: &str, name: &str, cells: &[(&str, ParameterValue)]| {
+            let mut all = vec![("property_set", string(set)), ("property", string(name))];
+            all.extend(cells.iter().cloned());
+            row(&all)
+        };
+        match which {
+            0 => named("Pset", "Rating", &[("requirement", string("required"))]),
+            1 => named("Pset", "Rating", &[("requirement", string("forbidden"))]),
+            2 => named(
+                "Pset",
+                "Rating",
+                &[
+                    ("requirement", string("optional")),
+                    ("one_of", string("F30|F60")),
+                ],
+            ),
+            3 => named(
+                "Pset",
+                "R*",
+                &[("state", string("include")), ("value_like", string("F*"))],
+            ),
+            4 => named(
+                "Pset",
+                "Width",
+                &[
+                    ("state", string("include")),
+                    ("minimum", number(200.0)),
+                    ("unit", string("mm")),
+                    ("decimals", integer(0)),
+                ],
+            ),
+            5 => named(
+                "Pset",
+                "Width",
+                &[
+                    ("state", string("exclude")),
+                    ("maximum", number(0.25)),
+                    ("unit", string("m")),
+                    ("maximum_exclusive", boolean(true)),
+                ],
+            ),
+            6 => row(&[
+                ("property_set_pattern", string("P.*")),
+                ("property_pattern", string("R.*")),
+                ("state", string("include")),
+                ("presence", string("not-empty")),
+            ]),
+            7 => named(
+                "Other",
+                "*",
+                &[
+                    ("state", string("include")),
+                    ("presence", string("defined")),
+                ],
+            ),
+            8 => named(
+                "Pset",
+                "Rating",
+                &[("state", string("include")), ("contains", string("F60"))],
+            ),
+            _ => row(&[
+                ("applies_to", selector(kind("door"))),
+                ("property_set", string("Pset")),
+                ("property", string("Rating")),
+                ("requirement", string("required")),
+            ]),
+        }
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(256))]
+
+        #[test]
+        fn generated_tables_hold_parity(
+            walls in proptest::collection::vec((0u8..12, 0u8..12, 0u8..12, any::<bool>()), 0..6),
+            rows in proptest::collection::vec(0u8..10, 1..4),
+            grouped in proptest::option::of(any::<bool>()),
+            category in any::<bool>(),
+            case_sensitive in proptest::option::of(any::<bool>()),
+        ) {
+            let mut model = Model::default();
+            for (index, (rating, width, other, unreadable)) in walls.iter().enumerate() {
+                let local = format!("w{index}");
+                model = model.object(&local, "wall").text(&local, "Pset", "Name", &local);
+                if let Some(value) = value(*rating) {
+                    model = model.value(&local, "Pset", "Rating", value);
+                }
+                if let Some(value) = value(*width) {
+                    model = model.value(&local, "Pset", "Width", value);
+                }
+                if let Some(value) = value(*other) {
+                    model = model.value(&local, "Other", "Note", value);
+                }
+                if *unreadable && index % 3 == 2 {
+                    model = model.unreadable(&local);
+                }
+            }
+            let mut parameters = requirements(rows.iter().map(|kind| requirement(*kind)).collect());
+            if let Some(grouped) = grouped {
+                parameters.push(("group_by_value", boolean(grouped)));
+            }
+            if category {
+                parameters.push(("category_property", property(Some("Pset"), "Name")));
+            }
+            if let Some(case_sensitive) = case_sensitive {
+                parameters.push(("case_sensitive", boolean(case_sensitive)));
+            }
+            run(model, parameters);
+        }
     }
 }

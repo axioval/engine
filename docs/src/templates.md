@@ -28,7 +28,8 @@ first over two populations and a derived ratio
 ([#290](https://github.com/axioval/engine/issues/290)); `consistent-value`
 and `selector-conformance` follow `unique-value` as group decisions, and
 `relative-count` judges two populations by a proportion, and
-`property-value` judges XML Schema facets (#287).
+`property-value` judges XML Schema facets and `property-requirements`
+requirements tables (#287).
 
 ## The outside contract
 
@@ -498,6 +499,16 @@ both``), a constraint's after `property-value parameters are invalid:`
 (`no data type and no value constraint`). Findings and open outcomes are
 the facet judge's, as the capability worded them.
 
+### `property-requirements`
+
+| Form | When | Values | Decision |
+| --- | --- | --- | --- |
+| one | always | none: the judge reads the property resolution and enumeration | `Requirements` over `requirements`, `case_sensitive`, `area_property`, `volume_property`, `group_by_value`, `category_property` |
+
+A refused row reads `property-requirements: row <n>: …`; findings start
+with their result and end `(requirement row <n>)`, as the capability
+worded them.
+
 ### `level-spacing`
 
 One form, `Decision::Each` over the anchor's levels (`member_selector`,
@@ -927,6 +938,17 @@ type, another or none, against generated facets under `optional`,
 `judges` case, recorded before the switch; and by the IDS conformance
 corpus, whose value facets it checks, reporting the same verdicts word for
 word. It is never forked.
+
+`property-requirements` is held to `property_requirements/reference.rs`
+(`axioval_rules::reference::PropertyRequirements`) through
+`common::Held` on every fixture of `tests/property_requirements.rs`, its
+refusals asserted word for word; by generated walls stating text,
+numbers, lengths, lists, blanks, `null` or nothing in two sets, some
+unreadable, against generated rows of every statement, with and without
+grouping by value and a category; by the `property-requirements` rules
+of the `judges` case, recorded before the switch; and by the IDS
+conformance corpus, reporting the same verdicts word for word. It is
+never forked.
 
 `shelf-capacity` is held so too: every fixture of `shelf_capacity.rs`
 and generated spaces of random doors, heights and minimums against

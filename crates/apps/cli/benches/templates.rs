@@ -142,6 +142,11 @@ const PAIRS: &[Pair] = &[
         case: "judges",
         reference: |registry| registry.replace(axioval::rules::reference::PropertyValueConstraint),
     },
+    Pair {
+        capability: "axioval:capability.property-requirements",
+        case: "judges",
+        reference: |registry| registry.replace(axioval::rules::reference::PropertyRequirements),
+    },
 ];
 
 /// Warm-up runs per side before measuring.

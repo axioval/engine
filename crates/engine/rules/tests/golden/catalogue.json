@@ -25298,7 +25298,44 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "property-requirements",
+        "forms": [
+          {
+            "when": [],
+            "values": [],
+            "decision": {
+              "kind": "requirements",
+              "requirements": "requirements",
+              "caseSensitive": "case_sensitive",
+              "areaProperty": "area_property",
+              "volumeProperty": "volume_property",
+              "groupByValue": "group_by_value",
+              "categoryProperty": "category_property"
+            },
+            "fail": "",
+            "undecided": ""
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "derived",
+              "name": "every applicable row of `requirements` holds",
+              "label": "the requirements table holds"
+            },
+            "blocks": {
+              "type": "expression.derived",
+              "label": "the requirements table holds",
+              "fields": {
+                "name": "every applicable row of `requirements` holds"
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.property-value",

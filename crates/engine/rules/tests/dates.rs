@@ -10,6 +10,13 @@ use axioval_ir::{NotEvaluatedReason, PropertyValue, TemporalPrecision};
 use axioval_rules::{ManualIssue, PropertyComparison, PropertyValueConstraint};
 use common::{Model, findings, flagged, number, property, rule, string, strings, unevaluated};
 
+/// `property-comparison` runs as a template, held on every fixture to the
+/// implementation it replaced.
+const PROPERTY_COMPARISON: common::Held = common::Held(
+    &PropertyComparison,
+    &axioval_rules::reference::PropertyComparison,
+);
+
 /// `property-value` runs as a template, held on every fixture to the
 /// implementation it replaced.
 const PROPERTY_VALUE: common::Held = common::Held(
@@ -379,7 +386,7 @@ fn comparison(extra: Vec<(&str, ParameterValue)>) -> CapabilityEvaluation {
     ];
     parameters.extend(extra);
     model().evaluate(
-        &PropertyComparison,
+        &PROPERTY_COMPARISON,
         &rule(
             "axioval:capability.property-comparison",
             Selector::All,
@@ -422,7 +429,7 @@ fn property_comparison_orders_dates_against_a_constant_or_a_property() {
             parameters.push(("precision", string(precision)));
         }
         permits().evaluate(
-            &PropertyComparison,
+            &PROPERTY_COMPARISON,
             &rule(
                 "axioval:capability.property-comparison",
                 Selector::All,
@@ -473,7 +480,7 @@ fn between(bounds: Vec<(&str, ParameterValue)>) -> CapabilityEvaluation {
     ];
     parameters.extend(bounds);
     phases().evaluate(
-        &PropertyComparison,
+        &PROPERTY_COMPARISON,
         &rule(
             "axioval:capability.property-comparison",
             Selector::All,
@@ -555,7 +562,7 @@ fn property_comparison_orders_date_time_bounds_as_instants() {
             .value("east", SET, "Done", date_time("2026-03-15T00:30:00+02:00"))
             .value("day", SET, "Done", date("2026-03-15"))
             .evaluate(
-                &PropertyComparison,
+                &PROPERTY_COMPARISON,
                 &rule(
                     "axioval:capability.property-comparison",
                     Selector::All,
@@ -633,7 +640,7 @@ fn property_comparison_refuses_precision_off_dates_and_a_factor_on_them() {
         .object("a", "door")
         .value("a", SET, "Inspected", date("2026-09-27"))
         .evaluate(
-            &PropertyComparison,
+            &PROPERTY_COMPARISON,
             &rule(
                 "axioval:capability.property-comparison",
                 Selector::All,
@@ -753,7 +760,7 @@ fn zoned_dates_compare_as_xml_schema_orders_them_in_every_capability() {
     assert_eq!(not_evaluated(&less), ["u", "w", "x"]);
 
     let compared = zoned_model().evaluate(
-        &PropertyComparison,
+        &PROPERTY_COMPARISON,
         &rule(
             "axioval:capability.property-comparison",
             Selector::All,

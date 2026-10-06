@@ -1,6 +1,8 @@
 //! Exact property-to-property comparison capability tests.
 #![allow(missing_docs)]
 
+mod common;
+
 use std::{
     collections::BTreeMap,
     sync::{Arc, Mutex},
@@ -20,6 +22,13 @@ use axioval_ir::{
     QuantityDimension, RuleId, SourceId,
 };
 use axioval_rules::{PropertyComparison, register_builtins};
+
+/// `property-comparison` runs as a template, held on every fixture to the
+/// implementation it replaced.
+const PROPERTY_COMPARISON: common::Held = common::Held(
+    &PropertyComparison,
+    &axioval_rules::reference::PropertyComparison,
+);
 
 fn source(name: &str) -> SourceId {
     SourceId::new("test", name).unwrap()
@@ -179,7 +188,7 @@ fn evaluate(
             )))
             .unwrap();
     }
-    PropertyComparison.evaluate(
+    PROPERTY_COMPARISON.evaluate(
         &RuleContext {
             project,
             services: &services,
@@ -199,7 +208,7 @@ fn evaluate_without_properties(
             relationship,
         )))
         .unwrap();
-    PropertyComparison.evaluate(
+    PROPERTY_COMPARISON.evaluate(
         &RuleContext {
             project,
             services: &services,

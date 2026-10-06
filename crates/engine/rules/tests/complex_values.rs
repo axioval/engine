@@ -13,6 +13,13 @@ use axioval_rules::{
 };
 use common::{Model, boolean, findings, flagged, kind, number, property, rule, selector, string};
 
+/// `property-comparison` runs as a template, held on every fixture to the
+/// implementation it replaced.
+const PROPERTY_COMPARISON: common::Held = common::Held(
+    &PropertyComparison,
+    &axioval_rules::reference::PropertyComparison,
+);
+
 /// `property-value` runs as a template, held on every fixture to the
 /// implementation it replaced.
 const PROPERTY_VALUE: common::Held = common::Held(
@@ -151,7 +158,7 @@ fn no_comparison_passes() {
             .edge("contains", "r", "a")
             .value("a", SET, "Foo", PropertyValue::Complex)
             .evaluate(
-                &PropertyComparison,
+                &PROPERTY_COMPARISON,
                 &rule(
                     "axioval:capability.property-comparison",
                     kind("room"),

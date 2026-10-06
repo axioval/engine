@@ -28,8 +28,9 @@ first over two populations and a derived ratio
 ([#290](https://github.com/axioval/engine/issues/290)); `consistent-value`
 and `selector-conformance` follow `unique-value` as group decisions, and
 `relative-count` judges two populations by a proportion, and
-`property-value` judges XML Schema facets and `property-requirements`
-requirements tables (#287).
+`property-value` judges XML Schema facets, `property-requirements`
+requirements tables and `property-comparison` candidates against a target
+(#287): every generic judge now runs as a template.
 
 ## The outside contract
 
@@ -523,6 +524,17 @@ A refused row reads `property-requirements: row <n>: …`; findings start
 with their result and end `(requirement row <n>)`, as the capability
 worded them.
 
+### `property-comparison`
+
+| Form | When | Values | Decision |
+| --- | --- | --- | --- |
+| one | always | none: the judge reads the candidates' and the target's properties | `Compared` over every parameter |
+
+A refusal reads `property-comparison parameters are invalid: …`
+(`Refusals::Worded`); findings are the judge's, as the capability worded
+them (`candidate … does not satisfy comparison`, `no candidate satisfies
+comparison`, `sum of compared values is … and is not …`).
+
 ### `level-spacing`
 
 One form, `Decision::Each` over the anchor's levels (`member_selector`,
@@ -963,6 +975,19 @@ grouping by value and a category; by the `property-requirements` rules
 of the `judges` case, recorded before the switch; and by the IDS
 conformance corpus, reporting the same verdicts word for word. It is
 never forked.
+
+`property-comparison` is held to `property_comparison/reference.rs`
+(`axioval_rules::reference::PropertyComparison`) through `common::Held`
+on every fixture of `tests/property_comparison.rs`,
+`tests/property_comparison_scopes.rs`,
+`tests/property_comparison_targets.rs`, `tests/dates.rs`,
+`tests/tolerance.rs`, `tests/quantity_targets.rs` and
+`tests/complex_values.rs` that runs it, its refusals asserted word for
+word; by generated rooms of chairs stating values of every kind (some
+unreadable), compared each, at least one, by count and by sum, against
+constants, properties, text lists and ranges, scaled and under a
+tolerance or not; and by the `property-comparison` rules of the `judges`
+case, recorded before the switch. It is never forked.
 
 `shelf-capacity` is held so too: every fixture of `shelf_capacity.rs`
 and generated spaces of random doors, heights and minimums against

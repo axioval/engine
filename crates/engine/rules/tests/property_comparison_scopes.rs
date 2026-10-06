@@ -11,6 +11,13 @@ use common::{
     Model, boolean, findings, kind, number, property, rule, selector, string, strings, unevaluated,
 };
 
+/// `property-comparison` runs as a template, held on every fixture to the
+/// implementation it replaced.
+const PROPERTY_COMPARISON: common::Held = common::Held(
+    &PropertyComparison,
+    &axioval_rules::reference::PropertyComparison,
+);
+
 const ID: &str = "axioval:capability.property-comparison";
 
 /// The parameters every rule declares, with `compared_selector` picking `candidates`.
@@ -90,7 +97,7 @@ fn door_types(
 fn fire_wall_door_types_are_matched_through_voids_and_fills_against_a_pattern_list() {
     let patterns = || ("target_texts", strings(&["EI??-*", "T30*"]));
     let evaluation = walls().evaluate(
-        &PropertyComparison,
+        &PROPERTY_COMPARISON,
         &rule(ID, fire_walls(), door_types("like", vec![patterns()])),
     );
     // `t30-rs` is not `T30*` when case matters; w2 is not a fire wall.
@@ -102,7 +109,7 @@ fn fire_wall_door_types_are_matched_through_voids_and_fills_against_a_pattern_li
         )]
     );
     let evaluation = walls().evaluate(
-        &PropertyComparison,
+        &PROPERTY_COMPARISON,
         &rule(
             ID,
             fire_walls(),
@@ -116,7 +123,7 @@ fn fire_wall_door_types_are_matched_through_voids_and_fills_against_a_pattern_li
 #[test]
 fn a_single_pattern_matches_the_whole_value() {
     let evaluation = walls().evaluate(
-        &PropertyComparison,
+        &PROPERTY_COMPARISON,
         &rule(
             ID,
             fire_walls(),
@@ -132,7 +139,7 @@ fn a_backslash_makes_a_wildcard_character_literal() {
     let model = || walls().text("d1", "Type", "Name", "T*1");
     let evaluate = |pattern: &str| {
         let evaluation = model().evaluate(
-            &PropertyComparison,
+            &PROPERTY_COMPARISON,
             &rule(
                 ID,
                 fire_walls(),
@@ -147,7 +154,7 @@ fn a_backslash_makes_a_wildcard_character_literal() {
     // `T\*1` is exactly `T*1`; `T*1` also takes `TX1`, and `T\*1` does not.
     assert_eq!(evaluate(r"T\*1"), 0);
     let evaluation = walls().text("d1", "Type", "Name", "TX1").evaluate(
-        &PropertyComparison,
+        &PROPERTY_COMPARISON,
         &rule(
             ID,
             fire_walls(),
@@ -160,7 +167,7 @@ fn a_backslash_makes_a_wildcard_character_literal() {
     assert_eq!(evaluation.findings().len(), 1);
     // A trailing backslash escapes nothing: an invalid declaration.
     let evaluation = walls().evaluate(
-        &PropertyComparison,
+        &PROPERTY_COMPARISON,
         &rule(
             ID,
             fire_walls(),
@@ -188,16 +195,16 @@ fn matches_is_a_regular_expression_over_the_whole_value() {
             ),
         )
     };
-    let evaluation = walls().evaluate(&PropertyComparison, &rule_for(r"(EI|T)\d+-.*"));
+    let evaluation = walls().evaluate(&PROPERTY_COMPARISON, &rule_for(r"(EI|T)\d+-.*"));
     assert!(
         findings(&evaluation).is_empty(),
         "{:?}",
         findings(&evaluation)
     );
     // Anchored: `EI\d+` does not match `EI30-T1`.
-    let evaluation = walls().evaluate(&PropertyComparison, &rule_for(r"EI\d+"));
+    let evaluation = walls().evaluate(&PROPERTY_COMPARISON, &rule_for(r"EI\d+"));
     assert_eq!(evaluation.findings().len(), 2);
-    let evaluation = walls().evaluate(&PropertyComparison, &rule_for("("));
+    let evaluation = walls().evaluate(&PROPERTY_COMPARISON, &rule_for("("));
     assert_eq!(
         unevaluated(&evaluation),
         [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
@@ -208,7 +215,7 @@ fn matches_is_a_regular_expression_over_the_whole_value() {
 fn a_pattern_may_be_a_property_of_the_checked_object() {
     let model = || walls().text("w1", "Pset", "DoorPattern", "EI*");
     let evaluation = model().evaluate(
-        &PropertyComparison,
+        &PROPERTY_COMPARISON,
         &rule(
             ID,
             fire_walls(),
@@ -227,7 +234,7 @@ fn a_pattern_may_be_a_property_of_the_checked_object() {
     );
     // A pattern read from the model that does not compile is not evaluated.
     let evaluation = walls().text("w1", "Pset", "DoorPattern", "EI\\").evaluate(
-        &PropertyComparison,
+        &PROPERTY_COMPARISON,
         &rule(
             ID,
             fire_walls(),
@@ -262,7 +269,7 @@ fn contains_takes_a_text_list_and_ignores_case_on_request() {
             ),
         )
     };
-    let evaluation = walls().evaluate(&PropertyComparison, &rule_for(true));
+    let evaluation = walls().evaluate(&PROPERTY_COMPARISON, &rule_for(true));
     assert_eq!(
         findings(&evaluation),
         [(
@@ -270,14 +277,14 @@ fn contains_takes_a_text_list_and_ignores_case_on_request() {
             "candidate test:model/d2 does not satisfy comparison".into()
         )]
     );
-    let evaluation = walls().evaluate(&PropertyComparison, &rule_for(false));
+    let evaluation = walls().evaluate(&PROPERTY_COMPARISON, &rule_for(false));
     assert!(findings(&evaluation).is_empty());
 }
 
 #[test]
 fn a_pattern_operator_rejects_a_number_target() {
     let evaluation = walls().evaluate(
-        &PropertyComparison,
+        &PROPERTY_COMPARISON,
         &rule(
             ID,
             fire_walls(),
@@ -315,7 +322,7 @@ fn is_undefined_and_is_defined_take_no_target_and_read_absence() {
             ),
         )
     };
-    let evaluation = model().evaluate(&PropertyComparison, &rule_for("is_undefined"));
+    let evaluation = model().evaluate(&PROPERTY_COMPARISON, &rule_for("is_undefined"));
     assert_eq!(
         findings(&evaluation),
         [(
@@ -323,7 +330,7 @@ fn is_undefined_and_is_defined_take_no_target_and_read_absence() {
             "candidate test:model/d4 does not satisfy comparison".into()
         )]
     );
-    let evaluation = model().evaluate(&PropertyComparison, &rule_for("is_defined"));
+    let evaluation = model().evaluate(&PROPERTY_COMPARISON, &rule_for("is_defined"));
     let mut flagged: Vec<_> = findings(&evaluation).into_iter().map(|(_, m)| m).collect();
     flagged.sort();
     assert_eq!(
@@ -338,7 +345,7 @@ fn is_undefined_and_is_defined_take_no_target_and_read_absence() {
     with_target
         .parameters
         .insert("target_text".into(), string("EI30"));
-    let evaluation = model().evaluate(&PropertyComparison, &with_target);
+    let evaluation = model().evaluate(&PROPERTY_COMPARISON, &with_target);
     assert_eq!(
         unevaluated(&evaluation),
         [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
@@ -390,7 +397,7 @@ fn doors_per_space(
 #[test]
 fn same_space_counts_the_doors_sharing_the_checked_objects_space_against_a_range() {
     let evaluation = spaces().evaluate(
-        &PropertyComparison,
+        &PROPERTY_COMPARISON,
         &rule(ID, kind("sensor"), doors_per_space(vec![])),
     );
     assert_eq!(
@@ -420,7 +427,7 @@ fn a_container_mode_needs_a_container_selector_and_no_chain() {
         doors_per_space(vec![("follow_chain", boolean(true))]),
     );
     for invalid in [without, chained] {
-        let evaluation = spaces().evaluate(&PropertyComparison, &invalid);
+        let evaluation = spaces().evaluate(&PROPERTY_COMPARISON, &invalid);
         assert_eq!(
             unevaluated(&evaluation),
             [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
@@ -445,7 +452,7 @@ fn an_undecided_container_leaves_every_checked_object_not_evaluated() {
     );
     let evaluation = spaces()
         .unreadable("s2")
-        .evaluate(&PropertyComparison, &rule);
+        .evaluate(&PROPERTY_COMPARISON, &rule);
     assert!(evaluation.findings().is_empty());
     assert_eq!(unevaluated(&evaluation).len(), 3);
 }
@@ -478,7 +485,7 @@ fn buildings() -> Model {
 #[test]
 fn same_building_climbs_any_number_of_steps_to_the_shared_ancestor() {
     let evaluation = buildings().text("a2", "Pset", "System", "C").evaluate(
-        &PropertyComparison,
+        &PROPERTY_COMPARISON,
         &rule(
             ID,
             kind("alarm"),
@@ -526,7 +533,7 @@ fn a_sum_is_judged_against_both_bounds_of_a_quantity_range() {
         .value("d2", "Q", "Area", area(2.5))
         .value("d3", "Q", "Area", area(0.5));
     let evaluation = model.evaluate(
-        &PropertyComparison,
+        &PROPERTY_COMPARISON,
         &rule(
             ID,
             kind("space"),
@@ -585,7 +592,7 @@ fn a_range_needs_both_bounds_in_order_and_only_between_takes_it() {
         for (name, value) in case {
             declared.parameters.insert(name.into(), value);
         }
-        let evaluation = spaces().evaluate(&PropertyComparison, &declared);
+        let evaluation = spaces().evaluate(&PROPERTY_COMPARISON, &declared);
         assert_eq!(
             unevaluated(&evaluation),
             [("-".into(), NotEvaluatedReason::InvalidDeclaration)],
@@ -594,7 +601,7 @@ fn a_range_needs_both_bounds_in_order_and_only_between_takes_it() {
     // Only one bound: a range needs both.
     let mut one_bound = rule(ID, kind("sensor"), doors_per_space(vec![]));
     one_bound.parameters.remove("maximum_number");
-    let evaluation = spaces().evaluate(&PropertyComparison, &one_bound);
+    let evaluation = spaces().evaluate(&PROPERTY_COMPARISON, &one_bound);
     assert_eq!(
         unevaluated(&evaluation),
         [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
@@ -613,7 +620,7 @@ fn findings_are_categorised_by_a_property_of_the_checked_object() {
     );
     let evaluation = spaces()
         .text("x1", "Pset", "Discipline", " Fire ")
-        .evaluate(&PropertyComparison, &rule);
+        .evaluate(&PROPERTY_COMPARISON, &rule);
     // x3 states no category, so its finding has none.
     assert_eq!(
         findings(&evaluation),
@@ -642,7 +649,7 @@ fn findings_are_categorised_by_a_property_of_the_checked_object() {
     let evaluation = spaces()
         .unreadable("x1")
         .unreadable("x2")
-        .evaluate(&PropertyComparison, &rule);
+        .evaluate(&PROPERTY_COMPARISON, &rule);
     assert_eq!(
         findings(&evaluation),
         [(

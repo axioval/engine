@@ -19444,7 +19444,61 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "property-comparison",
+        "refusals": "worded",
+        "forms": [
+          {
+            "when": [],
+            "values": [],
+            "decision": {
+              "kind": "compared",
+              "comparedSelector": "compared_selector",
+              "comparedProperty": "compared_property",
+              "operator": "operator",
+              "factor": "factor",
+              "quantifier": "quantifier",
+              "componentMode": "component_mode",
+              "containerSelector": "container_selector",
+              "containerRelationship": "container_relationship",
+              "levelProperty": "level_property",
+              "caseSensitive": "case_sensitive",
+              "categoryProperty": "category_property",
+              "targetProperty": "target_property",
+              "targetNumber": "target_number",
+              "targetQuantity": "target_quantity",
+              "targetText": "target_text",
+              "targetTexts": "target_texts",
+              "targetBoolean": "target_boolean",
+              "targetDate": "target_date",
+              "targetDateTime": "target_date_time",
+              "minimum": "minimum",
+              "maximum": "maximum",
+              "refusal": "property-comparison parameters are invalid: "
+            },
+            "fail": "",
+            "undecided": ""
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "derived",
+              "name": "`compared_property` of the candidates stands in `operator` to the target",
+              "label": "the candidates satisfy the comparison"
+            },
+            "blocks": {
+              "type": "expression.derived",
+              "label": "the candidates satisfy the comparison",
+              "fields": {
+                "name": "`compared_property` of the candidates stands in `operator` to the target"
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.property-data-type",

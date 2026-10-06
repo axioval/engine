@@ -12,6 +12,13 @@ use common::{
     unevaluated,
 };
 
+/// `property-comparison` runs as a template, held on every fixture to the
+/// implementation it replaced.
+const PROPERTY_COMPARISON: common::Held = common::Held(
+    &PropertyComparison,
+    &axioval_rules::reference::PropertyComparison,
+);
+
 const CAPABILITY: &str = "axioval:capability.property-comparison";
 
 /// Two rooms: `r1` holds three chairs, `r2` holds one.
@@ -55,7 +62,7 @@ fn compare(
     ];
     parameters.extend(extra);
     model.evaluate(
-        &PropertyComparison,
+        &PROPERTY_COMPARISON,
         &common::rule(CAPABILITY, kind("room"), parameters),
     )
 }
@@ -273,4 +280,171 @@ fn targets_are_declared_exactly_once() {
         unevaluated(&sum_without_property),
         [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
     );
+}
+
+/// Every refusal keeps its words after `property-comparison parameters are
+/// invalid: `.
+#[test]
+#[allow(clippy::type_complexity)]
+fn every_refusal_keeps_its_wording() {
+    let refusal = |quantifier: &str, operator: &str, extra: Vec<(&str, ParameterValue)>| {
+        compare(rooms(), quantifier, operator, extra)
+            .not_evaluated_outcomes()
+            .iter()
+            .map(|outcome| outcome.message().to_owned())
+            .collect::<Vec<_>>()
+    };
+    let cases: Vec<(&str, &str, Vec<(&str, ParameterValue)>, &str)> = vec![
+        ("each", "beside", vec![], "operator `beside` is unsupported"),
+        (
+            "each",
+            "equals",
+            vec![("target_number", number(1.0)), ("target_text", string("a"))],
+            "declare exactly one target",
+        ),
+        (
+            "every",
+            "equals",
+            vec![("target_number", number(1.0))],
+            "quantifier `every` is unsupported",
+        ),
+        (
+            "each",
+            "equals",
+            vec![("target_number", number(1.0))],
+            "`compared_property` is required except for `count`",
+        ),
+        (
+            "count",
+            "contains",
+            vec![("target_text", string("a"))],
+            "operator `contains` does not apply to a count or sum",
+        ),
+    ];
+    for (quantifier, operator, extra, message) in cases {
+        assert_eq!(
+            refusal(quantifier, operator, extra),
+            [format!(
+                "property-comparison parameters are invalid: {message}"
+            )]
+        );
+    }
+}
+
+/// Generated rooms of chairs stating widths, seats, colours and ratings of
+/// every kind (numbers, integers, lengths, text, lists, `null` or nothing,
+/// some unreadable), compared each, at least one, by count or by sum,
+/// against constants, properties, text lists and ranges, scaled, under a
+/// tolerance or not. The template is held to the implementation it
+/// replaced on each.
+mod generated {
+    use super::*;
+    use axioval_ir::QuantityDimension;
+    use proptest::prelude::*;
+
+    fn value(kind: u8) -> Option<PropertyValue> {
+        Some(match kind {
+            0 => PropertyValue::Decimal(0.5),
+            1 => PropertyValue::Integer(1),
+            2 => PropertyValue::Quantity {
+                value: 0.5,
+                dimension: QuantityDimension::Length,
+            },
+            3 => PropertyValue::String("red".into()),
+            4 => PropertyValue::String("Red".into()),
+            5 => PropertyValue::Null,
+            6 => PropertyValue::List(vec![PropertyValue::Integer(1)]),
+            7 => PropertyValue::Decimal(-0.0),
+            _ => return None,
+        })
+    }
+
+    fn target(kind: u8) -> (&'static str, Vec<(&'static str, ParameterValue)>) {
+        match kind {
+            0 => ("greater_or_equal", vec![("target_number", number(0.5))]),
+            1 => (
+                "less",
+                vec![("target_property", property(Some("Pset"), "Seats"))],
+            ),
+            2 => ("one_of", vec![("target_texts", strings(&["red", "blue"]))]),
+            3 => ("like", vec![("target_text", string("r*"))]),
+            4 => (
+                "between",
+                vec![
+                    ("minimum_number", number(0.0)),
+                    ("maximum_number", number(1.0)),
+                ],
+            ),
+            5 => (
+                "equals",
+                vec![(
+                    "target_quantity",
+                    ParameterValue::Quantity {
+                        value: 500.0,
+                        unit: "mm".into(),
+                    },
+                )],
+            ),
+            6 => ("is_defined", vec![]),
+            _ => ("not_equals", vec![("target_boolean", boolean(true))]),
+        }
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(256))]
+
+        #[test]
+        fn generated_rooms_hold_parity(
+            chairs in proptest::collection::vec((0u8..2, 0u8..9, any::<bool>()), 0..6),
+            seats in proptest::option::of(0u8..9),
+            quantifier in 0u8..4,
+            which in 0u8..8,
+            factor in proptest::option::of(0.5f64..2.0),
+            tolerance in any::<bool>(),
+            mode in 0u8..2,
+        ) {
+            let mut model = Model::default().object("r1", "room").object("r2", "room");
+            for (index, (room, width, unreadable)) in chairs.iter().enumerate() {
+                let local = format!("c{index}");
+                model = model
+                    .object(&local, "chair")
+                    .edge("contains", &format!("r{}", room + 1), &local);
+                if let Some(value) = value(*width) {
+                    model = model.value(&local, "Pset", "Width", value);
+                }
+                if *unreadable && index % 2 == 1 {
+                    model = model.unreadable(&local);
+                }
+            }
+            if let Some(value) = seats.and_then(value) {
+                model = model.value("r1", "Pset", "Seats", value);
+            }
+            let (operator, mut extra) = target(which);
+            let quantifier = ["each", "at_least_one", "count", "sum"][usize::from(quantifier)];
+            if quantifier != "count" {
+                extra.push(("compared_property", property(Some("Pset"), "Width")));
+            }
+            if tolerance {
+                extra.push(("tolerance", number(0.01)));
+            }
+            let mut model_extra = extra;
+            let mut parameters = vec![
+                ("compared_selector", selector(kind("chair"))),
+                ("operator", string(operator)),
+                ("factor", number(factor.unwrap_or(1.0))),
+                ("quantifier", string(quantifier)),
+            ];
+            if mode == 0 {
+                parameters.push(("component_mode", string("related")));
+                parameters.push(("relationship", string("contains")));
+            } else {
+                parameters.push(("component_mode", string("checked")));
+            }
+            parameters.append(&mut model_extra);
+            model.evaluate(
+                &PROPERTY_COMPARISON,
+                &common::rule(CAPABILITY, kind("room"), parameters),
+            );
+        }
+    }
 }

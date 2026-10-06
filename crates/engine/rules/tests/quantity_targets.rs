@@ -8,6 +8,13 @@ use axioval_ir::{NotEvaluatedReason, PropertyValue, QuantityDimension};
 use axioval_rules::PropertyComparison;
 use common::{Model, findings, flagged, kind, number, property, selector, string, unevaluated};
 
+/// `property-comparison` runs as a template, held on every fixture to the
+/// implementation it replaced.
+const PROPERTY_COMPARISON: common::Held = common::Held(
+    &PropertyComparison,
+    &axioval_rules::reference::PropertyComparison,
+);
+
 fn length(value: f64) -> PropertyValue {
     PropertyValue::Quantity {
         value,
@@ -90,7 +97,7 @@ fn a_comparison_sums_quantities_against_a_quantity_target() {
         .value("c2", "Pset", "Depth", length(0.65))
         .value("c3", "Pset", "Depth", length(0.5));
     let evaluation = model.evaluate(
-        &PropertyComparison,
+        &PROPERTY_COMPARISON,
         &common::rule(
             "axioval:capability.property-comparison",
             kind("room"),

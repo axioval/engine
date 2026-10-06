@@ -11,6 +11,13 @@ use common::{
     Model, findings, flagged, integer, kind, number, property, rule, selector, string, unevaluated,
 };
 
+/// `property-comparison` runs as a template, held on every fixture to the
+/// implementation it replaced.
+const PROPERTY_COMPARISON: common::Held = common::Held(
+    &PropertyComparison,
+    &axioval_rules::reference::PropertyComparison,
+);
+
 fn metres(value: f64) -> PropertyValue {
     PropertyValue::Quantity {
         value,
@@ -289,7 +296,7 @@ mod property_comparison {
 
     fn evaluate(parameters: Vec<(&str, ParameterValue)>) -> CapabilityEvaluation {
         rooms().evaluate(
-            &PropertyComparison,
+            &PROPERTY_COMPARISON,
             &rule(
                 "axioval:capability.property-comparison",
                 kind("room"),

@@ -192,6 +192,7 @@ pub mod reference {
     pub use crate::object_count::reference::ObjectCount;
     pub use crate::plan_area::reference::PlanAreaRange;
     pub use crate::plan_coverage::reference::PlanCoverage;
+    pub use crate::property_comparison::reference::PropertyComparison;
     pub use crate::property_predicate::reference::PropertyPredicate;
     pub use crate::property_requirements::reference::PropertyRequirements;
     pub use crate::property_value::reference::PropertyValueConstraint;

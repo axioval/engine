@@ -13,6 +13,7 @@ use std::sync::{Arc, Mutex};
 
 mod compare;
 mod each;
+mod facets;
 mod groups;
 mod members;
 mod proportion;
@@ -918,6 +919,9 @@ fn bind(template: &Template, rule: &CompiledRule) -> Result<Bound, Unavailable> 
         .iter()
         .map(|step| bound(&step.expression, &constants))
         .collect();
+    if let Decision::Facets(names) = &form.decision {
+        facets::check(rule, names)?;
+    }
     let proportion = match &form.decision {
         Decision::Proportion(decided) => Some(proportion::parse(rule, &decided.parameters)?),
         _ => None,
@@ -2206,7 +2210,7 @@ fn refused(
     message: String,
 ) -> CapabilityEvaluation {
     match template.refusals {
-        Refusals::Rule => CapabilityEvaluation::not_evaluated(reason, message),
+        Refusals::Rule | Refusals::Worded => CapabilityEvaluation::not_evaluated(reason, message),
         Refusals::Objects => {
             let (selected, mut evaluation) = select_objects(context, &rule.selector);
             for object in selected {
@@ -2260,7 +2264,7 @@ pub(crate) fn run(
             // object is worded as the check states it.
             let message = match template.refusals {
                 Refusals::Rule => format!("{}: {message}", template.name),
-                Refusals::Objects => message,
+                Refusals::Objects | Refusals::Worded => message,
             };
             return refused(template, context, rule, reason, message);
         }
@@ -2292,6 +2296,9 @@ pub(crate) fn run(
     } = &plan.form.decision
     {
         return groups::consistent(&plan, (key, value), consistent, context, rule);
+    }
+    if let Decision::Facets(names) = &plan.form.decision {
+        return facets::run(names, context, rule);
     }
     if let Decision::Conforms(conformance) = &plan.form.decision {
         return groups::conforms(&plan, conformance, context, rule);
@@ -2698,7 +2705,10 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
     }
     if matches!(
         plan.form.decision,
-        Decision::Unique { .. } | Decision::Consistent { .. } | Decision::Conforms(_)
+        Decision::Unique { .. }
+            | Decision::Consistent { .. }
+            | Decision::Conforms(_)
+            | Decision::Facets(_)
     ) {
         return Err(ForkError::Inexpressible(
             "an expression rule judges each object on its own, not against the values of its group"

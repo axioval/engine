@@ -97,6 +97,11 @@ pub enum Refusals {
     /// states it: as capabilities that judged the declaration per object
     /// reported it.
     Objects,
+    /// Once, for the rule as a whole, worded wholly as the check states it,
+    /// its own prefix included: as capabilities that named themselves
+    /// differently per refusal reported it (`property-value parameters
+    /// are invalid: …`).
+    Worded,
 }
 
 impl Refusals {
@@ -729,6 +734,11 @@ pub enum Decision {
     /// anchor's two member populations, or, with [`Proportion::groups`],
     /// of the groups the counted objects form by a stated value.
     Proportion(Box<Proportion>),
+    /// A stated property's value against lexical constraints written as
+    /// XML Schema facets, cast to the kind of the value the source
+    /// resolves ([`FacetParameters`]): the property a rule names, or every
+    /// property whose names match patterns.
+    Facets(Box<FacetParameters>),
     /// The anchor's members ([`Form::members`]) read and judged one by
     /// one, against their neighbours, a reference prevailing among them,
     /// and their own nested members ([`Each`]). Findings are on the
@@ -1040,6 +1050,54 @@ pub struct Proportion {
     pub parameters: ProportionParameters,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub groups: Option<ProportionGroups>,
+}
+
+/// What [`Decision::Facets`] reads of the rule: the parameters naming the
+/// property and stating each facet.
+///
+/// The property is `property` (a reference, resolved exactly with its
+/// declared type), or every property whose name matches
+/// `property_pattern` and whose set matches `property_set_pattern`
+/// (XML Schema patterns over the source's own names, enumerated exactly):
+/// each must meet the constraints, one must match unless `optional`, and
+/// with a set pattern one in every set it matches. The constraints are
+/// `data_type` (the source-declared type), `values` and `patterns` (any of,
+/// the whole value), the four bounds, the three lengths, `total_digits`
+/// and `fraction_digits` (counted on the shortest decimal reading back as
+/// the value), `optional` (an absent or `null` property passes), `precision`
+/// (`day`), `quantifier` (`any` or `all` of a list's, a range's or a
+/// table's stated values) and `si_units` (literals in the coherent SI unit
+/// of a quantity's dimension). Binding refuses a declaration as the
+/// capability refused it, the property's refusal after `target_refusal`
+/// and a constraint's after `constraint_refusal`
+/// ([`Refusals::Worded`]). A missing property resolution leaves each
+/// selected object open; every finding and open outcome is worded by the
+/// judge as the capability worded it (`missing required property …`,
+/// `property … is …, not one of the required values`).
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FacetParameters {
+    pub property: &'static str,
+    pub property_set_pattern: &'static str,
+    pub property_pattern: &'static str,
+    pub data_type: &'static str,
+    pub values: &'static str,
+    pub patterns: &'static str,
+    pub min_inclusive: &'static str,
+    pub max_inclusive: &'static str,
+    pub min_exclusive: &'static str,
+    pub max_exclusive: &'static str,
+    pub length: &'static str,
+    pub min_length: &'static str,
+    pub max_length: &'static str,
+    pub total_digits: &'static str,
+    pub fraction_digits: &'static str,
+    pub optional: &'static str,
+    pub precision: &'static str,
+    pub quantifier: &'static str,
+    pub si_units: &'static str,
+    pub target_refusal: &'static str,
+    pub constraint_refusal: &'static str,
 }
 
 /// The parameters stating a [`Proportion`].
@@ -1628,6 +1686,13 @@ impl Decision {
                     label: Some("ratio mode".into()),
                 }
             }
+            // The facets are lexical, cast to the kind the source declares,
+            // and may range over properties matched by pattern: the
+            // catalogue names the test the judge makes.
+            Self::Facets(facets) => Expression::Derived {
+                name: format!("`{}` meets its facets", facets.property),
+                label: Some("the property meets its facets".into()),
+            },
             // The selector holds of the checked object: an expression has
             // no operator applying a selector to the object in scope, so the
             // catalogue names the test the runner makes.

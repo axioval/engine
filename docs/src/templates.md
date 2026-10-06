@@ -310,6 +310,22 @@ catalogue, is the ratio mode, a branch per operator word; a rule is never
 forked from it, since small counts, tables and groups have no expression
 form the evaluator decides alike.
 
+`Decision::Facets` is the facet judge: a property's value against lexical
+constraints written as XML Schema facets, cast to the kind of the value
+the source resolves (`FacetParameters` names every parameter). The
+property is the reference parameter `property`, resolved exactly with its
+declared type (which the evaluator's values do not carry), or every
+property whose name matches `property_pattern` and set
+`property_set_pattern`, enumerated exactly. Binding refuses a declaration
+as the capability did, the property's refusal after `target_refusal` and
+a constraint's after `constraint_refusal`, which is why such a template
+words its refusals itself (`Refusals::Worded`). Each value is judged
+against `data_type`, `values`, `patterns`, the four bounds (through the
+one comparison), the lengths and digits, under `optional`, `precision`,
+`quantifier` and `si_units`; the judge words its findings and open
+outcomes as the capability did. Its expression form names the test;
+a rule is never forked from it.
+
 `Decision::Each` judges an anchor's members one by one (`Each`), with
 three relations no aggregate states:
 

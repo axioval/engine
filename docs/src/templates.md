@@ -1328,6 +1328,26 @@ realisable`, naming the capability itself), then each role selector's
 kind after `horizontal-guard: `; a rule selecting nothing judges nothing. Without the
 service the rule is open (`guard service is not registered`).
 
+### `empty-host`
+
+| Form | When | Values | Decision |
+| --- | --- | --- | --- |
+| one | always | `kept` = `opening_count;…` above 0 implies `opening_area;…` below `middle_face_area;…` less `area_tolerance` and the rounding allowance; `count`, `voided`, `face` the three values, read only for a finding | `Holds` over `kept` |
+
+The opening values name the rule's declaration as arguments
+(`path=@opening_path;length_axis=@length_axis;height_axis=@height_axis;minimum=@minimum_opening_area;openings=@opening_selector`,
+an unstated minimum or selector dropped) and place a host's openings once
+per run for both. The rounding allowance is the capability's, a
+nanometre times one square metre plus the face and the openings' area.
+A host with no opening on its middle plane holds, its face never
+measured. The declaration checks the path, the selector's kind, both axes
+(stated, then as the measurement reads them: `Check::Arguments`, the
+axes' options, that they differ, and the minimum area) and the tolerance
+(`nonNegativeQuantity`), in the capability's order and words; the
+tolerance defaults to 0 m². The finding reads `host is empty: its
+openings ({count:cited_ids}) void {voided:m2} of its {face:m2} face` and
+relates the counted openings, which `opening_count` cites.
+
 ## Binding and running a rule
 
 The rules crate's `templates` module runs a template
@@ -1814,6 +1834,15 @@ of the `spaces` case, recorded before the switch; and its fork, an
 expression requiring no boundary off the surface and every declared
 check, which reaches its verdicts (one finding where the template may
 report several, as any fork).
+
+`empty-host` is held to `empty_host/reference.rs`
+(`axioval_rules::reference::EmptyHost`) on every fixture of
+`tests/empty_host.rs` under `Parity::contract()`, its refusals asserted
+word for word; by generated walls of up to three openings of random size
+and place (overlapping, side by side, reaching past the wall, small)
+under random tolerances, minimum areas and faces; by the `empty-host`
+rules of the case `openings`, recorded before the switch; and by its fork,
+the truth itself, on the fixtures.
 
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the

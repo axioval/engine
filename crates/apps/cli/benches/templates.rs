@@ -68,6 +68,11 @@ struct Pair {
 /// pair here when it moves the implementation behind `parity-reference`.
 const PAIRS: &[Pair] = &[
     Pair {
+        capability: "axioval:capability.empty-host",
+        case: "openings",
+        reference: |registry| registry.replace(axioval::rules::reference::EmptyHost),
+    },
+    Pair {
         capability: "axioval:capability.body-extent",
         case: "elements",
         reference: |registry| registry.replace(axioval::rules::reference::BodyExtent),

@@ -12912,7 +12912,418 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "empty-host",
+        "defaults": [
+          {
+            "parameter": "area_tolerance",
+            "value": {
+              "type": "quantity",
+              "value": 0.0,
+              "unit": "m2"
+            }
+          }
+        ],
+        "declaration": [
+          {
+            "kind": "required",
+            "parameter": "opening_path"
+          },
+          {
+            "kind": "path",
+            "parameter": "opening_path"
+          },
+          {
+            "kind": "kind",
+            "parameter": "opening_selector"
+          },
+          {
+            "kind": "required",
+            "parameter": "length_axis"
+          },
+          {
+            "kind": "required",
+            "parameter": "height_axis"
+          },
+          {
+            "kind": "arguments",
+            "when": [],
+            "value": "opening_count;path=@opening_path;length_axis=@length_axis;height_axis=@height_axis;minimum=@minimum_opening_area;openings=@opening_selector"
+          },
+          {
+            "kind": "nonNegativeQuantity",
+            "parameter": "area_tolerance",
+            "dimension": "area",
+            "message": "`area_tolerance` is not a non-negative area"
+          }
+        ],
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "kept",
+                "expression": {
+                  "kind": "implies",
+                  "antecedent": {
+                    "kind": "compare",
+                    "operator": "greaterThan",
+                    "left": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "opening_count;path=@opening_path;length_axis=@length_axis;height_axis=@height_axis;minimum=@minimum_opening_area;openings=@opening_selector"
+                    },
+                    "right": {
+                      "kind": "literal",
+                      "value": {
+                        "type": "integer",
+                        "value": 0
+                      }
+                    },
+                    "label": "an opening takes area from its middle plane"
+                  },
+                  "consequent": {
+                    "kind": "compare",
+                    "operator": "lessThan",
+                    "left": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "opening_area;path=@opening_path;length_axis=@length_axis;height_axis=@height_axis;minimum=@minimum_opening_area;openings=@opening_selector"
+                    },
+                    "right": {
+                      "kind": "subtract",
+                      "left": {
+                        "kind": "subtract",
+                        "left": {
+                          "kind": "property",
+                          "propertySet": "axioval:measured",
+                          "property": "middle_face_area;length_axis=@length_axis;height_axis=@height_axis"
+                        },
+                        "right": {
+                          "kind": "parameter",
+                          "name": "area_tolerance"
+                        }
+                      },
+                      "right": {
+                        "kind": "multiply",
+                        "left": {
+                          "kind": "literal",
+                          "value": {
+                            "type": "number",
+                            "value": 1e-9
+                          }
+                        },
+                        "right": {
+                          "kind": "add",
+                          "left": {
+                            "kind": "add",
+                            "left": {
+                              "kind": "literal",
+                              "value": {
+                                "type": "quantity",
+                                "value": 1.0,
+                                "unit": "m2"
+                              }
+                            },
+                            "right": {
+                              "kind": "property",
+                              "propertySet": "axioval:measured",
+                              "property": "middle_face_area;length_axis=@length_axis;height_axis=@height_axis"
+                            }
+                          },
+                          "right": {
+                            "kind": "property",
+                            "propertySet": "axioval:measured",
+                            "property": "opening_area;path=@opening_path;length_axis=@length_axis;height_axis=@height_axis;minimum=@minimum_opening_area;openings=@opening_selector"
+                          }
+                        },
+                        "label": "rounding allowance"
+                      }
+                    },
+                    "label": "its openings leave part of its face"
+                  }
+                }
+              },
+              {
+                "name": "count",
+                "expression": {
+                  "kind": "property",
+                  "propertySet": "axioval:measured",
+                  "property": "opening_count;path=@opening_path;length_axis=@length_axis;height_axis=@height_axis;minimum=@minimum_opening_area;openings=@opening_selector"
+                }
+              },
+              {
+                "name": "voided",
+                "expression": {
+                  "kind": "property",
+                  "propertySet": "axioval:measured",
+                  "property": "opening_area;path=@opening_path;length_axis=@length_axis;height_axis=@height_axis;minimum=@minimum_opening_area;openings=@opening_selector"
+                }
+              },
+              {
+                "name": "face",
+                "expression": {
+                  "kind": "property",
+                  "propertySet": "axioval:measured",
+                  "property": "middle_face_area;length_axis=@length_axis;height_axis=@height_axis"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "holds",
+              "value": "kept"
+            },
+            "fail": "host is empty: its openings ({count:cited_ids}) void {voided:m2} of its {face:m2} face",
+            "undecided": "whether its openings void its face cannot be decided from the measured areas",
+            "related": "count"
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "implies",
+              "antecedent": {
+                "kind": "compare",
+                "operator": "greaterThan",
+                "left": {
+                  "kind": "property",
+                  "propertySet": "axioval:measured",
+                  "property": "opening_count;path=@opening_path;length_axis=@length_axis;height_axis=@height_axis;minimum=@minimum_opening_area;openings=@opening_selector"
+                },
+                "right": {
+                  "kind": "literal",
+                  "value": {
+                    "type": "integer",
+                    "value": 0
+                  }
+                },
+                "label": "an opening takes area from its middle plane"
+              },
+              "consequent": {
+                "kind": "compare",
+                "operator": "lessThan",
+                "left": {
+                  "kind": "property",
+                  "propertySet": "axioval:measured",
+                  "property": "opening_area;path=@opening_path;length_axis=@length_axis;height_axis=@height_axis;minimum=@minimum_opening_area;openings=@opening_selector"
+                },
+                "right": {
+                  "kind": "subtract",
+                  "left": {
+                    "kind": "subtract",
+                    "left": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "middle_face_area;length_axis=@length_axis;height_axis=@height_axis"
+                    },
+                    "right": {
+                      "kind": "parameter",
+                      "name": "area_tolerance"
+                    }
+                  },
+                  "right": {
+                    "kind": "multiply",
+                    "left": {
+                      "kind": "literal",
+                      "value": {
+                        "type": "number",
+                        "value": 1e-9
+                      }
+                    },
+                    "right": {
+                      "kind": "add",
+                      "left": {
+                        "kind": "add",
+                        "left": {
+                          "kind": "literal",
+                          "value": {
+                            "type": "quantity",
+                            "value": 1.0,
+                            "unit": "m2"
+                          }
+                        },
+                        "right": {
+                          "kind": "property",
+                          "propertySet": "axioval:measured",
+                          "property": "middle_face_area;length_axis=@length_axis;height_axis=@height_axis"
+                        }
+                      },
+                      "right": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "opening_area;path=@opening_path;length_axis=@length_axis;height_axis=@height_axis;minimum=@minimum_opening_area;openings=@opening_selector"
+                      }
+                    },
+                    "label": "rounding allowance"
+                  }
+                },
+                "label": "its openings leave part of its face"
+              }
+            },
+            "blocks": {
+              "type": "expression.implies",
+              "inputs": {
+                "antecedent": {
+                  "block": {
+                    "type": "expression.compare",
+                    "label": "an opening takes area from its middle plane",
+                    "fields": {
+                      "operator": "greaterThan"
+                    },
+                    "inputs": {
+                      "left": {
+                        "block": {
+                          "type": "measured.opening_count",
+                          "fields": {
+                            "height_axis": "@height_axis",
+                            "length_axis": "@length_axis",
+                            "minimum": "@minimum_opening_area",
+                            "openings": "@opening_selector",
+                            "path": "@opening_path"
+                          }
+                        }
+                      },
+                      "right": {
+                        "block": {
+                          "type": "expression.literal",
+                          "fields": {
+                            "value": {
+                              "type": "integer",
+                              "value": 0
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "consequent": {
+                  "block": {
+                    "type": "expression.compare",
+                    "label": "its openings leave part of its face",
+                    "fields": {
+                      "operator": "lessThan"
+                    },
+                    "inputs": {
+                      "left": {
+                        "block": {
+                          "type": "measured.opening_area",
+                          "fields": {
+                            "height_axis": "@height_axis",
+                            "length_axis": "@length_axis",
+                            "minimum": "@minimum_opening_area",
+                            "openings": "@opening_selector",
+                            "path": "@opening_path"
+                          }
+                        }
+                      },
+                      "right": {
+                        "block": {
+                          "type": "expression.subtract",
+                          "inputs": {
+                            "left": {
+                              "block": {
+                                "type": "expression.subtract",
+                                "inputs": {
+                                  "left": {
+                                    "block": {
+                                      "type": "measured.middle_face_area",
+                                      "fields": {
+                                        "height_axis": "@height_axis",
+                                        "length_axis": "@length_axis"
+                                      }
+                                    }
+                                  },
+                                  "right": {
+                                    "block": {
+                                      "type": "expression.parameter",
+                                      "fields": {
+                                        "name": "area_tolerance"
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            "right": {
+                              "block": {
+                                "type": "expression.multiply",
+                                "label": "rounding allowance",
+                                "inputs": {
+                                  "left": {
+                                    "block": {
+                                      "type": "expression.literal",
+                                      "fields": {
+                                        "value": {
+                                          "type": "number",
+                                          "value": 1e-9
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "right": {
+                                    "block": {
+                                      "type": "expression.add",
+                                      "inputs": {
+                                        "left": {
+                                          "block": {
+                                            "type": "expression.add",
+                                            "inputs": {
+                                              "left": {
+                                                "block": {
+                                                  "type": "expression.literal",
+                                                  "fields": {
+                                                    "value": {
+                                                      "type": "quantity",
+                                                      "unit": "m2",
+                                                      "value": 1.0
+                                                    }
+                                                  }
+                                                }
+                                              },
+                                              "right": {
+                                                "block": {
+                                                  "type": "measured.middle_face_area",
+                                                  "fields": {
+                                                    "height_axis": "@height_axis",
+                                                    "length_axis": "@length_axis"
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        "right": {
+                                          "block": {
+                                            "type": "measured.opening_area",
+                                            "fields": {
+                                              "height_axis": "@height_axis",
+                                              "length_axis": "@length_axis",
+                                              "minimum": "@minimum_opening_area",
+                                              "openings": "@opening_selector",
+                                              "path": "@opening_path"
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.escape-route",

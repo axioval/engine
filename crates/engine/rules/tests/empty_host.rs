@@ -111,7 +111,20 @@ fn check(model: Model, extra: Vec<(&'static str, ParameterValue)>) -> Capability
         ("height_axis", string("extrusion")),
     ];
     parameters.extend(extra);
-    model.evaluate(&EmptyHost, &rule(ID, kind("wall"), parameters))
+    held(model, &rule(ID, kind("wall"), parameters))
+}
+
+/// The template's evaluation of `rule`, held to the implementation it
+/// replaced under `Parity::contract()`.
+fn held(model: Model, rule: &axioval_engine::CompiledRule) -> CapabilityEvaluation {
+    model.holding_contract(
+        &EmptyHost,
+        &axioval_rules::reference::EmptyHost,
+        rule,
+        |_| {},
+        &[],
+        0.0,
+    )
 }
 
 fn square_metres(value: f64) -> ParameterValue {
@@ -292,4 +305,235 @@ fn an_empty_host_as_an_expression_reaches_the_verdicts() {
     }
     // A wall with no recorded voids and one without a body stay open.
     assert_eq!((found, open), (3, 4));
+}
+
+/// Every refused declaration is worded as the capability worded it, in
+/// its order, the template held to the implementation it replaced.
+#[test]
+#[allow(clippy::too_many_lines)]
+fn refused_declarations_are_worded_as_before() {
+    let model = || opening(wall(), "whole", (2.5, 1.5), (5.0, 3.0));
+    let length = |value: f64| ParameterValue::Quantity {
+        value,
+        unit: "m".into(),
+    };
+    let path = || ("opening_path", strings(&["voids:forward"]));
+    let axes = || {
+        [
+            ("length_axis", string("profile-x")),
+            ("height_axis", string("extrusion")),
+        ]
+    };
+    let cases: Vec<(Vec<(&'static str, ParameterValue)>, &str)> = vec![
+        (
+            axes().to_vec(),
+            "empty-host: parameter `opening_path` is required",
+        ),
+        (
+            [vec![("opening_path", string("voids"))], axes().to_vec()].concat(),
+            "empty-host: parameter `opening_path` has the wrong type",
+        ),
+        (
+            [
+                vec![path(), ("opening_selector", string("opening"))],
+                axes().to_vec(),
+            ]
+            .concat(),
+            "empty-host: parameter `opening_selector` has the wrong type",
+        ),
+        (
+            vec![path(), ("height_axis", string("extrusion"))],
+            "empty-host: parameter `length_axis` is required",
+        ),
+        (
+            vec![path(), ("length_axis", string("extrusion"))],
+            "empty-host: parameter `height_axis` is required",
+        ),
+        (
+            vec![
+                path(),
+                ("length_axis", string("profile-z")),
+                ("height_axis", string("sideways")),
+            ],
+            "empty-host: `length_axis` `profile-z` is unsupported; use `extrusion`, \
+             `profile-x` or `profile-y`",
+        ),
+        (
+            vec![
+                path(),
+                ("length_axis", string("profile-x")),
+                ("height_axis", string("profile-x")),
+            ],
+            "empty-host: `length_axis` and `height_axis` must differ",
+        ),
+        (
+            [
+                vec![path(), ("minimum_opening_area", length(0.5))],
+                axes().to_vec(),
+            ]
+            .concat(),
+            "empty-host: `minimum_opening_area` is not a non-negative area",
+        ),
+        (
+            [
+                vec![
+                    path(),
+                    (
+                        "minimum_opening_area",
+                        ParameterValue::Number { value: 0.5 },
+                    ),
+                ],
+                axes().to_vec(),
+            ]
+            .concat(),
+            "empty-host: parameter `minimum_opening_area` has the wrong type",
+        ),
+        (
+            [
+                vec![path(), ("area_tolerance", square_metres(-1.0))],
+                axes().to_vec(),
+            ]
+            .concat(),
+            "empty-host: `area_tolerance` is not a non-negative area",
+        ),
+        (
+            [
+                vec![
+                    path(),
+                    ("minimum_opening_area", square_metres(-1.0)),
+                    ("area_tolerance", length(1.0)),
+                ],
+                axes().to_vec(),
+            ]
+            .concat(),
+            "empty-host: `minimum_opening_area` is not a non-negative area",
+        ),
+        (
+            [
+                vec![path(), ("area_tolerance", length(1.0))],
+                axes().to_vec(),
+            ]
+            .concat(),
+            "empty-host: `area_tolerance` is not a non-negative area",
+        ),
+    ];
+    for (parameters, message) in cases {
+        let evaluation = held(model(), &rule(ID, kind("wall"), parameters));
+        let refused = evaluation.not_evaluated_outcomes();
+        assert_eq!(refused.len(), 1, "{message}");
+        assert_eq!(*refused[0].reason(), NotEvaluatedReason::InvalidDeclaration);
+        assert_eq!(refused[0].message(), message);
+    }
+    // A malformed path is refused as the path reader words it.
+    let evaluation = held(
+        model(),
+        &rule(
+            ID,
+            kind("wall"),
+            [
+                vec![("opening_path", strings(&["voids:sideways"]))],
+                axes().to_vec(),
+            ]
+            .concat(),
+        ),
+    );
+    assert_eq!(
+        *evaluation.not_evaluated_outcomes()[0].reason(),
+        NotEvaluatedReason::InvalidDeclaration
+    );
+}
+
+/// The rule forked from the template, an `expression` rule, reaches the
+/// template's verdicts on the fixtures: its finding is worded as an
+/// expression rule's, so only outcomes are compared.
+#[test]
+fn the_forked_rule_reaches_the_templates_verdicts() {
+    use axioval_rules::templates::{Fork, fork};
+    let fixtures: [fn() -> Model; 5] = [
+        || opening(wall(), "whole", (2.5, 1.5), (5.0, 3.0)),
+        || opening(wall(), "window", (2.5, 1.5), (1.0, 1.2)),
+        || opening(wall(), "most", (2.45, 1.5), (4.9, 3.0)),
+        || {
+            opening(
+                opening(wall(), "a", (2.0, 1.5), (2.0, 3.0)),
+                "b",
+                (2.5, 1.5),
+                (2.0, 3.0),
+            )
+        },
+        wall,
+    ];
+    for model in fixtures {
+        for tolerance in [None, Some(0.5)] {
+            let mut parameters = vec![
+                ("opening_path", strings(&["voids:forward"])),
+                ("length_axis", string("profile-x")),
+                ("height_axis", string("extrusion")),
+            ];
+            if let Some(tolerance) = tolerance {
+                parameters.push(("area_tolerance", square_metres(tolerance)));
+            }
+            let bound = rule(ID, kind("wall"), parameters);
+            let forked = fork(&EmptyHost, &bound).unwrap();
+            let mut expression_rule = bound.clone();
+            expression_rule.capability = Fork::CAPABILITY.into();
+            expression_rule.parameters = forked.parameters();
+            let template = held(model(), &bound);
+            let forked = model().evaluate_measured(
+                &axioval_rules::ExpressionRequirement,
+                &expression_rule,
+                |_| {},
+            );
+            let parity = axioval_rules::parity::compare_evaluations(
+                ("template", &template),
+                ("fork", &forked),
+            );
+            assert!(parity.holds(), "{tolerance:?}\n{}", parity.diff());
+        }
+    }
+}
+
+/// Generated walls of up to three rectangular openings of random size and
+/// place (overlapping, side by side, reaching past the wall, or small),
+/// under random tolerances and minimum areas and both faces, judged alike
+/// by the template and the implementation it replaced.
+mod generated {
+    use super::*;
+    use proptest::prelude::*;
+
+    /// An opening's centre and size along the wall and up it.
+    type Hole = (f64, f64, f64, f64);
+
+    fn hole() -> impl Strategy<Value = Hole> {
+        (0.0..5.0f64, 0.0..3.0f64, 0.05..5.5f64, 0.05..3.2f64)
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(96))]
+
+        #[test]
+        fn generated_walls_hold_parity(
+            holes in proptest::collection::vec(hole(), 0..4),
+            tolerance in proptest::option::of(0.0..4.0f64),
+            minimum in proptest::option::of(0.0..2.0f64),
+            flat in any::<bool>(),
+        ) {
+            let mut model = wall();
+            for (index, (x, z, width, height)) in holes.into_iter().enumerate() {
+                model = opening(model, &format!("o{index}"), (x, z), (width, height));
+            }
+            let mut parameters = vec![
+                ("opening_path", strings(&["voids:forward"])),
+                ("length_axis", string("profile-x")),
+                ("height_axis", string(if flat { "profile-y" } else { "extrusion" })),
+            ];
+            if let Some(tolerance) = tolerance {
+                parameters.push(("area_tolerance", square_metres(tolerance)));
+            }
+            if let Some(minimum) = minimum {
+                parameters.push(("minimum_opening_area", square_metres(minimum)));
+            }
+            held(model, &rule(ID, kind("wall"), parameters));
+        }
+    }
 }

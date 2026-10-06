@@ -194,6 +194,7 @@ pub mod reference {
     pub use crate::coordinate_consistency::reference::CoordinateConsistencyCheck;
     pub use crate::counterpart_coverage::reference::CounterpartCoverage;
     pub use crate::effective_coverage::reference::EffectiveCoverage;
+    pub use crate::empty_host::reference::EmptyHost;
     pub use crate::external_wall_validation::reference::ExternalWallValidation;
     pub use crate::horizontal_guard::reference::HorizontalGuard;
     pub use crate::level_spacing::reference::LevelSpacing;

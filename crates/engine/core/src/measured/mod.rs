@@ -622,7 +622,9 @@ impl Measures {
                 String::with_capacity(MEASURED_SET.len() + name.len() + locator.len() + 3);
             located.push_str(MEASURED_SET);
             located.push('/');
-            located.extend(name.chars().map(|letter| letter.to_ascii_lowercase()));
+            let start = located.len();
+            located.push_str(name);
+            located[start..].make_ascii_lowercase();
             located.push_str(": ");
             located.push_str(&locator);
             located

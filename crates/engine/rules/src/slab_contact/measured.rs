@@ -90,6 +90,10 @@ enum StoreysKey {
     Selection(SelectionIdentity),
 }
 
+/// The traversal arguments of a call, as a memo keys the traversal.
+#[derive(Hash, PartialEq, Eq)]
+struct TraversalKey([String; 5]);
+
 /// 1 where `object` lies on the end storey `end` names, 0 where not, as
 /// `slab-contact` decides which subjects it leaves out.
 fn end(
@@ -97,10 +101,30 @@ fn end(
     object: &ObjectId,
     context: &RuleContext<'_>,
 ) -> Result<Measurement, Unavailable> {
-    let picked = selection(context, call, "storeys", None)
-        .map_err(|error| (NotEvaluatedReason::IncompleteEvidence, error.to_string()))?
-        .ok_or_else(|| invalid("`storey_end` needs `storeys`"))?;
-    let traversal = traversal(call)?.ok_or_else(|| {
+    let picked = match call.argument("storeys") {
+        Some(MeasuredArgument::Objects(shared)) => std::borrow::Cow::Borrowed(&**shared),
+        _ => std::borrow::Cow::Owned(
+            selection(context, call, "storeys", None)
+                .map_err(|error| (NotEvaluatedReason::IncompleteEvidence, error.to_string()))?
+                .ok_or_else(|| invalid("`storey_end` needs `storeys`"))?,
+        ),
+    };
+    // The traversal, read once per run for every object.
+    let walked: Result<Option<Traversal>, Unavailable> = MeasuredMemo::of(
+        context.services,
+        TraversalKey(
+            [
+                "relationship",
+                "direction",
+                "path",
+                "follow_chain",
+                "skip_absent_relationship_ends",
+            ]
+            .map(|key| format!("{:?}", call.argument(key))),
+        ),
+        || traversal(call),
+    );
+    let traversal = walked?.ok_or_else(|| {
         invalid("`storey_end` needs a `relationship` or `path` to the object's storey")
     })?;
     let key = match call.argument("storeys") {
@@ -249,7 +273,7 @@ fn contact(
     call: &MeasuredCall,
     object: &ObjectId,
     context: &RuleContext<'_>,
-) -> Result<(Contact, usize), Unavailable> {
+) -> Result<(std::sync::Arc<Contact>, usize), Unavailable> {
     let service = context
         .services
         .get::<ContactServiceHandle>()
@@ -298,30 +322,31 @@ fn contact(
         side == ContactSide::Above,
         tolerances.map(f64::to_bits),
     );
-    let measured: Result<Contact, ContactError> = MeasuredMemo::of(context.services, key, || {
-        let candidates: Vec<ObjectId> = match &named {
-            None => context
-                .project
-                .objects()
-                .map(|candidate| candidate.id.clone())
-                .filter(|candidate| candidate != object)
-                .collect(),
-            Some(picked) => picked
-                .matched
-                .iter()
-                .filter(|candidate| *candidate != object)
-                .cloned()
-                .collect(),
-        };
-        service
-            .measure_contact(&ContactRequest::new(
-                object.clone(),
-                candidates,
-                side,
-                tolerance,
-            ))
-            .map(Contact::from)
-    });
+    let measured: Result<std::sync::Arc<Contact>, ContactError> =
+        MeasuredMemo::of(context.services, key, || {
+            let candidates: Vec<ObjectId> = match &named {
+                None => context
+                    .project
+                    .objects()
+                    .map(|candidate| candidate.id.clone())
+                    .filter(|candidate| candidate != object)
+                    .collect(),
+                Some(picked) => picked
+                    .matched
+                    .iter()
+                    .filter(|candidate| *candidate != object)
+                    .cloned()
+                    .collect(),
+            };
+            service
+                .measure_contact(&ContactRequest::new(
+                    object.clone(),
+                    candidates,
+                    side,
+                    tolerance,
+                ))
+                .map(|measured| std::sync::Arc::new(Contact::from(measured)))
+        });
     Ok((measured.map_err(contact_unavailable)?, undecided))
 }
 
@@ -368,8 +393,13 @@ fn contact_value(
     Ok((
         value,
         Citation {
-            // What the face rests on, so a reviewer can open it.
-            related: measured.touching,
+            // What the face rests on, so a reviewer can open it: the share
+            // the rule judges cites it.
+            related: if call.name() == CONTACT_SHARE {
+                measured.touching.clone()
+            } else {
+                Vec::new()
+            },
             evidence: Vec::new(),
         },
     ))

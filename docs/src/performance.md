@@ -255,3 +255,17 @@ finding on an anchor without them.
 reference's run time and 1.04 to 1.20× its peak heap, the architecture
 models the highest. Its value reads the search once per subject, its
 "none" wording from the search's citation, not a second read.
+
+`slab-contact` runs the `coverage` case's two rules, a face against
+selected walls, columns and beams, and one leaving out the bottom storey:
+0.99 to 1.25× its reference's run time per input (the tessellated column
+and the wall model, under the floor, judged together) and 1.03 to 1.35×
+its peak heap, the infra road the highest. It reached that through
+generic changes: a bound measured value is prepared once per rule
+(`PreparedRead`: parsed, bound and keyed once, each selection shared and
+kept in memos by identity), a provider keeping its measurements for the
+run is not memoized a second time (`MeasuredProvider::memoizes`), the
+grading values are read ahead with the form's, and the undecided count is
+read only to word an undecided shortfall. Before them it ran 2.2× on the
+infra road and held 11.8× the heap on the generated fixture, every read
+formatting its selection into a memo key.

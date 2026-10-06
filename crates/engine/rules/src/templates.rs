@@ -2881,10 +2881,26 @@ fn read_ahead(
         context,
         first,
     );
+    // The form's grading values too: read together they cost less than
+    // one by one, and one that cannot be read counts only where a finding
+    // is graded.
+    let graded = plan
+        .form
+        .grading
+        .as_ref()
+        .map_or(0, |grading| grading.values.len());
     let bound = bound_batched(
         plan.values()
             .chain((0..plan.form.checks.len()).flat_map(|index| plan.check_values(index)))
-            .map(|(_, expression)| expression),
+            .map(|(_, expression)| expression)
+            .chain(
+                plan.bound
+                    .grading
+                    .first()
+                    .into_iter()
+                    .flatten()
+                    .take(graded),
+            ),
         context,
         rule,
         arguments,

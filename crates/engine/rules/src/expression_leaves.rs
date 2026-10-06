@@ -367,27 +367,43 @@ impl<'a> ObjectLeaves<'a> {
         name: &str,
         bound: Result<axioval_engine::PreparedRead, (NotEvaluatedReason, String)>,
     ) -> Leaf {
-        let read = match self.bound.iter().position(|(read, _)| &**read == name) {
-            Some(index) => self.bound.swap_remove(index).1,
-            None => match bound {
-                Ok(prepared) => self.measure_prepared(&prepared),
-                Err((reason, why)) => Err((
-                    reason,
-                    format!(
-                        "`{}` of {}: {why}",
-                        name.split(';').next().unwrap_or(name),
-                        self.object.id
-                    ),
-                )),
-            },
+        let (written, read) = match self.bound.iter().position(|(read, _)| &**read == name) {
+            Some(index) => {
+                let (written, read) = self.bound.swap_remove(index);
+                (Some(written), read)
+            }
+            None => (
+                None,
+                match bound {
+                    Ok(prepared) => self.measure_prepared(&prepared),
+                    Err((reason, why)) => Err((
+                        reason,
+                        format!(
+                            "`{}` of {}: {why}",
+                            name.split(';').next().unwrap_or(name),
+                            self.object.id
+                        ),
+                    )),
+                },
+            ),
         };
-        self.bound_leaf(name, read)
+        self.bound_leaf_named(name, written, read)
     }
 
     /// The leaf of a measured value read with bound arguments.
     fn bound_leaf(
         &mut self,
         name: &str,
+        read: Result<axioval_engine::BoundRead, (NotEvaluatedReason, String)>,
+    ) -> Leaf {
+        self.bound_leaf_named(name, None, read)
+    }
+
+    /// [`Self::bound_leaf`], the name shared where it was read ahead.
+    fn bound_leaf_named(
+        &mut self,
+        name: &str,
+        written: Option<Arc<str>>,
         read: Result<axioval_engine::BoundRead, (NotEvaluatedReason, String)>,
     ) -> Leaf {
         let ((read, citation), name) = match read {
@@ -409,8 +425,8 @@ impl<'a> ObjectLeaves<'a> {
             Some(value) => Value::from_property(value),
         };
         self.stated.borrow_mut().push((
-            Some(Arc::from(axioval_ir::MEASURED_SET)),
-            Arc::from(name),
+            Some(measured_set()),
+            written.unwrap_or_else(|| Arc::from(name)),
             stated,
         ));
         if value.is_err() {
@@ -1057,4 +1073,11 @@ fn equal(cell: &Value, value: &Value) -> RowTest {
         (cell, value) if cell == value => RowTest::Match(1),
         _ => RowTest::NoMatch,
     }
+}
+
+/// The measured set's name, shared by every read of it.
+fn measured_set() -> Arc<str> {
+    static SET: std::sync::LazyLock<Arc<str>> =
+        std::sync::LazyLock::new(|| Arc::from(axioval_ir::MEASURED_SET));
+    SET.clone()
 }

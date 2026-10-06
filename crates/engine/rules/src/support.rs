@@ -260,6 +260,7 @@ fn resolved(
 /// `IfcRelFillsElement|IfcRelVoidsElement:backward+` every element above one
 /// through its openings. Intermediate objects may be anything; the objects
 /// the last step reaches are restricted to the caller's universe.
+#[derive(Clone)]
 pub(crate) struct Traversal {
     /// How messages name the traversal: the relationship, or the steps.
     pub(crate) relationship: String,

@@ -1,24 +1,21 @@
 //! How many times a stair or ramp falls foul of a fixed-size search, as a
 //! measured value: obstructed end spaces, doors in or over a landing,
 //! missing tactile strips, breaks in a handrail across landings and rails
-//! reaching over accessible surfaces. Each is counted by running that one
-//! check of `stair-geometry` or `ramp-geometry` alone on the object, with
-//! the sizes and kinds the value states, so the count is the capability's:
-//! from the defects found to those found or left open.
+//! reaching over accessible surfaces, from the defects found to those found
+//! or left open.
 //!
-//! This is an inverted wrapper, kept on purpose until the template rebuild
-//! (#280): the five checks have no search callable on its own yet, so the
-//! count runs the capability rather than copying its judgement. The rebuild
-//! splits each check into a search over the stair or ramp (end spaces in
-//! `ramp_ends.rs`, landing doors, tactile strips in `tactile.rs`, breaks in
-//! `continuity.rs`, rails over surfaces in `obstruction.rs`) returning one
-//! three-valued result per searched item, which the template judges and
-//! this count sums; then this module's synthesised rule goes.
+//! Where a search answers per item (`end_spaces`, `landing_doors` and
+//! `landing_swings`, a ramp's `rail_continuity` and `rail_obstructions` in
+//! `items.rs`), the count sums its items: a found one is a sure defect, an
+//! undecided one a possible one. The tactile strips and a whole stair's
+//! breaks are still counted by running that one check of `stair-geometry`
+//! alone with the sizes and kinds the value states, an inverted wrapper
+//! kept until `stair-geometry` is a template too (#280).
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_engine::{
-    CompiledRule, Measurement, PropertyResolutionError, RuleCapability, RuleContext,
+    CompiledRule, MeasuredMember, Measurement, PropertyResolutionError, RuleCapability, RuleContext,
 };
 use axioval_ir::contract::{ParameterValue, Selector, Severity};
 use axioval_ir::measured::{MeasuredArgument, MeasuredCall};
@@ -148,12 +145,66 @@ fn checked(
     Ok(stairs.into_iter().collect())
 }
 
-/// The defects `call` counts on `object`.
+/// The searched items a ramp's or a flight's defects are among, where the
+/// item searches answer them: each found one a sure defect, each undecided
+/// one a possible defect.
+fn searched(
+    call: &MeasuredCall,
+    object: &ObjectId,
+    context: &RuleContext<'_>,
+) -> Result<Option<Vec<MeasuredMember>>, PropertyResolutionError> {
+    let ramp = call.choice("of") == Some("ramp");
+    let name = call.name();
+    let searched = matches!(name, "obstructed_end_spaces" | "landing_door_conflicts")
+        || (ramp && matches!(name, "handrail_breaks" | "rails_over_surfaces"));
+    if !searched {
+        return Ok(None);
+    }
+    checked(call, object, context)?;
+    let stairs = super::items::walking(context)?;
+    let walked = super::items::walked(call, object, context)?;
+    let measured = (&stairs, &walked);
+    Ok(Some(match name {
+        "obstructed_end_spaces" => super::items::end_spaces(call, object, context, measured)?,
+        "landing_door_conflicts" => {
+            let mut found = super::items::doors(call, object, context, measured, false)?;
+            if call.choice("swing") == Some("yes") {
+                found.extend(super::items::doors(call, object, context, measured, true)?);
+            }
+            found
+        }
+        "handrail_breaks" => super::items::ramp_rails(call, object, context, measured, true)?,
+        _ => super::items::ramp_rails(call, object, context, measured, false)?,
+    }))
+}
+
+/// The defects `call` counts on `object`: from the items surely found to
+/// those found or left open.
 pub(super) fn count(
     call: &MeasuredCall,
     object: &ObjectId,
     context: &RuleContext<'_>,
 ) -> Result<Measurement, PropertyResolutionError> {
+    if let Some(items) = searched(call, object, context)? {
+        let (mut found, mut open, mut exact) = (0_u32, 0_u32, true);
+        for item in &items {
+            match item.fields.get("found") {
+                Some(axioval_engine::MemberValue::Truth { value: true, .. }) => {
+                    found += 1;
+                    exact &= item.exact;
+                }
+                Some(axioval_engine::MemberValue::Truth { value: false, .. }) => {}
+                _ => open += 1,
+            }
+        }
+        return Ok(Measurement::Cited {
+            lower: f64::from(found),
+            upper: f64::from(found.saturating_add(open)),
+            dimension: None,
+            locator: format!("{}:{object}", call.name()),
+            exact: exact && open == 0,
+        });
+    }
     let ramp = call.choice("of") == Some("ramp");
     let rule = CompiledRule {
         id: RuleId::new("axioval-measured-defects").expect("a valid rule id"),

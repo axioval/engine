@@ -30,7 +30,9 @@ and `selector-conformance` follow `unique-value` as group decisions, and
 `relative-count` judges two populations by a proportion, and
 `property-value` judges XML Schema facets, `property-requirements`
 requirements tables and `property-comparison` candidates against a target
-(#287): every generic judge now runs as a template.
+(#287): every generic judge now runs as a template; `ramp-geometry` is the
+first judging the items of measured lists one by one
+([#280](https://github.com/axioval/engine/issues/280)).
 
 ## The outside contract
 
@@ -60,7 +62,7 @@ rules crate (`body_extent/template.rs`):
 | `refusals` | Where a refused declaration and missing services are reported: `rule` (the default, once, before anything is selected, after the name) or `objects` (for each selected object, worded as the check states it, as capabilities that judged their declaration per object reported it). |
 | `defaults` | Values optional parameters take when unstated (`tolerance` 0 m). |
 | `declaration` | `Check`s over the rule's parameters, in order: `excludes` (where a mode is stated, no string parameter of a list states an option it does not combine with), `arguments` (where a mode is stated, the rule parameters a measured value names, checked as stated by the value's own argument check: a declaration, such as a table of rows, only the measurement knows how to read), `choice` (a string among options), `length` (a non-negative length), `count` (an integer of at least zero, stated where the descriptor requires it), `kind` (a parameter of its descriptor's kind, placed where the capability read it so refusals keep their order), `nonNegative` (numbers of at least zero), `traversal` (a valid `relationship` or `path`, declared only with one of the named parameters, or anywhere where it names none), `exclusive`, `anyOf`, `requires`, `ordered` (numbers, integers or quantities, as the descriptor types them), `disciplines` (a non-empty list of valid disciplines), `path` (a valid relationship path), `tolerance` (the rule's tolerance parameters valid together), `required` (a parameter stated, of its kind), `finite` (each parameter stated as a finite `number`, above or at least a bound where given), `increasing` (both numbers, the first below the second), `atMost` (each number stated at most a value: a share no greater than the whole). The first failing check leaves the rule not evaluated as an invalid declaration, worded as the capability worded it. |
-| `services` | The host services the values need (`Service`: `object-frame`, `vertical-extent`, `triangle-count`), and the message leaving the whole rule open without them, before anything is selected. |
+| `services` | The host services the values need (`Service`: `object-frame`, `vertical-extent`, `triangle-count`, `walking-surface`), and the message leaving the whole rule open without them, before anything is selected. |
 | `texts` | Named message parts, optionally conditional: `Condition::Positive` (a parameter above zero), `Condition::Inexact` (a value read from evidence that is not exact, such as a count of a tessellation), `Condition::Equals` (a string parameter or its default is a value), `Condition::Zero` (a value's lower end is zero: nothing surely counted), `Condition::All` (every one of several), `Condition::Not` and `Condition::Cites` (a value's measured reads cite an object: a search found a candidate). Several texts may share a name, each under its own condition: the first that holds is rendered (`plan area` or `facade area` by `measure`). |
 | `forms` | The compositions. The first form whose `when` parameters are all stated applies. |
 
@@ -404,8 +406,63 @@ its judgements for the catalogue and is never forked.
 The declaration checks such a capability needs are `nonNegativeLength`
 (a non-negative length, worded by the template), `together` (all or
 none), `among` (a string among options, `{value}` the stated one),
-`declares` (one stated, a boolean true) and `falseRequires` (a boolean
-stated false needs one of some parameters).
+`declares` (one declared: stated, a boolean true, a table with a row) and
+`falseRequires` (a boolean stated false needs one of some parameters).
+
+**Items of a measured list.** A form's check may decide
+`Decision::Items` (`Items`): the items of a measured member list, the
+list written as a measured value is (`landings;of=ramp;landing=@landing_objects`,
+its `@` references bound for each object, an unstated optional one
+dropped), read once per object however many checks read it. A list that
+cannot be measured leaves the check open with `refused` (`{why}`), or
+reports nothing where another check already did. Each item is judged by
+`ItemCheck`s, every failing test its own outcome (D1):
+
+- a `Test` judges a `Range` (a number field between the largest of its
+  `at_least` and the smallest of its `at_most` requirements, each the
+  first `Choice` whose conditions hold and whose bound is known: a rule
+  parameter, a number of the item, or a literal; widened by an
+  `Allowance`: eight units in the last place of a magnitude, at least one,
+  `times` over, the largest magnitude of any item judged together, or an
+  allowance the measurement states), a `Truth` (one value a finding), the
+  `Rows` of a table parameter (an item fails where every row fails,
+  graded by the row it misses least), or `Fails` (a finding wherever its
+  conditions hold: a requirement stated as conditions). A finding grades
+  its deviation from the declared bound; a bound that is an interval (an
+  item's own width) fails at its most lenient end and passes at its
+  strictest. `then`, `otherwise` and `straddled` judge a further test in
+  a test's place where it passes, fails or is open; `Effect`s turn a
+  pass, a finding, a finding below a lower bound, or a `null` open where
+  their conditions hold (`{failed}` the finding's words);
+- a `Group` reads `Guard` fields first: an undecided one leaves the item
+  open once for all its tests, a `null` one is skipped, opened or failed;
+- `When` conditions read the rule (`declared`, `undeclared`, `equals`,
+  `undecided`: a selector parameter leaving objects undecided) or the
+  item (a truth field, a `null`, a number exactly or surely below a value,
+  an empty objects field).
+
+`Together` judges every item in one outcome instead: `every` number in a
+range, named `riser {index} of {count}` among the items whose field is
+stated, the failing ones in one finding graded by the worst and the open
+ones grouped or each on its own; every truth (`truths`); or the `spread`
+of the numbers (the largest less the smallest) against a tolerance.
+`Passing` opens the check where every item passed and a condition holds
+(`undecided`): once, or per item of another list grouping them by a key
+(each stretch whose rails all pass). Messages read item fields
+(`{label}`, `{governing}`, `{governing:and}`, `{rise:length}`,
+`{slope:ratio}`, `{angle:degrees}`), parameters (`{minimum:length}`),
+the chosen requirements (`{stated:length}`, `{requirements}` their words
+joined by ` and `), `{bound}` (`0.15 m to 0.19 m`), `{why}` and the
+`ItemText`s, each under conditions. A form with such a check is never
+forked (`ForkError::Inexpressible`); its expression form is a `none`
+aggregate over the list of an item failing its tests.
+
+The declaration checks the stair and ramp templates add are `positive` (a
+length above zero), `needs` (where a check is declared every parameter it
+needs is stated, and none of them without one), `below` (two lengths in
+order), `requiresValue` (a parameter only with another's string value),
+`requiresDeclared` (only with a declared one) and `rows` (each row of a
+table states its columns as required).
 
 ### `object-count`
 
@@ -702,6 +759,34 @@ lies within any {candidate}; required {minimum_ratio}`, `candidate` being
 `candidate (there are none)` where the search cited none
 (`Condition::Cites`); an undecided one `coverage of {minimum_ratio} cannot
 be decided from the measured areas`.
+
+### `ramp-geometry`
+
+One form: the ramp's `run_count` read first, so a ramp the walking-surface
+service cannot measure is open once, for its reason; then a check per
+declared requirement, each `Items` over a list the ramp's runs are
+measured into:
+
+| Check | List | Judgement |
+| --- | --- | --- |
+| `slope_limits` | `runs` | each run against the table's `Rows` (slope, length, rise), its slope's rounding stated by the run |
+| `slope_tolerance` | `runs` | the `spread` of the run slopes, twice the largest slope rounding |
+| `minimum_headroom` | `clearances;side=above` | the clearance at least the minimum; an undecided obstacle opens a pass or nothing above |
+| `width_minimum`, `width_maximum` | `runs` | `every` run width, open where one is not measured |
+| landings | `landings` | the landing present where required; its depth and width at least the minimum (the end minimum at the two outermost ends) and the run's width, open once without a rectangle or a measured width; an undecided carrier opens a shortfall |
+| `landing_doors`, `landing_door_swing` | `landing_doors`, `landing_swings` | the searches' answers |
+| `minimum_headroom_below` | `clearances;side=below` | as headroom, over the spaces' floors |
+| handrails | `handrail_stretches`, `rail_heights`, `rail_extensions`, `rail_gaps` | the sides required (one, both, both above a width); each rail's height; each extension and its rail running level over the minimum; each gap; an undecided rail opens a pass per stretch, a missing side, a short extension or a gap |
+| `check_continuous_handrails`, `check_rails_obstruction`, `end_space_*` | `rail_continuity`, `rail_obstructions`, `end_spaces` | the searches' answers |
+| `clear_width_minimum` | `clear_widths` | each run's clear width at least the minimum; an undecided obstacle opens a pass |
+
+The declaration keeps the capability's checks, words and order. Searches
+(the free space at each end, doors on or over a landing, the handrail
+across a landing, rails over a surface) answer three-valued per item and
+word what they found; the template judges the numbers. Their counts
+(`obstructed_end_spaces`, `landing_door_conflicts`, `handrail_breaks`,
+`rails_over_surfaces`) sum the same items rather than running the
+capability.
 
 ## Binding and running a rule
 
@@ -1019,6 +1104,17 @@ by the `space-on-slab` rule of the `storeys` case, recorded before the
 switch; and its fork, which carries the selector, the minimum and the
 traversal, reaches its verdicts (D23).
 
+`ramp-geometry` is held to the implementation it replaced
+(`axioval_rules::reference::RampGeometry`) through `common::Held` on every
+ramp fixture of `tests/stair_geometry.rs` (`held`), its messages asserted
+literally; by generated ramps of random runs, widths and landings under
+random slope limits, tolerances, widths and landing minimums; and by the
+`ramp-geometry` rules of the case `stairs`, recorded before the switch
+(the public models hold no ramp: they record the walking-surface
+service's refusals). It is never forked. A selector whose objects cannot
+all be listed leaves each check open once, worded as the binding words it,
+where the capability left each end open naming the selection (D24).
+
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the
 public models. A rebuild retires its reference once its family's
@@ -1052,7 +1148,11 @@ addition data the runner interprets, never code per capability:
   rule selects there.
 - **Several findings per object** (built: `Judgement`s of
   `Decision::Each` for members, `Form::checks` for an object-level form,
-  each its own outcome; divergence D1).
+  each its own outcome; divergence D1; and `Decision::Items`, each item of
+  a measured list judged on its own).
+- **Searches as measured values** (built for stairs and ramps: a search
+  answers one three-valued item per searched item, `found` and its
+  words).
 - **Tables and defaults.** Table parameters reach values through `lookup`;
   fallbacks (a stated value, then a table, then a declared default, each on
   an exact absence only) are a value list read in order, the first that is

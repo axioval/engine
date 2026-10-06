@@ -59,6 +59,30 @@ pub(super) struct HandrailCheck<'a> {
     pub(super) ramp_continuity: Option<f64>,
 }
 
+impl<'a> HandrailCheck<'a> {
+    /// A check only measuring the rails `rails` names along a stretch,
+    /// within `reach` across and `above` over it, a rail's rise measured
+    /// over `level_over` beyond each end.
+    pub(super) fn measuring(
+        rails: &'a Selector,
+        (reach, above): (f64, f64),
+        level_over: f64,
+    ) -> Self {
+        Self {
+            rails,
+            reach,
+            above,
+            height: (None, None),
+            extension: (Some(level_over), None),
+            from_riser: false,
+            gap: None,
+            sides: None,
+            continuous: false,
+            ramp_continuity: None,
+        }
+    }
+}
+
 impl HandrailCheck<'_> {
     /// How far outside the walking surface's sides a rail may run.
     pub(super) fn reach(&self) -> f64 {
@@ -396,7 +420,7 @@ fn push_all(
 }
 
 /// The largest magnitude among the positions of the measurement.
-fn scale(measured: &HandrailEvidence) -> f64 {
+pub(super) fn scale(measured: &HandrailEvidence) -> f64 {
     let (start, end) = measured.pitch();
     let mut positions = vec![start, end];
     for part in measured.parts() {
@@ -714,7 +738,7 @@ impl Judged<'_> {
 }
 
 /// Why the pieces along a side cannot be put in order.
-fn unordered(side: RailSide, pieces: &[ObjectId], along: &Along<'_>) -> String {
+pub(super) fn unordered(side: RailSide, pieces: &[ObjectId], along: &Along<'_>) -> String {
     let names = pieces
         .iter()
         .map(ToString::to_string)
@@ -750,7 +774,7 @@ fn level(rail: &ObjectId, rise: Option<MeasuredInterval>, minimum: f64, place: &
     }
 }
 
-fn side_words(side: RailSide) -> &'static str {
+pub(super) fn side_words(side: RailSide) -> &'static str {
     match side {
         RailSide::Left => "left",
         RailSide::Right => "right",

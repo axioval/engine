@@ -463,8 +463,10 @@ them surely picked.
 
 **Binding.** The compiler type-checks every reference against the rule's
 parameters (`EngineError::InvalidExpression` at the read: a parameter the
-rule does not state, or of another kind); a selector, a derived value and
-a member list name none. An expression rule declares the parameters its
+rule does not state, or of another kind); a selector and a derived value
+name none. A member list names them as a measured value does
+(`clearances;obstacles=@headroom_obstacles`), bound for each object before
+it is measured. An expression rule declares the parameters its
 measured values read as authored parameters of its definition, a
 `selector` among them. When the rule runs, the reference is bound before
 anything is measured (`MeasuredCall::bind`): a selector to the objects it
@@ -986,15 +988,18 @@ among the objects of the `landing` kinds, none when none carries one;
 `landing_count` is 1 or 0, and `end_width` the width such a landing is
 compared with (the flight's, or a turning flight's tread meeting it).
 
-The checks that are fixed-size searches count what they find, each by
-running that one check of `stair-geometry` or `ramp-geometry` alone with the
-sizes and kinds the value states: `obstructed_end_spaces`,
-`landing_door_conflicts` (with `swing=yes` doors swinging over too),
-`missing_tactile_strips` (on a whole stair's flights with `within`, the path
-to it), `handrail_breaks` across a whole stair's or a ramp's landings, and
-`rails_over_surfaces`. Each is an interval from what was found to what was
-found or left open, so `= 0` holds, fails or is not evaluated exactly as the
-check does. They are measured through the walking-surface
+The checks that are fixed-size searches count what they find:
+`obstructed_end_spaces`, `landing_door_conflicts` (with `swing=yes` doors
+swinging over too), `missing_tactile_strips` (on a whole stair's flights
+with `within`, the path to it), `handrail_breaks` across a whole stair's or
+a ramp's landings, and `rails_over_surfaces`. Each sums the items of the
+search's list (`end_spaces`, `landing_doors` and `landing_swings`,
+`rail_continuity`, `rail_obstructions`, below) with the sizes and kinds the
+value states: an item found is a sure defect, one left undecided a
+possible one, so the count is an interval from what was found to what was
+found or left open, and `= 0` holds, fails or is not evaluated exactly as
+the check does. `run_count` is how many sloped runs the service measures
+of a ramp, cited as the service cites them. They are measured through the walking-surface
 service as `stair-geometry` and `ramp-geometry` measure them, each a
 flight measured first; the steps, runs and handrails are measured members
 (below). Headroom, the clearance below and the clear width are
@@ -1066,6 +1071,25 @@ and declare their parameters and typed fields:
 | `parallel_pairs` (`members`, `member_path`, `angle_tolerance`, `reach`) | the parallel pairs of members the object reaches, as `wall-spacing` pairs them | `distance` |
 | `swing_spaces` (`path`, `kinds`) | the spaces a door opens onto, probed as `door-swing` probes them | `into`, `away` |
 | `opening_placements` (`host_path`, `hosts`, `length_axis`, `height_axis`, `zone`, `minimum`) | an opening's placement in each host its path reaches, as `opening-zone` places it | `inside`, `end_distance`, `edge_distance`, `bottom_distance`, `top_distance` |
+| `clearances` (`of`, `side`, `obstacles`) | the headroom above a flight or ramp, or the clearance below it over the floors of the spaces `obstacles` names: one item | `clearance` (`null` where nothing governs it), `governing`, `noun` |
+| `landings` (`of`, `walking_line_offset`, `landing`) | the landing at each end of a flight, or at both ends of each of a ramp's runs | `label`, `noun`, `present`, `depth`, `width`, `carrier`, `carriers`, `walking`, `outermost`, `scale` |
+| `clear_widths` (`of`, `walking_line_offset`, `obstacles`, `band_from`, `band_to`, `landing`, `ends`, `stretch`) | the clear width of a flight and the landings at its ends, or of each of a ramp's runs | `label`, `above`, `width`, `governing`, `place` |
+| `handrail_stretches`, `rail_heights`, `rail_extensions`, `rail_gaps` (`of`, `walking_line_offset`, `rails`, `reach_across`, `reach_above`, `level_over`, `from`) | each stretch (a flight, or a ramp's run) and the sides its rails run along; each rail's height; each end extension of the handrail along a side and of each rail over the middle; each gap between consecutive pieces | `stretch`, `label`; `measured`, `sides`, `side`, `on_sides`, `width`; `rail`, `rails`, `lowest`, `highest`; `end`, `other`, `from`, `place`, `reach`, `rise`, `over_middle`; `pair`, `gap`; `scale` |
+| `end_spaces` (`of`, `obstacles`, `depth`, `width`, `height`), `landing_doors`, `landing_swings` (`of`, `landing`, `doors`, `height`), `rail_continuity` (`rails`, reaches, `tolerance`, `gap`), `rail_obstructions` (`rails`, `surfaces`, reaches) | one search per end, per landing, per broken side or per rail over a surface | `found`, `finding`, `objects`, `label` |
+
+The stair and ramp lists are what `stair-geometry` and `ramp-geometry`
+judge item by item ([Capability templates](./templates.md)). A text field
+(`label`, `carrier`) words the item as a message names it, and an objects
+field (`governing`, `carriers`, `objects`) names the objects a finding on
+the item relates; read in an expression, either is text, the objects'
+identities joined by `, `. `scale` is the largest magnitude among the
+positions measured, which the binary rounding of their coordinates grows
+with, and the runs' `slope_rounding` how far that rounding may move a
+run's slope. A search's item states `found` true with what it found
+(`finding`), false, or undecided with why; a search over a selection that
+leaves objects undecided treats them as possible finds. A list that names
+the rule's selectors and lengths (`@landing_objects`) is measured once per
+object, however many checks read it.
 
 Step `j` climbs riser `j` onto tread `j`; its `going`, `nosing` and
 `winder_angle` are measured from the tread below, so the first step and a

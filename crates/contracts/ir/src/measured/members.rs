@@ -17,6 +17,8 @@ use super::{
 };
 use crate::QuantityDimension;
 
+mod walking;
+
 /// One list of measured members.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -240,6 +242,9 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             ),
         ],
     },
+    walking::CLEAR_WIDTHS,
+    walking::CLEARANCES,
+    walking::END_SPACES,
     MemberDescriptor {
         list: MeasuredDescriptor {
             name: "end_walls",
@@ -703,6 +708,7 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             ),
         ],
     },
+    walking::HANDRAIL_STRETCHES,
     MemberDescriptor {
         list: MeasuredDescriptor {
             name: "handrails",
@@ -914,6 +920,9 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             ),
         ],
     },
+    walking::LANDING_DOORS,
+    walking::LANDING_SWINGS,
+    walking::LANDINGS,
     MemberDescriptor {
         list: MeasuredDescriptor {
             name: "opening_placements",
@@ -1082,6 +1091,11 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             ),
         )],
     },
+    walking::RAIL_CONTINUITY,
+    walking::RAIL_EXTENSIONS,
+    walking::RAIL_GAPS,
+    walking::RAIL_HEIGHTS,
+    walking::RAIL_OBSTRUCTIONS,
     MemberDescriptor {
         list: MeasuredDescriptor {
             name: "recesses",
@@ -1186,6 +1200,36 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
                      not measured.",
                     "Die Breite des Laufs quer zu seiner Richtung; `null`, wo seine Seiten \
                      nicht gemessen sind.",
+                ),
+            },
+            MemberField {
+                name: "label",
+                kind: MemberFieldKind::Text,
+                label: &en_de("Label", "Bezeichnung"),
+                help: &en_de(
+                    "How messages name the run: `run 2 of 3`.",
+                    "Wie Meldungen den Lauf nennen: `run 2 of 3`.",
+                ),
+            },
+            MemberField {
+                name: "scale",
+                kind: RATIO,
+                label: &en_de("Scale", "Größenordnung"),
+                help: &en_de(
+                    "The largest magnitude among the run's positions, in metres: the binary \
+                     rounding of decimal coordinates grows with it.",
+                    "Der größte Betrag unter den Lagen des Laufs, in Metern: die binäre \
+                     Rundung dezimaler Koordinaten wächst mit ihm.",
+                ),
+            },
+            MemberField {
+                name: "slope_rounding",
+                kind: RATIO,
+                label: &en_de("Slope rounding", "Rundung der Neigung"),
+                help: &en_de(
+                    "How far the binary rounding of the run's coordinates may move its slope.",
+                    "Wie weit die binäre Rundung der Koordinaten des Laufs seine Neigung \
+                     verschieben kann.",
                 ),
             },
             MemberField {
@@ -1323,6 +1367,17 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
                 help: &en_de(
                     "Whether the riser leaves the step open.",
                     "Ob die Steigung die Stufe offen lässt.",
+                ),
+            },
+            MemberField {
+                name: "scale",
+                kind: RATIO,
+                label: &en_de("Scale", "Größenordnung"),
+                help: &en_de(
+                    "The largest magnitude among the flight's positions, in metres: the \
+                     binary rounding of decimal coordinates grows with it.",
+                    "Der größte Betrag unter den Lagen des Laufs, in Metern: die binäre \
+                     Rundung dezimaler Koordinaten wächst mit ihm.",
                 ),
             },
         ],

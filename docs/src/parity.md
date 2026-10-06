@@ -208,7 +208,11 @@ public model, unmeshed, recorded before they are rebuilt as templates
 (#287). The
 case `shelving` records two `shelf-capacity` rules (doors through stated
 space boundaries, and through the derived adjacency among selected
-spaces) before it became a template (#289).
+spaces) before it became a template (#289). The case `stairs` records
+`stair-geometry` and `ramp-geometry` rules over slabs, beams and storeys
+standing in for flights, ramps and whole stairs (#280): the public models
+hold none, so it records the walking-surface service's refusals and the
+whole-stair mode's own outcomes.
 
 Each pair's evidence prints as one JSON line. That line is what the
 migration ledger records as a proof item, tagged `"kind": "parity"`; the
@@ -247,6 +251,7 @@ reproduce it unless that rebuild issue changes the contract on purpose.
 | D21 | `area-ratio` | `a_sum_on_a_rounding_midpoint_is_shown_as_its_interval` | a finding's rounded areas and ratio | The template sums the members' areas as the evaluator sums any aggregate, an exact interval (D19). Where the binary sum lies within a unit in the last place of a rounding midpoint of the message (an area shown to 1e-2 m², a ratio to 1e-4), the interval holds both neighbours: the template shows its lower end, and the ratio as `between`, where the capability showed its rounded point. | Accepted, as D19: outcome, grade and table agree within a unit in the last place; only a message at a midpoint differs. The generated inputs keep to areas binary arithmetic sums exactly, and the fixture asserts both messages. |
 | D22 | `area-ratio` | `an_empty_population_needs_no_service` | open with a missing service against open with no denominator area | An anchor reaching no member of a population whose areas are measured: the capability asked for the area service before summing nothing and left the anchor open without it; the template measures nothing and needs no service, so an anchor without any member is open for a denominator without area. | Accepted: both leave the anchor open; nothing is measured, so no service is needed. With the service registered, as on every public model, both agree. |
 | D23 | `plan-coverage` | review of the `@candidate_selector` binding | open against a verdict | A candidate selector whose selection leaves a whole source undecided (its resource objects cannot be listed): the capability searched the candidates it could list; the template's search takes the selection bound as a measured value's argument, which refuses a selection it cannot list whole, and leaves every subject open. | Accepted: fail closed where candidates may be missing. No public model or fixture lists resource objects for the case's selector. |
+| D24 | `ramp-geometry` | not reached by a fixture | the selection's words and count | A selector parameter (`headroom_obstacles`, `landing_objects`, `handrail_objects`, …) whose source's objects cannot all be listed: the capability left each end, run or check open naming the selection (`headroom obstacle selection is undecided: …`), the template leaves each check open once, worded as binding the selection refuses it (``the objects `@headroom_obstacles` selects cannot all be listed: …``). | Accepted: both fail closed, for the same reason, on the same object. |
 
 The comparison grew stricter with this chapter: it now counts findings
 (D1), compares source- and project-scoped outcomes (D4 now shows the

@@ -3948,6 +3948,21 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              entlang der eigenen Achsen, wie `parking-bay` Breite und Länge prüft.",
         ),
     },
+    MeasuredDescriptor {
+        name: "run_count",
+        parameters: &[],
+        dimension: None,
+        services: FLIGHT,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_FLIGHT],
+        label: &en_de("Ramp runs", "Rampenläufe"),
+        help: &en_de(
+            "How many sloped runs the walking-surface service measures of a ramp, as \
+             `ramp-geometry` measures them before it judges any.",
+            "Wie viele geneigte Läufe der Laufflächendienst an einer Rampe misst, wie \
+             `ramp-geometry` sie misst, bevor es einen beurteilt.",
+        ),
+    },
     plain!(
         "section_area",
         Some(QuantityDimension::Area),

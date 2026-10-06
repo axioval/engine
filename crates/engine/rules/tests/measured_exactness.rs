@@ -55,6 +55,11 @@ const COVERED: &[(&str, &str, &str)] = &[
         "a_tessellated_flight_measures_inexactly",
     ),
     (
+        "run_count",
+        "tests/stair_geometry.rs",
+        "a_tessellated_ramps_items_measure_inexactly",
+    ),
+    (
         "guard_edges",
         "tests/horizontal_guard.rs",
         "approximate_guard_edges_are_never_measured",

@@ -152,6 +152,11 @@ const PAIRS: &[Pair] = &[
         case: "judges",
         reference: |registry| registry.replace(axioval::rules::reference::PropertyComparison),
     },
+    Pair {
+        capability: "axioval:capability.ramp-geometry",
+        case: "stairs",
+        reference: |registry| registry.replace(axioval::rules::reference::RampGeometry),
+    },
 ];
 
 /// Warm-up runs per side before measuring.

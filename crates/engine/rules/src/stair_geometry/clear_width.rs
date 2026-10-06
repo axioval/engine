@@ -150,6 +150,28 @@ struct Measured {
 }
 
 impl Width {
+    /// The stretch or landing in a message: `the flight`, `run 1 of 2`.
+    pub(super) fn label(&self) -> &str {
+        &self.label
+    }
+
+    /// What the band stands on in a message: `its pitch line`, `its level`.
+    pub(super) fn above(&self) -> &'static str {
+        self.above
+    }
+
+    /// Whether it is a landing's.
+    pub(super) fn is_landing(&self) -> bool {
+        matches!(self.place, Place::Landing(_))
+    }
+
+    /// The obstacles bounding its narrowest place, where measured.
+    pub(super) fn governing(&self) -> &[ObjectId] {
+        self.measured
+            .as_ref()
+            .map_or(&[], |measured| measured.governing.as_slice())
+    }
+
     fn evidence(&self) -> Vec<Evidence> {
         self.measured
             .as_ref()

@@ -115,6 +115,7 @@ fn steps(flight: &TreadFlight, object: &ObjectId) -> Vec<MeasuredMember> {
     let winders = flight.winder_angles();
     let closures = flight.riser_closures();
     let total = risers.len();
+    let scale = super::flight_scale(flight);
     (0..total)
         .map(|index| {
             let at = |field: &str| format!("steps:{object}#{}/{total}:{field}", index + 1);
@@ -171,6 +172,15 @@ fn steps(flight: &TreadFlight, object: &ObjectId) -> Vec<MeasuredMember> {
                         ),
                     },
                 },
+            );
+            fields.insert(
+                "scale",
+                MemberValue::Measured(Measurement::Value {
+                    lower: scale,
+                    upper: scale,
+                    dimension: None,
+                    locator: at("scale"),
+                }),
             );
             MeasuredMember {
                 certain: true,
@@ -617,6 +627,7 @@ impl MeasuredProvider for StairMeasures {
         if name.starts_with("landing_") || name == "landing_count" {
             return Self::landing(call, object, context);
         }
+
         let flight = flight(call, object, &walking(context)?)?;
         let locator = format!("{name}:{object}");
         if name == "end_width" {
@@ -660,6 +671,7 @@ impl MeasuredProvider for StairMeasures {
         Ok(measured(width, flight.evidence().exact, locator))
     }
 
+    #[allow(clippy::too_many_lines)]
     fn members_cited(
         &self,
         call: &MeasuredCall,
@@ -706,6 +718,30 @@ impl MeasuredProvider for StairMeasures {
                 ("length", number(Some(run.length()), LENGTH, at("length"))),
                 ("rise", number(Some(run.rise()), LENGTH, at("rise"))),
                 ("width", number(run.width(), LENGTH, at("width"))),
+                (
+                    "label",
+                    MemberValue::Text {
+                        text: format!("run {} of {total}", index + 1),
+                    },
+                ),
+                (
+                    "scale",
+                    MemberValue::Measured(Measurement::Value {
+                        lower: super::run_scale(run),
+                        upper: super::run_scale(run),
+                        dimension: None,
+                        locator: at("scale"),
+                    }),
+                ),
+                (
+                    "slope_rounding",
+                    MemberValue::Measured(Measurement::Value {
+                        lower: super::slope_slack(run),
+                        upper: super::slope_slack(run),
+                        dimension: None,
+                        locator: at("slope_rounding"),
+                    }),
+                ),
             ]);
             let mut exact = measured.evidence().exact;
             for (end, place) in [

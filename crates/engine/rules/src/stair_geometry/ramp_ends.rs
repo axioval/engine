@@ -48,6 +48,31 @@ pub(super) fn end_space_descriptors() -> Vec<ParameterDescriptor> {
     ]
 }
 
+impl<'a> EndSpaceCheck<'a> {
+    /// The free space `depth` deep, `width` wide and `height` high, which
+    /// none of the objects `obstacles` names may reach into.
+    pub(super) fn new(obstacles: &'a Selector, (depth, width, height): (f64, f64, f64)) -> Self {
+        Self {
+            obstacles,
+            depth,
+            width,
+            height,
+        }
+    }
+}
+
+impl<'a> DoorCheck<'a> {
+    /// No door `doors` names standing in the column `height` high over a
+    /// landing.
+    pub(super) fn new(doors: &'a Selector, height: f64) -> Self {
+        Self {
+            doors,
+            height,
+            swing: true,
+        }
+    }
+}
+
 /// The landing-door parameters a ramp and a flight share.
 pub(super) fn door_descriptors() -> Vec<ParameterDescriptor> {
     vec![

@@ -796,8 +796,23 @@ fn limit(slope: f64, length: Option<f64>, rise: Option<f64>) -> TableRow {
     row
 }
 
+/// `rule` on `model` run by `capability`'s template, held to the
+/// implementation it replaced under `Parity::contract()` on the same
+/// context (`common::Held`): every fixture is a parity check.
+fn held(
+    model: Model,
+    capability: &'static (dyn axioval_engine::RuleCapability + Sync),
+    rule: &axioval_engine::CompiledRule,
+    register: impl Fn(&mut axioval_engine::ServiceRegistry),
+) -> CapabilityEvaluation {
+    let reference: &'static (dyn axioval_engine::RuleCapability + Sync) =
+        &axioval_rules::reference::RampGeometry;
+    model.evaluate_measured(&common::Held(capability, reference), rule, register)
+}
+
 fn check_ramps(parameters: Vec<(&str, ParameterValue)>) -> CapabilityEvaluation {
-    model().evaluate_with(
+    held(
+        model(),
         &RampGeometryCheck,
         &rule(RAMP, kind("ramp"), parameters),
         |services| {
@@ -829,9 +844,14 @@ fn a_ramp_too_steep_for_its_run_is_found() {
                 .into()
         )]
     );
-    assert_eq!(
-        evaluation.findings()[0].evidence[0].locator,
-        "sloped-runs:steep"
+    // The finding cites the ramp's runs, as the measured `run_count`
+    // read them from the walking-surface service.
+    assert!(
+        evaluation.findings()[0].evidence[0]
+            .locator
+            .ends_with("sloped-runs:steep"),
+        "{:?}",
+        evaluation.findings()[0].evidence
     );
     // The nearest row: 3 m over its 2 m run, 50 % beyond it.
     assert_deviation(deviation_of(&evaluation, "run 1 of 1"), (0.5, 0.5));
@@ -846,7 +866,8 @@ fn ramp_runs_of_unequal_slope_are_found() {
         "{:?}",
         findings(&evaluation)
     );
-    let evaluation = model().evaluate_with(
+    let evaluation = held(
+        model(),
         &RampGeometryCheck,
         &rule(RAMP, kind("ramp"), vec![("slope_tolerance", number(0.01))]),
         |services| {
@@ -1100,7 +1121,8 @@ fn landing_and_below_declarations_are_checked() {
 
 #[test]
 fn ramp_widths_and_run_landings_are_checked_per_run() {
-    let evaluation = model().evaluate_with(
+    let evaluation = held(
+        model(),
         &RampGeometryCheck,
         &rule(
             RAMP,
@@ -1141,7 +1163,8 @@ fn ramp_widths_and_run_landings_are_checked_per_run() {
     );
     // The ramp's own landing relates nothing else.
     assert!(evaluation.findings()[0].related.is_empty());
-    let evaluation = model().evaluate_with(
+    let evaluation = held(
+        model(),
         &RampGeometryCheck,
         &rule(RAMP, kind("ramp"), vec![("width_minimum", metres(1.8))]),
         |services| {
@@ -1612,16 +1635,18 @@ fn check_ramps_with(
     floor: Option<Floor>,
     parameters: Vec<(&str, ParameterValue)>,
 ) -> CapabilityEvaluation {
-    model().evaluate_with(
+    let (stairs, floor) = (Arc::new(stairs), floor.map(Arc::new));
+    held(
+        model(),
         &RampGeometryCheck,
         &rule(RAMP, kind("ramp"), parameters),
-        |services| {
+        move |services| {
             services
-                .register(WalkingSurfaceServiceHandle::new(Arc::new(stairs)))
+                .register(WalkingSurfaceServiceHandle::new(stairs.clone()))
                 .unwrap();
-            if let Some(floor) = floor {
+            if let Some(floor) = &floor {
                 services
-                    .register(FreeSpaceServiceHandle::new(Arc::new(floor)))
+                    .register(FreeSpaceServiceHandle::new(floor.clone()))
                     .unwrap();
             }
         },
@@ -2086,13 +2111,16 @@ fn a_door_swinging_over_a_ramp_landing_is_found() {
     // sweeps y 2 .. 2.9 and misses it.
     let landing = || stairs().landing("gentle", WalkingEnd::RunTop(1), "slab", Some((2.0, 1.5)));
     let run = |open: [f64; 3], heights: bool| {
-        let doors = Doors::default().door(
-            "door",
-            vec![hinged([1.0, 2.0, 0.0], [-1.0, 0.0, 0.0], open, 0.9, false)],
-            1.0,
-            None,
-        );
-        model().evaluate_with(
+        let doors = move || {
+            Doors::default().door(
+                "door",
+                vec![hinged([1.0, 2.0, 0.0], [-1.0, 0.0, 0.0], open, 0.9, false)],
+                1.0,
+                None,
+            )
+        };
+        held(
+            model(),
             &RampGeometryCheck,
             &rule(
                 RAMP,
@@ -2111,7 +2139,7 @@ fn a_door_swinging_over_a_ramp_landing_is_found() {
                 services
                     .register(FreeSpaceServiceHandle::new(Arc::new(Floor::default())))
                     .unwrap();
-                services.register(doors.handle()).unwrap();
+                services.register(doors().handle()).unwrap();
                 if heights {
                     services
                         .register(axioval_engine::VerticalExtentServiceHandle::new(Arc::new(
@@ -3104,15 +3132,22 @@ fn check_clear(
     parameters: Vec<(&str, ParameterValue)>,
 ) -> CapabilityEvaluation {
     let id = if selected == "ramp" { RAMP } else { STAIR };
-    model().object("wall", "wall").evaluate_with(
-        capability,
-        &rule(id, kind(selected), parameters),
-        |services| {
-            services
-                .register(WalkingSurfaceServiceHandle::new(Arc::new(stairs)))
-                .unwrap();
-        },
-    )
+    let stairs = Arc::new(stairs);
+    let register = move |services: &mut axioval_engine::ServiceRegistry| {
+        services
+            .register(WalkingSurfaceServiceHandle::new(stairs.clone()))
+            .unwrap();
+    };
+    let model = model().object("wall", "wall");
+    if selected == "ramp" {
+        return held(
+            model,
+            &RampGeometryCheck,
+            &rule(id, kind(selected), parameters),
+            register,
+        );
+    }
+    model.evaluate_with(capability, &rule(id, kind(selected), parameters), register)
 }
 
 fn clear_parameters(minimum: f64) -> Vec<(&'static str, ParameterValue)> {
@@ -3363,15 +3398,17 @@ fn check_ramps_near(
     proximity: impl ProximityService,
     parameters: Vec<(&str, ParameterValue)>,
 ) -> CapabilityEvaluation {
-    model().evaluate_with(
+    let (stairs, proximity) = (Arc::new(stairs), Arc::new(proximity));
+    held(
+        model(),
         &RampGeometryCheck,
         &rule(RAMP, kind("ramp"), parameters),
-        |services| {
+        move |services| {
             services
-                .register(WalkingSurfaceServiceHandle::new(Arc::new(stairs)))
+                .register(WalkingSurfaceServiceHandle::new(stairs.clone()))
                 .unwrap();
             services
-                .register(ProximityServiceHandle::new(Arc::new(proximity)))
+                .register(ProximityServiceHandle::new(proximity.clone()))
                 .unwrap();
         },
     )
@@ -3835,6 +3872,46 @@ fn a_tessellated_flight_measures_inexactly() {
     }
 }
 
+/// A ramp measured from a tessellation counts its runs inexactly, and an
+/// exact one exactly: the evidence is the service's, never inferred from
+/// the count.
+#[test]
+fn a_tessellated_ramps_items_measure_inexactly() {
+    use axioval_engine::{CapabilityRegistry, ServiceRegistry};
+    let project = model().project();
+    for (margin, exact) in [(0.001, false), (0.0, true)] {
+        let run = SlopedRun::try_new(
+            x(),
+            around(0.0, margin),
+            around(0.5, margin),
+            around(0.0, margin),
+            around(6.0, margin),
+        )
+        .unwrap();
+        let evidence = Evidence {
+            source: source(),
+            locator: "sloped-runs:gentle".into(),
+            exact,
+        };
+        let surface = SlopedSurface::try_new(id("gentle"), vec![run], evidence).unwrap();
+        let mut services = ServiceRegistry::new();
+        services
+            .register(WalkingSurfaceServiceHandle::new(Arc::new(
+                Stairs::default().ramp(surface),
+            )))
+            .unwrap();
+        axioval_rules::register_builtins(CapabilityRegistry::new())
+            .unwrap()
+            .install_measured(&mut services, &project);
+        let ((lower, upper), cited) =
+            common::measured_cited(&services, &project, &id("gentle"), "run_count")
+                .unwrap()
+                .unwrap();
+        assert_eq!((lower, upper), (1.0, 1.0));
+        assert_eq!(cited, exact, "run_count at margin {margin}");
+    }
+}
+
 /// A handrail that may reach over the middle or lie wholly in either half
 /// cannot be placed: its sides, its place among the pieces and the gap
 /// after it are undecided, never false or none. One surely over the middle
@@ -4014,7 +4091,7 @@ mod as_expressions {
                 .register(WalkingSurfaceServiceHandle::new(Arc::new(fixture())))
                 .unwrap();
         };
-        let evaluated = model().evaluate_with(check, &rule(id, kind(of), parameters), register);
+        let evaluated = model().evaluate_measured(check, &rule(id, kind(of), parameters), register);
         let expected = verdicts(&evaluated);
         let rule = rule(
             "axioval:capability.expression",
@@ -4421,9 +4498,10 @@ mod as_expressions {
         parameters: Vec<(&str, ParameterValue)>,
         requirement: &Value,
     ) -> (BTreeSet<String>, BTreeSet<String>) {
-        let evaluated = model().evaluate_with(check, &rule(id, kind(of), parameters), |services| {
-            register(services);
-        });
+        let evaluated =
+            model().evaluate_measured(check, &rule(id, kind(of), parameters), |services| {
+                register(services);
+            });
         let rewrite = rule(
             "axioval:capability.expression",
             kind(of),
@@ -5500,5 +5578,189 @@ mod as_expressions {
                 unless_null(&clearance, at_least(mm(clearance.clone()), m(2.0))),
             ]),
         );
+    }
+}
+
+/// Generated ramps held to the implementation `ramp-geometry` replaced:
+/// runs of random rise, length and width, landings of random size (or none,
+/// or no rectangle) at their ends, under random slope limits, tolerance,
+/// widths and landing minimums, every outcome under `Parity::contract()`.
+mod generated_ramps {
+    use super::*;
+    use proptest::collection::vec;
+    use proptest::prelude::*;
+
+    /// One run: its rise and length in mm, and its width (none where its
+    /// sides are not measured).
+    type Run = (u32, u32, Option<u32>);
+
+    /// The landing at a run's end: none, one filling no rectangle, or its
+    /// depth and width in mm.
+    type End = Option<Option<(u32, u32)>>;
+
+    fn run() -> impl Strategy<Value = Run> {
+        (
+            50u32..900,
+            1000u32..12_000,
+            proptest::option::weighted(0.9, 800u32..2400),
+        )
+    }
+
+    fn end() -> impl Strategy<Value = End> {
+        prop_oneof![
+            Just(None),
+            Just(Some(None)),
+            (600u32..2600, 600u32..2600).prop_map(|size| Some(Some(size))),
+        ]
+    }
+
+    /// A slope limit row: its slope in ‰ and its longest run and highest
+    /// rise in mm.
+    type Limit = (u32, Option<u32>, Option<u32>);
+
+    fn limit_row() -> impl Strategy<Value = Limit> {
+        (
+            20u32..200,
+            proptest::option::of(2000u32..12_000),
+            proptest::option::of(200u32..1000),
+        )
+    }
+
+    fn mm(value: u32) -> f64 {
+        f64::from(value) / 1000.0
+    }
+
+    fn surface(runs: &[Run]) -> SlopedSurface {
+        let (mut start, mut bottom) = (0.0, 0.0);
+        let runs = runs
+            .iter()
+            .map(|(rise, length, width)| {
+                let (rise, length) = (mm(*rise), mm(*length));
+                let run = SlopedRun::try_new(
+                    x(),
+                    point(bottom),
+                    point(bottom + rise),
+                    point(start),
+                    point(start + length),
+                )
+                .unwrap();
+                let run = match width {
+                    Some(width) => run.with_sides(point(0.0), point(mm(*width))).unwrap(),
+                    None => run,
+                };
+                start += length + 1.5;
+                bottom += rise;
+                run
+            })
+            .collect();
+        let evidence = Evidence::exact(source(), "sloped-runs:r".to_owned());
+        SlopedSurface::try_new(id("r"), runs, evidence).unwrap()
+    }
+
+    fn hold(runs: &[Run], ends: &[End], parameters: Vec<(&str, ParameterValue)>) {
+        let mut stairs = Stairs::default().ramp(surface(runs));
+        for (index, _) in runs.iter().enumerate() {
+            for (offset, which) in [
+                (0, WalkingEnd::RunBottom(index)),
+                (1, WalkingEnd::RunTop(index)),
+            ] {
+                if let Some(Some(landing)) = ends.get(2 * index + offset) {
+                    stairs = stairs.landing(
+                        "r",
+                        which,
+                        "slab",
+                        landing.map(|(depth, width)| (mm(depth), mm(width))),
+                    );
+                }
+            }
+        }
+        let stairs = Arc::new(stairs);
+        // Holding the template to its reference is the assertion.
+        held(
+            Model::default().object("r", "ramp").object("slab", "slab"),
+            &RampGeometryCheck,
+            &rule(RAMP, kind("ramp"), parameters),
+            move |services| {
+                services
+                    .register(WalkingSurfaceServiceHandle::new(stairs.clone()))
+                    .unwrap();
+            },
+        );
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig {
+            cases: 96,
+            failure_persistence: None,
+            ..ProptestConfig::default()
+        })]
+
+        #[test]
+        fn generated_ramps_hold_parity(
+            runs in vec(run(), 1..4),
+            ends in vec(end(), 8),
+            limits in vec(limit_row(), 0..3),
+            tolerance in proptest::option::of(0u32..60),
+            widths in (proptest::option::of(800u32..1600), proptest::option::of(1200u32..2400)),
+            sizes in (
+                proptest::option::of(800u32..2000),
+                proptest::option::of(800u32..2000),
+                proptest::option::of(800u32..2400),
+                proptest::option::of(800u32..2400),
+            ),
+            flags in (any::<bool>(), any::<bool>()),
+        ) {
+            let mut parameters = vec![(
+                "slope_limits",
+                ParameterValue::Table {
+                    value: limits
+                        .iter()
+                        .map(|(slope, length, rise)| {
+                            limit(
+                                f64::from(*slope) / 1000.0,
+                                length.map(mm),
+                                rise.map(mm),
+                            )
+                        })
+                        .collect(),
+                },
+            )];
+            if let Some(tolerance) = tolerance {
+                parameters.push(("slope_tolerance", number(f64::from(tolerance) / 1000.0)));
+            }
+            let (low, high) = widths;
+            if let (Some(low), Some(high)) = (low, high) {
+                if low <= high {
+                    parameters.push(("width_minimum", metres(mm(low))));
+                    parameters.push(("width_maximum", metres(mm(high))));
+                }
+            } else if let Some(low) = low {
+                parameters.push(("width_minimum", metres(mm(low))));
+            }
+            let (depth, width, end_depth, end_width) = sizes;
+            let (walking, required) = flags;
+            let mut landings = Vec::new();
+            for (name, value) in [
+                ("landing_depth_minimum", depth),
+                ("landing_width_minimum", width),
+                ("end_landing_depth_minimum", end_depth),
+                ("end_landing_width_minimum", end_width),
+            ] {
+                if let Some(value) = value {
+                    landings.push((name, metres(mm(value))));
+                }
+            }
+            if walking {
+                landings.push(("landing_at_least_walking_width", boolean(true)));
+            }
+            if required {
+                landings.push(("landings_required", boolean(true)));
+            }
+            if !landings.is_empty() {
+                parameters.push(("landing_objects", slabs()));
+                parameters.extend(landings);
+            }
+            hold(&runs, &ends, parameters);
+        }
     }
 }

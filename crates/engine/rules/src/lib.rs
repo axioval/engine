@@ -199,6 +199,7 @@ pub mod reference {
     pub use crate::related_count::reference::RelatedCount;
     pub use crate::relative_count::reference::RelativeCount;
     pub use crate::shelf_capacity::reference::ShelfCapacity;
+    pub use crate::stair_geometry::RampGeometryReference as RampGeometry;
     pub use crate::triangle_count::reference::TriangleCountLimit;
     pub use crate::unique_value::reference::UniqueValue;
 }
@@ -292,6 +293,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(opening_zone::PlacementMeasures))
         .and_then(|registry| registry.register_measured(allowed_profile::ProfileMeasures))
         .and_then(|registry| registry.register_measured(stair_geometry::StairMeasures))
+        .and_then(|registry| registry.register_measured(stair_geometry::StairItems))
         .and_then(|registry| registry.register_measured(horizontal_guard::GuardMeasures))
         .and_then(|registry| registry.register_measured(measured_plan::PlanMeasures))
         .and_then(|registry| registry.register_measured(axioval_engine::FacePieceMeasures))

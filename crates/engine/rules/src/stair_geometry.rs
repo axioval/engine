@@ -18,12 +18,15 @@ mod clear_width;
 mod continuity;
 mod defects;
 mod handrails;
+mod items;
 mod measured;
 mod obstruction;
 mod ramp_ends;
 mod tactile;
+mod template;
 mod whole;
 
+pub(crate) use items::StairItems;
 pub(crate) use measured::StairMeasures;
 
 use axioval_engine::{
@@ -144,6 +147,36 @@ pub struct StairGeometryCheck;
 /// landings before the lowest and beyond the highest run instead of the
 /// landing minimums.
 pub struct RampGeometryCheck;
+
+/// The implementation `ramp-geometry` ran before it became a template,
+/// kept as the reference the template is held to.
+pub struct RampGeometryReference;
+
+static RAMP: std::sync::LazyLock<axioval_engine::template::Template> =
+    std::sync::LazyLock::new(|| template::ramp(RampGeometryReference.parameters()));
+static RAMP_PLANS: crate::templates::Plans = crate::templates::Plans::new();
+
+impl RuleCapability for RampGeometryCheck {
+    fn id(&self) -> &'static str {
+        template::RAMP
+    }
+
+    fn grades_deviation(&self) -> bool {
+        true
+    }
+
+    fn parameters(&self) -> Vec<ParameterDescriptor> {
+        RAMP.parameters.clone()
+    }
+
+    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
+        crate::templates::run((&RAMP, &RAMP_PLANS), context, rule)
+    }
+
+    fn template(&self) -> Option<&axioval_engine::template::Template> {
+        Some(&RAMP)
+    }
+}
 
 const SLOPE_LIMITS: &[TableColumn] = &[
     TableColumn::required("maximum_slope", ColumnKind::Number),
@@ -1837,7 +1870,7 @@ impl<'a> RampConfig<'a> {
     }
 }
 
-impl RuleCapability for RampGeometryCheck {
+impl RuleCapability for RampGeometryReference {
     fn id(&self) -> &'static str {
         "axioval:capability.ramp-geometry"
     }

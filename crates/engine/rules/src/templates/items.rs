@@ -515,12 +515,13 @@ pub(super) fn judge_items(
     let listed = leaves.bound_members(&list);
     let (members, evidence) = match listed.as_ref() {
         Ok((members, evidence)) => (members, evidence),
-        Err((_, why)) => {
+        Err((reason, why)) => {
             return match items.refused {
+                // Open for the reason the list was refused.
                 Some(message) => {
                     let mut scope = scope;
                     scope.named("why", why.clone());
-                    vec![open(scope.render(message))]
+                    vec![Outcome::Open(reason.clone(), scope.render(message))]
                 }
                 None => Vec::new(),
             };

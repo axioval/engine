@@ -725,7 +725,9 @@ fn check(check: &Check, rule: &CompiledRule, template: &Template) -> Result<(), 
 /// keyed by the value's keys, checked by the value's own argument check.
 fn arguments_checked(rule: &CompiledRule, value: &str) -> Result<(), Unavailable> {
     use axioval_ir::measured::MeasuredArgument;
+    // A measured value, or a measured member list.
     let call = axioval_ir::measured::parse(value)
+        .or_else(|_| axioval_ir::measured::parse_members(value))
         .map_err(|error| invalid(format!("the template's value `{value}`: {error}")))?;
     let Some(check) = crate::measured_kinds::argument_check(call.name()) else {
         return Ok(());

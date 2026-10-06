@@ -285,7 +285,8 @@ pub enum Check {
         message: &'static str,
     },
     /// Where every parameter of `when` is stated, the rule parameters the
-    /// measured value `value` names (`@name`) are checked as stated, under
+    /// measured value or member list `value` names (`@name`) are checked as
+    /// stated, under
     /// the value's keys, by the value's own argument check (one its
     /// provider declares, `measured_kinds::argument_check`): a declaration
     /// only the measurement knows how to read, such as a table of rows,
@@ -465,6 +466,7 @@ pub enum Service {
     WalkingSurface,
     Contact,
     PlanArea,
+    PlanSpan,
 }
 
 impl Service {
@@ -484,6 +486,7 @@ impl Service {
                 .is_some(),
             Self::Contact => services.get::<crate::ContactServiceHandle>().is_some(),
             Self::PlanArea => services.get::<crate::PlanAreaServiceHandle>().is_some(),
+            Self::PlanSpan => services.get::<crate::PlanSpanServiceHandle>().is_some(),
         }
     }
 }
@@ -2591,5 +2594,42 @@ mod tests {
         assert!(json.contains("\"operator\":\"equals\""), "{json}");
         assert!(json.contains("\"operator\":\"notEquals\""), "{json}");
         assert_eq!(json.matches("\"of\":\"subject\"").count(), 2, "{json}");
+    }
+
+    /// The plan-span service a template may need: registered only where
+    /// the host registers it, and named as the registry lists it.
+    #[test]
+    fn a_template_may_need_the_plan_span_service() {
+        use crate::{PlanLength, PlanSpan, PlanSpanError, PlanSpanService};
+        use axioval_ir::ObjectId;
+
+        struct Silent;
+
+        impl PlanSpanService for Silent {
+            fn measure_diameter(&self, _: &ObjectId) -> Result<PlanLength, PlanSpanError> {
+                Err(PlanSpanError::Unavailable("unused".into()))
+            }
+            fn measure_span(
+                &self,
+                _: &ObjectId,
+                _: &ObjectId,
+                _: PlanSpan,
+            ) -> Result<PlanLength, PlanSpanError> {
+                Err(PlanSpanError::Unavailable("unused".into()))
+            }
+        }
+
+        let mut services = crate::ServiceRegistry::new();
+        assert!(!Service::PlanSpan.registered(&services));
+        services
+            .register(crate::PlanSpanServiceHandle::new(std::sync::Arc::new(
+                Silent,
+            )))
+            .unwrap();
+        assert!(Service::PlanSpan.registered(&services));
+        assert_eq!(
+            serde_json::to_string(&Service::PlanSpan).unwrap(),
+            "\"plan-span\""
+        );
     }
 }

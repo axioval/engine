@@ -38,9 +38,9 @@ use crate::ParameterDescriptor;
 mod items;
 
 pub use items::{
-    Allowance, Bound, Choice, Effect, Every, Group, Groups, Guard, ItemCheck, ItemTest, ItemText,
-    ItemUnit, Items, Judge, On, OnNull, OpenItems, Passing, Range, Requirement, RowColumn, Rows,
-    Spread, Together, TogetherJudge, Truths, When,
+    Allowance, Bound, Choice, Count, Effect, Every, Group, Groups, Guard, ItemCheck, ItemTest,
+    ItemText, ItemUnit, Items, Judge, Least, On, OnNull, OpenItems, Passing, Range, Requirement,
+    RowColumn, Rows, Spread, Together, TogetherJudge, Truths, When,
 };
 
 /// Four units in the last place of the largest magnitude a comparison
@@ -330,6 +330,33 @@ pub enum Check {
     Rows {
         parameter: &'static str,
         columns: &'static [RowCheck],
+    },
+    /// A quantity parameter, where stated, is a plane angle of at least
+    /// zero: otherwise `` `<parameter>` is negative `` or
+    /// `` `<parameter>` is not a plane angle ``.
+    Angle { parameter: &'static str },
+    /// Where the string parameter `parameter` is `value`, one of `with` is
+    /// stated.
+    ValueRequires {
+        parameter: &'static str,
+        value: &'static str,
+        with: &'static [&'static str],
+        message: &'static str,
+    },
+    /// The parameters are stated all together or not at all, except where
+    /// every one of `stated` is stated and every one of `unstated` is not.
+    TogetherExcept {
+        parameters: &'static [&'static str],
+        stated: &'static [&'static str],
+        unstated: &'static [&'static str],
+        message: &'static str,
+    },
+    /// Where one of `any` is declared (stated, a boolean true), `with` is
+    /// stated.
+    AnyRequires {
+        any: &'static [&'static str],
+        with: &'static str,
+        message: &'static str,
     },
 }
 

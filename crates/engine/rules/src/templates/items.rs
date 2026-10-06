@@ -11,9 +11,9 @@
 
 use axioval_engine::Deviation;
 use axioval_engine::template::{
-    Allowance, Applies, Bound, Effect, End, Every, Group, Guard, ItemCheck, ItemTest, ItemUnit,
-    Items, Judge, On, OnNull, OpenItems, Operand, Requirement, Rows, Spread, TogetherJudge, Truths,
-    When,
+    Allowance, Applies, Bound, Count, Effect, End, Every, Group, Guard, ItemCheck, ItemTest,
+    ItemUnit, Items, Judge, Least, On, OnNull, OpenItems, Operand, Requirement, Rows, Spread,
+    TogetherJudge, Truths, When,
 };
 use axioval_engine::{MeasuredMember, Measurement, MemberValue, RuleContext};
 use axioval_ir::contract::{ParameterValue, ScalarValue};
@@ -533,6 +533,7 @@ pub(super) fn judge_items(
                 together
                     .present
                     .is_none_or(|name| !matches!(field(member, name), Field::Null))
+                    && scope.with(Some(member)).holds(&together.when)
             })
             .collect();
         return vec![match &together.judge {
@@ -545,6 +546,8 @@ pub(super) fn judge_items(
             TogetherJudge::Spread(spread) => {
                 judge_spread(&scope, spread, &present, evidence, object)
             }
+            TogetherJudge::Count(count) => judge_count(&scope, count, &present, evidence, object),
+            TogetherJudge::Least(least) => judge_least(&scope, least, &present, evidence, object),
         }];
     }
     let mut outcomes = Vec::new();
@@ -1166,5 +1169,130 @@ fn judge_spread(
                 .then(|| Deviation::above(tolerance, lower, upper)),
         },
         Verdict::Undecided(_) => open(scope.render(spread.undecided)),
+    }
+}
+
+/// How many items there are, within bounds; never open.
+fn judge_count(
+    scope: &Scope<'_, '_, '_>,
+    count: &Count,
+    present: &[&MeasuredMember],
+    listed: &[Evidence],
+    object: &Object,
+) -> Outcome {
+    let mut scope = scope.with(None);
+    scope.unit = ItemUnit::Count;
+    #[allow(clippy::cast_precision_loss)]
+    let number = present.len() as f64;
+    let (minimum, _) = bound(&scope, &count.at_least, true);
+    let (maximum, _) = bound(&scope, &count.at_most, false);
+    let (minimum, maximum) = (minimum.map(|span| span.0), maximum.map(|span| span.0));
+    let deviation = if minimum.is_some_and(|minimum| number < minimum) {
+        minimum.map(|minimum| Deviation::below(minimum, number, number))
+    } else if maximum.is_some_and(|maximum| number > maximum) {
+        maximum.map(|maximum| Deviation::above(maximum, number, number))
+    } else {
+        return Outcome::Passed;
+    };
+    scope.named("count", present.len().to_string());
+    scope.named("bound", bound_words(minimum, maximum, ItemUnit::Count));
+    Outcome::Finding {
+        message: scope.render(count.fail),
+        evidence: cited(&scope, listed, object),
+        related: Vec::new(),
+        deviation: deviation.filter(|_| scope.plan.template.grades),
+    }
+}
+
+/// The least of the items' numbers at least a bound.
+fn judge_least(
+    scope: &Scope<'_, '_, '_>,
+    least: &Least,
+    present: &[&MeasuredMember],
+    listed: &[Evidence],
+    object: &Object,
+) -> Outcome {
+    let mut scope = scope.with(None);
+    scope.unit = least.unit;
+    let mut unknown: Vec<String> = Vec::new();
+    let mut known: Vec<(&MeasuredMember, Span)> = Vec::new();
+    for member in present {
+        match field(member, least.value) {
+            Field::Number(span) => known.push((member, span)),
+            Field::Undecided(why) => unknown.push(why.to_owned()),
+            _ => {}
+        }
+    }
+    let mut evidence = scope.read.evidence.clone();
+    evidence.extend(listed.iter().cloned());
+    for (member, _) in &known {
+        evidence.push(Evidence {
+            source: object.id.source.clone(),
+            locator: scope.items.list.to_owned(),
+            exact: member.exact,
+        });
+    }
+    scope.named("unknown", unknown.join("; "));
+    scope.named(
+        "some",
+        if unknown.len() == 1 {
+            "a width"
+        } else {
+            "widths"
+        }
+        .to_owned(),
+    );
+    // The narrowest is the item of least upper end; the least lies between
+    // the least lower and the least upper end.
+    let Some((narrowest, (_, upper))) =
+        known.iter().copied().min_by(|a, b| a.1.1.total_cmp(&b.1.1))
+    else {
+        return open(scope.render(least.unmeasured));
+    };
+    let lower = known
+        .iter()
+        .map(|(_, span)| span.0)
+        .fold(f64::INFINITY, f64::min);
+    let (lower, upper) = if lower <= upper.max(lower) {
+        (lower, upper.max(lower))
+    } else {
+        (lower, upper)
+    };
+    let mut related: Vec<ObjectId> = Vec::new();
+    for name in &least.related {
+        for found in objects(Some(narrowest), Some(name)) {
+            if !related.contains(&found) {
+                related.push(found);
+            }
+        }
+    }
+    let at = scope.with(Some(narrowest)).render(least.at);
+    scope.named("at", at);
+    scope.named("least", show((lower, upper), least.unit));
+    let Some((minimum, _)) = bound(&scope, std::slice::from_ref(&least.at_least), true).0 else {
+        return Outcome::Passed;
+    };
+    let allowance = least.times * slack(upper);
+    match judge(lower, upper, Some(minimum - allowance), None) {
+        Verdict::Fail(_) => Outcome::Finding {
+            message: scope.render(least.fail),
+            evidence,
+            related,
+            deviation: scope
+                .plan
+                .template
+                .grades
+                .then(|| Deviation::below(minimum, lower, upper)),
+        },
+        Verdict::Pass => {
+            if scope.holds(&least.pending.when) {
+                open(scope.render(least.pending.message))
+            } else if unknown.is_empty() {
+                Outcome::Passed
+            } else {
+                open(scope.render(least.partial))
+            }
+        }
+        Verdict::Undecided(_) => open(scope.render(least.undecided)),
     }
 }

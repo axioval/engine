@@ -579,6 +579,52 @@ fn check(check: &Check, rule: &CompiledRule, template: &Template) -> Result<(), 
             }
         }
         Check::Rows { parameter, columns } => rows(rule, parameter, columns),
+        Check::Angle { parameter } => match Parameters(rule).quantity(parameter)? {
+            None => Ok(()),
+            Some((value, QuantityDimension::PlaneAngle)) if value >= 0.0 => Ok(()),
+            Some((_, QuantityDimension::PlaneAngle)) => {
+                Err(invalid(format!("`{parameter}` is negative")))
+            }
+            Some(_) => Err(invalid(format!("`{parameter}` is not a plane angle"))),
+        },
+        Check::ValueRequires {
+            parameter,
+            value,
+            with,
+            message,
+        } => {
+            if Parameters(rule).string(parameter)? == Some(*value) && !any(with) {
+                Err(invalid(*message))
+            } else {
+                Ok(())
+            }
+        }
+        Check::TogetherExcept {
+            parameters,
+            stated: excepted,
+            unstated,
+            message,
+        } => {
+            let count = parameters.iter().filter(|name| stated(rule, name)).count();
+            let except = excepted.iter().all(|name| stated(rule, name))
+                && !unstated.iter().any(|name| stated(rule, name));
+            if count == 0 || count == parameters.len() || except {
+                Ok(())
+            } else {
+                Err(invalid(*message))
+            }
+        }
+        Check::AnyRequires {
+            any: declaring,
+            with,
+            message,
+        } => {
+            if declaring.iter().any(|name| declared(rule, name)) && !stated(rule, with) {
+                Err(invalid(*message))
+            } else {
+                Ok(())
+            }
+        }
     }
 }
 

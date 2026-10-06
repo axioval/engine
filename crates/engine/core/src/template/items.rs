@@ -351,6 +351,10 @@ pub struct Together {
     /// themselves.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub present: Option<&'static str>,
+    /// Only items where these hold are judged (a flight's winders only
+    /// where it turns).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub when: Vec<When>,
     /// How an item is named: `riser {index} of {count}`.
     pub name: &'static str,
     pub judge: TogetherJudge,
@@ -369,6 +373,56 @@ pub enum TogetherJudge {
     /// The spread of the items' numbers (the largest less the smallest)
     /// at most a tolerance.
     Spread(Box<Spread>),
+    /// How many items there are, within bounds (`{count}`), never open.
+    Count(Box<Count>),
+    /// The least of the items' numbers at least a bound: the least lies
+    /// between the least lower end and the least upper end, at the item of
+    /// least upper end; an item not measured can only lower it.
+    Least(Box<Least>),
+}
+
+/// [`TogetherJudge::Count`].
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Count {
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub at_least: Vec<Requirement>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub at_most: Vec<Requirement>,
+    /// The finding: `{count}` the items, `{bound}` the bounds as counts.
+    pub fail: &'static str,
+}
+
+/// [`TogetherJudge::Least`]. Messages read `{least}` (the least as an
+/// interval), `{at}` (the narrowest item, worded by `at`), `{unknown}`
+/// (why items are not measured, joined `; `) and `{some}` (`a width` or
+/// `widths`, by how many are not measured).
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Least {
+    pub value: &'static str,
+    pub unit: ItemUnit,
+    pub at_least: Requirement,
+    /// The allowance, times eight units in the last place of the least's
+    /// upper end (at least one).
+    pub times: f64,
+    /// How the narrowest item is named.
+    pub at: &'static str,
+    /// The objects fields a finding relates, of the narrowest item.
+    pub related: Vec<&'static str>,
+    pub fail: &'static str,
+    pub undecided: &'static str,
+    /// Every measured item passing, the check is open with this where its
+    /// conditions hold (an undecided obstacle may narrow it).
+    pub pending: Effect,
+    /// Every measured item passing but some not measured.
+    pub partial: &'static str,
+    /// No item measured.
+    pub unmeasured: &'static str,
+    /// Further reasons items may be missing, a text field of the first item
+    /// (`;`-separated), counted with the unmeasured ones.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub missing: Option<&'static str>,
 }
 
 /// [`TogetherJudge::Every`].
@@ -576,6 +630,7 @@ impl Items {
                 TogetherJudge::Truths(truths) => {
                     operands.push(truth(truths.value, truths.finding));
                 }
+                TogetherJudge::Count(_) | TogetherJudge::Least(_) => {}
                 TogetherJudge::Spread(spread) => operands.push(compare(
                     ExpressionComparison::LessThanOrEquals,
                     Expression::Subtract {

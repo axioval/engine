@@ -324,6 +324,7 @@ fn every_width(list: &'static str, name: &'static str, unmeasured: &'static str)
     check(Items {
         together: Some(Together {
             present: None,
+            when: Vec::new(),
             name,
             judge: TogetherJudge::Every(Box::new(Every {
                 range: Range {
@@ -1124,6 +1125,7 @@ pub(crate) fn ramp(parameters: Vec<ParameterDescriptor>) -> Template {
         check(Items {
             together: Some(Together {
                 present: None,
+                when: Vec::new(),
                 name: "",
                 judge: TogetherJudge::Spread(Box::new(Spread {
                     value: "slope",

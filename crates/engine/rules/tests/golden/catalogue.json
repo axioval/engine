@@ -8276,7 +8276,328 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "consistent-value",
+        "defaults": [
+          {
+            "parameter": "case_sensitive",
+            "value": {
+              "type": "boolean",
+              "value": false
+            }
+          },
+          {
+            "parameter": "same_kind",
+            "value": {
+              "type": "boolean",
+              "value": true
+            }
+          }
+        ],
+        "declaration": [
+          {
+            "kind": "kind",
+            "parameter": "tolerance"
+          },
+          {
+            "kind": "kind",
+            "parameter": "tolerance_quantity"
+          },
+          {
+            "kind": "exclusive",
+            "one": [
+              "tolerance"
+            ],
+            "other": [
+              "tolerance_quantity"
+            ],
+            "message": "declare either `tolerance` or `tolerance_quantity`, not both"
+          },
+          {
+            "kind": "nonNegative",
+            "parameters": [
+              "tolerance",
+              "tolerance_quantity"
+            ],
+            "message": "the tolerance is negative"
+          },
+          {
+            "kind": "required",
+            "parameter": "key"
+          },
+          {
+            "kind": "required",
+            "parameter": "value"
+          },
+          {
+            "kind": "kind",
+            "parameter": "case_sensitive"
+          },
+          {
+            "kind": "kind",
+            "parameter": "same_kind"
+          },
+          {
+            "kind": "kind",
+            "parameter": "across_sources"
+          },
+          {
+            "kind": "traversal",
+            "with": [],
+            "message": ""
+          }
+        ],
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "key",
+                "expression": {
+                  "kind": "property",
+                  "propertySet": "{key.set}",
+                  "property": "{key.name}"
+                }
+              },
+              {
+                "name": "value",
+                "expression": {
+                  "kind": "property",
+                  "propertySet": "{value.set}",
+                  "property": "{value.name}"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "consistent",
+              "key": "key",
+              "value": "value",
+              "consistent": {
+                "across": "across_sources",
+                "caseSensitive": "case_sensitive",
+                "sameKind": "same_kind",
+                "tolerance": "tolerance",
+                "toleranceQuantity": "tolerance_quantity",
+                "messages": {
+                  "differs": "{value} is {value:stated} where other objects with {key} {key:stated} have {others}",
+                  "differsUnkeyed": "{key} has no value, and {value} is {value:stated} where other objects without {key} have {others}",
+                  "keyed": "objects with {key} {key:stated}",
+                  "unkeyed": "objects without {key}",
+                  "straddles": "consistent-value: the range of {value} over the {objects} may lie on either side of the tolerance {spread}",
+                  "beyond": "{value} is {value:stated}, farther than the tolerance {spread} from the median {median} of the {objects}",
+                  "atEnd": "{value} is {value:stated}, at an end of the range {range} of {value} over the {objects}, which exceeds the tolerance {spread}",
+                  "undecided": "consistent-value: {value} {value:stated} may lie within the tolerance {spread} of the median {median} of the {objects} or beyond it",
+                  "inapplicable": "consistent-value: the tolerance {spread} does not apply to {value:stated}",
+                  "notFinite": "consistent-value: {value:stated} is not a finite value",
+                  "inexact": "consistent-value: integer cannot be represented exactly as a decimal"
+                }
+              }
+            },
+            "fail": "",
+            "undecided": ""
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "compare",
+              "operator": "equals",
+              "left": {
+                "kind": "aggregate",
+                "function": "count",
+                "over": {
+                  "kind": "selector",
+                  "selector": {
+                    "kind": "expression",
+                    "expression": {
+                      "kind": "parameter",
+                      "name": "selection",
+                      "label": "the objects the rule selects in the scope"
+                    }
+                  }
+                },
+                "where": {
+                  "kind": "expression",
+                  "expression": {
+                    "kind": "and",
+                    "operands": [
+                      {
+                        "kind": "compare",
+                        "operator": "equals",
+                        "left": {
+                          "kind": "property",
+                          "propertySet": "{key.set}",
+                          "property": "{key.name}"
+                        },
+                        "right": {
+                          "kind": "property",
+                          "propertySet": "{key.set}",
+                          "property": "{key.name}",
+                          "of": "subject"
+                        },
+                        "caseSensitive": false
+                      },
+                      {
+                        "kind": "compare",
+                        "operator": "notEquals",
+                        "left": {
+                          "kind": "property",
+                          "propertySet": "{value.set}",
+                          "property": "{value.name}"
+                        },
+                        "right": {
+                          "kind": "property",
+                          "propertySet": "{value.set}",
+                          "property": "{value.name}",
+                          "of": "subject"
+                        },
+                        "caseSensitive": false
+                      }
+                    ]
+                  }
+                },
+                "label": "objects of the same key stating another value"
+              },
+              "right": {
+                "kind": "literal",
+                "value": {
+                  "type": "integer",
+                  "value": 0
+                }
+              }
+            },
+            "blocks": {
+              "type": "expression.compare",
+              "fields": {
+                "operator": "equals"
+              },
+              "inputs": {
+                "left": {
+                  "block": {
+                    "type": "expression.aggregate",
+                    "label": "objects of the same key stating another value",
+                    "fields": {
+                      "function": "count"
+                    },
+                    "inputs": {
+                      "over": {
+                        "block": {
+                          "type": "source.selector",
+                          "inputs": {
+                            "selector": {
+                              "block": {
+                                "type": "selector.expression",
+                                "inputs": {
+                                  "expression": {
+                                    "block": {
+                                      "type": "expression.parameter",
+                                      "label": "the objects the rule selects in the scope",
+                                      "fields": {
+                                        "name": "selection"
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "where": {
+                        "block": {
+                          "type": "selector.expression",
+                          "inputs": {
+                            "expression": {
+                              "block": {
+                                "type": "expression.and",
+                                "inputs": {
+                                  "operands": {
+                                    "blocks": [
+                                      {
+                                        "type": "expression.compare",
+                                        "fields": {
+                                          "caseSensitive": false,
+                                          "operator": "equals"
+                                        },
+                                        "inputs": {
+                                          "left": {
+                                            "block": {
+                                              "type": "expression.property",
+                                              "fields": {
+                                                "property": "{key.name}",
+                                                "propertySet": "{key.set}"
+                                              }
+                                            }
+                                          },
+                                          "right": {
+                                            "block": {
+                                              "type": "expression.property",
+                                              "fields": {
+                                                "of": "subject",
+                                                "property": "{key.name}",
+                                                "propertySet": "{key.set}"
+                                              }
+                                            }
+                                          }
+                                        }
+                                      },
+                                      {
+                                        "type": "expression.compare",
+                                        "fields": {
+                                          "caseSensitive": false,
+                                          "operator": "notEquals"
+                                        },
+                                        "inputs": {
+                                          "left": {
+                                            "block": {
+                                              "type": "expression.property",
+                                              "fields": {
+                                                "property": "{value.name}",
+                                                "propertySet": "{value.set}"
+                                              }
+                                            }
+                                          },
+                                          "right": {
+                                            "block": {
+                                              "type": "expression.property",
+                                              "fields": {
+                                                "of": "subject",
+                                                "property": "{value.name}",
+                                                "propertySet": "{value.set}"
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "right": {
+                  "block": {
+                    "type": "expression.literal",
+                    "fields": {
+                      "value": {
+                        "type": "integer",
+                        "value": 0
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.containment",

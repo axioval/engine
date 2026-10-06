@@ -363,6 +363,11 @@ mod consistent {
 
     const ID: &str = "axioval:capability.consistent-value";
 
+    /// `consistent-value` runs as a template, held on every fixture to the
+    /// implementation it replaced.
+    const CONSISTENT: common::Held =
+        common::Held(&ConsistentValue, &axioval_rules::reference::ConsistentValue);
+
     #[test]
     fn members_of_one_key_that_disagree_are_each_reported() {
         let model = Model::default()
@@ -383,7 +388,7 @@ mod consistent {
             .text("d4", "Pset", "FireRating", "F30")
             .text("w1", "Pset", "FireRating", "F90");
         let evaluation = model.evaluate(
-            &ConsistentValue,
+            &CONSISTENT,
             &rule(
                 ID,
                 Selector::All,
@@ -424,7 +429,7 @@ mod consistent {
             .text("d1", "Pset", "FireRating", "F30")
             .text("d2", "Pset", "Mark", " ")
             .text("d2", "Pset", "FireRating", "F30");
-        let evaluation = agreeing.evaluate(&ConsistentValue, &rule);
+        let evaluation = agreeing.evaluate(&CONSISTENT, &rule);
         assert!(
             evaluation.findings().is_empty(),
             "{:?}",
@@ -440,7 +445,7 @@ mod consistent {
             .text("d2", "Pset", "FireRating", "F90")
             .text("d3", "Pset", "Mark", "T1")
             .text("d3", "Pset", "FireRating", "F60");
-        let evaluation = conflicting.evaluate(&ConsistentValue, &rule);
+        let evaluation = conflicting.evaluate(&CONSISTENT, &rule);
         assert_eq!(
             findings(&evaluation),
             [
@@ -496,7 +501,7 @@ mod consistent {
             ("value", property(Some("Pset"), "Width")),
         ];
         parameters.extend(tolerance);
-        model.evaluate(&ConsistentValue, &rule(ID, kind("wall"), parameters))
+        model.evaluate(&CONSISTENT, &rule(ID, kind("wall"), parameters))
     }
 
     #[test]
@@ -588,6 +593,10 @@ mod consistent {
             unevaluated(&evaluation),
             [("w2".to_owned(), NotEvaluatedReason::InvalidEvidence)]
         );
+        assert_eq!(
+            evaluation.not_evaluated_outcomes()[0].message(),
+            "consistent-value: the tolerance 0.001 m does not apply to 0.24 m²"
+        );
         let mut both = rule(
             ID,
             kind("wall"),
@@ -598,18 +607,196 @@ mod consistent {
                 ("tolerance_quantity", millimetres(1.0)),
             ],
         );
-        let evaluation = walls(&[metres(0.24)]).evaluate(&ConsistentValue, &both);
+        let evaluation = walls(&[metres(0.24)]).evaluate(&CONSISTENT, &both);
         assert_eq!(
             unevaluated(&evaluation),
             [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+        assert_eq!(
+            evaluation.not_evaluated_outcomes()[0].message(),
+            "consistent-value: declare either `tolerance` or `tolerance_quantity`, not both"
         );
         both.parameters.remove("tolerance_quantity");
         both.parameters.insert("tolerance".into(), number(-1.0));
-        let evaluation = walls(&[metres(0.24)]).evaluate(&ConsistentValue, &both);
+        let evaluation = walls(&[metres(0.24)]).evaluate(&CONSISTENT, &both);
         assert_eq!(
             unevaluated(&evaluation),
             [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
         );
+        assert_eq!(
+            evaluation.not_evaluated_outcomes()[0].message(),
+            "consistent-value: the tolerance is negative"
+        );
+        both.parameters.remove("key");
+        let evaluation = walls(&[metres(0.24)]).evaluate(&CONSISTENT, &both);
+        assert_eq!(
+            evaluation.not_evaluated_outcomes()[0].message(),
+            "consistent-value: the tolerance is negative"
+        );
+        both.parameters.insert("tolerance".into(), number(1.0));
+        let evaluation = walls(&[metres(0.24)]).evaluate(&CONSISTENT, &both);
+        assert_eq!(
+            evaluation.not_evaluated_outcomes()[0].message(),
+            "consistent-value: parameter `key` is required"
+        );
+    }
+
+    #[test]
+    fn straddling_and_undecided_members_are_worded_as_before() {
+        let measured = |lower, upper| PropertyValue::Measured {
+            lower,
+            upper,
+            dimension: Some(axioval_ir::QuantityDimension::Length),
+        };
+        let straddling = walls(&[metres(0.24), measured(0.2395, 0.2415)]);
+        let evaluation = thickness(straddling, Some(("tolerance_quantity", millimetres(1.0))));
+        assert_eq!(
+            evaluation.not_evaluated_outcomes()[0].message(),
+            "consistent-value: the range of Pset.Width over the objects with Pset.Type `T1` \
+             may lie on either side of the tolerance 0.001 m"
+        );
+        // w4 lies beyond the median's tolerance; w3 may or may not.
+        let model = walls(&[
+            metres(0.24),
+            metres(0.24),
+            measured(0.2405, 0.2425),
+            metres(0.26),
+        ]);
+        let evaluation = thickness(model, Some(("tolerance_quantity", millimetres(1.0))));
+        assert_eq!(
+            findings(&evaluation),
+            [(
+                "w4".into(),
+                "Pset.Width is 0.26 m, farther than the tolerance 0.001 m from the median \
+                 0.24025 to 0.24125 m of the objects with Pset.Type `T1`"
+                    .into()
+            )]
+        );
+        assert_eq!(
+            evaluation.not_evaluated_outcomes()[0].message(),
+            "consistent-value: Pset.Width 0.24 m may lie within the tolerance 0.001 m of the \
+             median 0.24025 to 0.24125 m of the objects with Pset.Type `T1` or beyond it"
+        );
+    }
+
+    /// Generated walls of two types, some without one, in two sources and
+    /// on two storeys, stating text, numbers, quantities, measured
+    /// intervals, nothing, `null` or something unreadable, judged under
+    /// every combination of strictness, scope, kind and tolerance. The
+    /// template is held to the implementation it replaced on each.
+    mod generated {
+        use super::*;
+        use axioval_ir::{ObjectId, QuantityDimension, SourceId};
+        use proptest::prelude::*;
+
+        fn value(kind: u8) -> Option<PropertyValue> {
+            let length = |value| PropertyValue::Quantity {
+                value,
+                dimension: QuantityDimension::Length,
+            };
+            Some(match kind {
+                0 => PropertyValue::String("F30".into()),
+                1 => PropertyValue::String("f30".into()),
+                2 => PropertyValue::String("F90".into()),
+                3 => length(0.24),
+                4 => length(0.2405),
+                5 => length(0.26),
+                6 => PropertyValue::Measured {
+                    lower: 0.2395,
+                    upper: 0.2415,
+                    dimension: Some(QuantityDimension::Length),
+                },
+                7 => PropertyValue::Decimal(0.24),
+                8 => PropertyValue::Integer(1),
+                9 => PropertyValue::Quantity {
+                    value: 0.24,
+                    dimension: QuantityDimension::Area,
+                },
+                10 => PropertyValue::Null,
+                11 => PropertyValue::String(" ".into()),
+                _ => return None,
+            })
+        }
+
+        fn key(kind: u8) -> Option<PropertyValue> {
+            Some(match kind {
+                0 => PropertyValue::String("T1".into()),
+                1 => PropertyValue::String("t1".into()),
+                2 => PropertyValue::String("T2".into()),
+                3 => PropertyValue::String("  ".into()),
+                4 => PropertyValue::Null,
+                _ => return None,
+            })
+        }
+
+        proptest! {
+            #![proptest_config(ProptestConfig::with_cases(256))]
+
+            #[test]
+            fn generated_groups_hold_parity(
+                walls in proptest::collection::vec(
+                    (0u8..6, 0u8..14, any::<bool>(), any::<bool>(), any::<bool>()),
+                    0..8,
+                ),
+                case_sensitive in proptest::option::of(any::<bool>()),
+                same_kind in proptest::option::of(any::<bool>()),
+                across in proptest::option::of(any::<bool>()),
+                along in any::<bool>(),
+                tolerance in 0u8..4,
+            ) {
+                let mut model = Model::default()
+                    .object("st1", "storey")
+                    .object("st2", "storey");
+                for (index, (marked, stated, upper, other, door)) in walls.iter().enumerate() {
+                    let local = format!("w{index}");
+                    let kind = if *door { "door" } else { "wall" };
+                    let id = if *other {
+                        ObjectId::new(SourceId::new("test", "other").unwrap(), &local).unwrap()
+                    } else {
+                        common::id(&local)
+                    };
+                    model = if *other {
+                        model.object_in("other", &local, kind)
+                    } else {
+                        model
+                            .object(&local, kind)
+                            .edge("aggregates", if *upper { "st2" } else { "st1" }, &local)
+                    };
+                    if let Some(key) = key(*marked) {
+                        model = model.value_of(id.clone(), "Pset", "Type", key);
+                    }
+                    model = match value(*stated) {
+                        Some(value) => model.value_of(id, "Pset", "Width", value),
+                        None if *stated == 13 => model.unreadable_object(id),
+                        None => model,
+                    };
+                }
+                let mut parameters = vec![
+                    ("key", property(Some("Pset"), "Type")),
+                    ("value", property(Some("Pset"), "Width")),
+                ];
+                for (name, flag) in [
+                    ("case_sensitive", case_sensitive),
+                    ("same_kind", same_kind),
+                    ("across_sources", across),
+                ] {
+                    if let Some(flag) = flag {
+                        parameters.push((name, boolean(flag)));
+                    }
+                }
+                if along {
+                    parameters.push(("relationship", string("aggregates")));
+                    parameters.push(("direction", string("backward")));
+                }
+                match tolerance {
+                    1 => parameters.push(("tolerance", number(0.001))),
+                    2 => parameters.push(("tolerance_quantity", millimetres(1.0))),
+                    3 => parameters.push(("tolerance", number(0.0))),
+                    _ => {}
+                }
+                model.evaluate(&CONSISTENT, &rule(ID, Selector::All, parameters));
+            }
+        }
     }
 }
 

@@ -25,7 +25,8 @@ is the first deciding per source or for the project
 first whose values take the rule's selectors
 ([#289](https://github.com/axioval/engine/issues/289)); `area-ratio` is the
 first over two populations and a derived ratio
-([#290](https://github.com/axioval/engine/issues/290)).
+([#290](https://github.com/axioval/engine/issues/290)); `consistent-value`
+follows `unique-value` as a group decision (#287).
 
 ## The outside contract
 
@@ -362,6 +363,22 @@ and the tolerance, in the capability's order. Its findings read
 `{property} {value:stated} is also used by {others} other object(s)
 {tolerance:suffix}` and, for an object without a value, `{property} has
 no value`.
+
+### `consistent-value`
+
+| Form | When | Values | Decision |
+| --- | --- | --- | --- |
+| one | always | `key` = the stated `{key}`, `value` = the stated `{value}` | `Consistent`: groups per source or across sources (`across_sources`), of one kind unless `same_kind` (default true), narrowed by the traversal; `case_sensitive` (default false); `tolerance` or `tolerance_quantity` on numeric values |
+
+The declaration checks both tolerances' kinds, that only one is stated
+and neither is negative, `key`, `value`, the three flags' kinds and the
+traversal, in the capability's order. Its findings read `{value}
+{value:stated} where other objects with {key} {key:stated} have
+{others}`, `{key} has no value, and {value} is {value:stated} where other
+objects without {key} have {others}`, and under a tolerance `{value} is
+{value:stated}, farther than the tolerance {spread} from the median
+{median} of the {objects}` or `…, at an end of the range {range} of
+{value} over the {objects}, which exceeds the tolerance {spread}`.
 
 ### `level-spacing`
 
@@ -747,6 +764,16 @@ text, numbers, quantities, nothing, `null` or something unreadable,
 under every combination of strictness, scope and tolerance; and by the
 `unique-value` rules of the `counts` case, recorded before the switch.
 It is never forked.
+
+`consistent-value` is held to `consistent_value/reference.rs`
+(`axioval_rules::reference::ConsistentValue`) through `common::Held` on
+every fixture of its module in `tests/semantic.rs`, its refusals and
+straddling groups worded literally; by generated walls and doors of two
+types (some without one) in two sources and on two storeys, stating text,
+lengths, areas, numbers, measured intervals, nothing, `null` or something
+unreadable, under every combination of strictness, scope, kind and
+tolerance; and by the `consistent-value` rules of the `judges` case,
+recorded before the switch. It is never forked.
 
 `shelf-capacity` is held so too: every fixture of `shelf_capacity.rs`
 and generated spaces of random doors, heights and minimums against

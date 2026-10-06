@@ -214,6 +214,25 @@ to 0.75× its reference, and at 1.64 to 1.68× on the three architecture models,
 whose references take under 90 µs (judged together by the floor, where it
 holds); peak heap 0.76 to 1.28×.
 
+The generic judges of #287 run the `judges` case's rules of their
+capability, measured by the same gate:
+
+| input | objects | consistent-value |
+| --- | ---: | --- |
+| generated fixture, 400 walls | 421 | 1.12× / 1.15× |
+| building architecture (IFC4) | 38 | 1.11× / 1.01× |
+| building structural (IFC4) | 33 | 1.10× / 1.01× |
+| building HVAC (IFC4) | 18 | 1.18× / 1.01× |
+| infra road (IFC4) | 116 | 1.14× / 1.00× |
+| building architecture (IFC2x3) | 36 | 1.11× / 1.01× |
+| building structural (IFC2x3) | 30 | 1.10× / 1.01× |
+| building architecture (IFC4x3) | 37 | 1.08× / 1.01× |
+| building structural (IFC4x3) | 33 | 1.12× / 1.01× |
+| wall with opening and window | 9 | 1.07× / 1.07× |
+| tessellated column | 3 | 1.03× / 1.05× |
+
+`consistent-value` runs six rules.
+
 Before this work `body-extent`'s template ran 2.3 to 3.8 times as long as
 its reference (the fixture 3.8×): every value went through a request, a
 resolution and the evaluator's explanation, and the extent was measured

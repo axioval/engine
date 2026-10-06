@@ -122,6 +122,11 @@ const PAIRS: &[Pair] = &[
         case: "storeys",
         reference: |registry| registry.replace(axioval::rules::reference::PlanCoverage),
     },
+    Pair {
+        capability: "axioval:capability.consistent-value",
+        case: "judges",
+        reference: |registry| registry.replace(axioval::rules::reference::ConsistentValue),
+    },
 ];
 
 /// Warm-up runs per side before measuring.

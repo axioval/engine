@@ -219,3 +219,15 @@ its reference (the fixture 3.8×): every value went through a request, a
 resolution and the evaluator's explanation, and the extent was measured
 three times per rule. Its peak heap is mostly the memo: one body per
 measured object, kept for the run.
+
+`area-ratio` runs the `storeys` case's two rules, a share of spaces over
+slabs and a window-to-wall ratio of facade areas: 1.00 to 1.15× its
+reference's run time on every input (the generated fixture 1.01×, the
+building architecture models 1.13 to 1.15×, the structural models 1.01 to
+1.11×) and 1.00 to 1.20× its peak heap. A numeric aggregate stops listing
+members at its first unreadable one
+(`ExpressionContext::members_until_unreadable`), as the capability stopped
+summing at its first unmeasurable member: before that, a storey whose
+walls' facades cannot be measured read every wall, 1.94× on the
+structural models. Members are counted only where a rule asks for a
+finding on an anchor without them.

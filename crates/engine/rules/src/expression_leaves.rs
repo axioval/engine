@@ -90,6 +90,9 @@ pub(crate) struct ObjectLeaves<'a> {
     /// The objects measured values bound from the rule were measured
     /// against, as their providers cite them, in reading order.
     related: RefCell<Vec<ObjectId>>,
+    /// What the measured values bound from the rule noted, as their
+    /// providers cite it, in reading order.
+    notes: RefCell<Vec<String>>,
     /// Members the caller states for one aggregate source in place of
     /// reaching them: a template's members of an anchor, or the objects
     /// selected in a scope.
@@ -126,6 +129,7 @@ impl<'a> ObjectLeaves<'a> {
             bound: Vec::new(),
             arguments: None,
             related: RefCell::new(Vec::new()),
+            notes: RefCell::new(Vec::new()),
             lists: RefCell::new(Vec::new()),
         }
     }
@@ -156,6 +160,7 @@ impl<'a> ObjectLeaves<'a> {
             bound: Vec::new(),
             arguments: self.arguments,
             related: RefCell::new(Vec::new()),
+            notes: RefCell::new(Vec::new()),
             lists: RefCell::new(Vec::new()),
         }
     }
@@ -178,6 +183,7 @@ impl<'a> ObjectLeaves<'a> {
             bound: Vec::new(),
             arguments: self.arguments,
             related: RefCell::new(Vec::new()),
+            notes: RefCell::new(Vec::new()),
             lists: RefCell::new(Vec::new()),
         }
     }
@@ -279,6 +285,12 @@ impl<'a> ObjectLeaves<'a> {
     /// measured against, as their providers cite them.
     pub(crate) fn take_related(&self) -> Vec<ObjectId> {
         std::mem::take(&mut *self.related.borrow_mut())
+    }
+
+    /// What the measured values read since the last call noted, as their
+    /// providers cite it.
+    pub(crate) fn take_notes(&self) -> Vec<String> {
+        std::mem::take(&mut *self.notes.borrow_mut())
     }
 
     /// The measured value `name` as `call` names it, its references bound
@@ -426,6 +438,7 @@ impl<'a> ObjectLeaves<'a> {
         };
         evidence.extend(citation.evidence);
         self.related.borrow_mut().extend(citation.related);
+        self.notes.borrow_mut().extend(citation.notes);
         let value = match &stated {
             // A stated absence is `null`, never a value not read.
             None => Ok(Value::Null),

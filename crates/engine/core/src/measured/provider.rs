@@ -141,6 +141,11 @@ pub struct Citation {
     pub related: Vec<ObjectId>,
     /// The evidence that reached them, beside the value's own.
     pub evidence: Vec<Evidence>,
+    /// What the measurement found that its value does not say, each a
+    /// clause a message may quote: why it may be larger or smaller than
+    /// measured (a counterpart whose extent cannot be read), in the order
+    /// found.
+    pub notes: Vec<String>,
 }
 
 /// Trusted code measuring registered values.

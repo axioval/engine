@@ -140,6 +140,7 @@ fn measured(
     let citation = Citation {
         related: shelving.doors.clone(),
         evidence: shelving.evidence[1..].to_vec(),
+        notes: Vec::new(),
     };
     if call.name() == SHELF_LENGTH {
         return Ok((

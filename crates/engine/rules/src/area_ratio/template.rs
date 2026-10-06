@@ -537,6 +537,7 @@ pub(crate) fn template() -> Template {
         defaults: vec![ParameterDefault {
             parameter: "empty_numerator_finding",
             value: ScalarValue::Boolean { value: false },
+            from: &[],
         }],
         declaration: declaration(),
         services: None,

@@ -226,6 +226,7 @@ pub(crate) fn template() -> Template {
                 value: 0.0,
                 unit: "m".into(),
             },
+            from: &[],
         }],
         declaration: declaration(),
         services: Some(Services {

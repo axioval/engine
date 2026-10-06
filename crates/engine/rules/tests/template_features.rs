@@ -924,3 +924,379 @@ mod near {
         );
     }
 }
+
+/// A value one of two parameters states, thresholds read as parameters of
+/// a grading and of the texts wording it, checks applying where a
+/// parameter is at least a number, and the declaration checks stated as
+/// conditions, over parameters strictly increasing, of a dimension and
+/// over an angle: what `counterpart-coverage` composes, on a small template
+/// of its own.
+mod thresholds {
+    use super::*;
+    use axioval_engine::template::{
+        Applies, Band, Check, Condition, End, FormCheck, Grading, ParameterDefault, Refusals, Text,
+    };
+    use axioval_ir::contract::ScalarValue;
+    use axioval_ir::{PropertyValue, QuantityDimension, Severity};
+
+    const ID: &str = "test:thresholds";
+
+    fn stated(name: &'static str, property: &str) -> TemplateValue {
+        TemplateValue {
+            name,
+            expression: Expression::Property {
+                property_set: Some("Pset".into()),
+                property: property.into(),
+                of: None,
+                label: None,
+            },
+            expect: None,
+            absent: None,
+            mismatch: None,
+        }
+    }
+
+    const fn exceeds(parameter: &'static str, end: End) -> Condition {
+        Condition::Exceeds {
+            value: "share",
+            parameter,
+            end,
+        }
+    }
+
+    const HIGH_UPPER: Condition = exceeds("high_above", End::Upper);
+    const HIGH_LOWER: Condition = exceeds("high_above", End::Lower);
+
+    /// Each panel's share at most the lower of two thresholds stated,
+    /// graded by the higher one it may exceed, where the growth (`growth`,
+    /// or `own_growth`) is not negative.
+    #[allow(clippy::too_many_lines)]
+    fn template() -> Template {
+        Template {
+            id: ID,
+            parameters: vec![
+                ParameterDescriptor::optional("low_above", ParameterType::Number),
+                ParameterDescriptor::optional("high_above", ParameterType::Number),
+                ParameterDescriptor::optional("growth", ParameterType::Quantity),
+                ParameterDescriptor::optional("own_growth", ParameterType::Quantity),
+                ParameterDescriptor::optional("turn", ParameterType::Quantity),
+            ],
+            grades: true,
+            name: "thresholds",
+            refusals: Refusals::Rule,
+            defaults: vec![
+                ParameterDefault {
+                    parameter: "effective",
+                    value: ScalarValue::Quantity {
+                        value: 0.0,
+                        unit: "m".into(),
+                    },
+                    from: &["growth", "own_growth"],
+                },
+                ParameterDefault {
+                    parameter: "lowest",
+                    value: ScalarValue::Number { value: 0.0 },
+                    from: &["low_above", "high_above"],
+                },
+            ],
+            declaration: vec![
+                Check::Quantity {
+                    parameter: "growth",
+                    dimension: QuantityDimension::Length,
+                    message: "growth must be a length",
+                },
+                Check::AnyOf {
+                    parameters: &["low_above", "high_above"],
+                    message: "declare a threshold",
+                },
+                Check::Holds {
+                    condition: Condition::Not {
+                        condition: &Condition::Under {
+                            parameter: "high_above",
+                            than: 0.0,
+                        },
+                    },
+                    message: "high_above must not be negative",
+                },
+                Check::Exceeds {
+                    parameter: "high_above",
+                    earlier: &["low_above"],
+                    message: "high_above must exceed low_above",
+                },
+                Check::AngleBelow {
+                    parameter: "turn",
+                    below: 45.0,
+                    range: "turn must lie in [0, 45) degrees",
+                    angle: "turn must be a plane angle",
+                },
+            ],
+            services: None,
+            texts: vec![Text {
+                name: "graded",
+                when: Some(Condition::All {
+                    conditions: &[
+                        HIGH_UPPER,
+                        Condition::Not {
+                            condition: &HIGH_LOWER,
+                        },
+                    ],
+                }),
+                text: "; graded error by its upper bound",
+            }],
+            forms: vec![Form {
+                when: &[],
+                values: vec![stated("share", "Share")],
+                decision: Decision::Within {
+                    value: "share",
+                    minimum: None,
+                    maximum: None,
+                    rounding: Vec::new(),
+                },
+                fail: "",
+                undecided: "",
+                members: None,
+                table: None,
+                scope: None,
+                unless: Vec::new(),
+                grading: None,
+                derived: Vec::new(),
+                related: None,
+                checks: vec![FormCheck {
+                    values: Vec::new(),
+                    decision: Decision::Within {
+                        value: "share",
+                        minimum: None,
+                        maximum: Some(vec![Term::plus(Operand::Parameter("lowest"))]),
+                        rounding: Vec::new(),
+                    },
+                    fail: "share {share:area} above {lowest} grown by {effective:si} m{graded}",
+                    undecided: "share {share:area} straddles {lowest}",
+                    related: None,
+                    grading: Some(Grading {
+                        values: Vec::new(),
+                        derived: Vec::new(),
+                        undecided: Vec::new(),
+                        bands: vec![
+                            Band {
+                                severity: Severity::Error,
+                                when: Some(exceeds("high_above", End::Upper)),
+                            },
+                            Band {
+                                severity: Severity::Warning,
+                                when: Some(exceeds("low_above", End::Upper)),
+                            },
+                        ],
+                    }),
+                    applies: Some(Applies {
+                        when: &[],
+                        any: &[],
+                        condition: Some(Condition::AtLeast {
+                            parameter: "effective",
+                            than: 0.0,
+                        }),
+                    }),
+                }],
+            }],
+        }
+    }
+
+    fn panels() -> Model {
+        let between = |lower: f64, upper: f64| PropertyValue::Measured {
+            lower,
+            upper,
+            dimension: None,
+        };
+        Model::default()
+            .object("low", "panel")
+            .value("low", "Pset", "Share", between(0.05, 0.05))
+            .object("middle", "panel")
+            .value("middle", "Pset", "Share", between(0.3, 0.4))
+            .object("across", "panel")
+            .value("across", "Pset", "Share", between(0.3, 0.7))
+            .object("high", "panel")
+            .value("high", "Pset", "Share", between(0.8, 0.9))
+            .object("straddling", "panel")
+            .value("straddling", "Pset", "Share", between(0.1, 0.3))
+    }
+
+    fn metres(value: f64) -> ParameterValue {
+        ParameterValue::Quantity {
+            value,
+            unit: "m".into(),
+        }
+    }
+
+    fn graded(
+        evaluation: &axioval_engine::CapabilityEvaluation,
+    ) -> Vec<(String, Severity, String)> {
+        let mut found: Vec<_> = evaluation
+            .findings()
+            .iter()
+            .map(|finding| {
+                (
+                    common::subject(finding),
+                    finding.severity.clone(),
+                    finding.message.clone(),
+                )
+            })
+            .collect();
+        found.sort();
+        found
+    }
+
+    /// The threshold is the first of two parameters stated, the growth the
+    /// first of two, and a finding is graded by the most severe threshold
+    /// its upper end exceeds, worded so where its lower end does not.
+    #[test]
+    fn thresholds_and_values_are_read_from_the_first_parameter_stated() {
+        let templated = Templated::new(template());
+        let evaluation = panels().evaluate(
+            &templated,
+            &rule(
+                ID,
+                kind("panel"),
+                vec![
+                    ("low_above", number(0.2)),
+                    ("high_above", number(0.5)),
+                    ("own_growth", metres(0.02)),
+                ],
+            ),
+        );
+        assert_eq!(
+            graded(&evaluation),
+            [
+                (
+                    "across".to_owned(),
+                    Severity::Error,
+                    "share between 0.3 and 0.7 above 0.2 grown by 0.02 m; graded error by its \
+                     upper bound"
+                        .to_owned()
+                ),
+                (
+                    "high".to_owned(),
+                    Severity::Error,
+                    "share between 0.8 and 0.9 above 0.2 grown by 0.02 m".to_owned()
+                ),
+                (
+                    "middle".to_owned(),
+                    Severity::Warning,
+                    "share between 0.3 and 0.4 above 0.2 grown by 0.02 m".to_owned()
+                ),
+            ]
+        );
+        assert_eq!(
+            unevaluated(&evaluation),
+            [(
+                "straddling".to_owned(),
+                NotEvaluatedReason::IncompleteEvidence
+            )]
+        );
+        // Graded from the lowest threshold stated.
+        let deviation = evaluation.deviation(0).expect("graded");
+        assert!(deviation.lower() > 0.0, "{deviation:?}");
+
+        // Without the lower threshold, the higher one is the lowest.
+        let higher = panels().evaluate(
+            &templated,
+            &rule(ID, kind("panel"), vec![("high_above", number(0.5))]),
+        );
+        assert_eq!(
+            graded(&higher)
+                .into_iter()
+                .map(|(panel, severity, _)| (panel, severity))
+                .collect::<Vec<_>>(),
+            [("high".to_owned(), Severity::Error)]
+        );
+        assert_eq!(unevaluated(&higher).len(), 1);
+    }
+
+    /// A check whose condition does not hold over the parameters is not
+    /// judged: a negative growth switches it off.
+    #[test]
+    fn a_check_applies_where_a_parameter_is_at_least_a_number() {
+        let templated = Templated::new(template());
+        let off = panels().evaluate(
+            &templated,
+            &rule(
+                ID,
+                kind("panel"),
+                vec![("low_above", number(0.2)), ("growth", metres(-1.0))],
+            ),
+        );
+        assert!(off.findings().is_empty());
+        assert!(off.not_evaluated_outcomes().is_empty());
+    }
+
+    /// Declaration checks over a dimension, a condition, an increasing pair
+    /// and an angle, each worded as stated after the name.
+    #[test]
+    fn declarations_are_checked_as_conditions_and_orders() {
+        let templated = Templated::new(template());
+        let refused = |parameters: Vec<(&'static str, ParameterValue)>| {
+            let evaluation = panels().evaluate(&templated, &rule(ID, kind("panel"), parameters));
+            let outcomes = evaluation.not_evaluated_outcomes();
+            assert_eq!(outcomes.len(), 1, "{outcomes:?}");
+            assert_eq!(
+                outcomes[0].reason(),
+                &NotEvaluatedReason::InvalidDeclaration
+            );
+            outcomes[0].message().to_owned()
+        };
+        assert_eq!(
+            refused(vec![
+                ("low_above", number(0.2)),
+                (
+                    "growth",
+                    ParameterValue::Quantity {
+                        value: 1.0,
+                        unit: "m2".into()
+                    }
+                )
+            ]),
+            "thresholds: growth must be a length"
+        );
+        assert_eq!(refused(vec![]), "thresholds: declare a threshold");
+        assert_eq!(
+            refused(vec![("high_above", number(-0.1))]),
+            "thresholds: high_above must not be negative"
+        );
+        assert_eq!(
+            refused(vec![
+                ("low_above", number(0.5)),
+                ("high_above", number(0.5))
+            ]),
+            "thresholds: high_above must exceed low_above"
+        );
+        let turn = |value: f64, unit: &str| {
+            (
+                "turn",
+                ParameterValue::Quantity {
+                    value,
+                    unit: unit.into(),
+                },
+            )
+        };
+        assert_eq!(
+            refused(vec![("low_above", number(0.2)), turn(45.0, "deg")]),
+            "thresholds: turn must lie in [0, 45) degrees"
+        );
+        assert_eq!(
+            refused(vec![("low_above", number(0.2)), turn(1.0, "m")]),
+            "thresholds: turn must be a plane angle"
+        );
+        let within = panels().evaluate(
+            &templated,
+            &rule(
+                ID,
+                kind("panel"),
+                vec![("low_above", number(0.2)), turn(44.0, "deg")],
+            ),
+        );
+        assert!(
+            within
+                .not_evaluated_outcomes()
+                .iter()
+                .all(|outcome| outcome.reason() != &NotEvaluatedReason::InvalidDeclaration)
+        );
+    }
+}

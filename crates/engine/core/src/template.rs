@@ -137,6 +137,13 @@ impl Refusals {
 pub struct ParameterDefault {
     pub parameter: &'static str,
     pub value: ScalarValue,
+    /// Parameters whose value it takes instead, the first of them the rule
+    /// states: one value a rule may state under either of two names (one
+    /// tolerance for both checks, or each its own). `value` is taken only
+    /// where it states none of them. It may name no parameter of the
+    /// descriptor, a name only the template reads.
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    pub from: &'static [&'static str],
 }
 
 /// One check of a rule's parameters. Each names the parameters it reads;
@@ -388,6 +395,36 @@ pub enum Check {
         flags: &'static [&'static str],
         check: &'static Check,
     },
+    /// `condition` holds over the rule's parameters, their defaults
+    /// applied (a condition reading a value never holds): a declaration
+    /// stated as conditions, such as two switches not both off.
+    Holds {
+        condition: Condition,
+        message: &'static str,
+    },
+    /// Where stated, `parameter` is a quantity of `dimension` (of any sign):
+    /// otherwise `message`.
+    Quantity {
+        parameter: &'static str,
+        dimension: axioval_ir::QuantityDimension,
+        message: &'static str,
+    },
+    /// Where stated, the number `parameter` exceeds each of `earlier` the
+    /// rule states: thresholds strictly increasing.
+    Exceeds {
+        parameter: &'static str,
+        earlier: &'static [&'static str],
+        message: &'static str,
+    },
+    /// Where stated, `parameter` is a plane angle (`angle` otherwise) of
+    /// at least zero and below `below` degrees (`range` otherwise),
+    /// compared in degrees as the capabilities converted it.
+    AngleBelow {
+        parameter: &'static str,
+        below: f64,
+        range: &'static str,
+        angle: &'static str,
+    },
 }
 
 /// What [`Check::Rows`] requires of one column of every row.
@@ -503,6 +540,18 @@ pub enum Condition {
     Lists {
         parameter: &'static str,
         value: &'static str,
+    },
+    /// The parameter (or its default) is a number of at least `than`.
+    AtLeast { parameter: &'static str, than: f64 },
+    /// The parameter (or its default) is a number below `than`.
+    Under { parameter: &'static str, than: f64 },
+    /// The value's `end` lies above the number the parameter (or its
+    /// default) states; never where it states none: whether a share
+    /// surely (`lower`) or possibly (`upper`) exceeds a threshold.
+    Exceeds {
+        value: &'static str,
+        parameter: &'static str,
+        end: End,
     },
 }
 

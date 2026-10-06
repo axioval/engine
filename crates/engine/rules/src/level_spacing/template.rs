@@ -410,10 +410,12 @@ pub(crate) fn template() -> Template {
             ParameterDefault {
                 parameter: "tolerance",
                 value: length(1e-3),
+                from: &[],
             },
             ParameterDefault {
                 parameter: "space_height",
                 value: ScalarValue::Boolean { value: true },
+                from: &[],
             },
         ],
         declaration: declaration(),

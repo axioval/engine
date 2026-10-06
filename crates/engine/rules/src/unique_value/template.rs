@@ -45,6 +45,7 @@ fn default(parameter: &'static str, value: bool) -> ParameterDefault {
     ParameterDefault {
         parameter,
         value: ScalarValue::Boolean { value },
+        from: &[],
     }
 }
 

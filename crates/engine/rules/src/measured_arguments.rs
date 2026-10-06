@@ -191,6 +191,7 @@ impl Arguments {
 
 /// The value the rule's parameter `parameter` binds for a measured
 /// parameter of `kind`.
+#[allow(clippy::too_many_lines)]
 fn bound(
     context: &RuleContext<'_>,
     arguments: Option<&Arguments>,
@@ -294,6 +295,22 @@ fn bound(
             MeasuredArgument::Truth(*value)
         }
         (MeasuredParameterKind::Truth, _) => return Err(not("a boolean")),
+        (MeasuredParameterKind::Angle { below }, value) => {
+            let ParameterValue::Quantity { value, unit } = value else {
+                return Err(not("a plane angle"));
+            };
+            let degrees = match si_quantity(*value, unit) {
+                Ok((radians, QuantityDimension::PlaneAngle)) => radians.to_degrees(),
+                _ => return Err(not("a plane angle")),
+            };
+            if !(0.0..below).contains(&degrees) {
+                return Err(invalid(format!(
+                    "{reference} is {degrees} degrees, not an angle of at least 0 and below \
+                     {below} degrees"
+                )));
+            }
+            MeasuredArgument::Number(degrees)
+        }
         (MeasuredParameterKind::Vector | MeasuredParameterKind::Polygon, _) => {
             return Err(invalid(format!("{reference} names no value of a rule")));
         }

@@ -214,6 +214,7 @@ pub(crate) fn template() -> Template {
             value: ScalarValue::String {
                 value: "footprint".into(),
             },
+            from: &[],
         }],
         declaration: declaration(),
         services: None,

@@ -28,6 +28,7 @@ pub(crate) fn template() -> Template {
             value: ScalarValue::String {
                 value: "does not match any agreed combination of values".into(),
             },
+            from: &[],
         }],
         declaration: vec![
             Check::Required {

@@ -185,6 +185,8 @@ pub enum ParameterReference {
     Number,
     /// A `boolean`, bound to its truth.
     Boolean,
+    /// A `quantity` of plane angle, bound in degrees.
+    Angle,
 }
 
 /// What a measured parameter's value is.
@@ -222,6 +224,10 @@ pub enum MeasuredParameterKind {
     Number { minimum: f64 },
     /// A truth, written `true` or `false`.
     Truth,
+    /// An angle in degrees, at least zero and below `below`, written as a
+    /// plain number; a rule's plane-angle quantity binds converted to
+    /// degrees. It is bound as a [`MeasuredArgument::Number`].
+    Angle { below: f64 },
 }
 
 impl MeasuredParameterKind {
@@ -238,6 +244,7 @@ impl MeasuredParameterKind {
             Self::Table => Some(ParameterReference::Table),
             Self::Number { .. } => Some(ParameterReference::Number),
             Self::Truth => Some(ParameterReference::Boolean),
+            Self::Angle { .. } => Some(ParameterReference::Angle),
             Self::Vector | Self::Polygon => None,
         }
     }
@@ -350,7 +357,7 @@ impl MeasuredCall {
                 )
                 | (MeasuredParameterKind::Table, MeasuredArgument::Table(_))
                 | (
-                    MeasuredParameterKind::Number { .. },
+                    MeasuredParameterKind::Number { .. } | MeasuredParameterKind::Angle { .. },
                     MeasuredArgument::Number(_)
                 )
                 | (MeasuredParameterKind::Truth, MeasuredArgument::Truth(_))
@@ -692,6 +699,15 @@ fn plain(kind: MeasuredParameterKind, value: &str) -> Result<MeasuredArgument, S
                 .filter(|number| number.is_finite() && *number >= minimum)
                 .ok_or_else(|| format!("`{value}` is no number of at least {minimum}"))?,
         )),
+        MeasuredParameterKind::Angle { below } => Ok(MeasuredArgument::Number(
+            value
+                .parse::<f64>()
+                .ok()
+                .filter(|degrees| (0.0..below).contains(degrees))
+                .ok_or_else(|| {
+                    format!("`{value}` is no angle of at least 0 and below {below} degrees")
+                })?,
+        )),
         _ => match value.to_ascii_lowercase().as_str() {
             "true" => Ok(MeasuredArgument::Truth(true)),
             "false" => Ok(MeasuredArgument::Truth(false)),
@@ -786,7 +802,9 @@ fn argument(kind: MeasuredParameterKind, value: &str) -> Result<MeasuredArgument
             }
             MeasuredArgument::Polygon(vertices)
         }
-        MeasuredParameterKind::Number { .. } | MeasuredParameterKind::Truth => {
+        MeasuredParameterKind::Number { .. }
+        | MeasuredParameterKind::Angle { .. }
+        | MeasuredParameterKind::Truth => {
             return plain(kind, value);
         }
         MeasuredParameterKind::Table => {

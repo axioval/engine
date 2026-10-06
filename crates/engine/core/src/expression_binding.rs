@@ -140,6 +140,17 @@ fn references(name: &str, parameters: &BTreeMap<String, ParameterValue>) -> Resu
                 ),
                 "a number",
             ),
+            ParameterReference::Angle => (
+                match value {
+                    ParameterValue::Quantity { unit, .. } => {
+                        parse_unit(unit).is_ok_and(|(_, unit)| {
+                            unit == Unit::of(Some(QuantityDimension::PlaneAngle))
+                        })
+                    }
+                    _ => false,
+                },
+                "a plane angle",
+            ),
             ParameterReference::Boolean => {
                 (matches!(value, ParameterValue::Boolean { .. }), "a boolean")
             }

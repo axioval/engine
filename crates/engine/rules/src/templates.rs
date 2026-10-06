@@ -660,6 +660,53 @@ fn check(check: &Check, rule: &CompiledRule, template: &Template) -> Result<(), 
                 Err(invalid(*message))
             }
         }
+        Check::Holds { condition, message } => {
+            let (constants, _) = constants(template, rule, false)?;
+            if holds_over(&constants, &Read::default(), Some(*condition)) {
+                Ok(())
+            } else {
+                Err(invalid(*message))
+            }
+        }
+        Check::Quantity {
+            parameter,
+            dimension,
+            message,
+        } => match Parameters(rule).quantity(parameter)? {
+            Some((_, stated)) if stated != *dimension => Err(invalid(*message)),
+            _ => Ok(()),
+        },
+        Check::Exceeds {
+            parameter,
+            earlier,
+            message,
+        } => {
+            let Some(value) = numeric(rule, template, parameter)? else {
+                return Ok(());
+            };
+            for name in *earlier {
+                if numeric(rule, template, name)?.is_some_and(|earlier| value <= earlier) {
+                    return Err(invalid(*message));
+                }
+            }
+            Ok(())
+        }
+        Check::AngleBelow {
+            parameter,
+            below,
+            range,
+            angle,
+        } => match Parameters(rule).quantity(parameter)? {
+            None => Ok(()),
+            Some((radians, QuantityDimension::PlaneAngle)) => {
+                if (0.0..*below).contains(&radians.to_degrees()) {
+                    Ok(())
+                } else {
+                    Err(invalid(*range))
+                }
+            }
+            Some(_) => Err(invalid(*angle)),
+        },
         Check::When { flags, check: then } => {
             let mut on = false;
             for flag in *flags {
@@ -1086,6 +1133,68 @@ fn slot(text: &str, constants: &BTreeMap<String, Constant>) -> Option<Slot> {
     changed.then_some(Slot::Filled(filled))
 }
 
+/// A rule's parameters as constants, and as a measured value's references
+/// bind them.
+type Bindings = (BTreeMap<String, Constant>, BTreeMap<String, ParameterValue>);
+
+/// The rule's parameters as constants, each of its descriptor's kind, and
+/// the template's defaults applied: a default taking another parameter's
+/// value takes the first of them stated, its literal where none is. With
+/// `strict`, a parameter of another kind refuses the rule; otherwise it is
+/// left out (a declaration check reading the constants refuses it in its
+/// place). Returns the constants and the parameters a measured value's
+/// references bind, the defaults added.
+fn constants(
+    template: &Template,
+    rule: &CompiledRule,
+    strict: bool,
+) -> Result<Bindings, Unavailable> {
+    let mut constants = BTreeMap::new();
+    for descriptor in &template.parameters {
+        let read = match constant(rule, descriptor) {
+            Ok(read) => read,
+            Err(refused) if strict => return Err(refused),
+            Err(_) => None,
+        };
+        if let Some(constant) = read {
+            constants.insert(descriptor.name.clone(), constant);
+        }
+    }
+    let mut parameters = rule.parameters.clone();
+    for default in &template.defaults {
+        if constants.contains_key(default.parameter) {
+            continue;
+        }
+        // Another parameter's value, the first of them stated.
+        if let Some(from) = default
+            .from
+            .iter()
+            .find(|name| constants.contains_key(**name))
+        {
+            let taken = constants[*from].clone();
+            if let Some(stated) = parameters.get(*from).cloned() {
+                parameters.insert(default.parameter.to_owned(), stated);
+            }
+            constants.insert(default.parameter.to_owned(), taken);
+            continue;
+        }
+        parameters.insert(
+            default.parameter.to_owned(),
+            ParameterValue::from(default.value.clone()),
+        );
+        let constant = match &default.value {
+            ScalarValue::Quantity { value, unit } => {
+                let (value, dimension) = crate::support::si_quantity(*value, unit)?;
+                Constant::Quantity(value, dimension)
+            }
+            ScalarValue::String { value } => Constant::Text(value.clone()),
+            other => Constant::Scalar(other.clone()),
+        };
+        constants.insert(default.parameter.to_owned(), constant);
+    }
+    Ok((constants, parameters))
+}
+
 /// Binds `rule` into `template`: checks its declaration, folds its
 /// parameters into constants and chooses its form.
 #[allow(clippy::too_many_lines)]
@@ -1103,30 +1212,7 @@ fn bind(template: &Template, rule: &CompiledRule) -> Result<Bound, Unavailable> 
             _ => {}
         }
     }
-    let mut constants = BTreeMap::new();
-    for descriptor in &template.parameters {
-        if let Some(constant) = constant(rule, descriptor)? {
-            constants.insert(descriptor.name.clone(), constant);
-        }
-    }
-    let mut parameters = rule.parameters.clone();
-    for default in &template.defaults {
-        if !constants.contains_key(default.parameter) {
-            parameters.insert(
-                default.parameter.to_owned(),
-                ParameterValue::from(default.value.clone()),
-            );
-            let constant = match &default.value {
-                ScalarValue::Quantity { value, unit } => {
-                    let (value, dimension) = crate::support::si_quantity(*value, unit)?;
-                    Constant::Quantity(value, dimension)
-                }
-                ScalarValue::String { value } => Constant::Text(value.clone()),
-                other => Constant::Scalar(other.clone()),
-            };
-            constants.insert(default.parameter.to_owned(), constant);
-        }
-    }
+    let (constants, parameters) = constants(template, rule, true)?;
     let index = template
         .forms
         .iter()
@@ -1274,6 +1360,8 @@ struct Read {
     /// The objects each value's measured reads were measured against, as
     /// their providers cite them.
     related: Vec<(&'static str, Vec<ObjectId>)>,
+    /// What each value's measured reads noted, as their providers cite it.
+    notes: Vec<(&'static str, Vec<String>)>,
 }
 
 /// The few values of one object a form names, in reading order: a list
@@ -1611,16 +1699,34 @@ fn placeholder(plan: &Plan<'_>, read: &Read, key: &str) -> Option<String> {
         // A share as the coverage capabilities showed it: the value's upper
         // end, at most the whole, to four decimals.
         // The objects the value's measured reads were measured against.
-        "cited" => {
-            let cited = cited(read, name);
-            (!cited.is_empty()).then(|| {
-                cited
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            })
-        }
+        "cited" => Some(
+            cited(read, name)
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", "),
+        ),
+        // What the value's measured reads noted, each after `; `: nothing
+        // where they noted nothing.
+        "notes" => Some(
+            read.notes
+                .iter()
+                .filter(|(read, _)| *read == name)
+                .flat_map(|(_, notes)| notes)
+                .fold(String::new(), |mut out, note| {
+                    out.push_str("; ");
+                    out.push_str(note);
+                    out
+                }),
+        ),
+        // A constant's number in coherent SI units, as Rust shows it
+        // (`0.02`): a tolerance as the capability wrote it after its own
+        // unit.
+        "si" => plan
+            .constants
+            .get(name)
+            .and_then(Constant::number)
+            .map(|value| value.to_string()),
         "share" => match read.values.get(name) {
             Some(Value::Number { value, .. }) => {
                 Some(((value.upper.min(1.0) * 1e4).round() / 1e4).to_string())
@@ -1675,48 +1781,71 @@ fn decimals(format: &str) -> Option<(&str, usize)> {
 
 /// Whether a text's condition holds.
 fn holds(plan: &Plan<'_>, read: &Read, condition: Option<Condition>) -> bool {
+    holds_over(&plan.constants, read, condition)
+}
+
+/// Whether `condition` holds over `constants` and the values `read`.
+fn holds_over(
+    constants: &BTreeMap<String, Constant>,
+    read: &Read,
+    condition: Option<Condition>,
+) -> bool {
+    let number = |parameter: &str| constants.get(parameter).and_then(Constant::number);
+    let value = |name: &str| match read.values.get(name) {
+        Some(Value::Number { value, .. }) => Some((value.lower, value.upper)),
+        _ => None,
+    };
     match condition {
         None => true,
-        Some(Condition::Positive { parameter }) => plan
-            .constants
-            .get(parameter)
-            .and_then(Constant::number)
-            .is_some_and(|value| value > 0.0),
+        Some(Condition::Positive { parameter }) => {
+            number(parameter).is_some_and(|value| value > 0.0)
+        }
         Some(Condition::Inexact { value }) => read.inexact.get(value).is_some(),
         Some(Condition::Equals { parameter, value }) => matches!(
-            plan.constants.get(parameter),
+            constants.get(parameter),
             Some(Constant::Text(stated)) if stated == value
         ),
         Some(Condition::OneOf { parameter, values }) => matches!(
-            plan.constants.get(parameter),
+            constants.get(parameter),
             Some(Constant::Text(stated)) if values.contains(&stated.as_str())
         ),
-        Some(Condition::Zero { value }) => matches!(
-            read.values.get(value),
-            Some(Value::Number { value, .. }) if value.lower == 0.0
-        ),
+        Some(Condition::Zero { value: name }) => value(name).is_some_and(|(lower, _)| lower == 0.0),
         Some(Condition::All { conditions }) => conditions
             .iter()
-            .all(|condition| holds(plan, read, Some(*condition))),
-        Some(Condition::Not { condition }) => !holds(plan, read, Some(*condition)),
+            .all(|condition| holds_over(constants, read, Some(*condition))),
+        Some(Condition::Not { condition }) => !holds_over(constants, read, Some(*condition)),
         Some(Condition::Cites { value }) => read
             .related
             .iter()
             .any(|(name, objects)| *name == value && !objects.is_empty()),
         Some(Condition::Absent { value }) => matches!(read.values.get(value), Some(Value::Null)),
-        Some(Condition::Below { value, than }) => matches!(
-            read.values.get(value),
-            Some(Value::Number { value, .. }) if value.upper < than
-        ),
-        Some(Condition::Above { value, than }) => matches!(
-            read.values.get(value),
-            Some(Value::Number { value, .. }) if value.lower > than
-        ),
+        Some(Condition::Below { value: name, than }) => {
+            value(name).is_some_and(|(_, upper)| upper < than)
+        }
+        Some(Condition::Above { value: name, than }) => {
+            value(name).is_some_and(|(lower, _)| lower > than)
+        }
         Some(Condition::Lists { parameter, value }) => matches!(
-            plan.constants.get(parameter),
+            constants.get(parameter),
             Some(Constant::Other(ParameterValue::StringList { value: listed }))
                 if listed.iter().any(|listed| listed.trim() == value)
         ),
+        Some(Condition::AtLeast { parameter, than }) => {
+            number(parameter).is_some_and(|value| value >= than)
+        }
+        Some(Condition::Under { parameter, than }) => {
+            number(parameter).is_some_and(|value| value < than)
+        }
+        Some(Condition::Exceeds {
+            value: name,
+            parameter,
+            end,
+        }) => match (value(name), number(parameter)) {
+            (Some((lower, upper)), Some(threshold)) => {
+                (if end == End::Lower { lower } else { upper }) > threshold
+            }
+            _ => false,
+        },
     }
 }
 
@@ -2058,6 +2187,10 @@ fn read_graded<'v>(
         if !cited.is_empty() {
             read.related.push((step.name, cited));
         }
+        let noted = leaves.take_notes();
+        if !noted.is_empty() {
+            read.notes.push((step.name, noted));
+        }
         let before = read.evidence.len();
         read.evidence.extend(evidence);
         if read.evidence[before..]
@@ -2259,6 +2392,10 @@ fn read_values<'v>(
         let cited = leaves.take_related();
         if !cited.is_empty() {
             read.related.push((step.name, cited));
+        }
+        let noted = leaves.take_notes();
+        if !noted.is_empty() {
+            read.notes.push((step.name, noted));
         }
         let before = read.evidence.len();
         read.evidence.extend(evidence);
@@ -2997,9 +3134,20 @@ fn read_ahead(
         .grading
         .as_ref()
         .map_or(0, |grading| grading.values.len());
+    // A check the rule's parameters leave out is never read.
+    let applying = |index: &usize| {
+        plan.form.checks[*index]
+            .applies
+            .as_ref()
+            .is_none_or(|applies| each::applies(plan, applies))
+    };
     let bound = bound_batched(
         plan.values()
-            .chain((0..plan.form.checks.len()).flat_map(|index| plan.check_values(index)))
+            .chain(
+                (0..plan.form.checks.len())
+                    .filter(applying)
+                    .flat_map(|index| plan.check_values(index)),
+            )
             .map(|(_, expression)| expression)
             .chain(
                 plan.bound
@@ -3408,7 +3556,7 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
             .map_err(ForkError::Inexpressible)?;
         let requirement = bound(&requirement, &plan.constants);
         return Ok(Fork {
-            carried: carried(&requirement, rule),
+            carried: carried(&requirement, &plan.bound.parameters),
             requirement,
         });
     }
@@ -3491,17 +3639,23 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
             label: Some(format!("unless {}", unless.value.name)),
         })
         .collect();
-    // Every check is required beside the form's own decision, as the
-    // template finds each on its own.
-    let requirement = if plan.form.checks.is_empty() {
+    // Every check applying to the rule is required beside the form's own
+    // decision, as the template finds each on its own.
+    let applying: Vec<usize> = (0..plan.form.checks.len())
+        .filter(|index| {
+            plan.form.checks[*index]
+                .applies
+                .as_ref()
+                .is_none_or(|applies| each::applies(&plan, applies))
+        })
+        .collect();
+    let requirement = if applying.is_empty() {
         own
     } else {
-        let mut operands: Vec<Expression> = plan
-            .form
-            .checks
+        let mut operands: Vec<Expression> = applying
             .iter()
-            .enumerate()
-            .map(|(index, check)| {
+            .map(|&index| {
+                let check = &plan.form.checks[index];
                 let read: Vec<(&TemplateValue, Expression)> = values
                     .iter()
                     .cloned()
@@ -3534,17 +3688,21 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
         ));
     }
     Ok(Fork {
-        carried: carried(&requirement, rule),
+        carried: carried(&requirement, &plan.bound.parameters),
         requirement,
     })
 }
 
-/// The parameters of `rule` the measured values `requirement` reads name.
-fn carried(requirement: &Expression, rule: &CompiledRule) -> BTreeMap<String, ParameterValue> {
+/// The parameters the measured values `requirement` reads name, as the
+/// rule states them or the template's defaults give them.
+fn carried(
+    requirement: &Expression,
+    parameters: &BTreeMap<String, ParameterValue>,
+) -> BTreeMap<String, ParameterValue> {
     measured_references(requirement)
         .into_iter()
         .filter_map(|name| {
-            rule.parameters
+            parameters
                 .get(&name)
                 .map(|value| (name.clone(), value.clone()))
         })

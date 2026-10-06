@@ -13,12 +13,19 @@ use crate::support::{Traversal, Unavailable};
 pub(crate) struct Population {
     pub(crate) matched: BTreeSet<ObjectId>,
     pub(crate) undecided: BTreeSet<ObjectId>,
+    /// The first outcome the selection left open, of an object or a
+    /// source: why the selector cannot decide everything it might pick.
+    pub(crate) first: Option<(NotEvaluatedReason, String)>,
 }
 
 impl Population {
     pub(crate) fn of(context: &RuleContext<'_>, selector: &Selector) -> Self {
         let (matched, outcomes) = select_objects(context, selector);
         Self {
+            first: outcomes
+                .not_evaluated_outcomes()
+                .first()
+                .map(|outcome| (outcome.reason().clone(), outcome.message().to_owned())),
             matched: matched
                 .into_iter()
                 .map(|object| object.id.clone())

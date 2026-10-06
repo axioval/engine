@@ -292,6 +292,7 @@ impl RuleCapability for TableAllocation {
         };
         let (selected, mut evaluation) = select_objects(context, &rule.selector);
         let members = Population {
+            first: None,
             matched: selected.iter().map(|object| object.id.clone()).collect(),
             undecided: evaluation
                 .not_evaluated_outcomes()

@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 mod compare;
+mod each;
 mod groups;
 mod scopes;
 
@@ -153,6 +154,9 @@ struct Bound {
     expressions: Vec<Expression>,
     /// The comparison a [`Decision::Compare`] judges, bound.
     comparison: Option<compare::Bound>,
+    /// A [`Decision::Each`]'s member values' expressions, then each
+    /// nested population's, the rule's parameters bound in.
+    each: Vec<Vec<Expression>>,
 }
 
 impl std::ops::Deref for Plan<'_> {
@@ -363,6 +367,61 @@ fn check(check: &Check, rule: &CompiledRule, template: &Template) -> Result<(), 
             }
         }
         Check::Tolerance => Parameters(rule).tolerance().map(|_| ()),
+        Check::NonNegativeLength { parameter, message } => {
+            match Parameters(rule).quantity(parameter)? {
+                None => Ok(()),
+                Some((value, QuantityDimension::Length)) if value >= 0.0 => Ok(()),
+                Some(_) => Err(invalid(*message)),
+            }
+        }
+        Check::Together {
+            parameters,
+            message,
+        } => {
+            let stated = parameters.iter().filter(|name| stated(rule, name)).count();
+            if stated == 0 || stated == parameters.len() {
+                Ok(())
+            } else {
+                Err(invalid(*message))
+            }
+        }
+        Check::Among {
+            parameter,
+            options,
+            message,
+        } => match Parameters(rule).string(parameter)? {
+            Some(value) if !options.contains(&value) => {
+                Err(invalid(message.replace("{value}", value)))
+            }
+            _ => Ok(()),
+        },
+        Check::Declares {
+            parameters,
+            message,
+        } => {
+            let declared = parameters.iter().any(|name| {
+                !matches!(
+                    rule.parameters.get(*name),
+                    None | Some(ParameterValue::Boolean { value: false })
+                )
+            });
+            if declared {
+                Ok(())
+            } else {
+                Err(invalid(*message))
+            }
+        }
+        Check::FalseRequires {
+            flag,
+            with,
+            message,
+        } => {
+            if Parameters(rule).boolean(flag)? == Some(false) && !any(with) {
+                Err(invalid(*message))
+            } else {
+                Ok(())
+            }
+        }
         Check::Required { parameter } => {
             let descriptor = template
                 .parameters
@@ -666,20 +725,39 @@ fn bind(template: &Template, rule: &CompiledRule) -> Result<Bound, Unavailable> 
         .collect();
     let comparison = match &form.decision {
         Decision::Compare { comparison, .. } => Some(compare::bind(rule, comparison)?),
-        Decision::Within { .. } | Decision::Unique { .. } => None,
+        _ => None,
+    };
+    let each = match &form.decision {
+        Decision::Each(each) => std::iter::once(&each.values)
+            .chain(each.nested.iter().map(|nested| &nested.values))
+            .map(|values| {
+                values
+                    .iter()
+                    .map(|step| bound(&step.expression, &constants))
+                    .collect()
+            })
+            .collect(),
+        _ => Vec::new(),
     };
     Ok(Bound {
         form: index,
         constants,
         expressions,
         comparison,
+        each,
     })
 }
 
 /// The form's decision with a bound left out where it sums a parameter
 /// the rule leaves unstated.
 fn effective(plan: &Plan<'_>) -> Decision {
-    match &plan.form.decision {
+    effective_of(plan, &plan.form.decision)
+}
+
+/// `decision` with a bound left out where it sums a parameter the rule
+/// leaves unstated.
+fn effective_of(plan: &Plan<'_>, decision: &Decision) -> Decision {
+    match decision {
         Decision::Within {
             value,
             minimum,
@@ -706,7 +784,7 @@ fn effective(plan: &Plan<'_>) -> Decision {
                     .collect(),
             }
         }
-        decision @ (Decision::Compare { .. } | Decision::Unique { .. }) => decision.clone(),
+        decision => decision.clone(),
     }
 }
 
@@ -725,6 +803,9 @@ struct Read {
     /// Further placeholders the runner states: an anchor's `{undecided}`
     /// members and how they are reached (`{relation}`).
     named: Named<String>,
+    /// The values of the member of a nested member in scope, which
+    /// messages read as `member:<name>`.
+    outer: Named<Value>,
     /// The declared minimum and maximum a range judge read (`{required}`).
     bounds: Option<(Option<f64>, Option<f64>)>,
 }
@@ -732,6 +813,7 @@ struct Read {
 /// The few values of one object a form names, in reading order: a list
 /// kept inline, since a form reads a handful and each object reads them
 /// anew.
+#[derive(Clone)]
 struct Named<V>(smallvec::SmallVec<[(&'static str, V); 6]>);
 
 impl<V> Default for Named<V> {
@@ -741,6 +823,11 @@ impl<V> Default for Named<V> {
 }
 
 impl<V> Named<V> {
+    /// Every name with its value, in naming order.
+    fn iter(&self) -> impl Iterator<Item = (&'static str, &V)> {
+        self.0.iter().map(|(name, value)| (*name, value))
+    }
+
     fn get(&self, name: &str) -> Option<&V> {
         self.0
             .iter()
@@ -916,6 +1003,10 @@ fn refusal(message: &str, expression: &Expression, object: &Object) -> String {
     let message = message
         .strip_prefix("property evidence conflicts: ")
         .unwrap_or(message);
+    // An engine-measured value's refusal names the set too.
+    let message = message
+        .strip_prefix(&format!("`{}` value ", axioval_ir::MEASURED_SET))
+        .unwrap_or(message);
     if let Some(rest) = message.strip_prefix(&format!("`{name}` of {}: ", object.id)) {
         return rest.to_owned();
     }
@@ -949,7 +1040,9 @@ fn render(plan: &Plan<'_>, read: &Read, template: &str) -> String {
 }
 
 fn placeholder(plan: &Plan<'_>, read: &Read, key: &str) -> Option<String> {
-    let (name, format) = key.split_once(':').unwrap_or((key, ""));
+    // The format follows the last colon: `member:height:length` formats
+    // the member's value `height`.
+    let (name, format) = key.rsplit_once(':').unwrap_or((key, ""));
     if format.is_empty() {
         let mut named = plan
             .template
@@ -1011,7 +1104,11 @@ fn placeholder(plan: &Plan<'_>, read: &Read, key: &str) -> Option<String> {
                 .map(|value| crate::plan_area::shown(value, value)),
         },
         "length" => {
-            if let Some(Value::Number { value, .. }) = read.values.get(name) {
+            let value = match name.strip_prefix("member:") {
+                Some(outer) => read.outer.get(outer),
+                None => read.values.get(name),
+            };
+            if let Some(Value::Number { value, .. }) = value {
                 return Some(shown(value.lower, value.upper));
             }
             plan.constants
@@ -1046,6 +1143,10 @@ fn holds(plan: &Plan<'_>, read: &Read, condition: Option<Condition>) -> bool {
         Some(Condition::Equals { parameter, value }) => matches!(
             plan.constants.get(parameter),
             Some(Constant::Text(stated)) if stated == value
+        ),
+        Some(Condition::OneOf { parameter, values }) => matches!(
+            plan.constants.get(parameter),
+            Some(Constant::Text(stated)) if values.contains(&stated.as_str())
         ),
         Some(Condition::Zero { value }) => matches!(
             read.values.get(value),
@@ -1228,15 +1329,16 @@ fn candidates<'a>(
 /// Reads the plan's values for `object` with `leaves`, in order, into
 /// `read`: the outcome where one leaves the object decided or open
 /// before the decision.
-fn read_values(
+fn read_values<'v>(
     plan: &Plan<'_>,
-    decision: &Decision,
+    values: impl IntoIterator<Item = (&'v TemplateValue, &'v Expression)>,
+    as_stated: &dyn Fn(&str) -> bool,
     context: &RuleContext<'_>,
     object: &Object,
     leaves: &mut ObjectLeaves<'_>,
     read: &mut Read,
 ) -> Option<Outcome> {
-    for (step, expression) in plan.values() {
+    for (step, expression) in values {
         let (outcome, evidence) = read_step(expression, step.name, leaves);
         let before = read.evidence.len();
         read.evidence.extend(evidence);
@@ -1254,7 +1356,7 @@ fn read_values(
         }
         // The value a comparison judges is judged as the source states it:
         // an absence, `null` and a value of any kind reach the comparison.
-        if judges_stated(decision, step.name) {
+        if as_stated(step.name) {
             if stated.is_some() {
                 continue;
             }
@@ -1344,7 +1446,7 @@ fn judge_object(
                 // form says they may.
                 let possible = match scope.members.undecided {
                     UndecidedMembers::Widen => tally.possible.as_slice(),
-                    UndecidedMembers::OnlyExcess { .. } => &[],
+                    UndecidedMembers::OnlyExcess { .. } | UndecidedMembers::Refuse { .. } => &[],
                 };
                 leaves = leaves.supplying(
                     Members::source(scope.members.selector),
@@ -1355,7 +1457,15 @@ fn judge_object(
             Err((reason, message)) => return Outcome::Open(reason, message).into(),
         }
     }
-    if let Some(outcome) = read_values(plan, decision, context, object, &mut leaves, &mut read) {
+    if let Some(outcome) = read_values(
+        plan,
+        plan.values(),
+        &|name| judges_stated(decision, name),
+        context,
+        object,
+        &mut leaves,
+        &mut read,
+    ) {
         return outcome.into();
     }
     let undecided = members.as_ref().map_or(0, |members| members.undecided);
@@ -1492,6 +1602,9 @@ pub(crate) fn run(
             NotEvaluatedReason::MissingService,
             services.message,
         );
+    }
+    if let Decision::Each(each) = &plan.form.decision {
+        return each::run(&plan, each, context, rule);
     }
     if let Decision::Unique { value, unique } = &plan.form.decision {
         return groups::run(&plan, value, unique, context, rule);
@@ -1764,6 +1877,11 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
         form: &template.forms[binding.form],
         bound: Arc::new(binding),
     };
+    if matches!(plan.form.decision, Decision::Each(_)) {
+        return Err(ForkError::Inexpressible(
+            "members judged one by one against their neighbours have no expression form".to_owned(),
+        ));
+    }
     if matches!(plan.form.decision, Decision::Unique { .. }) {
         return Err(ForkError::Inexpressible(
             "an expression rule judges each object on its own, not against the values of its group"

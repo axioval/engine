@@ -251,7 +251,15 @@ fn judge(
         .insert("undecided", tally.possible.len().to_string());
     // Whether the possible objects are what leaves the scope undecided.
     let mut straddled = false;
-    let outcome = match read_values(plan, decision, context, &stand_in, &mut leaves, &mut read) {
+    let outcome = match read_values(
+        plan,
+        plan.values(),
+        &|name| super::judges_stated(decision, name),
+        context,
+        &stand_in,
+        &mut leaves,
+        &mut read,
+    ) {
         Some(outcome) => outcome,
         None => match within(plan, &read, decision) {
             Some(judged) => {

@@ -176,6 +176,54 @@ finding reads `{others}` (how many objects share the value),
 catalogue, is that at most one object of the scope's `selection` states
 the checked object's value; a rule is never forked from it.
 
+`Decision::Each` judges an anchor's members one by one (`Each`), with
+three relations no aggregate states:
+
+- **Neighbouring members.** The members (`Form::members`, decided as
+  `UndecidedMembers::Refuse` requires: any object the selector cannot
+  decide, anywhere, leaves every anchor open with `{why}`) read `values`
+  with themselves in scope and are ordered by `order`, lowest first and
+  ties by identity; one whose `order` is not a stated length leaves the
+  anchor open (`unordered`). A member's `rise` is the next member's
+  `order` less its own; the last member's comes from `Rise::last`, the
+  highest value of a nested population (a level's contents' tops), or
+  leaves it open (`Rise::open`); `skip_first`/`skip_last` leave the first
+  or last without one. The rise is read only where an applicable
+  judgement reads it.
+- **A prevailing reference.** `Decision::Near` judges a value against a
+  reference within a tolerance, the reference a value of the subject, of
+  its member (`member:<name>`), or `Reference::Prevailing`: the exact
+  value most subjects share within the tolerance, the lowest among
+  equally common ones (`level_spacing::prevailing`); without one each
+  subject is open with `missing`, or nothing is judged.
+- **Nested members.** `Nested` reads, per member, the objects a selector
+  parameter picks (every object where unstated) that a path parameter
+  reaches (a storey's spaces): any undecided one leaves the member open
+  (`undecided`), fewer than `least` judge nothing or leave it open
+  (`fewer`), the `services` they need are checked before or after
+  reaching them, and a value that cannot be read leaves the nested member
+  open, or the member (`errors_open_member`). `differences` derive values
+  (`top − bottom`), and a `NestedTable` holds a row per nested member, the
+  member's identity first.
+
+Every `Judgement` (`Each::checks`, `Nested::checks`) is its own outcome on
+its subject, so a member failing two judgements has two findings
+(divergence D1's "several findings per object"); one applies where its
+`Applies` holds (every `when` parameter stated, a boolean or its default
+true; one of `any`; its `condition`, such as `Condition::OneOf`), and only
+to subjects having every value it reads, at least `least` of them. A
+member's findings relate the next member up, a nested member's its
+member. Rises and differences are computed in plain binary arithmetic
+(`[a.lower − b.upper, a.upper − b.lower]`), as the capabilities computed
+them, like `Within`'s bounds. Such a form expands into the conjunction of
+its judgements for the catalogue and is never forked.
+
+The declaration checks such a capability needs are `nonNegativeLength`
+(a non-negative length, worded by the template), `together` (all or
+none), `among` (a string among options, `{value}` the stated one),
+`declares` (one stated, a boolean true) and `falseRequires` (a boolean
+stated false needs one of some parameters).
+
 ### `object-count`
 
 | Form | When | Values | Decision |

@@ -164,6 +164,36 @@ pub enum Check {
     /// The parameter is stated, and of its descriptor's kind: otherwise
     /// `` parameter `<parameter>` is required `` or the reader's refusal.
     Required { parameter: &'static str },
+    /// A quantity parameter, where stated, is a length of at least zero:
+    /// otherwise `message` (a wrong type refused as the reader words it).
+    NonNegativeLength {
+        parameter: &'static str,
+        message: &'static str,
+    },
+    /// The parameters are stated all together or not at all.
+    Together {
+        parameters: &'static [&'static str],
+        message: &'static str,
+    },
+    /// A string parameter, where stated, is one of `options`: otherwise
+    /// `message`, `{value}` the stated string.
+    Among {
+        parameter: &'static str,
+        options: &'static [&'static str],
+        message: &'static str,
+    },
+    /// At least one of `parameters` is declared: stated and, for a
+    /// boolean, true.
+    Declares {
+        parameters: &'static [&'static str],
+        message: &'static str,
+    },
+    /// Where the boolean `flag` is stated false, one of `with` is stated.
+    FalseRequires {
+        flag: &'static str,
+        with: &'static [&'static str],
+        message: &'static str,
+    },
 }
 
 /// The host services a template's values need, and the message leaving
@@ -230,6 +260,11 @@ pub enum Condition {
     },
     /// The value's lower end is zero: nothing surely counted.
     Zero { value: &'static str },
+    /// The string parameter (or its default) is one of `values`.
+    OneOf {
+        parameter: &'static str,
+        values: &'static [&'static str],
+    },
 }
 
 /// One composition of a template.
@@ -396,6 +431,10 @@ pub enum UndecidedMembers {
     /// decision judges the widened value, a verdict standing only where
     /// they cannot change it. `{undecided}` is their count.
     Widen,
+    /// Any object the selector cannot decide, anywhere, leaves every
+    /// anchor open (members are ordered among each other): with
+    /// `message`, `{why}` the first such object's refusal, for its reason.
+    Refuse { message: &'static str },
 }
 
 /// A report table a form fills: one row per selected object whose values
@@ -476,6 +515,195 @@ pub enum Decision {
     /// compared with those of the other objects of its group, a finding on
     /// every object sharing it with another, relating them ([`Unique`]).
     Unique { value: &'static str, unique: Unique },
+    /// The anchor's members ([`Form::members`]) read and judged one by
+    /// one, against their neighbours, a reference prevailing among them,
+    /// and their own nested members ([`Each`]). Findings are on the
+    /// members (or nested members), several per member where several
+    /// judgements fail.
+    Each(Box<Each>),
+    /// A value agrees with a reference within a tolerance: a finding where
+    /// the whole interval lies beyond it, the subject open where part of
+    /// it does. Only a judgement of [`Each`] uses it.
+    Near {
+        value: &'static str,
+        reference: Reference,
+        tolerance: Operand,
+    },
+}
+
+/// Members read and judged one by one: what [`Decision::Each`] decides.
+///
+/// Each member of an anchor (decided, as [`UndecidedMembers::Refuse`]
+/// requires) reads `values` with itself in scope; `order` orders them,
+/// lowest first and ties by identity, a member whose `order` is not a
+/// stated length leaving the anchor open (`unordered`, `{member}`). The
+/// members' `rise` is the difference of the next member's `order` and the
+/// member's own, in plain binary arithmetic as the capabilities computed
+/// it; the last member's comes from `last`, or leaves it open (`open`),
+/// and `skip_first`/`skip_last` (boolean parameters) leave the first or
+/// last member without one. A rise is read only where an applicable
+/// judgement reads it. `checks` judge each member having every value they
+/// read; `nested` reads further populations per member. `table` holds one
+/// row per member, its values or unknown.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Each {
+    pub values: Vec<TemplateValue>,
+    pub order: &'static str,
+    pub unordered: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub skip_first: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub skip_last: Option<&'static str>,
+    pub rise: Rise,
+    pub checks: Vec<Judgement>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub nested: Vec<Nested>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub table: Option<Table>,
+}
+
+/// The difference of the next member's `order` and a member's own.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Rise {
+    /// The name the rise is read under.
+    pub name: &'static str,
+    /// The last member's rise: the highest upper end of a value of a
+    /// nested population, less the member's `order`, where that population
+    /// applies.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last: Option<Highest>,
+    /// The last member left open where no `last` applies.
+    pub open: &'static str,
+}
+
+/// The highest `value` among the members of the nested population
+/// `nested`: lower and upper ends each the greatest.
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Highest {
+    pub nested: &'static str,
+    pub value: &'static str,
+}
+
+/// When a judgement or nested population applies: every parameter of
+/// `when` stated (a boolean, or its default, true), one of `any` where it
+/// names some, and `condition` holding.
+#[derive(Clone, Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Applies {
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    pub when: &'static [&'static str],
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    pub any: &'static [&'static str],
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub condition: Option<Condition>,
+}
+
+/// One judgement of each subject (a member, or a nested member): its own
+/// outcome, so a subject failing several has several findings.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Judgement {
+    pub applies: Applies,
+    /// A `Within` or `Near` decision over the subject's values.
+    pub decision: Decision,
+    pub fail: &'static str,
+    pub undecided: &'static str,
+    /// Fewer subjects with the values it reads: nothing judged (a
+    /// prevailing value needs two).
+    pub least: usize,
+}
+
+/// The reference a [`Decision::Near`] compares with.
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(tag = "kind", content = "value", rename_all = "camelCase")]
+pub enum Reference {
+    /// A value of the subject, or (`member:<name>`) of its member.
+    Value(&'static str),
+    /// The prevailing exact value `value` among the judgement's subjects:
+    /// the one most share within the tolerance, the lowest among equally
+    /// common ones. Without one each subject is open with `missing`, or
+    /// nothing is judged without a message.
+    Prevailing {
+        value: &'static str,
+        missing: Option<&'static str>,
+    },
+}
+
+/// Objects a path reaches from each member (a storey's spaces, a level's
+/// contents), read and judged per member.
+///
+/// They are the objects a selector parameter picks (every object where
+/// unstated) that the path parameter reaches; any whose selection is
+/// undecided leaves the member open (`undecided`, `{undecided}` their
+/// count, `{relation}` the path). Fewer than `least` nested members judge
+/// nothing, or leave the member open with `fewer`. Without `services` the
+/// member is open with their message, checked first where
+/// `services_first`. A value of a nested member that cannot be read leaves
+/// it open, or, `errors_open_member`, the member. `differences` derive
+/// values in plain binary arithmetic (`[a.lower − b.upper, a.upper −
+/// b.lower]`); `table` holds a row per nested member read.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Nested {
+    pub name: &'static str,
+    pub applies: Applies,
+    pub path: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub selector: Option<&'static str>,
+    pub undecided: &'static str,
+    pub least: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fewer: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub services: Option<Services>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub services_first: bool,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub errors_open_member: bool,
+    /// Only members whose value of this name is known have the population.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub members_with: Option<&'static str>,
+    pub values: Vec<TemplateValue>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub differences: Vec<Difference>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub checks: Vec<Judgement>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub table: Option<NestedTable>,
+}
+
+impl Nested {
+    /// The aggregate source a value reads a member's nested population
+    /// through, as a block editor shows it.
+    #[must_use]
+    pub fn source(&self) -> axioval_ir::contract::AggregateSource {
+        axioval_ir::contract::AggregateSource::Path {
+            path: vec![format!("{{{}}}", self.path)],
+        }
+    }
+}
+
+/// A value derived as `minuend − subtrahend`, both intervals.
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Difference {
+    pub name: &'static str,
+    pub minuend: &'static str,
+    pub subtrahend: &'static str,
+}
+
+/// A report table of nested members: the member's identity as text under
+/// `member`, then columns of the nested member's values or
+/// (`member:<name>`) its member's.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NestedTable {
+    pub name: &'static str,
+    pub member: &'static str,
+    pub columns: Vec<Column>,
 }
 
 /// What [`Decision::Unique`] reads of the rule.
@@ -829,6 +1057,50 @@ impl Decision {
                 value: subject,
                 comparison,
             } => comparison.expression(&value(subject)),
+            // Every judgement of every member, as a block editor shows them.
+            Self::Each(each) => Expression::And {
+                operands: each
+                    .checks
+                    .iter()
+                    .chain(each.nested.iter().flat_map(|nested| &nested.checks))
+                    .map(|judgement| judgement.decision.expression(value))
+                    .collect(),
+                label: Some("each member".into()),
+            },
+            Self::Near {
+                value: subject,
+                reference,
+                tolerance,
+            } => {
+                let reference = match reference {
+                    Reference::Value(name) => value(name),
+                    Reference::Prevailing { value: name, .. } => Expression::Derived {
+                        name: format!("prevailing {name}"),
+                        label: None,
+                    },
+                };
+                let tolerance = match tolerance {
+                    Operand::Value(name) => value(name),
+                    Operand::Parameter(name) => Expression::Parameter {
+                        name: (*name).to_owned(),
+                        label: None,
+                    },
+                };
+                Expression::Compare {
+                    operator: ExpressionComparison::LessThanOrEquals,
+                    left: boxed(Expression::Abs {
+                        operand: boxed(Expression::Subtract {
+                            left: boxed(value(subject)),
+                            right: boxed(reference),
+                            label: None,
+                        }),
+                        label: None,
+                    }),
+                    right: boxed(tolerance),
+                    case_sensitive: true,
+                    label: Some("within the tolerance".into()),
+                }
+            }
             Self::Unique { value: subject, .. } => {
                 // No other object the rule selects in the scope states the
                 // checked object's value: at most one, itself, does.

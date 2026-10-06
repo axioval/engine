@@ -70,7 +70,15 @@ pub(super) fn run(
     for object in selected {
         let mut leaves = ObjectLeaves::new(context, object, Some(&rule.parameters));
         let mut read = Read::default();
-        match read_values(plan, decision, context, object, &mut leaves, &mut read) {
+        match read_values(
+            plan,
+            plan.values(),
+            &|name| super::judges_stated(decision, name),
+            context,
+            object,
+            &mut leaves,
+            &mut read,
+        ) {
             None => {}
             Some(Outcome::Open(reason, message)) => {
                 evaluation.push_object_not_evaluated(object.id.clone(), reason, message);

@@ -9,6 +9,13 @@ use axioval_ir::contract::{ComparisonOperator, ParameterValue, Quantifier, Selec
 use axioval_rules::{ManualIssue, PropertyValueConstraint};
 use common::{Model, findings, kind, property, rule, string, strings, unevaluated};
 
+/// `property-value` runs as a template, held on every fixture to the
+/// implementation it replaced.
+const PROPERTY_VALUE: common::Held = common::Held(
+    &PropertyValueConstraint,
+    &axioval_rules::reference::PropertyValueConstraint,
+);
+
 const VALUE: &str = "axioval:capability.property-value";
 
 /// `w1` has `Foobar` and `Foobaz` both `x`, `w2` `Foobar` `x` and `Foobaz`
@@ -36,7 +43,7 @@ fn values_x(extra: Vec<(&'static str, ParameterValue)>) -> Vec<(&'static str, Pa
 #[test]
 fn every_matching_property_must_meet_the_constraints() {
     let evaluation = model().evaluate(
-        &PropertyValueConstraint,
+        &PROPERTY_VALUE,
         &rule(
             VALUE,
             kind("wall"),
@@ -69,7 +76,7 @@ fn every_matching_property_must_meet_the_constraints() {
 #[test]
 fn an_optional_pattern_may_match_nothing_and_any_set_is_searched() {
     let evaluation = model().evaluate(
-        &PropertyValueConstraint,
+        &PROPERTY_VALUE,
         &rule(
             VALUE,
             kind("wall"),
@@ -94,10 +101,7 @@ fn a_pattern_rule_is_declared_exactly_once() {
         values_x(vec![]),
         values_x(vec![("property_pattern", string("[a-z-[aeiou]]"))]),
     ] {
-        let evaluation = model().evaluate(
-            &PropertyValueConstraint,
-            &rule(VALUE, kind("wall"), parameters),
-        );
+        let evaluation = model().evaluate(&PROPERTY_VALUE, &rule(VALUE, kind("wall"), parameters));
         assert_eq!(
             unevaluated(&evaluation),
             [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
@@ -105,7 +109,7 @@ fn a_pattern_rule_is_declared_exactly_once() {
     }
     // A source that cannot list its properties decides nothing.
     let evaluation = model().names_only().evaluate(
-        &PropertyValueConstraint,
+        &PROPERTY_VALUE,
         &rule(
             VALUE,
             kind("wall"),
@@ -200,7 +204,7 @@ fn a_set_pattern_needs_a_match_in_every_set_it_matches() {
             .text("w1", "Foo_Baz", "Another", "x")
     };
     let evaluation = model().evaluate(
-        &PropertyValueConstraint,
+        &PROPERTY_VALUE,
         &rule(
             VALUE,
             kind("wall"),
@@ -219,7 +223,7 @@ fn a_set_pattern_needs_a_match_in_every_set_it_matches() {
     );
     // Optional, it holds wherever it is stated.
     let evaluation = model().evaluate(
-        &PropertyValueConstraint,
+        &PROPERTY_VALUE,
         &rule(
             VALUE,
             kind("wall"),
@@ -241,7 +245,7 @@ fn an_empty_set_the_pattern_matches_needs_a_match_too() {
         .text("w1", "Foo_Bar", "Foo", "x")
         .empty_set("w1", "Foo_Baz")
         .evaluate(
-            &PropertyValueConstraint,
+            &PROPERTY_VALUE,
             &rule(
                 VALUE,
                 kind("wall"),

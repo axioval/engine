@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 
 mod compare;
 mod each;
-mod facets;
+pub(crate) mod facets;
 mod groups;
 mod members;
 mod proportion;

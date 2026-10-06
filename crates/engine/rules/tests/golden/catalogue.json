@@ -25648,7 +25648,60 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "property-value",
+        "refusals": "worded",
+        "forms": [
+          {
+            "when": [],
+            "values": [],
+            "decision": {
+              "kind": "facets",
+              "property": "property",
+              "propertySetPattern": "property_set_pattern",
+              "propertyPattern": "property_pattern",
+              "dataType": "data_type",
+              "values": "values",
+              "patterns": "patterns",
+              "minInclusive": "min_inclusive",
+              "maxInclusive": "max_inclusive",
+              "minExclusive": "min_exclusive",
+              "maxExclusive": "max_exclusive",
+              "length": "length",
+              "minLength": "min_length",
+              "maxLength": "max_length",
+              "totalDigits": "total_digits",
+              "fractionDigits": "fraction_digits",
+              "optional": "optional",
+              "precision": "precision",
+              "quantifier": "quantifier",
+              "siUnits": "si_units",
+              "targetRefusal": "property-value: ",
+              "constraintRefusal": "property-value parameters are invalid: "
+            },
+            "fail": "",
+            "undecided": ""
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "derived",
+              "name": "`property` meets its facets",
+              "label": "the property meets its facets"
+            },
+            "blocks": {
+              "type": "expression.derived",
+              "label": "the property meets its facets",
+              "fields": {
+                "name": "`property` meets its facets"
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.property-value-equals",

@@ -1,37 +1,19 @@
-//! The facet judge ([`axioval_engine::template::Decision::Facets`]): a
-//! property's value against lexical constraints written as XML Schema
-//! facets, cast to the kind of the value the source resolved.
-//!
-//! - text compares exactly and case-sensitively, and alone takes `patterns`
-//!   and lengths;
-//! - a boolean accepts `true`/`1` and `false`/`0`;
-//! - an integer takes integer literals, and bounds in any numeric form;
-//! - a decimal takes `xs:double` literals and equals within the tolerance
-//!   `|x - v| <= |v|·1e-6 + 1e-6`; bounds compare without tolerance;
-//! - a date takes `xs:date` literals (`2026-09-27`) and a date-time
-//!   `xs:dateTime` literals with a UTC offset, compared chronologically.
-//!   With `precision` `day` both read as the calendar day they state, so a
-//!   date-time value takes date literals and the reverse.
-//!
-//! A literal that cannot be cast to the value's kind, or a constraint the
-//! kind does not take, leaves the object not evaluated
-//! (`InvalidDeclaration`). A quantity is compared only when `si_units`
-//! states that the literals are in the coherent SI unit of its dimension. A
-//! list, bounded value or table is judged by its stated values under the
-//! declared `quantifier`, a range also by its open ends. Every order is
-//! decided by the one comparison every rule uses.
+//! `property-value` as it was implemented before it became a template
+//! (#287), kept only as the parity reference the template is held to in the
+//! rules crate's tests (`parity-reference` feature). It is no capability of
+//! any registry.
 
-use axioval_engine::template::FacetParameters;
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, NamePattern, NotEvaluatedReason, PropertyResolution,
-    PropertyResolutionError, PropertyResolutionServiceHandle, RuleContext, UnreadableValue,
+    CapabilityEvaluation, CompiledRule, NamePattern, NotEvaluatedReason, ParameterDescriptor,
+    ParameterType, PropertyResolution, PropertyResolutionError, PropertyResolutionServiceHandle,
+    RuleCapability, RuleContext, UnreadableValue,
 };
 use axioval_ir::contract::{ParameterValue, Quantifier};
 use axioval_ir::{
     Date, DateTime, Evidence, Finding, Object, Property, PropertyValue, Severity, TemporalPrecision,
 };
 
-use crate::support::{Tolerance, Unavailable, invalid as refused, temporal_order};
+use crate::support::{Tolerance, temporal_order};
 use axioval_engine::comparison::{self as shared, Order};
 
 use crate::selection::{
@@ -40,68 +22,9 @@ use crate::selection::{
 };
 use crate::xsd_pattern;
 
-/// Checks a rule's facet declaration as the capability checked it: the
-/// property it names, then the constraints, each refusal worded in full.
-pub(super) fn check(rule: &CompiledRule, names: &FacetParameters) -> Result<(), Unavailable> {
-    Target::read(rule, names)
-        .map_err(|message| refused(format!("{}{message}", names.target_refusal)))?;
-    Constraints::read(rule, names)
-        .map_err(|message| refused(format!("{}{message}", names.constraint_refusal)))?;
-    Ok(())
-}
-
-/// Runs a form judging each selected object's property by its facets.
-pub(super) fn run(
-    names: &FacetParameters,
-    context: &RuleContext<'_>,
-    rule: &CompiledRule,
-) -> CapabilityEvaluation {
-    // Checked by the declaration (`Check::Facets`).
-    let (Ok(target), Ok(constraints)) = (Target::read(rule, names), Constraints::read(rule, names))
-    else {
-        return CapabilityEvaluation::default();
-    };
-    let (selected, mut evaluation) = select_objects(context, &rule.selector);
-    let Some(service) = context.services.get::<PropertyResolutionServiceHandle>() else {
-        for object in selected {
-            evaluation.push_object_not_evaluated(
-                object.id.clone(),
-                NotEvaluatedReason::MissingService,
-                "property-resolution service is not registered",
-            );
-        }
-        return evaluation;
-    };
-    for object in selected {
-        match &target {
-            Target::Exact { set, name } => {
-                check_exact(
-                    context,
-                    rule,
-                    service,
-                    object,
-                    (*set, name),
-                    &constraints,
-                    &mut evaluation,
-                );
-            }
-            Target::Matched { set, name, shown } => {
-                check_matched(
-                    context,
-                    rule,
-                    object,
-                    (set.as_ref(), name, shown),
-                    &constraints,
-                    &mut evaluation,
-                );
-            }
-        }
-    }
-    evaluation
-}
-
-/// IDS equality tolerance for doubles, relative and absolute.
-pub(crate) const EPSILON: f64 = 1.0e-6;
+/// IDS equality tolerance for doubles, relative and absolute: the facet
+/// judge's.
+use crate::templates::facets::EPSILON;
 
 /// The declared constraints of one rule.
 #[derive(Default)]
@@ -128,7 +51,7 @@ struct Constraints<'r> {
 }
 
 impl<'r> Constraints<'r> {
-    fn read(rule: &'r CompiledRule, names: &FacetParameters) -> Result<Self, String> {
+    fn read(rule: &'r CompiledRule) -> Result<Self, String> {
         let text = |name: &str| match rule.parameters.get(name) {
             Some(ParameterValue::String { value }) => Some(value.as_str()),
             _ => None,
@@ -142,23 +65,23 @@ impl<'r> Constraints<'r> {
             _ => None,
         };
         let constraints = Self {
-            data_type: text(names.data_type),
-            values: list(names.values),
-            patterns: list(names.patterns),
-            min_inclusive: text(names.min_inclusive),
-            max_inclusive: text(names.max_inclusive),
-            min_exclusive: text(names.min_exclusive),
-            max_exclusive: text(names.max_exclusive),
-            length: count(names.length),
-            min_length: count(names.min_length),
-            max_length: count(names.max_length),
-            total_digits: count(names.total_digits),
-            fraction_digits: count(names.fraction_digits),
+            data_type: text("data_type"),
+            values: list("values"),
+            patterns: list("patterns"),
+            min_inclusive: text("min_inclusive"),
+            max_inclusive: text("max_inclusive"),
+            min_exclusive: text("min_exclusive"),
+            max_exclusive: text("max_exclusive"),
+            length: count("length"),
+            min_length: count("min_length"),
+            max_length: count("max_length"),
+            total_digits: count("total_digits"),
+            fraction_digits: count("fraction_digits"),
             optional: matches!(
-                rule.parameters.get(names.optional),
+                rule.parameters.get("optional"),
                 Some(ParameterValue::Boolean { value: true })
             ),
-            quantifier: match text(names.quantifier) {
+            quantifier: match text("quantifier") {
                 None => None,
                 Some("any") => Some(Quantifier::Any),
                 Some("all") => Some(Quantifier::All),
@@ -167,10 +90,10 @@ impl<'r> Constraints<'r> {
                 }
             },
             si_units: matches!(
-                rule.parameters.get(names.si_units),
+                rule.parameters.get("si_units"),
                 Some(ParameterValue::Boolean { value: true })
             ),
-            precision: match text(names.precision) {
+            precision: match text("precision") {
                 None => None,
                 Some("day") => Some(TemporalPrecision::Day),
                 Some(other) => {
@@ -243,6 +166,143 @@ enum Verdict {
     Inapplicable(NotEvaluatedReason, String),
 }
 
+/// Requires a property's value to meet lexical constraints, cast to its kind.
+///
+/// Parameters: `property`, or `property_pattern` with an optional
+/// `property_set_pattern` (XML Schema patterns over the source's own names,
+/// matching them whole); optionally `data_type` (the source-declared type,
+/// as in `property-data-type`), `values` (any of), `patterns` (XML Schema
+/// regular expressions, any of, whole value), `min_inclusive`,
+/// `max_inclusive`, `min_exclusive`, `max_exclusive`, `length`,
+/// `min_length`, `max_length`, `total_digits`, `fraction_digits` (for a
+/// number only), `optional`, `precision` (`day`, for a date or date-time
+/// value only), `quantifier` (`any` or `all`) and `si_units`. All given
+/// constraints must hold. A decimal's digits are
+/// counted on the shortest decimal that reads back as the same double, the
+/// form a model's literal has. Without `optional`, absence, `null`, blank
+/// text and an empty list are violations; with it, an absent or `null`
+/// property passes and any present value, empty text included, is checked.
+///
+/// With patterns, every matching property, enumerated exactly through the
+/// property service, must meet the constraints, and one must match unless
+/// the rule is optional; with `property_set_pattern`, one must match in
+/// every set the pattern matches, as IDS requires. Each failing property
+/// and each set without a match is its own finding.
+///
+/// A list, a bounded value or a table is judged by its stated values (see
+/// `PropertyValue::stated_values`) under `quantifier`: `any` holds when one
+/// of them meets every constraint, `all` when each does, and there is at
+/// least one. A range holds every value between its bounds, so under `all`
+/// a bounded value open on one side fails every bound on that side. Without
+/// a quantifier such a value is not evaluated; a scalar under a quantifier
+/// is judged as itself. `si_units` reads numeric literals compared with a
+/// quantity in the coherent SI unit of its dimension (metres, square
+/// metres, kilograms, ...), the unit the value is stated in; without it a
+/// quantity is not evaluated.
+pub struct PropertyValueConstraint;
+impl RuleCapability for PropertyValueConstraint {
+    fn id(&self) -> &'static str {
+        "axioval:capability.property-value"
+    }
+
+    fn parameters(&self) -> Vec<ParameterDescriptor> {
+        let mut parameters = vec![ParameterDescriptor::optional(
+            "property",
+            ParameterType::PropertyReference,
+        )];
+        for name in [
+            "property_set_pattern",
+            "property_pattern",
+            "data_type",
+            "min_inclusive",
+            "max_inclusive",
+            "min_exclusive",
+            "max_exclusive",
+            "precision",
+            "quantifier",
+        ] {
+            parameters.push(ParameterDescriptor::optional(name, ParameterType::String));
+        }
+        for name in ["values", "patterns"] {
+            parameters.push(ParameterDescriptor::optional(
+                name,
+                ParameterType::StringList,
+            ));
+        }
+        for name in [
+            "length",
+            "min_length",
+            "max_length",
+            "total_digits",
+            "fraction_digits",
+        ] {
+            parameters.push(ParameterDescriptor::optional(name, ParameterType::Integer));
+        }
+        for name in ["optional", "si_units"] {
+            parameters.push(ParameterDescriptor::optional(name, ParameterType::Boolean));
+        }
+        parameters
+    }
+
+    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
+        let target = match Target::read(rule) {
+            Ok(target) => target,
+            Err(message) => {
+                return CapabilityEvaluation::not_evaluated(
+                    NotEvaluatedReason::InvalidDeclaration,
+                    format!("property-value: {message}"),
+                );
+            }
+        };
+        let constraints = match Constraints::read(rule) {
+            Ok(constraints) => constraints,
+            Err(message) => {
+                return CapabilityEvaluation::not_evaluated(
+                    NotEvaluatedReason::InvalidDeclaration,
+                    format!("property-value parameters are invalid: {message}"),
+                );
+            }
+        };
+        let (selected, mut evaluation) = select_objects(context, &rule.selector);
+        let Some(service) = context.services.get::<PropertyResolutionServiceHandle>() else {
+            for object in selected {
+                evaluation.push_object_not_evaluated(
+                    object.id.clone(),
+                    NotEvaluatedReason::MissingService,
+                    "property-resolution service is not registered",
+                );
+            }
+            return evaluation;
+        };
+        for object in selected {
+            match &target {
+                Target::Exact { set, name } => {
+                    check_exact(
+                        context,
+                        rule,
+                        service,
+                        object,
+                        (*set, name),
+                        &constraints,
+                        &mut evaluation,
+                    );
+                }
+                Target::Matched { set, name, shown } => {
+                    check_matched(
+                        context,
+                        rule,
+                        object,
+                        (set.as_ref(), name, shown),
+                        &constraints,
+                        &mut evaluation,
+                    );
+                }
+            }
+        }
+        evaluation
+    }
+}
+
 /// The property a rule judges: one named exactly, or every one whose name
 /// (and set) match XML Schema patterns.
 enum Target<'r> {
@@ -258,13 +318,13 @@ enum Target<'r> {
 }
 
 impl<'r> Target<'r> {
-    fn read(rule: &'r CompiledRule, names: &FacetParameters) -> Result<Self, String> {
+    fn read(rule: &'r CompiledRule) -> Result<Self, String> {
         let text = |name: &str| match rule.parameters.get(name) {
             Some(ParameterValue::String { value }) => Ok(Some(value.as_str())),
             None => Ok(None),
             Some(_) => Err(format!("`{name}` is not a string")),
         };
-        let reference = match rule.parameters.get(names.property) {
+        let reference = match rule.parameters.get("property") {
             Some(ParameterValue::PropertyReference {
                 property,
                 property_set,
@@ -272,8 +332,8 @@ impl<'r> Target<'r> {
             None => None,
             Some(_) => return Err("`property` is not a property reference".into()),
         };
-        let set_pattern = text(names.property_set_pattern)?;
-        let name_pattern = text(names.property_pattern)?;
+        let set_pattern = text("property_set_pattern")?;
+        let name_pattern = text("property_pattern")?;
         let compile = |pattern: &str| {
             xsd_name_pattern(pattern).map_err(|why| format!("name pattern {pattern:?}: {why}"))
         };
@@ -473,10 +533,7 @@ fn judge(property: &Property, name: &str, constraints: &Constraints<'_>) -> Verd
     let typed;
     let mut value = value;
     if let Some(expected) = constraints.data_type {
-        match (
-            property.data_type(),
-            crate::property_value::typed_cells(property, expected),
-        ) {
+        match (property.data_type(), typed_cells(property, expected)) {
             (Some(actual), _) if actual.eq_ignore_ascii_case(expected) => {}
             (Some(actual), _) => {
                 return Verdict::Fails(format!("property {name} is {actual}, not {expected}"));
@@ -505,6 +562,31 @@ fn judge(property: &Property, name: &str, constraints: &Constraints<'_>) -> Verd
         }
         Verdict::Meets => Verdict::Meets,
     }
+}
+
+/// The cells of a table value's columns declared `expected`, when the
+/// source reports its column types; `None` for any other value.
+pub(crate) fn typed_cells<'p>(
+    property: &'p Property,
+    expected: &str,
+) -> Option<Vec<&'p PropertyValue>> {
+    let (PropertyValue::Table(rows), Some(types)) = (&property.value, property.column_types())
+    else {
+        return None;
+    };
+    let defining = types.defining.eq_ignore_ascii_case(expected);
+    let defined = types.defined.eq_ignore_ascii_case(expected);
+    Some(
+        rows.iter()
+            .flat_map(|row| {
+                [
+                    defining.then_some(&row.defining),
+                    defined.then_some(&row.defined),
+                ]
+            })
+            .flatten()
+            .collect(),
+    )
 }
 
 fn is_empty(value: &PropertyValue) -> bool {
@@ -950,64 +1032,5 @@ fn parse_double(literal: &str) -> Option<f64> {
         literal.parse().ok()
     } else {
         None
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{Constraints, Verdict, digits, parse_double, parse_integer, within_tolerance};
-
-    #[test]
-    fn digits_are_counted_as_xml_schema_counts_them() {
-        let limits = |total, fraction| Constraints {
-            total_digits: total,
-            fraction_digits: fraction,
-            ..Constraints::default()
-        };
-        let meets = |numeral: &str, constraints: &Constraints<'_>| {
-            matches!(digits(numeral, constraints), Verdict::Meets)
-        };
-        assert!(meets("123", &limits(Some(3), None)));
-        assert!(!meets("1234", &limits(Some(3), None)));
-        assert!(meets("120", &limits(Some(3), Some(0))));
-        assert!(meets("0.0012", &limits(Some(4), Some(4))));
-        assert!(!meets("0.0012", &limits(Some(3), None)));
-        assert!(!meets("1.25", &limits(None, Some(1))));
-        assert!(meets("1.25", &limits(Some(3), Some(2))));
-        assert!(meets("0", &limits(Some(1), Some(0))));
-    }
-
-    #[test]
-    fn number_literals_follow_xml_schema() {
-        assert_eq!(parse_integer("+42"), Some(42));
-        assert_eq!(parse_integer("-7"), Some(-7));
-        for bad in ["42.0", "4 2", "", "+", "0x1"] {
-            assert_eq!(parse_integer(bad), None, "{bad}");
-        }
-        assert_eq!(parse_double("1.2345e3"), Some(1234.5));
-        assert_eq!(parse_double("1.2345E3"), Some(1234.5));
-        assert_eq!(parse_double(".5"), Some(0.5));
-        assert_eq!(parse_double("5."), Some(5.0));
-        assert_eq!(parse_double("-INF"), Some(f64::NEG_INFINITY));
-        for bad in ["42,3", "123,4.5", "inf", "nan", "e3", ".", "1e", "1.2.3"] {
-            assert_eq!(parse_double(bad), None, "{bad}");
-        }
-    }
-
-    #[test]
-    fn equality_uses_the_ids_tolerance() {
-        assert!(within_tolerance(100_000.1, 100_000.0));
-        assert!(!within_tolerance(100_000.2, 100_000.0));
-        assert!(within_tolerance(0.000_000_5, 0.0));
-        assert!(!within_tolerance(0.000_001_1, 0.0));
-        // The boundary itself is equal, as the buildingSMART cases require.
-        assert!(within_tolerance(0.000_001, 0.0));
-        assert!(within_tolerance(99_999.899_999, 100_000.0));
-        assert!(!within_tolerance(99_999.899_998_9, 100_000.0));
-        assert!(within_tolerance(0.000_000_900_000_1, -0.000_000_1));
-        assert!(!within_tolerance(0.000_000_900_000_11, -0.000_000_1));
-        assert!(!within_tolerance(-1_000_001.000_001_1, -1_000_000.0));
-        assert!(within_tolerance(-1.000_001, -1.0));
-        assert!(!within_tolerance(f64::NAN, f64::NAN));
     }
 }

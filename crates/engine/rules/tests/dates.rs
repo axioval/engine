@@ -10,6 +10,13 @@ use axioval_ir::{NotEvaluatedReason, PropertyValue, TemporalPrecision};
 use axioval_rules::{ManualIssue, PropertyComparison, PropertyValueConstraint};
 use common::{Model, findings, flagged, number, property, rule, string, strings, unevaluated};
 
+/// `property-value` runs as a template, held on every fixture to the
+/// implementation it replaced.
+const PROPERTY_VALUE: common::Held = common::Held(
+    &PropertyValueConstraint,
+    &axioval_rules::reference::PropertyValueConstraint,
+);
+
 const SET: &str = "Pset";
 
 fn date(text: &str) -> PropertyValue {
@@ -296,7 +303,7 @@ fn constraint(parameters: Vec<(&str, ParameterValue)>) -> CapabilityEvaluation {
     let mut all = vec![("property", property(Some(SET), "Inspected"))];
     all.extend(parameters);
     model().evaluate(
-        &PropertyValueConstraint,
+        &PROPERTY_VALUE,
         &rule("axioval:capability.property-value", Selector::All, all),
     )
 }
@@ -338,7 +345,7 @@ fn property_value_refuses_what_a_date_cannot_take() {
             .object("only", "door")
             .value("only", SET, "Inspected", date("2026-09-27"))
             .evaluate(
-                &PropertyValueConstraint,
+                &PROPERTY_VALUE,
                 &rule(
                     "axioval:capability.property-value",
                     Selector::All,
@@ -685,7 +692,7 @@ fn zoned_value(extra: Vec<(&str, ParameterValue)>) -> CapabilityEvaluation {
     let mut parameters = vec![("property", property(Some(SET), "Inspected"))];
     parameters.extend(extra);
     zoned_model().evaluate(
-        &PropertyValueConstraint,
+        &PROPERTY_VALUE,
         &rule(
             "axioval:capability.property-value",
             Selector::All,

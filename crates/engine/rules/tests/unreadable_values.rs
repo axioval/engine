@@ -11,6 +11,13 @@ use axioval_rules::{
 };
 use common::{Model, boolean, flagged, property, rule, string, strings, unevaluated};
 
+/// `property-value` runs as a template, held on every fixture to the
+/// implementation it replaced.
+const PROPERTY_VALUE: common::Held = common::Held(
+    &PropertyValueConstraint,
+    &axioval_rules::reference::PropertyValueConstraint,
+);
+
 const SET: &str = "Pset";
 
 /// `a` states a mass it cannot read, `b` has no such property.
@@ -80,11 +87,7 @@ fn its_declared_type_decides_a_data_type_requirement() {
 #[test]
 fn its_value_is_never_compared() {
     let value = |extra: Vec<(&str, ParameterValue)>| {
-        check(
-            &PropertyValueConstraint,
-            "axioval:capability.property-value",
-            extra,
-        )
+        check(&PROPERTY_VALUE, "axioval:capability.property-value", extra)
     };
     // Another declared type fails whatever the value.
     let other = value(vec![

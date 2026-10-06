@@ -13,6 +13,13 @@ use axioval_rules::{
 };
 use common::{Model, boolean, findings, flagged, kind, number, property, rule, selector, string};
 
+/// `property-value` runs as a template, held on every fixture to the
+/// implementation it replaced.
+const PROPERTY_VALUE: common::Held = common::Held(
+    &PropertyValueConstraint,
+    &axioval_rules::reference::PropertyValueConstraint,
+);
+
 const SET: &str = "Foo_Bar";
 
 /// `a` holds the complex `Foo`, `b` no `Foo`.
@@ -70,7 +77,7 @@ fn it_has_no_data_type() {
     );
     // An optional facet with a data type is failed by a complex as well.
     let optional = check(
-        &PropertyValueConstraint,
+        &PROPERTY_VALUE,
         "axioval:capability.property-value",
         vec![
             ("data_type", string("IFCLENGTHMEASURE")),
@@ -88,11 +95,7 @@ fn it_meets_no_value_constraint() {
         vec![("min_inclusive", string("0"))],
         vec![("patterns", common::strings(&[".*"]))],
     ] {
-        let evaluation = check(
-            &PropertyValueConstraint,
-            "axioval:capability.property-value",
-            extra,
-        );
+        let evaluation = check(&PROPERTY_VALUE, "axioval:capability.property-value", extra);
         assert_eq!(flagged(&evaluation), ["a", "b"]);
         assert_eq!(open(&evaluation), 0);
     }

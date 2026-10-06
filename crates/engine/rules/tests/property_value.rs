@@ -1,6 +1,8 @@
 //! `axioval:capability.property-value`: lexical constraints cast to the value.
 #![allow(missing_docs)]
 
+mod common;
+
 use std::{collections::BTreeMap, sync::Arc};
 
 use axioval_engine::{
@@ -15,6 +17,13 @@ use axioval_ir::{
     QuantityDimension, RuleId, SourceId,
 };
 use axioval_rules::{PropertyValueConstraint, register_builtins};
+
+/// `property-value` runs as a template, held on every fixture to the
+/// implementation it replaced.
+const PROPERTY_VALUE: common::Held = common::Held(
+    &PropertyValueConstraint,
+    &axioval_rules::reference::PropertyValueConstraint,
+);
 
 fn source() -> SourceId {
     SourceId::new("cad", "native-model").unwrap()
@@ -74,6 +83,15 @@ fn check(
 }
 
 fn check_property(property: Option<Property>, parameters: &[(&str, ParameterValue)]) -> Outcome {
+    outcome(&evaluation(property, parameters))
+}
+
+/// `property-value`'s evaluation of one wall holding `property` (or
+/// none), named `P.Code` by the rule, held to its reference.
+fn evaluation(
+    property: Option<Property>,
+    parameters: &[(&str, ParameterValue)],
+) -> CapabilityEvaluation {
     let project = Project::new(vec![object()]).unwrap();
     let mut services = ServiceRegistry::new();
     services
@@ -99,13 +117,13 @@ fn check_property(property: Option<Property>, parameters: &[(&str, ParameterValu
         selector: Selector::All,
         parameters: all,
     };
-    outcome(&PropertyValueConstraint.evaluate(
+    PROPERTY_VALUE.evaluate(
         &RuleContext {
             project: &project,
             services: &services,
         },
         &rule,
-    ))
+    )
 }
 
 fn outcome(evaluation: &CapabilityEvaluation) -> Outcome {
@@ -587,4 +605,134 @@ fn a_table_with_column_types_is_judged_by_the_cells_of_the_declared_type() {
         typed("IFCREAL", "1"),
         Outcome::Fails(message) if message.contains("no column of type IFCREAL")
     ));
+}
+
+/// Every refusal keeps its words: the property's after `property-value: `,
+/// a constraint's after `property-value parameters are invalid: `.
+#[test]
+fn every_refusal_keeps_its_wording() {
+    let refusal = |parameters: &[(&str, ParameterValue)]| {
+        evaluation(None, parameters)
+            .not_evaluated_outcomes()
+            .iter()
+            .map(|outcome| outcome.message().to_owned())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        refusal(&[text("property_pattern", "Code"), values(&["x"])]),
+        ["property-value: declare `property` or `property_pattern`, not both"]
+    );
+    assert_eq!(
+        refusal(&[]),
+        ["property-value parameters are invalid: no data type and no value constraint"]
+    );
+    assert_eq!(
+        refusal(&[values(&["x"]), quantifier("some")]),
+        ["property-value parameters are invalid: quantifier `some` is not `any` or `all`"]
+    );
+    assert_eq!(
+        refusal(&[text("data_type", " ")]),
+        ["property-value parameters are invalid: data_type is blank"]
+    );
+}
+
+/// Generated values of every kind (text, booleans, integers, decimals,
+/// dates, quantities, measured intervals, `null`, complex values, lists,
+/// ranges and tables), stated with and without a declared type or not at
+/// all, judged against generated facets. The template is held to the
+/// implementation it replaced on each.
+mod generated {
+    use super::*;
+    use axioval_ir::{Date, DateTime};
+    use proptest::prelude::*;
+
+    fn value(kind: u8) -> Option<PropertyValue> {
+        Some(match kind {
+            0 => PropertyValue::String("F30".into()),
+            1 => PropertyValue::String("  ".into()),
+            2 => PropertyValue::Boolean(true),
+            3 => PropertyValue::Integer(42),
+            4 => PropertyValue::Decimal(42.000_000_5),
+            5 => PropertyValue::Decimal(0.25),
+            6 => metres(2.5),
+            7 => PropertyValue::Measured {
+                lower: 2.4,
+                upper: 2.6,
+                dimension: Some(QuantityDimension::Length),
+            },
+            8 => PropertyValue::Date("2026-09-27".parse::<Date>().unwrap()),
+            9 => PropertyValue::DateTime("2026-09-27T10:00:00+02:00".parse::<DateTime>().unwrap()),
+            10 => PropertyValue::Null,
+            11 => PropertyValue::Complex,
+            12 => PropertyValue::List(vec![
+                PropertyValue::String("F30".into()),
+                PropertyValue::String("F90".into()),
+            ]),
+            13 => bounded(Some(1.0), None, None)?,
+            _ => return None,
+        })
+    }
+
+    fn facet(kind: u8) -> Vec<(&'static str, ParameterValue)> {
+        match kind {
+            0 => vec![values(&["F30", "42", "true", "0.25", "2026-09-27"])],
+            1 => vec![text("min_inclusive", "1"), text("max_exclusive", "50")],
+            // Compiled rules hold parameters of their declared kinds only.
+            2 => vec![(
+                "patterns",
+                ParameterValue::StringList {
+                    value: vec!["F\\d+".into()],
+                },
+            )],
+            3 => vec![("min_length", ParameterValue::Integer { value: 2 })],
+            4 => vec![("total_digits", ParameterValue::Integer { value: 2 })],
+            5 => vec![text("data_type", "IFCLABEL")],
+            6 => vec![
+                text("min_inclusive", "2026-01-01"),
+                text("precision", "day"),
+            ],
+            7 => vec![values(&["x"]), text("quantifier", "nonsense")],
+            _ => vec![
+                values(&["F30"]),
+                ("length", ParameterValue::Integer { value: 3 }),
+            ],
+        }
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(512))]
+
+        #[test]
+        fn generated_values_hold_parity(
+            kind in 0u8..15,
+            typed in proptest::option::of(0u8..2),
+            facets in proptest::collection::vec(0u8..9, 1..3),
+            optional_ in any::<bool>(),
+            si_ in any::<bool>(),
+            quantifier_ in proptest::option::of(any::<bool>()),
+        ) {
+            let property = value(kind).map(|value| {
+                let property = Property::new("P", "Code", value)
+                    .unwrap()
+                    .with_evidence(Evidence::exact(source(), "native P.Code"));
+                match typed {
+                    Some(0) => property.with_data_type("IFCLABEL").unwrap(),
+                    Some(_) => property.with_data_type("IFCREAL").unwrap(),
+                    None => property,
+                }
+            });
+            let mut parameters: Vec<(&str, ParameterValue)> =
+                facets.iter().flat_map(|kind| facet(*kind)).collect();
+            if optional_ {
+                parameters.push(optional());
+            }
+            if si_ {
+                parameters.push(si());
+            }
+            if let Some(all) = quantifier_ {
+                parameters.push(quantifier(if all { "all" } else { "any" }));
+            }
+            evaluation(property, &parameters);
+        }
+    }
 }

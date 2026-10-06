@@ -1063,9 +1063,8 @@ mod tests {
                 "`contact_area` parameter `gap`: `@anchor` names the anchor",
             ),
             (
-                "face_pieces;face=@face".to_owned(),
-                "`face_pieces` parameter `face`: `@face` names a rule parameter, which a \
-                 member list never takes",
+                "face_pieces;face=@".to_owned(),
+                "`face_pieces` parameter `face`: `@` names no rule parameter",
             ),
         ] {
             let error = if name.starts_with(FACE_PIECES) {

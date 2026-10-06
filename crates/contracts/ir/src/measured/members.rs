@@ -61,6 +61,11 @@ pub enum MemberFieldKind {
     },
     /// A truth.
     Truth,
+    /// Words naming the member, as messages name it; read as text.
+    Text,
+    /// Objects the member was measured against or found; read as the text
+    /// of their identities, joined by `, `.
+    Objects,
 }
 
 const FLIGHTS: &[&str] = &["walking-surface"];
@@ -1410,24 +1415,13 @@ pub fn member_descriptor(name: &str) -> Option<&'static MemberDescriptor> {
 /// As [`super::parse`]: an unknown list, or a parameter it does not take
 /// or of the wrong kind.
 pub fn parse_members(text: &str) -> Result<MeasuredCall, MeasuredError> {
-    let call = super::parse_in(
+    // A member list names the rule's parameters (`@name`) and the anchor
+    // as a measured value does; they are bound when the rule reads it.
+    super::parse_in(
         text,
         MEASURED_MEMBERS.iter().map(|descriptor| &descriptor.list),
         "measured member list",
-    )?;
-    // Only a measured value binds a rule parameter; a member list is
-    // listed by name.
-    if let Some((key, argument)) = call.references().next() {
-        return Err(MeasuredError::Invalid {
-            name: call.name().to_owned(),
-            key: key.to_owned(),
-            detail: format!(
-                "`{}` names a rule parameter, which a member list never takes",
-                argument.written().unwrap_or_default()
-            ),
-        });
-    }
-    Ok(call)
+    )
 }
 
 /// The member list `call` was parsed from.

@@ -67,7 +67,27 @@ fn selection(
     })
 }
 
+/// The objects `selector`, the rule's parameter `parameter`, picks, read
+/// outside a rule's run.
+pub(crate) fn selection_of(
+    context: &RuleContext<'_>,
+    parameter: &str,
+    selector: &Selector,
+) -> Result<MeasuredSelection, Unavailable> {
+    selection(context, parameter, selector)
+}
+
 impl Arguments {
+    /// The objects the selector parameter `parameter` picks, read once.
+    pub(crate) fn selection_of(
+        &self,
+        context: &RuleContext<'_>,
+        parameter: &str,
+        selector: &Selector,
+    ) -> Result<MeasuredSelection, Unavailable> {
+        self.selection(context, parameter, selector)
+    }
+
     /// The objects the selector parameter `parameter` picks, read once.
     fn selection(
         &self,

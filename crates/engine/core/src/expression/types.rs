@@ -237,6 +237,7 @@ fn member_type(
     Ok(match field.kind {
         MemberFieldKind::Number { dimension } => Type::Number(Unit::of(dimension)),
         MemberFieldKind::Truth => Type::Boolean,
+        MemberFieldKind::Text | MemberFieldKind::Objects => Type::Text,
     })
 }
 

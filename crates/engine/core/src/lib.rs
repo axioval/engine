@@ -1045,7 +1045,7 @@ pub use linear_quantity::{
 pub use measured::faces::FacePieceMeasures;
 pub use measured::provider::{
     Citation, MeasuredMember, MeasuredMemo, MeasuredProvider, Measurement, MemberValue,
-    measured_members, measured_members_cited,
+    measured_members, measured_members_bound, measured_members_cited,
 };
 pub use measured::{BoundRead, MeasuredRead, MeasuredValues, measured_value};
 pub use metric_routing::{

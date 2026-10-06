@@ -16,6 +16,7 @@ mod compared;
 mod each;
 pub(crate) mod facets;
 mod groups;
+mod items;
 mod members;
 mod proportion;
 mod requirements;
@@ -437,13 +438,7 @@ fn check(check: &Check, rule: &CompiledRule, template: &Template) -> Result<(), 
             parameters,
             message,
         } => {
-            let declared = parameters.iter().any(|name| {
-                !matches!(
-                    rule.parameters.get(*name),
-                    None | Some(ParameterValue::Boolean { value: false })
-                )
-            });
-            if declared {
+            if parameters.iter().any(|name| declared(rule, name)) {
                 Ok(())
             } else {
                 Err(invalid(*message))
@@ -513,6 +508,42 @@ fn check(check: &Check, rule: &CompiledRule, template: &Template) -> Result<(), 
                 Ok(())
             }
         }
+        Check::Positive { parameter, message } => match length(rule, parameter)? {
+            Some(value) if value <= 0.0 => Err(invalid(
+                message.map_or_else(|| format!("`{parameter}` must be positive"), str::to_owned),
+            )),
+            _ => Ok(()),
+        },
+        Check::Needs {
+            all,
+            any: declaring,
+            missing,
+            unused,
+        } => {
+            let declared = declaring.iter().any(|name| declared(rule, name));
+            let every = all.iter().all(|name| stated(rule, name));
+            match (declared, every, any(all)) {
+                (true, false, _) => Err(invalid(*missing)),
+                (false, _, true) => Err(invalid(*unused)),
+                _ => Ok(()),
+            }
+        }
+        Check::Below { low, high, message } => match (length(rule, low)?, length(rule, high)?) {
+            (Some(low), Some(high)) if low >= high => Err(invalid(*message)),
+            _ => Ok(()),
+        },
+        Check::RequiresValue {
+            parameter,
+            with,
+            value,
+            message,
+        } => {
+            if stated(rule, parameter) && Parameters(rule).string(with)? != Some(*value) {
+                Err(invalid(*message))
+            } else {
+                Ok(())
+            }
+        }
         Check::Excludes {
             when,
             parameters,
@@ -536,6 +567,18 @@ fn check(check: &Check, rule: &CompiledRule, template: &Template) -> Result<(), 
                 Ok(())
             }
         }
+        Check::RequiresDeclared {
+            parameter,
+            with,
+            message,
+        } => {
+            if stated(rule, parameter) && !with.iter().any(|name| declared(rule, name)) {
+                Err(invalid(*message))
+            } else {
+                Ok(())
+            }
+        }
+        Check::Rows { parameter, columns } => rows(rule, parameter, columns),
     }
 }
 
@@ -559,6 +602,49 @@ fn arguments_checked(rule: &CompiledRule, value: &str) -> Result<(), Unavailable
         })
         .collect();
     check(&stated)
+}
+
+/// Whether the rule declares `name`: states it, a boolean true, a table
+/// with a row.
+fn declared(rule: &CompiledRule, name: &str) -> bool {
+    match rule.parameters.get(name) {
+        None | Some(ParameterValue::Boolean { value: false }) => false,
+        Some(ParameterValue::Table { value }) => !value.is_empty(),
+        Some(_) => true,
+    }
+}
+
+/// Every row of the table `parameter` against `columns`, row by row.
+fn rows(
+    rule: &CompiledRule,
+    parameter: &str,
+    columns: &[axioval_engine::template::RowCheck],
+) -> Result<(), Unavailable> {
+    use axioval_engine::template::RowCheck;
+    for row in Parameters(rule).table(parameter)?.unwrap_or_default() {
+        for column in columns {
+            match column {
+                RowCheck::Number {
+                    column,
+                    missing,
+                    negative,
+                } => match row.number(column)? {
+                    None => return Err(invalid(*missing)),
+                    Some(value) if value < 0.0 => return Err(invalid(*negative)),
+                    Some(_) => {}
+                },
+                RowCheck::Length { column, message } => {
+                    if let Some((value, unit)) = row.quantity(column)? {
+                        match crate::support::si_quantity(value, unit)? {
+                            (value, QuantityDimension::Length) if value >= 0.0 => {}
+                            _ => return Err(invalid(*message)),
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 /// The parameter `name` where stated as a `number`.
@@ -800,11 +886,27 @@ fn fill(json: &mut Json, constants: &BTreeMap<String, Constant>) {
 /// were not written. Any other reference stays, and binding it fails
 /// closed.
 fn unstated_dropped(name: &str, constants: &BTreeMap<String, Constant>) -> String {
+    unstated_dropped_from(name, constants, axioval_ir::measured::parse)
+}
+
+/// [`unstated_dropped`] of a member list a template's check reads.
+fn unstated_dropped_list(name: &str, constants: &BTreeMap<String, Constant>) -> String {
+    unstated_dropped_from(name, constants, axioval_ir::measured::parse_members)
+}
+
+fn unstated_dropped_from(
+    name: &str,
+    constants: &BTreeMap<String, Constant>,
+    parse: fn(
+        &str,
+    )
+        -> Result<axioval_ir::measured::MeasuredCall, axioval_ir::measured::MeasuredError>,
+) -> String {
     use axioval_ir::measured::MeasuredArgument;
     if !name.contains('@') {
         return name.to_owned();
     }
-    let Ok(call) = axioval_ir::measured::parse(name) else {
+    let Ok(call) = parse(name) else {
         return name.to_owned();
     };
     let dropped: Vec<&str> = call
@@ -1679,6 +1781,12 @@ fn judge_checks(
             &mut checked,
         ) {
             outcomes.push(outcome);
+            continue;
+        }
+        if let Decision::Items(judged) = &check.decision {
+            outcomes.extend(items::judge_items(
+                plan, judged, &checked, context, object, leaves,
+            ));
             continue;
         }
         let decision = effective_of(plan, &check.decision);
@@ -2716,6 +2824,18 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
     if matches!(plan.form.decision, Decision::Each(_)) {
         return Err(ForkError::Inexpressible(
             "members judged one by one against their neighbours have no expression form".to_owned(),
+        ));
+    }
+    if plan
+        .form
+        .checks
+        .iter()
+        .any(|check| matches!(check.decision, Decision::Items(_)))
+    {
+        return Err(ForkError::Inexpressible(
+            "items of a measured list judged one by one, each its own outcome, have no \
+             expression form"
+                .to_owned(),
         ));
     }
     if matches!(

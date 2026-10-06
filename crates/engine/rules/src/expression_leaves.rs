@@ -91,7 +91,15 @@ pub(crate) struct ObjectLeaves<'a> {
     /// reaching them: a template's members of an anchor, or the objects
     /// selected in a scope.
     supplied: Vec<(AggregateSource, Vec<Candidate<'a>>)>,
+    /// Member lists a template's checks read, by their name as written,
+    /// each measured once for the object.
+    lists: RefCell<Vec<(Arc<str>, Arc<Listed>)>>,
 }
+
+/// A measured member list as a template's checks read it: its members and
+/// the evidence of the measurement they come from, or why it cannot be
+/// measured.
+pub(crate) type Listed = Result<(Vec<MeasuredMember>, Vec<Evidence>), (NotEvaluatedReason, String)>;
 
 impl<'a> ObjectLeaves<'a> {
     /// Leaves of `object`, reading the rule's `parameters` where given.
@@ -114,6 +122,7 @@ impl<'a> ObjectLeaves<'a> {
             bound: Vec::new(),
             arguments: None,
             related: RefCell::new(Vec::new()),
+            lists: RefCell::new(Vec::new()),
         }
     }
 
@@ -142,6 +151,7 @@ impl<'a> ObjectLeaves<'a> {
             bound: Vec::new(),
             arguments: self.arguments,
             related: RefCell::new(Vec::new()),
+            lists: RefCell::new(Vec::new()),
         }
     }
 
@@ -162,6 +172,7 @@ impl<'a> ObjectLeaves<'a> {
             bound: Vec::new(),
             arguments: self.arguments,
             related: RefCell::new(Vec::new()),
+            lists: RefCell::new(Vec::new()),
         }
     }
 
@@ -185,6 +196,70 @@ impl<'a> ObjectLeaves<'a> {
     pub(crate) fn with_arguments(mut self, arguments: &'a Arguments) -> Self {
         self.arguments = Some(arguments);
         self
+    }
+
+    /// The member list `list` (written as a measured value is, `@`
+    /// references bound to the rule's parameters and the anchor) measured
+    /// of the object, once per object however many checks read it. A
+    /// refusal states why without the list's name and the object.
+    pub(crate) fn bound_members(&self, list: &str) -> Arc<Listed> {
+        if let Some((_, listed)) = self
+            .lists
+            .borrow()
+            .iter()
+            .find(|(written, _)| &**written == list)
+        {
+            return Arc::clone(listed);
+        }
+        let listed = Arc::new(self.measure_members(list));
+        self.lists
+            .borrow_mut()
+            .push((Arc::from(list), Arc::clone(&listed)));
+        listed
+    }
+
+    fn measure_members(&self, list: &str) -> Listed {
+        let mut call = axioval_ir::measured::parse_members(list)
+            .map_err(|error| (NotEvaluatedReason::InvalidDeclaration, error.to_string()))?;
+        bind(
+            self.context,
+            self.parameters,
+            self.arguments,
+            &self.subject.id,
+            &mut call,
+        )?;
+        axioval_engine::measured_members_bound(self.context.services, &self.object.id, &call)
+            .map_err(|error| {
+                let (reason, message) = crate::selection::property_error(error);
+                let prefix = format!("`{}` of {}: ", call.name(), self.object.id);
+                let message = message
+                    .strip_prefix("property evidence conflicts: ")
+                    .unwrap_or(&message);
+                let message = message
+                    .strip_prefix(&format!("`{}` value ", axioval_ir::MEASURED_SET))
+                    .unwrap_or(message);
+                (
+                    reason,
+                    message.strip_prefix(&prefix).unwrap_or(message).to_owned(),
+                )
+            })
+    }
+
+    /// Whether the rule's selector parameter `parameter` leaves objects
+    /// undecided, read once per rule; a selection that cannot be listed
+    /// may leave any object undecided.
+    pub(crate) fn leaves_undecided(&self, parameter: &str) -> bool {
+        let Some(ParameterValue::Selector { value: selector }) = self
+            .parameters
+            .and_then(|parameters| parameters.get(parameter))
+        else {
+            return false;
+        };
+        let read = match self.arguments {
+            Some(arguments) => arguments.selection_of(self.context, parameter, selector),
+            None => crate::measured_arguments::selection_of(self.context, parameter, selector),
+        };
+        read.map_or(true, |selection| !selection.undecided.is_empty())
     }
 
     /// The objects the measured values read since the last call were
@@ -319,6 +394,20 @@ impl<'a> ObjectLeaves<'a> {
                 value: Ok(Value::Boolean(*value)),
                 evidence: cited(locator),
             },
+            Some(MemberValue::Text { text }) => Leaf {
+                value: Ok(Value::Text(text.clone())),
+                evidence: cited(name),
+            },
+            Some(MemberValue::Objects { objects }) => Leaf {
+                value: Ok(Value::Text(
+                    objects
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                )),
+                evidence: cited(name),
+            },
             Some(MemberValue::Measured(Measurement::Absent { locator })) => Leaf {
                 value: Ok(Value::Null),
                 evidence: cited(locator),
@@ -370,14 +459,32 @@ impl<'a> ObjectLeaves<'a> {
         value: Option<&Expression>,
         path: &str,
     ) -> Result<Vec<Member>, String> {
+        let mut call = axioval_ir::measured::parse_members(list).map_err(|error| {
+            self.reasons
+                .borrow_mut()
+                .push(NotEvaluatedReason::InvalidDeclaration);
+            error.to_string()
+        })?;
+        // The rule's parameters and the anchor the list names, bound as a
+        // measured value's are.
+        if let Err((reason, why)) = bind(
+            self.context,
+            self.parameters,
+            self.arguments,
+            &self.subject.id,
+            &mut call,
+        ) {
+            self.reasons.borrow_mut().push(reason);
+            return Err(format!("`{list}` of {}: {why}", self.object.id));
+        }
         let (measured, listed) =
-            axioval_engine::measured_members_cited(self.context.services, &self.object.id, list)
+            axioval_engine::measured_members_bound(self.context.services, &self.object.id, &call)
                 .map_err(|error| {
-                    self.reasons
-                        .borrow_mut()
-                        .push(crate::selection::property_error(error.clone()).0);
-                    format!("`{list}` of {}: {error}", self.object.id)
-                })?;
+                self.reasons
+                    .borrow_mut()
+                    .push(crate::selection::property_error(error.clone()).0);
+                format!("`{list}` of {}: {error}", self.object.id)
+            })?;
         self.listed = listed;
         let mut members = Vec::new();
         for member in &measured {

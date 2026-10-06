@@ -35,6 +35,14 @@ use serde::Serialize;
 
 use crate::ParameterDescriptor;
 
+mod items;
+
+pub use items::{
+    Allowance, Bound, Choice, Effect, Every, Group, Groups, Guard, ItemCheck, ItemTest, ItemText,
+    ItemUnit, Items, Judge, On, OnNull, OpenItems, Passing, Range, Requirement, RowColumn, Rows,
+    Spread, Together, TogetherJudge, Truths, When,
+};
+
 /// Four units in the last place of the largest magnitude a comparison
 /// involves: decimal coordinates and lengths read in binary differ from
 /// what was meant by that much, and no more. A [`Decision::Within`]
@@ -278,6 +286,69 @@ pub enum Check {
     /// `required:provided`, no two starting at one count, positive
     /// increments declared together, and rows or increments.
     Proportion(ProportionParameters),
+    /// A length parameter, where stated, is above zero: otherwise
+    /// `message`, or `` `<parameter>` must be positive ``.
+    Positive {
+        parameter: &'static str,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        message: Option<&'static str>,
+    },
+    /// Where one of `any` is declared (stated, a boolean true), every one
+    /// of `all` is stated (`missing` otherwise); where none is, none of
+    /// `all` is (`unused` otherwise): a check that needs its objects, and
+    /// objects stated for no check.
+    Needs {
+        all: &'static [&'static str],
+        any: &'static [&'static str],
+        missing: &'static str,
+        unused: &'static str,
+    },
+    /// Where both lengths are stated, `low` is below `high`: otherwise
+    /// `message`.
+    Below {
+        low: &'static str,
+        high: &'static str,
+        message: &'static str,
+    },
+    /// `parameter` is stated only where the string parameter `with` is
+    /// `value`.
+    RequiresValue {
+        parameter: &'static str,
+        with: &'static str,
+        value: &'static str,
+        message: &'static str,
+    },
+    /// `parameter` is stated only where one of `with` is declared (stated,
+    /// a boolean true).
+    RequiresDeclared {
+        parameter: &'static str,
+        with: &'static [&'static str],
+        message: &'static str,
+    },
+    /// Every row of the table parameter states its columns as `columns`
+    /// require, row by row, column by column.
+    Rows {
+        parameter: &'static str,
+        columns: &'static [RowCheck],
+    },
+}
+
+/// What [`Check::Rows`] requires of one column of every row.
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum RowCheck {
+    /// A `number`, stated (`missing` otherwise) and at least zero
+    /// (`negative` otherwise).
+    Number {
+        column: &'static str,
+        missing: &'static str,
+        negative: &'static str,
+    },
+    /// Where stated, a length of at least zero: otherwise `message`.
+    Length {
+        column: &'static str,
+        message: &'static str,
+    },
 }
 
 /// The host services a template's values need, and the message leaving
@@ -297,6 +368,7 @@ pub enum Service {
     ObjectFrame,
     VerticalExtent,
     TriangleCount,
+    WalkingSurface,
 }
 
 impl Service {
@@ -310,6 +382,9 @@ impl Service {
                 .is_some(),
             Self::TriangleCount => services
                 .get::<crate::TriangleCountServiceHandle>()
+                .is_some(),
+            Self::WalkingSurface => services
+                .get::<crate::WalkingSurfaceServiceHandle>()
                 .is_some(),
         }
     }
@@ -762,6 +837,10 @@ pub enum Decision {
         reference: Reference,
         tolerance: Operand,
     },
+    /// The items of a measured member list, each judged on its own (each
+    /// failing test its own outcome), or together in one outcome
+    /// ([`Items`]). Only a form's check uses it.
+    Items(Box<Items>),
 }
 
 /// Members read and judged one by one: what [`Decision::Each`] decides.
@@ -1621,6 +1700,14 @@ impl Decision {
                         label: Some("at most the upper bound".into()),
                     });
                 }
+                // Without a bound the value is only read: a form whose
+                // checks decide.
+                if operands.is_empty() {
+                    return Expression::Literal {
+                        value: ScalarValue::Boolean { value: true },
+                        label: Some("read".into()),
+                    };
+                }
                 Expression::And {
                     operands,
                     label: None,
@@ -1674,6 +1761,7 @@ impl Decision {
                     label: Some("within the tolerance".into()),
                 }
             }
+            Self::Items(items) => items.expression(),
             Self::Unique { value: subject, .. } => {
                 // No other object the rule selects in the scope states the
                 // checked object's value: at most one, itself, does.

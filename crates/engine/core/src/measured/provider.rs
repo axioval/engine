@@ -101,6 +101,19 @@ pub enum MemberValue {
         /// Why, in plain words.
         why: String,
     },
+    /// Words naming what the member is, as messages name it (`the bottom
+    /// of run 1 of 2`).
+    Text {
+        /// The words.
+        text: String,
+    },
+    /// Objects the member was measured against or found (the obstacles
+    /// governing a clearance, the doors standing on a landing), sorted by
+    /// source-qualified identity; a finding on the member relates them.
+    Objects {
+        /// The objects.
+        objects: Vec<ObjectId>,
+    },
 }
 
 /// One measured member: a flight's step, a ramp's run.
@@ -267,6 +280,21 @@ pub fn measured_members_cited(
 ) -> Result<(Vec<MeasuredMember>, Vec<Evidence>), PropertyResolutionError> {
     let call = axioval_ir::measured::parse_members(name)
         .map_err(|error| PropertyResolutionError::Unavailable(error.to_string()))?;
+    measured_members_bound(services, object, &call)
+}
+
+/// [`measured_members_cited`] of a list already parsed, its references
+/// bound (`@name` to the rule's parameters, `@anchor` to the checked
+/// object): what a template reads of a list naming the rule's parameters.
+///
+/// # Errors
+///
+/// As [`measured_members`].
+pub fn measured_members_bound(
+    services: &ServiceRegistry,
+    object: &ObjectId,
+    call: &axioval_ir::measured::MeasuredCall,
+) -> Result<(Vec<MeasuredMember>, Vec<Evidence>), PropertyResolutionError> {
     let providers = services.get::<Providers>().ok_or_else(|| {
         PropertyResolutionError::MissingService(format!(
             "no built-in code measures `{}` outside a run",
@@ -287,7 +315,7 @@ pub fn measured_members_cited(
         project: &providers.project,
         services,
     };
-    provider.members_cited(&call, object, &context)
+    provider.members_cited(call, object, &context)
 }
 
 /// What providers measured in one run, shared by every rule and template

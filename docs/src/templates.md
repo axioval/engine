@@ -239,6 +239,33 @@ finding reads `{others}` (how many objects share the value),
 catalogue, is that at most one object of the scope's `selection` states
 the checked object's value; a rule is never forked from it.
 
+`Decision::Consistent` is the second group decision: the objects stating
+one value of the stated `key` must state one value of the stated `value`
+(`Consistent`). Groups are each source, or the project where the boolean
+parameter `Consistent::across` holds, of one kind unless
+`Consistent::same_kind` is false, narrowed by the rule's traversal like
+`Unique`'s; keys are trimmed and folded unless
+`Consistent::case_sensitive` holds, and an absent, `null` or blank key is
+a group of its own. An absent value is a value of its own. A group stating
+two values is a finding on each object, relating those holding another
+(`differs`, or `differs_unkeyed` for the group without a key;
+`{others}` lists the other values). With the number parameter
+`Consistent::tolerance` (numbers and quantities in SI units) or the
+quantity parameter `Consistent::tolerance_quantity` (quantities of its
+dimension), a numeric group agrees when its range, measured intervals at
+their full width, is within the tolerance, widened by four units in the
+last place of its largest magnitude; a range that may lie on either side
+leaves each object open (`straddles`), and one beyond it is a finding on
+each object farther than the tolerance from the group's median interval
+(`beyond`, `{median}`), an object whose distance straddles it open
+(`undecided`), or, where none is, on the objects at the range's ends
+(`at_end`, `{range}`). A value the tolerance does not apply to leaves its
+object open (`inapplicable`, `not_finite`, `inexact`). Messages read
+`{objects}` (the group as `keyed` or `unkeyed` words it) and `{spread}`
+(the tolerance as declared). Its expression form, for the catalogue, is
+that no object of the scope's `selection` states the checked object's key
+with another value; a rule is never forked from it.
+
 `Decision::Each` judges an anchor's members one by one (`Each`), with
 three relations no aggregate states:
 

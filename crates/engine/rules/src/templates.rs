@@ -1862,7 +1862,11 @@ fn derive(plan: &Plan<'_>, read: &mut Read) -> Option<Outcome> {
 /// Whether `decision` judges the value `name` as the source states it,
 /// rather than as the evaluator reads it.
 fn judges_stated(decision: &Decision, name: &str) -> bool {
-    matches!(decision, Decision::Compare { value, .. } | Decision::Unique { value, .. } if *value == name)
+    match decision {
+        Decision::Compare { value, .. } | Decision::Unique { value, .. } => *value == name,
+        Decision::Consistent { key, value, .. } => *key == name || *value == name,
+        _ => false,
+    }
 }
 
 /// Reads the plan's values for `object` and decides.
@@ -2242,6 +2246,14 @@ pub(crate) fn run(
     }
     if let Decision::Unique { value, unique } = &plan.form.decision {
         return groups::run(&plan, value, unique, context, rule);
+    }
+    if let Decision::Consistent {
+        key,
+        value,
+        consistent,
+    } = &plan.form.decision
+    {
+        return groups::consistent(&plan, (key, value), consistent, context, rule);
     }
     if let Some(scopes) = &plan.form.scope {
         return scopes::run(&plan, &effective(&plan), scopes, context, rule);
@@ -2631,7 +2643,10 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
             "members judged one by one against their neighbours have no expression form".to_owned(),
         ));
     }
-    if matches!(plan.form.decision, Decision::Unique { .. }) {
+    if matches!(
+        plan.form.decision,
+        Decision::Unique { .. } | Decision::Consistent { .. }
+    ) {
         return Err(ForkError::Inexpressible(
             "an expression rule judges each object on its own, not against the values of its group"
                 .to_owned(),

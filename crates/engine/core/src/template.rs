@@ -699,6 +699,15 @@ pub enum Decision {
     /// compared with those of the other objects of its group, a finding on
     /// every object sharing it with another, relating them ([`Unique`]).
     Unique { value: &'static str, unique: Unique },
+    /// A group decision: the objects stating one value of `key` within a
+    /// scope must state one value of `value`, exactly or within a declared
+    /// tolerance; each object holding another value than the rest of its
+    /// group is a finding relating them ([`Consistent`]).
+    Consistent {
+        key: &'static str,
+        value: &'static str,
+        consistent: Consistent,
+    },
     /// The anchor's members ([`Form::members`]) read and judged one by
     /// one, against their neighbours, a reference prevailing among them,
     /// and their own nested members ([`Each`]). Findings are on the
@@ -920,6 +929,59 @@ pub struct Unique {
     pub case_sensitive: &'static str,
     pub require: &'static str,
     pub missing: &'static str,
+}
+
+/// What [`Decision::Consistent`] reads of the rule.
+///
+/// Objects are grouped by their stated `key` (folded unless the boolean
+/// parameter `case_sensitive` holds; an absent, `null` or blank key is a
+/// group of its own) within each source, or the project where `across`
+/// holds, of one kind unless `same_kind` is false, and narrowed by the
+/// rule's traversal to the objects reaching the same related objects.
+/// An absent value is a value of its own. A group stating more than one
+/// value is a finding on each object, relating those holding another
+/// value (`differs`, or `differs_unkeyed` for the group without a key).
+///
+/// With the number parameter `tolerance` (numbers and quantities in SI
+/// units) or the quantity parameter `tolerance_quantity` (quantities of
+/// its dimension), numeric values agree when the group's range, from its
+/// least to its greatest value, measured intervals at their full width,
+/// is within the tolerance, widened by four units in the last place of
+/// the largest magnitude. A range that may lie on either side leaves each
+/// object open (`straddles`); one beyond it is a finding on each object
+/// farther than the tolerance from the group's median (`beyond`), an
+/// object whose distance straddles it open (`undecided`), or, where none
+/// is, on the objects at the range's ends (`at_end`). A value the
+/// tolerance does not apply to leaves its object open (`inapplicable`,
+/// `not_finite`, `inexact`). Messages read `{objects}` (the group as
+/// `keyed` or `unkeyed` words it), `{others}` (the other values),
+/// `{spread}` (the tolerance), `{median}` and `{range}`.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Consistent {
+    pub across: &'static str,
+    pub case_sensitive: &'static str,
+    pub same_kind: &'static str,
+    pub tolerance: &'static str,
+    pub tolerance_quantity: &'static str,
+    pub messages: ConsistentMessages,
+}
+
+/// How [`Consistent`] words its outcomes.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConsistentMessages {
+    pub differs: &'static str,
+    pub differs_unkeyed: &'static str,
+    pub keyed: &'static str,
+    pub unkeyed: &'static str,
+    pub straddles: &'static str,
+    pub beyond: &'static str,
+    pub at_end: &'static str,
+    pub undecided: &'static str,
+    pub inapplicable: &'static str,
+    pub not_finite: &'static str,
+    pub inexact: &'static str,
 }
 
 /// A comparison a rule states as an operator word and at most one target
@@ -1391,7 +1453,69 @@ impl Decision {
                     label: None,
                 }
             }
+            Self::Consistent {
+                key,
+                value: subject,
+                ..
+            } => {
+                // No object the rule selects in the scope states the checked
+                // object's key with another value.
+                let compare = |name: &str, operator| {
+                    let member = value(name);
+                    let own = subject_scoped(member.clone());
+                    Expression::Compare {
+                        operator,
+                        left: boxed(member),
+                        right: boxed(own),
+                        case_sensitive: false,
+                        label: None,
+                    }
+                };
+                Expression::Compare {
+                    operator: ExpressionComparison::Equals,
+                    left: boxed(Expression::Aggregate {
+                        function: axioval_ir::contract::AggregateFunction::Count,
+                        over: Scopes::source(),
+                        filter: Some(Box::new(axioval_ir::contract::Selector::Expression {
+                            expression: boxed(Expression::And {
+                                operands: vec![
+                                    compare(key, ExpressionComparison::Equals),
+                                    compare(subject, ExpressionComparison::NotEquals),
+                                ],
+                                label: None,
+                            }),
+                        })),
+                        value: None,
+                        label: Some("objects of the same key stating another value".into()),
+                    }),
+                    right: boxed(Expression::Literal {
+                        value: ScalarValue::Integer { value: 0 },
+                        label: None,
+                    }),
+                    case_sensitive: true,
+                    label: None,
+                }
+            }
         }
+    }
+}
+
+/// A property read of `expression` read of the checked object rather than
+/// the aggregated member; any other expression as it is.
+fn subject_scoped(expression: Expression) -> Expression {
+    match expression {
+        Expression::Property {
+            property_set,
+            property,
+            label,
+            ..
+        } => Expression::Property {
+            property_set,
+            property,
+            of: Some(axioval_ir::contract::PropertyScope::Subject),
+            label,
+        },
+        other => other,
     }
 }
 
@@ -1600,5 +1724,64 @@ mod tests {
         )
         .unwrap();
         assert!(widened.contains("rounding allowance"), "{widened}");
+    }
+
+    /// A consistency decision reads, for the catalogue, as no object of
+    /// the scope stating the checked object's key with another value: the
+    /// key compared equal and the value unequal, each against the checked
+    /// object's own.
+    #[test]
+    fn a_consistency_counts_the_objects_of_the_key_stating_another_value() {
+        let property = |name: &str| Expression::Property {
+            property_set: Some("Pset".into()),
+            property: name.into(),
+            of: None,
+            label: None,
+        };
+        let decision = Decision::Consistent {
+            key: "key",
+            value: "value",
+            consistent: Consistent {
+                across: "across_sources",
+                case_sensitive: "case_sensitive",
+                same_kind: "same_kind",
+                tolerance: "tolerance",
+                tolerance_quantity: "tolerance_quantity",
+                messages: ConsistentMessages {
+                    differs: "",
+                    differs_unkeyed: "",
+                    keyed: "",
+                    unkeyed: "",
+                    straddles: "",
+                    beyond: "",
+                    at_end: "",
+                    undecided: "",
+                    inapplicable: "",
+                    not_finite: "",
+                    inexact: "",
+                },
+            },
+        };
+        let read = |name: &str| property(if name == "key" { "Mark" } else { "Rating" });
+        let Expression::Compare {
+            operator: ExpressionComparison::Equals,
+            left,
+            right,
+            ..
+        } = decision.expression(&read)
+        else {
+            panic!("a count compared with zero");
+        };
+        assert!(matches!(
+            *right,
+            Expression::Literal {
+                value: ScalarValue::Integer { value: 0 },
+                ..
+            }
+        ));
+        let json = serde_json::to_string(&left).unwrap();
+        assert!(json.contains("\"operator\":\"equals\""), "{json}");
+        assert!(json.contains("\"operator\":\"notEquals\""), "{json}");
+        assert_eq!(json.matches("\"of\":\"subject\"").count(), 2, "{json}");
     }
 }

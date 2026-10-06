@@ -5790,3 +5790,157 @@ mod generated_ramps {
         }
     }
 }
+
+/// Generated flights held to the implementation `stair-geometry` replaced:
+/// risers of random height, measured exactly or within a margin, of random
+/// width, with landings of random size (or none, or no rectangle) at their
+/// ends, under random step, count, rise, tolerance, width and landing
+/// bounds, every outcome under `Parity::contract()`.
+mod generated_flights {
+    use super::*;
+    use proptest::collection::vec;
+    use proptest::prelude::*;
+
+    /// The landing at an end: none, one filling no rectangle, or its depth
+    /// and width in mm.
+    type End = Option<Option<(u32, u32)>>;
+
+    fn end() -> impl Strategy<Value = End> {
+        prop_oneof![
+            Just(None),
+            Just(Some(None)),
+            (600u32..2400, 600u32..2400).prop_map(|size| Some(Some(size))),
+        ]
+    }
+
+    fn mm(value: u32) -> f64 {
+        f64::from(value) / 1000.0
+    }
+
+    /// A range in mm, either end possibly unstated, the minimum below.
+    fn bounds(
+        low: std::ops::Range<u32>,
+        spread: u32,
+    ) -> impl Strategy<Value = (Option<u32>, Option<u32>)> {
+        (proptest::option::of(low), proptest::option::of(0..spread)).prop_map(
+            |(low, spread)| match (low, spread) {
+                (Some(low), Some(spread)) => (Some(low), Some(low + spread)),
+                (low, None) => (low, None),
+                (None, Some(spread)) => (None, Some(200 + spread)),
+            },
+        )
+    }
+
+    fn push_range(
+        parameters: &mut Vec<(&'static str, ParameterValue)>,
+        (minimum, maximum): (&'static str, &'static str),
+        (low, high): (Option<u32>, Option<u32>),
+    ) {
+        if let Some(low) = low {
+            parameters.push((minimum, metres(mm(low))));
+        }
+        if let Some(high) = high {
+            parameters.push((maximum, metres(mm(high))));
+        }
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig {
+            cases: 96,
+            failure_persistence: None,
+            ..ProptestConfig::default()
+        })]
+
+        #[test]
+        fn generated_flights_hold_parity(
+            risers in vec(140u32..220, 2..12),
+            margin in prop_oneof![Just(0u32), 1u32..5],
+            width in 800u32..1600,
+            ends in vec(end(), 2),
+            riser in bounds(140..190, 60),
+            going in bounds(240..300, 80),
+            step in bounds(560..640, 100),
+            count in (proptest::option::of(2i64..8), proptest::option::of(0i64..10)),
+            rise in proptest::option::of(800u32..2400),
+            tolerances in (proptest::option::of(0u32..30), proptest::option::of(0u32..10)),
+            widths in bounds(800..1400, 600),
+            sizes in (proptest::option::of(800u32..2000), proptest::option::of(800u32..2000)),
+            flags in (any::<bool>(), any::<bool>()),
+        ) {
+            let risers: Vec<f64> = risers.iter().copied().map(mm).collect();
+            let mut stairs = Stairs::default().flight(wide_flight(
+                "f",
+                &risers,
+                mm(margin),
+                mm(width),
+            ));
+            for (which, landing) in [WalkingEnd::FlightBottom, WalkingEnd::FlightTop]
+                .into_iter()
+                .zip(&ends)
+            {
+                if let Some(landing) = landing {
+                    stairs = stairs.landing(
+                        "f",
+                        which,
+                        "slab",
+                        landing.map(|(depth, width)| (mm(depth), mm(width))),
+                    );
+                }
+            }
+            let mut parameters = vec![("forbid_open_risers", boolean(true))];
+            push_range(&mut parameters, ("riser_minimum", "riser_maximum"), riser);
+            push_range(&mut parameters, ("going_minimum", "going_maximum"), going);
+            push_range(&mut parameters, ("step_length_minimum", "step_length_maximum"), step);
+            push_range(&mut parameters, ("width_minimum", "width_maximum"), widths);
+            let (least, more) = count;
+            if let Some(least) = least {
+                parameters.push(("minimum_risers", ParameterValue::Integer { value: least }));
+            }
+            if let Some(more) = more {
+                let most = least.unwrap_or(0) + more;
+                parameters.push(("maximum_risers", ParameterValue::Integer { value: most }));
+            }
+            if let Some(rise) = rise {
+                parameters.push(("maximum_rise", metres(mm(rise))));
+            }
+            let (risers_apart, goings_apart) = tolerances;
+            if let Some(tolerance) = risers_apart {
+                parameters.push(("riser_tolerance", metres(mm(tolerance))));
+            }
+            if let Some(tolerance) = goings_apart {
+                parameters.push(("going_tolerance", metres(mm(tolerance))));
+            }
+            let (depth, landing_width) = sizes;
+            let (walking, required) = flags;
+            let mut landings = Vec::new();
+            if let Some(depth) = depth {
+                landings.push(("landing_depth_minimum", metres(mm(depth))));
+            }
+            if let Some(landing_width) = landing_width {
+                landings.push(("landing_width_minimum", metres(mm(landing_width))));
+            }
+            if walking {
+                landings.push(("landing_at_least_walking_width", boolean(true)));
+            }
+            if required {
+                landings.push(("landings_required", boolean(true)));
+            }
+            if !landings.is_empty() {
+                parameters.push(("landing_objects", slabs()));
+                parameters.extend(landings);
+            }
+            let stairs = Arc::new(stairs);
+            // Holding the template to its reference is the assertion.
+            held(
+                Model::default().object("f", "flight").object("slab", "slab"),
+                &StairGeometryCheck,
+                &rule(STAIR, kind("flight"), parameters),
+                move |services| {
+                    services
+                        .register(WalkingSurfaceServiceHandle::new(stairs.clone()))
+                        .unwrap();
+                },
+            );
+        }
+    }
+}

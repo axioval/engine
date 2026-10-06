@@ -1356,6 +1356,10 @@ mod relative_count {
     use super::*;
 
     const ID: &str = "axioval:capability.relative-count";
+    /// `relative-count` runs as a template, held on every fixture to the
+    /// implementation it replaced.
+    const RELATIVE: common::Held =
+        common::Held(&RelativeCount, &axioval_rules::reference::RelativeCount);
 
     #[test]
     fn a_ratio_is_checked_per_anchor_in_exact_integers() {
@@ -1378,7 +1382,7 @@ mod relative_count {
             }
         }
         let evaluation = model.evaluate(
-            &RelativeCount,
+            &RELATIVE,
             &rule(
                 ID,
                 kind("storey"),

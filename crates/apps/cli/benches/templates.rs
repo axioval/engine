@@ -132,6 +132,11 @@ const PAIRS: &[Pair] = &[
         case: "judges",
         reference: |registry| registry.replace(axioval::rules::reference::SelectorConformance),
     },
+    Pair {
+        capability: "axioval:capability.relative-count",
+        case: "judges",
+        reference: |registry| registry.replace(axioval::rules::reference::RelativeCount),
+    },
 ];
 
 /// Warm-up runs per side before measuring.

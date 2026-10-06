@@ -194,6 +194,7 @@ pub mod reference {
     pub use crate::plan_coverage::reference::PlanCoverage;
     pub use crate::property_predicate::reference::PropertyPredicate;
     pub use crate::related_count::reference::RelatedCount;
+    pub use crate::relative_count::reference::RelativeCount;
     pub use crate::shelf_capacity::reference::ShelfCapacity;
     pub use crate::triangle_count::reference::TriangleCountLimit;
     pub use crate::unique_value::reference::UniqueValue;

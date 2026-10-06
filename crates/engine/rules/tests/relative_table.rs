@@ -13,6 +13,11 @@ use common::{
 
 const ID: &str = "axioval:capability.relative-count";
 
+/// `relative-count` runs as a template, held on every fixture to the
+/// implementation it replaced.
+const RELATIVE: common::Held =
+    common::Held(&RelativeCount, &axioval_rules::reference::RelativeCount);
+
 /// Storeys with (workplaces, washbasins).
 fn storeys(counts: &[(&str, usize, usize)]) -> Model {
     let mut model = Model::default();
@@ -37,7 +42,7 @@ fn check(model: Model, extra: Vec<(&str, ParameterValue)>) -> axioval_engine::Ca
         ("relationship", string("contains")),
     ];
     parameters.extend(extra);
-    model.evaluate(&RelativeCount, &rule(ID, kind("storey"), parameters))
+    model.evaluate(&RELATIVE, &rule(ID, kind("storey"), parameters))
 }
 
 fn table() -> Vec<(&'static str, ParameterValue)> {

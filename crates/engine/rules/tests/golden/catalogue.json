@@ -28730,7 +28730,2230 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "relative-count",
+        "declaration": [
+          {
+            "kind": "required",
+            "parameter": "provided_selector"
+          },
+          {
+            "kind": "required",
+            "parameter": "required_selector"
+          },
+          {
+            "kind": "proportion",
+            "providedUnit": "provided_unit",
+            "requiredUnit": "required_unit",
+            "operator": "operator",
+            "smallBelow": "small_required_below",
+            "smallProvided": "small_provided",
+            "table": "table",
+            "additionalRequired": "additional_required",
+            "additionalProvided": "additional_provided"
+          },
+          {
+            "kind": "kind",
+            "parameter": "group_property"
+          },
+          {
+            "kind": "requires",
+            "parameter": "across_sources",
+            "with": [
+              "group_property"
+            ],
+            "message": "`across_sources` applies only with group_property"
+          },
+          {
+            "kind": "requires",
+            "parameter": "case_sensitive",
+            "with": [
+              "group_property"
+            ],
+            "message": "`case_sensitive` applies only with group_property"
+          },
+          {
+            "kind": "exclusive",
+            "one": [
+              "group_property"
+            ],
+            "other": [
+              "relationship"
+            ],
+            "message": "`relationship` does not apply with group_property"
+          },
+          {
+            "kind": "exclusive",
+            "one": [
+              "group_property"
+            ],
+            "other": [
+              "direction"
+            ],
+            "message": "`direction` does not apply with group_property"
+          },
+          {
+            "kind": "exclusive",
+            "one": [
+              "group_property"
+            ],
+            "other": [
+              "follow_chain"
+            ],
+            "message": "`follow_chain` does not apply with group_property"
+          },
+          {
+            "kind": "exclusive",
+            "one": [
+              "group_property"
+            ],
+            "other": [
+              "path"
+            ],
+            "message": "`path` does not apply with group_property"
+          },
+          {
+            "kind": "exclusive",
+            "one": [
+              "group_property"
+            ],
+            "other": [
+              "skip_absent_relationship_ends"
+            ],
+            "message": "`skip_absent_relationship_ends` does not apply with group_property"
+          },
+          {
+            "kind": "traversal",
+            "with": [],
+            "message": ""
+          },
+          {
+            "kind": "kind",
+            "parameter": "across_sources"
+          },
+          {
+            "kind": "kind",
+            "parameter": "case_sensitive"
+          }
+        ],
+        "forms": [
+          {
+            "when": [
+              "group_property"
+            ],
+            "values": [
+              {
+                "name": "group",
+                "expression": {
+                  "kind": "property",
+                  "propertySet": "{group_property.set}",
+                  "property": "{group_property.name}"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "proportion",
+              "provided": "provided",
+              "required": "required",
+              "parameters": {
+                "providedUnit": "provided_unit",
+                "requiredUnit": "required_unit",
+                "operator": "operator",
+                "smallBelow": "small_required_below",
+                "smallProvided": "small_provided",
+                "table": "table",
+                "additionalRequired": "additional_required",
+                "additionalProvided": "additional_provided"
+              },
+              "groups": {
+                "value": "group",
+                "provided": "provided_selector",
+                "required": "required_selector",
+                "across": "across_sources",
+                "caseSensitive": "case_sensitive",
+                "label": "group {group_property} {group:stated}",
+                "ungrouped": "{group_property} is {group:stated}, so the object counts in no group",
+                "undecidedUngrouped": "{group_property} is {group:stated}, and whether the object is counted is undecided",
+                "undecided": "{label}: {undecided} object(s) cannot be assigned to either population",
+                "unreadable": "{label}: an object whose {group_property} could not be read may belong here",
+                "onlyRequired": "{label}: {required} required object(s) and no provided object; the group is present only in the required set",
+                "fail": "{label}: {provided} provided and {required} required object(s); required {requirement}"
+              }
+            },
+            "fail": "",
+            "undecided": ""
+          },
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "provided",
+                "expression": {
+                  "kind": "aggregate",
+                  "function": "count",
+                  "over": {
+                    "kind": "selector",
+                    "selector": {
+                      "kind": "expression",
+                      "expression": {
+                        "kind": "parameter",
+                        "name": "provided_selector"
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "name": "required",
+                "expression": {
+                  "kind": "aggregate",
+                  "function": "count",
+                  "over": {
+                    "kind": "selector",
+                    "selector": {
+                      "kind": "expression",
+                      "expression": {
+                        "kind": "parameter",
+                        "name": "required_selector"
+                      }
+                    }
+                  }
+                }
+              }
+            ],
+            "decision": {
+              "kind": "proportion",
+              "provided": "provided",
+              "required": "required",
+              "parameters": {
+                "providedUnit": "provided_unit",
+                "requiredUnit": "required_unit",
+                "operator": "operator",
+                "smallBelow": "small_required_below",
+                "smallProvided": "small_provided",
+                "table": "table",
+                "additionalRequired": "additional_required",
+                "additionalProvided": "additional_provided"
+              }
+            },
+            "fail": "{provided:least} provided and {required:least} required object(s) {relation}; required {requirement}",
+            "undecided": "",
+            "members": {
+              "selector": "provided_selector",
+              "undecided": {
+                "kind": "open",
+                "message": "{undecided} related object(s) {relation} cannot be assigned to either population"
+              },
+              "more": [
+                "required_selector"
+              ]
+            }
+          }
+        ],
+        "requirements": [
+          {
+            "when": [
+              "group_property"
+            ],
+            "expression": {
+              "kind": "if",
+              "branches": [
+                {
+                  "when": {
+                    "kind": "compare",
+                    "operator": "equals",
+                    "left": {
+                      "kind": "parameter",
+                      "name": "operator"
+                    },
+                    "right": {
+                      "kind": "literal",
+                      "value": {
+                        "type": "string",
+                        "value": "equal"
+                      }
+                    }
+                  },
+                  "then": {
+                    "kind": "compare",
+                    "operator": "equals",
+                    "left": {
+                      "kind": "multiply",
+                      "left": {
+                        "kind": "derived",
+                        "name": "provided"
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "required_unit"
+                      }
+                    },
+                    "right": {
+                      "kind": "multiply",
+                      "left": {
+                        "kind": "derived",
+                        "name": "required"
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "provided_unit"
+                      }
+                    },
+                    "label": "provided against required"
+                  }
+                },
+                {
+                  "when": {
+                    "kind": "compare",
+                    "operator": "equals",
+                    "left": {
+                      "kind": "parameter",
+                      "name": "operator"
+                    },
+                    "right": {
+                      "kind": "literal",
+                      "value": {
+                        "type": "string",
+                        "value": "not_equal"
+                      }
+                    }
+                  },
+                  "then": {
+                    "kind": "compare",
+                    "operator": "notEquals",
+                    "left": {
+                      "kind": "multiply",
+                      "left": {
+                        "kind": "derived",
+                        "name": "provided"
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "required_unit"
+                      }
+                    },
+                    "right": {
+                      "kind": "multiply",
+                      "left": {
+                        "kind": "derived",
+                        "name": "required"
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "provided_unit"
+                      }
+                    },
+                    "label": "provided against required"
+                  }
+                },
+                {
+                  "when": {
+                    "kind": "compare",
+                    "operator": "equals",
+                    "left": {
+                      "kind": "parameter",
+                      "name": "operator"
+                    },
+                    "right": {
+                      "kind": "literal",
+                      "value": {
+                        "type": "string",
+                        "value": "greater"
+                      }
+                    }
+                  },
+                  "then": {
+                    "kind": "compare",
+                    "operator": "greaterThan",
+                    "left": {
+                      "kind": "multiply",
+                      "left": {
+                        "kind": "derived",
+                        "name": "provided"
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "required_unit"
+                      }
+                    },
+                    "right": {
+                      "kind": "multiply",
+                      "left": {
+                        "kind": "derived",
+                        "name": "required"
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "provided_unit"
+                      }
+                    },
+                    "label": "provided against required"
+                  }
+                },
+                {
+                  "when": {
+                    "kind": "compare",
+                    "operator": "equals",
+                    "left": {
+                      "kind": "parameter",
+                      "name": "operator"
+                    },
+                    "right": {
+                      "kind": "literal",
+                      "value": {
+                        "type": "string",
+                        "value": "at_least"
+                      }
+                    }
+                  },
+                  "then": {
+                    "kind": "compare",
+                    "operator": "greaterThanOrEquals",
+                    "left": {
+                      "kind": "multiply",
+                      "left": {
+                        "kind": "derived",
+                        "name": "provided"
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "required_unit"
+                      }
+                    },
+                    "right": {
+                      "kind": "multiply",
+                      "left": {
+                        "kind": "derived",
+                        "name": "required"
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "provided_unit"
+                      }
+                    },
+                    "label": "provided against required"
+                  }
+                },
+                {
+                  "when": {
+                    "kind": "compare",
+                    "operator": "equals",
+                    "left": {
+                      "kind": "parameter",
+                      "name": "operator"
+                    },
+                    "right": {
+                      "kind": "literal",
+                      "value": {
+                        "type": "string",
+                        "value": "less"
+                      }
+                    }
+                  },
+                  "then": {
+                    "kind": "compare",
+                    "operator": "lessThan",
+                    "left": {
+                      "kind": "multiply",
+                      "left": {
+                        "kind": "derived",
+                        "name": "provided"
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "required_unit"
+                      }
+                    },
+                    "right": {
+                      "kind": "multiply",
+                      "left": {
+                        "kind": "derived",
+                        "name": "required"
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "provided_unit"
+                      }
+                    },
+                    "label": "provided against required"
+                  }
+                },
+                {
+                  "when": {
+                    "kind": "compare",
+                    "operator": "equals",
+                    "left": {
+                      "kind": "parameter",
+                      "name": "operator"
+                    },
+                    "right": {
+                      "kind": "literal",
+                      "value": {
+                        "type": "string",
+                        "value": "at_most"
+                      }
+                    }
+                  },
+                  "then": {
+                    "kind": "compare",
+                    "operator": "lessThanOrEquals",
+                    "left": {
+                      "kind": "multiply",
+                      "left": {
+                        "kind": "derived",
+                        "name": "provided"
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "required_unit"
+                      }
+                    },
+                    "right": {
+                      "kind": "multiply",
+                      "left": {
+                        "kind": "derived",
+                        "name": "required"
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "provided_unit"
+                      }
+                    },
+                    "label": "provided against required"
+                  }
+                }
+              ],
+              "else": {
+                "kind": "null"
+              },
+              "label": "ratio mode"
+            },
+            "blocks": {
+              "type": "expression.if",
+              "label": "ratio mode",
+              "inputs": {
+                "branches": {
+                  "branches": [
+                    {
+                      "when": {
+                        "type": "expression.compare",
+                        "fields": {
+                          "operator": "equals"
+                        },
+                        "inputs": {
+                          "left": {
+                            "block": {
+                              "type": "expression.parameter",
+                              "fields": {
+                                "name": "operator"
+                              }
+                            }
+                          },
+                          "right": {
+                            "block": {
+                              "type": "expression.literal",
+                              "fields": {
+                                "value": {
+                                  "type": "string",
+                                  "value": "equal"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "then": {
+                        "type": "expression.compare",
+                        "label": "provided against required",
+                        "fields": {
+                          "operator": "equals"
+                        },
+                        "inputs": {
+                          "left": {
+                            "block": {
+                              "type": "expression.multiply",
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "expression.derived",
+                                    "fields": {
+                                      "name": "provided"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "required_unit"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "right": {
+                            "block": {
+                              "type": "expression.multiply",
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "expression.derived",
+                                    "fields": {
+                                      "name": "required"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "provided_unit"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "when": {
+                        "type": "expression.compare",
+                        "fields": {
+                          "operator": "equals"
+                        },
+                        "inputs": {
+                          "left": {
+                            "block": {
+                              "type": "expression.parameter",
+                              "fields": {
+                                "name": "operator"
+                              }
+                            }
+                          },
+                          "right": {
+                            "block": {
+                              "type": "expression.literal",
+                              "fields": {
+                                "value": {
+                                  "type": "string",
+                                  "value": "not_equal"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "then": {
+                        "type": "expression.compare",
+                        "label": "provided against required",
+                        "fields": {
+                          "operator": "notEquals"
+                        },
+                        "inputs": {
+                          "left": {
+                            "block": {
+                              "type": "expression.multiply",
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "expression.derived",
+                                    "fields": {
+                                      "name": "provided"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "required_unit"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "right": {
+                            "block": {
+                              "type": "expression.multiply",
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "expression.derived",
+                                    "fields": {
+                                      "name": "required"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "provided_unit"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "when": {
+                        "type": "expression.compare",
+                        "fields": {
+                          "operator": "equals"
+                        },
+                        "inputs": {
+                          "left": {
+                            "block": {
+                              "type": "expression.parameter",
+                              "fields": {
+                                "name": "operator"
+                              }
+                            }
+                          },
+                          "right": {
+                            "block": {
+                              "type": "expression.literal",
+                              "fields": {
+                                "value": {
+                                  "type": "string",
+                                  "value": "greater"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "then": {
+                        "type": "expression.compare",
+                        "label": "provided against required",
+                        "fields": {
+                          "operator": "greaterThan"
+                        },
+                        "inputs": {
+                          "left": {
+                            "block": {
+                              "type": "expression.multiply",
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "expression.derived",
+                                    "fields": {
+                                      "name": "provided"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "required_unit"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "right": {
+                            "block": {
+                              "type": "expression.multiply",
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "expression.derived",
+                                    "fields": {
+                                      "name": "required"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "provided_unit"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "when": {
+                        "type": "expression.compare",
+                        "fields": {
+                          "operator": "equals"
+                        },
+                        "inputs": {
+                          "left": {
+                            "block": {
+                              "type": "expression.parameter",
+                              "fields": {
+                                "name": "operator"
+                              }
+                            }
+                          },
+                          "right": {
+                            "block": {
+                              "type": "expression.literal",
+                              "fields": {
+                                "value": {
+                                  "type": "string",
+                                  "value": "at_least"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "then": {
+                        "type": "expression.compare",
+                        "label": "provided against required",
+                        "fields": {
+                          "operator": "greaterThanOrEquals"
+                        },
+                        "inputs": {
+                          "left": {
+                            "block": {
+                              "type": "expression.multiply",
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "expression.derived",
+                                    "fields": {
+                                      "name": "provided"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "required_unit"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "right": {
+                            "block": {
+                              "type": "expression.multiply",
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "expression.derived",
+                                    "fields": {
+                                      "name": "required"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "provided_unit"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "when": {
+                        "type": "expression.compare",
+                        "fields": {
+                          "operator": "equals"
+                        },
+                        "inputs": {
+                          "left": {
+                            "block": {
+                              "type": "expression.parameter",
+                              "fields": {
+                                "name": "operator"
+                              }
+                            }
+                          },
+                          "right": {
+                            "block": {
+                              "type": "expression.literal",
+                              "fields": {
+                                "value": {
+                                  "type": "string",
+                                  "value": "less"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "then": {
+                        "type": "expression.compare",
+                        "label": "provided against required",
+                        "fields": {
+                          "operator": "lessThan"
+                        },
+                        "inputs": {
+                          "left": {
+                            "block": {
+                              "type": "expression.multiply",
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "expression.derived",
+                                    "fields": {
+                                      "name": "provided"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "required_unit"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "right": {
+                            "block": {
+                              "type": "expression.multiply",
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "expression.derived",
+                                    "fields": {
+                                      "name": "required"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "provided_unit"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "when": {
+                        "type": "expression.compare",
+                        "fields": {
+                          "operator": "equals"
+                        },
+                        "inputs": {
+                          "left": {
+                            "block": {
+                              "type": "expression.parameter",
+                              "fields": {
+                                "name": "operator"
+                              }
+                            }
+                          },
+                          "right": {
+                            "block": {
+                              "type": "expression.literal",
+                              "fields": {
+                                "value": {
+                                  "type": "string",
+                                  "value": "at_most"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "then": {
+                        "type": "expression.compare",
+                        "label": "provided against required",
+                        "fields": {
+                          "operator": "lessThanOrEquals"
+                        },
+                        "inputs": {
+                          "left": {
+                            "block": {
+                              "type": "expression.multiply",
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "expression.derived",
+                                    "fields": {
+                                      "name": "provided"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "required_unit"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "right": {
+                            "block": {
+                              "type": "expression.multiply",
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "expression.derived",
+                                    "fields": {
+                                      "name": "required"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "provided_unit"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "else": {
+                  "block": {
+                    "type": "expression.null"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "when": [],
+            "expression": {
+              "kind": "if",
+              "branches": [
+                {
+                  "when": {
+                    "kind": "compare",
+                    "operator": "equals",
+                    "left": {
+                      "kind": "parameter",
+                      "name": "operator"
+                    },
+                    "right": {
+                      "kind": "literal",
+                      "value": {
+                        "type": "string",
+                        "value": "equal"
+                      }
+                    }
+                  },
+                  "then": {
+                    "kind": "compare",
+                    "operator": "equals",
+                    "left": {
+                      "kind": "multiply",
+                      "left": {
+                        "kind": "aggregate",
+                        "function": "count",
+                        "over": {
+                          "kind": "selector",
+                          "selector": {
+                            "kind": "expression",
+                            "expression": {
+                              "kind": "parameter",
+                              "name": "provided_selector"
+                            }
+                          }
+                        }
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "required_unit"
+                      }
+                    },
+                    "right": {
+                      "kind": "multiply",
+                      "left": {
+                        "kind": "aggregate",
+                        "function": "count",
+                        "over": {
+                          "kind": "selector",
+                          "selector": {
+                            "kind": "expression",
+                            "expression": {
+                              "kind": "parameter",
+                              "name": "required_selector"
+                            }
+                          }
+                        }
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "provided_unit"
+                      }
+                    },
+                    "label": "provided against required"
+                  }
+                },
+                {
+                  "when": {
+                    "kind": "compare",
+                    "operator": "equals",
+                    "left": {
+                      "kind": "parameter",
+                      "name": "operator"
+                    },
+                    "right": {
+                      "kind": "literal",
+                      "value": {
+                        "type": "string",
+                        "value": "not_equal"
+                      }
+                    }
+                  },
+                  "then": {
+                    "kind": "compare",
+                    "operator": "notEquals",
+                    "left": {
+                      "kind": "multiply",
+                      "left": {
+                        "kind": "aggregate",
+                        "function": "count",
+                        "over": {
+                          "kind": "selector",
+                          "selector": {
+                            "kind": "expression",
+                            "expression": {
+                              "kind": "parameter",
+                              "name": "provided_selector"
+                            }
+                          }
+                        }
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "required_unit"
+                      }
+                    },
+                    "right": {
+                      "kind": "multiply",
+                      "left": {
+                        "kind": "aggregate",
+                        "function": "count",
+                        "over": {
+                          "kind": "selector",
+                          "selector": {
+                            "kind": "expression",
+                            "expression": {
+                              "kind": "parameter",
+                              "name": "required_selector"
+                            }
+                          }
+                        }
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "provided_unit"
+                      }
+                    },
+                    "label": "provided against required"
+                  }
+                },
+                {
+                  "when": {
+                    "kind": "compare",
+                    "operator": "equals",
+                    "left": {
+                      "kind": "parameter",
+                      "name": "operator"
+                    },
+                    "right": {
+                      "kind": "literal",
+                      "value": {
+                        "type": "string",
+                        "value": "greater"
+                      }
+                    }
+                  },
+                  "then": {
+                    "kind": "compare",
+                    "operator": "greaterThan",
+                    "left": {
+                      "kind": "multiply",
+                      "left": {
+                        "kind": "aggregate",
+                        "function": "count",
+                        "over": {
+                          "kind": "selector",
+                          "selector": {
+                            "kind": "expression",
+                            "expression": {
+                              "kind": "parameter",
+                              "name": "provided_selector"
+                            }
+                          }
+                        }
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "required_unit"
+                      }
+                    },
+                    "right": {
+                      "kind": "multiply",
+                      "left": {
+                        "kind": "aggregate",
+                        "function": "count",
+                        "over": {
+                          "kind": "selector",
+                          "selector": {
+                            "kind": "expression",
+                            "expression": {
+                              "kind": "parameter",
+                              "name": "required_selector"
+                            }
+                          }
+                        }
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "provided_unit"
+                      }
+                    },
+                    "label": "provided against required"
+                  }
+                },
+                {
+                  "when": {
+                    "kind": "compare",
+                    "operator": "equals",
+                    "left": {
+                      "kind": "parameter",
+                      "name": "operator"
+                    },
+                    "right": {
+                      "kind": "literal",
+                      "value": {
+                        "type": "string",
+                        "value": "at_least"
+                      }
+                    }
+                  },
+                  "then": {
+                    "kind": "compare",
+                    "operator": "greaterThanOrEquals",
+                    "left": {
+                      "kind": "multiply",
+                      "left": {
+                        "kind": "aggregate",
+                        "function": "count",
+                        "over": {
+                          "kind": "selector",
+                          "selector": {
+                            "kind": "expression",
+                            "expression": {
+                              "kind": "parameter",
+                              "name": "provided_selector"
+                            }
+                          }
+                        }
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "required_unit"
+                      }
+                    },
+                    "right": {
+                      "kind": "multiply",
+                      "left": {
+                        "kind": "aggregate",
+                        "function": "count",
+                        "over": {
+                          "kind": "selector",
+                          "selector": {
+                            "kind": "expression",
+                            "expression": {
+                              "kind": "parameter",
+                              "name": "required_selector"
+                            }
+                          }
+                        }
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "provided_unit"
+                      }
+                    },
+                    "label": "provided against required"
+                  }
+                },
+                {
+                  "when": {
+                    "kind": "compare",
+                    "operator": "equals",
+                    "left": {
+                      "kind": "parameter",
+                      "name": "operator"
+                    },
+                    "right": {
+                      "kind": "literal",
+                      "value": {
+                        "type": "string",
+                        "value": "less"
+                      }
+                    }
+                  },
+                  "then": {
+                    "kind": "compare",
+                    "operator": "lessThan",
+                    "left": {
+                      "kind": "multiply",
+                      "left": {
+                        "kind": "aggregate",
+                        "function": "count",
+                        "over": {
+                          "kind": "selector",
+                          "selector": {
+                            "kind": "expression",
+                            "expression": {
+                              "kind": "parameter",
+                              "name": "provided_selector"
+                            }
+                          }
+                        }
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "required_unit"
+                      }
+                    },
+                    "right": {
+                      "kind": "multiply",
+                      "left": {
+                        "kind": "aggregate",
+                        "function": "count",
+                        "over": {
+                          "kind": "selector",
+                          "selector": {
+                            "kind": "expression",
+                            "expression": {
+                              "kind": "parameter",
+                              "name": "required_selector"
+                            }
+                          }
+                        }
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "provided_unit"
+                      }
+                    },
+                    "label": "provided against required"
+                  }
+                },
+                {
+                  "when": {
+                    "kind": "compare",
+                    "operator": "equals",
+                    "left": {
+                      "kind": "parameter",
+                      "name": "operator"
+                    },
+                    "right": {
+                      "kind": "literal",
+                      "value": {
+                        "type": "string",
+                        "value": "at_most"
+                      }
+                    }
+                  },
+                  "then": {
+                    "kind": "compare",
+                    "operator": "lessThanOrEquals",
+                    "left": {
+                      "kind": "multiply",
+                      "left": {
+                        "kind": "aggregate",
+                        "function": "count",
+                        "over": {
+                          "kind": "selector",
+                          "selector": {
+                            "kind": "expression",
+                            "expression": {
+                              "kind": "parameter",
+                              "name": "provided_selector"
+                            }
+                          }
+                        }
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "required_unit"
+                      }
+                    },
+                    "right": {
+                      "kind": "multiply",
+                      "left": {
+                        "kind": "aggregate",
+                        "function": "count",
+                        "over": {
+                          "kind": "selector",
+                          "selector": {
+                            "kind": "expression",
+                            "expression": {
+                              "kind": "parameter",
+                              "name": "required_selector"
+                            }
+                          }
+                        }
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "provided_unit"
+                      }
+                    },
+                    "label": "provided against required"
+                  }
+                }
+              ],
+              "else": {
+                "kind": "null"
+              },
+              "label": "ratio mode"
+            },
+            "blocks": {
+              "type": "expression.if",
+              "label": "ratio mode",
+              "inputs": {
+                "branches": {
+                  "branches": [
+                    {
+                      "when": {
+                        "type": "expression.compare",
+                        "fields": {
+                          "operator": "equals"
+                        },
+                        "inputs": {
+                          "left": {
+                            "block": {
+                              "type": "expression.parameter",
+                              "fields": {
+                                "name": "operator"
+                              }
+                            }
+                          },
+                          "right": {
+                            "block": {
+                              "type": "expression.literal",
+                              "fields": {
+                                "value": {
+                                  "type": "string",
+                                  "value": "equal"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "then": {
+                        "type": "expression.compare",
+                        "label": "provided against required",
+                        "fields": {
+                          "operator": "equals"
+                        },
+                        "inputs": {
+                          "left": {
+                            "block": {
+                              "type": "expression.multiply",
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "expression.aggregate",
+                                    "fields": {
+                                      "function": "count"
+                                    },
+                                    "inputs": {
+                                      "over": {
+                                        "block": {
+                                          "type": "source.selector",
+                                          "inputs": {
+                                            "selector": {
+                                              "block": {
+                                                "type": "selector.expression",
+                                                "inputs": {
+                                                  "expression": {
+                                                    "block": {
+                                                      "type": "expression.parameter",
+                                                      "fields": {
+                                                        "name": "provided_selector"
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "required_unit"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "right": {
+                            "block": {
+                              "type": "expression.multiply",
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "expression.aggregate",
+                                    "fields": {
+                                      "function": "count"
+                                    },
+                                    "inputs": {
+                                      "over": {
+                                        "block": {
+                                          "type": "source.selector",
+                                          "inputs": {
+                                            "selector": {
+                                              "block": {
+                                                "type": "selector.expression",
+                                                "inputs": {
+                                                  "expression": {
+                                                    "block": {
+                                                      "type": "expression.parameter",
+                                                      "fields": {
+                                                        "name": "required_selector"
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "provided_unit"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "when": {
+                        "type": "expression.compare",
+                        "fields": {
+                          "operator": "equals"
+                        },
+                        "inputs": {
+                          "left": {
+                            "block": {
+                              "type": "expression.parameter",
+                              "fields": {
+                                "name": "operator"
+                              }
+                            }
+                          },
+                          "right": {
+                            "block": {
+                              "type": "expression.literal",
+                              "fields": {
+                                "value": {
+                                  "type": "string",
+                                  "value": "not_equal"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "then": {
+                        "type": "expression.compare",
+                        "label": "provided against required",
+                        "fields": {
+                          "operator": "notEquals"
+                        },
+                        "inputs": {
+                          "left": {
+                            "block": {
+                              "type": "expression.multiply",
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "expression.aggregate",
+                                    "fields": {
+                                      "function": "count"
+                                    },
+                                    "inputs": {
+                                      "over": {
+                                        "block": {
+                                          "type": "source.selector",
+                                          "inputs": {
+                                            "selector": {
+                                              "block": {
+                                                "type": "selector.expression",
+                                                "inputs": {
+                                                  "expression": {
+                                                    "block": {
+                                                      "type": "expression.parameter",
+                                                      "fields": {
+                                                        "name": "provided_selector"
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "required_unit"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "right": {
+                            "block": {
+                              "type": "expression.multiply",
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "expression.aggregate",
+                                    "fields": {
+                                      "function": "count"
+                                    },
+                                    "inputs": {
+                                      "over": {
+                                        "block": {
+                                          "type": "source.selector",
+                                          "inputs": {
+                                            "selector": {
+                                              "block": {
+                                                "type": "selector.expression",
+                                                "inputs": {
+                                                  "expression": {
+                                                    "block": {
+                                                      "type": "expression.parameter",
+                                                      "fields": {
+                                                        "name": "required_selector"
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "provided_unit"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "when": {
+                        "type": "expression.compare",
+                        "fields": {
+                          "operator": "equals"
+                        },
+                        "inputs": {
+                          "left": {
+                            "block": {
+                              "type": "expression.parameter",
+                              "fields": {
+                                "name": "operator"
+                              }
+                            }
+                          },
+                          "right": {
+                            "block": {
+                              "type": "expression.literal",
+                              "fields": {
+                                "value": {
+                                  "type": "string",
+                                  "value": "greater"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "then": {
+                        "type": "expression.compare",
+                        "label": "provided against required",
+                        "fields": {
+                          "operator": "greaterThan"
+                        },
+                        "inputs": {
+                          "left": {
+                            "block": {
+                              "type": "expression.multiply",
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "expression.aggregate",
+                                    "fields": {
+                                      "function": "count"
+                                    },
+                                    "inputs": {
+                                      "over": {
+                                        "block": {
+                                          "type": "source.selector",
+                                          "inputs": {
+                                            "selector": {
+                                              "block": {
+                                                "type": "selector.expression",
+                                                "inputs": {
+                                                  "expression": {
+                                                    "block": {
+                                                      "type": "expression.parameter",
+                                                      "fields": {
+                                                        "name": "provided_selector"
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "required_unit"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "right": {
+                            "block": {
+                              "type": "expression.multiply",
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "expression.aggregate",
+                                    "fields": {
+                                      "function": "count"
+                                    },
+                                    "inputs": {
+                                      "over": {
+                                        "block": {
+                                          "type": "source.selector",
+                                          "inputs": {
+                                            "selector": {
+                                              "block": {
+                                                "type": "selector.expression",
+                                                "inputs": {
+                                                  "expression": {
+                                                    "block": {
+                                                      "type": "expression.parameter",
+                                                      "fields": {
+                                                        "name": "required_selector"
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "provided_unit"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "when": {
+                        "type": "expression.compare",
+                        "fields": {
+                          "operator": "equals"
+                        },
+                        "inputs": {
+                          "left": {
+                            "block": {
+                              "type": "expression.parameter",
+                              "fields": {
+                                "name": "operator"
+                              }
+                            }
+                          },
+                          "right": {
+                            "block": {
+                              "type": "expression.literal",
+                              "fields": {
+                                "value": {
+                                  "type": "string",
+                                  "value": "at_least"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "then": {
+                        "type": "expression.compare",
+                        "label": "provided against required",
+                        "fields": {
+                          "operator": "greaterThanOrEquals"
+                        },
+                        "inputs": {
+                          "left": {
+                            "block": {
+                              "type": "expression.multiply",
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "expression.aggregate",
+                                    "fields": {
+                                      "function": "count"
+                                    },
+                                    "inputs": {
+                                      "over": {
+                                        "block": {
+                                          "type": "source.selector",
+                                          "inputs": {
+                                            "selector": {
+                                              "block": {
+                                                "type": "selector.expression",
+                                                "inputs": {
+                                                  "expression": {
+                                                    "block": {
+                                                      "type": "expression.parameter",
+                                                      "fields": {
+                                                        "name": "provided_selector"
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "required_unit"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "right": {
+                            "block": {
+                              "type": "expression.multiply",
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "expression.aggregate",
+                                    "fields": {
+                                      "function": "count"
+                                    },
+                                    "inputs": {
+                                      "over": {
+                                        "block": {
+                                          "type": "source.selector",
+                                          "inputs": {
+                                            "selector": {
+                                              "block": {
+                                                "type": "selector.expression",
+                                                "inputs": {
+                                                  "expression": {
+                                                    "block": {
+                                                      "type": "expression.parameter",
+                                                      "fields": {
+                                                        "name": "required_selector"
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "provided_unit"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "when": {
+                        "type": "expression.compare",
+                        "fields": {
+                          "operator": "equals"
+                        },
+                        "inputs": {
+                          "left": {
+                            "block": {
+                              "type": "expression.parameter",
+                              "fields": {
+                                "name": "operator"
+                              }
+                            }
+                          },
+                          "right": {
+                            "block": {
+                              "type": "expression.literal",
+                              "fields": {
+                                "value": {
+                                  "type": "string",
+                                  "value": "less"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "then": {
+                        "type": "expression.compare",
+                        "label": "provided against required",
+                        "fields": {
+                          "operator": "lessThan"
+                        },
+                        "inputs": {
+                          "left": {
+                            "block": {
+                              "type": "expression.multiply",
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "expression.aggregate",
+                                    "fields": {
+                                      "function": "count"
+                                    },
+                                    "inputs": {
+                                      "over": {
+                                        "block": {
+                                          "type": "source.selector",
+                                          "inputs": {
+                                            "selector": {
+                                              "block": {
+                                                "type": "selector.expression",
+                                                "inputs": {
+                                                  "expression": {
+                                                    "block": {
+                                                      "type": "expression.parameter",
+                                                      "fields": {
+                                                        "name": "provided_selector"
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "required_unit"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "right": {
+                            "block": {
+                              "type": "expression.multiply",
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "expression.aggregate",
+                                    "fields": {
+                                      "function": "count"
+                                    },
+                                    "inputs": {
+                                      "over": {
+                                        "block": {
+                                          "type": "source.selector",
+                                          "inputs": {
+                                            "selector": {
+                                              "block": {
+                                                "type": "selector.expression",
+                                                "inputs": {
+                                                  "expression": {
+                                                    "block": {
+                                                      "type": "expression.parameter",
+                                                      "fields": {
+                                                        "name": "required_selector"
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "provided_unit"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "when": {
+                        "type": "expression.compare",
+                        "fields": {
+                          "operator": "equals"
+                        },
+                        "inputs": {
+                          "left": {
+                            "block": {
+                              "type": "expression.parameter",
+                              "fields": {
+                                "name": "operator"
+                              }
+                            }
+                          },
+                          "right": {
+                            "block": {
+                              "type": "expression.literal",
+                              "fields": {
+                                "value": {
+                                  "type": "string",
+                                  "value": "at_most"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "then": {
+                        "type": "expression.compare",
+                        "label": "provided against required",
+                        "fields": {
+                          "operator": "lessThanOrEquals"
+                        },
+                        "inputs": {
+                          "left": {
+                            "block": {
+                              "type": "expression.multiply",
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "expression.aggregate",
+                                    "fields": {
+                                      "function": "count"
+                                    },
+                                    "inputs": {
+                                      "over": {
+                                        "block": {
+                                          "type": "source.selector",
+                                          "inputs": {
+                                            "selector": {
+                                              "block": {
+                                                "type": "selector.expression",
+                                                "inputs": {
+                                                  "expression": {
+                                                    "block": {
+                                                      "type": "expression.parameter",
+                                                      "fields": {
+                                                        "name": "provided_selector"
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "required_unit"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          "right": {
+                            "block": {
+                              "type": "expression.multiply",
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "expression.aggregate",
+                                    "fields": {
+                                      "function": "count"
+                                    },
+                                    "inputs": {
+                                      "over": {
+                                        "block": {
+                                          "type": "source.selector",
+                                          "inputs": {
+                                            "selector": {
+                                              "block": {
+                                                "type": "selector.expression",
+                                                "inputs": {
+                                                  "expression": {
+                                                    "block": {
+                                                      "type": "expression.parameter",
+                                                      "fields": {
+                                                        "name": "required_selector"
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "provided_unit"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "else": {
+                  "block": {
+                    "type": "expression.null"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.same-container",

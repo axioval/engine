@@ -26,7 +26,8 @@ first whose values take the rule's selectors
 ([#289](https://github.com/axioval/engine/issues/289)); `area-ratio` is the
 first over two populations and a derived ratio
 ([#290](https://github.com/axioval/engine/issues/290)); `consistent-value`
-and `selector-conformance` follow `unique-value` as group decisions (#287).
+and `selector-conformance` follow `unique-value` as group decisions, and
+`relative-count` judges two populations by a proportion (#287).
 
 ## The outside contract
 
@@ -162,7 +163,8 @@ still decides; a denominator surely zero leaves the object open with
 `zero`. A form with derived values is not forked (its requirement, for the
 catalogue, states a ratio as a division and a difference as a
 subtraction); one with further populations forks each into an aggregate
-along the same path, filtered by its selector. `area-ratio` runs on both;
+along the same path, filtered by its selector. `area-ratio` runs on both,
+and `relative-count` reads its two populations so;
 `tests/template_features.rs` holds them to small templates of their own.
 
 **Member checks.** `Members::checks` judge each member of the first
@@ -433,6 +435,23 @@ findings read `{message}: {values}` for a combination of values,
 `{properties} has no value to compare with the agreed list` for an object
 stating none, and `{message}` alone where the selector consults no
 property.
+
+### `relative-count`
+
+| Form | When | Values | Decision |
+| --- | --- | --- | --- |
+| groups | `group_property` | `group` = the stated `{group_property}` of each object | `Proportion` per group of the rule's selection, per source or across sources (`across_sources`), `case_sensitive` |
+| anchors | always | `provided`, `required` = the counts of the anchor's members `provided_selector` and `required_selector` pick (`Members::more`), open where any is undecided | `Proportion` of the two counts |
+
+The declaration checks both selectors, the proportion (`Check::Proportion`:
+ratio or table, in the capability's order and words), then the grouping:
+`group_property`'s kind, `across_sources` and `case_sensitive` only with
+it, no traversal parameter with it (each refused by name), the traversal
+and both flags' kinds. An anchor's finding reads `{provided:least}
+provided and {required:least} required object(s) {relation}; required
+{requirement}`, and one with undecided members is open with `{undecided}
+related object(s) {relation} cannot be assigned to either population`. A
+group's outcomes start `group {group_property} {group:stated}`.
 
 ### `level-spacing`
 
@@ -838,6 +857,17 @@ related selector and an expression, with and without a message; and by
 the `selector-conformance` rules of the `judges` case, recorded before the
 switch. The IDS conformance corpus, whose facets it checks, reports the
 same verdicts word for word. It is never forked.
+
+`relative-count` is held to `relative_count/reference.rs`
+(`axioval_rules::reference::RelativeCount`) through `common::Held` on
+every fixture of `tests/relative_count.rs`, `tests/relative_table.rs` and
+its module in `tests/semantic.rs`, every refusal now asserted word for
+word; by generated rooms in two sources reaching washbasins, other
+fixtures and workplaces (some of undecided kind) along a relationship or
+in their whole source, judged by ratios with and without small counts and
+by tables, per anchor or per group of codes stated, blank, `null`,
+folded or unreadable; and by the `relative-count` rules of the `judges`
+case, recorded before the switch. It is never forked.
 
 `shelf-capacity` is held so too: every fixture of `shelf_capacity.rs`
 and generated spaces of random doors, heights and minimums against

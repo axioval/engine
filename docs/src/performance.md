@@ -269,3 +269,10 @@ grading values are read ahead with the form's, and the undecided count is
 read only to word an undecided shortfall. Before them it ran 2.2× on the
 infra road and held 11.8× the heap on the generated fixture, every read
 formatting its selection into a memo key.
+
+`slab-stack-spacing` runs the `storeys` case's rule: 0.94 to 1.16× its
+reference's run time and 1.00 to 1.27× its peak heap, the generated
+fixture the highest. Its values measure the stacks once per run, keyed by
+the rule's selection, which the run's own selection supplies
+(`@selection`); a value read again by several checks keeps what was read
+ahead, and a rule selecting nothing reads nothing ahead.

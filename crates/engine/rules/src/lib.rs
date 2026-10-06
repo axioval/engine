@@ -200,6 +200,7 @@ pub mod reference {
     pub use crate::relative_count::reference::RelativeCount;
     pub use crate::shelf_capacity::reference::ShelfCapacity;
     pub use crate::slab_contact::reference::SlabContact;
+    pub use crate::slab_stack::reference::SlabStackSpacing;
     pub use crate::stair_geometry::reference::RampGeometryReference as RampGeometry;
     pub use crate::stair_geometry::reference::StairGeometryReference as StairGeometry;
     pub use crate::triangle_count::reference::TriangleCountLimit;
@@ -216,6 +217,7 @@ pub use xsd_pattern::translate as translate_xsd_pattern;
 /// # Errors
 ///
 /// Returns an error if the registry already contains a built-in capability ID.
+#[allow(clippy::too_many_lines)]
 pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegistry, EngineError> {
     registry
         .register(PropertyExists)

@@ -62,11 +62,11 @@ rules crate (`body_extent/template.rs`):
 | `id`, `parameters` | The capability's id and descriptor, unchanged. |
 | `grades` | Whether findings are graded (the descriptor's `grades_deviation`): each states how far its value misses the bound it fails, measured from the declared bound, never the widened one, for the runtime's severity bands. |
 | `name` | How rule-scoped messages name the capability (`body-extent: …`). |
-| `refusals` | Where a refused declaration and missing services are reported: `rule` (the default, once, before anything is selected, after the name), `objects` (for each selected object, worded as the check states it, as capabilities that judged their declaration per object reported it) or `prefixed` (for each selected object, a refused declaration after a prefix: `slab-contact declaration is invalid: …`; missing services as stated). |
+| `refusals` | Where a refused declaration and missing services are reported: `rule` (the default, once, before anything is selected, after the name), `objects` (for each selected object, worded as the check states it, as capabilities that judged their declaration per object reported it) or `prefixed` (for each selected object, a refused declaration after a prefix: `slab-contact declaration is invalid: …`; missing services as stated) or `servicesPerObject` (a refused declaration once for the rule, after the name, missing services for each selected object). |
 | `defaults` | Values optional parameters take when unstated (`tolerance` 0 m). |
-| `declaration` | `Check`s over the rule's parameters, in order: `excludes` (where a mode is stated, no string parameter of a list states an option it does not combine with), `arguments` (where a mode is stated, the rule parameters a measured value names, checked as stated by the value's own argument check: a declaration, such as a table of rows, only the measurement knows how to read), `choice` (a string among options), `length` (a non-negative length), `count` (an integer of at least zero, stated where the descriptor requires it), `kind` (a parameter of its descriptor's kind, placed where the capability read it so refusals keep their order), `nonNegative` (numbers of at least zero), `traversal` (a valid `relationship` or `path`, declared only with one of the named parameters, or anywhere where it names none), `exclusive`, `anyOf`, `requires`, `ordered` (numbers, integers or quantities, as the descriptor types them), `disciplines` (a non-empty list of valid disciplines), `path` (a valid relationship path), `tolerance` (the rule's tolerance parameters valid together), `required` (a parameter stated, of its kind), `finite` (each parameter stated as a finite `number`, above or at least a bound where given), `increasing` (both numbers, the first below the second), `atMost` (each number stated at most a value: a share no greater than the whole), `when` (a check that applies only where one of some boolean parameters is stated true: a declaration a mode needs only while it is on). The first failing check leaves the rule not evaluated as an invalid declaration, worded as the capability worded it. |
-| `services` | The host services the values need (`Service`: `object-frame`, `vertical-extent`, `triangle-count`, `walking-surface`, `contact`), and the message leaving the whole rule open without them, before anything is selected. |
-| `texts` | Named message parts, optionally conditional: `Condition::Positive` (a parameter above zero), `Condition::Inexact` (a value read from evidence that is not exact, such as a count of a tessellation), `Condition::Equals` (a string parameter or its default is a value), `Condition::Zero` (a value's lower end is zero: nothing surely counted), `Condition::All` (every one of several), `Condition::Not`, `Condition::Cites` (a value's measured reads cite an object: a search found a candidate), `Condition::Absent` (a value is `null`: a measurement found nothing near), `Condition::Below` and `Condition::Above` (a value surely below or above a number: its upper or lower end is). Several texts may share a name, each under its own condition: the first that holds is rendered (`plan area` or `facade area` by `measure`). |
+| `declaration` | `Check`s over the rule's parameters, in order: `excludes` (where a mode is stated, no string parameter of a list states an option it does not combine with), `arguments` (where a mode is stated, the rule parameters a measured value names, checked as stated by the value's own argument check: a declaration, such as a table of rows, only the measurement knows how to read), `choice` (a string among options), `length` (a non-negative length), `count` (an integer of at least zero, stated where the descriptor requires it), `kind` (a parameter of its descriptor's kind, placed where the capability read it so refusals keep their order), `nonNegative` (numbers of at least zero), `traversal` (a valid `relationship` or `path`, declared only with one of the named parameters, or anywhere where it names none), `exclusive`, `anyOf`, `requires`, `ordered` (numbers, integers or quantities, as the descriptor types them), `disciplines` (a non-empty list of valid disciplines), `path` (a valid relationship path), `tolerance` (the rule's tolerance parameters valid together), `required` (a parameter stated, of its kind), `finite` (each parameter stated as a finite `number`, above or at least a bound where given), `increasing` (both numbers, the first below the second), `atMost` (each number stated at most a value: a share no greater than the whole), `when` (a check that applies only where one of some boolean parameters is stated true: a declaration a mode needs only while it is on), `amongEach` (every string a list states, trimmed, among options, `{value}` the one that is not), `declaresListed` (`declares`, a string list only where it lists one). The first failing check leaves the rule not evaluated as an invalid declaration, worded as the capability worded it. |
+| `services` | The host services the values need (`Service`: `object-frame`, `vertical-extent`, `triangle-count`, `walking-surface`, `contact`, `plan-area`), and the message leaving the whole rule open without them, before anything is selected. |
+| `texts` | Named message parts, optionally conditional: `Condition::Positive` (a parameter above zero), `Condition::Inexact` (a value read from evidence that is not exact, such as a count of a tessellation), `Condition::Equals` (a string parameter or its default is a value), `Condition::Zero` (a value's lower end is zero: nothing surely counted), `Condition::All` (every one of several), `Condition::Not`, `Condition::Cites` (a value's measured reads cite an object: a search found a candidate), `Condition::Absent` (a value is `null`: a measurement found nothing near), `Condition::Below` and `Condition::Above` (a value surely below or above a number: its upper or lower end is), `Condition::Lists` (a string-list parameter lists a word). Several texts may share a name, each under its own condition: the first that holds is rendered (`plan area` or `facade area` by `measure`). |
 | `forms` | The compositions. The first form whose `when` parameters are all stated applies. |
 
 A `Form` holds:
@@ -74,6 +74,11 @@ A `Form` holds:
 - `values`: `TemplateValue`s, each a named expression, read in order for
   each selected object. A value may `expect` a kind (`length`), and words
   a stated absence (`absent`) and a value of the wrong kind (`mismatch`);
+  one expected `optional` that is stated absent passes the form, or the
+  check, it belongs to without a finding (no slab above to measure to). A
+  measured value's reference to a parameter the template defaults binds
+  the default, and `@selection` the objects the rule itself selects (the
+  stack a slab belongs to); a rule reading that is never forked;
 - `decision`: how the values decide;
 - `fail` and `undecided`: the finding's message, and the message of an
   object the values cannot decide;
@@ -96,7 +101,10 @@ A `Form` holds:
   and before the form's own decision, each its own finding or not-evaluated
   outcome: a capability reporting one per failed check (D1). A check's
   value that cannot be read leaves only that check open; a form value that
-  cannot be read leaves the object open once;
+  cannot be read leaves the object open once. A check `applies` only where
+  its `Applies` holds (a measure the rule lists as consistent), and decides
+  by `Within` or by `Near`, its value against another value within a
+  tolerance, as a member's judgement does;
 - `unless`: values that leave an object unjudged (`Unless`), read before
   anything else, each only where it `applies` (a boolean parameter stated
   true): one surely true (`true`, or a number surely other than zero)
@@ -887,6 +895,26 @@ order and words; the storey selector and the traversal are checked only
 while a storey is left out (`when`), and without the contact service each
 face is open (`contact service is not registered`).
 
+### `slab-stack-spacing`
+
+| Form | When | Values | Checks |
+| --- | --- | --- | --- |
+| one | always | `next` = `stack_distance;measure=top_to_top;slabs=@selection;ratio=@minimum_overlap_ratio`, `optional`: a slab none stacks above passes | per measure: `distance` within `<measure>_minimum` and `<measure>_maximum` (where one is stated); where `consistent` lists the measure, `distance` near `stack_prevailing;…;tolerance=@tolerance` (`optional`) within `tolerance` (1 mm by default) |
+
+The values measure the stacks over the rule's own selection once per run,
+its undecided objects possible next slabs up but never measured from:
+which slab is next up, each consecutive pair, and each stack (slabs
+connected through consecutive pairs) with the distance most of its pairs
+share. A slab whose extent cannot be measured is open for its reason and
+leaves every other open (`the vertical extent of … could not be
+measured, …`); one whose next slab up cannot be decided is open once. A
+distance's finding relates the next slab up (`related: distance`) and
+reads `{label} to {distance:cited} is {distance:length}; required {bound}`,
+a consistency finding `… which differs from the prevailing
+{prevailing:length} in this stack`. The declaration is refused once for
+the rule (`servicesPerObject`), in the capability's order and words; the
+services missing leave each slab open.
+
 ## Binding and running a rule
 
 The rules crate's `templates` module runs a template
@@ -938,7 +966,8 @@ end to two decimals (`{numerator:least2}`: `0.66`), a share's upper
 end, at most 1, to four decimals (`{share:share}`: `0.4`), and a number
 with a fixed number of decimals: a value known as one point or a
 constant (`{minimum:fixed4}`: `0.5000`), or a value's lower or upper end
-(`{share:lower4}`, `{length:upper3}`); a `Compare`
+(`{share:lower4}`, `{length:upper3}`), and the objects a value's measured
+reads were measured against (`{distance:cited}`: the next slab up); a `Compare`
 form also reads `{target}` (the stated target as the rule declares it,
 after a space: ` 250 mm`, `` `F30` ``, ` [F30, F90]`) and
 `{tolerance:suffix}` (` (within tolerance 0.01)`, nothing when exact).
@@ -1235,6 +1264,14 @@ with random contact, gaps, minimums, sides and storeys left out; by the
 and its fork, which passes a face where a value leaving it unjudged holds
 and otherwise reaches the template's verdicts, its findings at the rule's
 severity (D25).
+
+`slab-stack-spacing` is held to `slab_stack/reference.rs`
+(`axioval_rules::reference::SlabStackSpacing`, which shares the stack
+search) through `common::Held` on every fixture of `tests/slab_stack.rs`;
+by generated stacks of slabs of random plans, elevations, thickness and
+tessellation under random bounds, consistency and tolerances; and by the
+`slab-stack` rule of the `storeys` case, recorded before the switch. It is
+never forked (D26).
 
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the

@@ -167,6 +167,11 @@ const PAIRS: &[Pair] = &[
         case: "coverage",
         reference: |registry| registry.replace(axioval::rules::reference::SlabContact),
     },
+    Pair {
+        capability: "axioval:capability.slab-stack-spacing",
+        case: "storeys",
+        reference: |registry| registry.replace(axioval::rules::reference::SlabStackSpacing),
+    },
 ];
 
 /// Warm-up runs per side before measuring.

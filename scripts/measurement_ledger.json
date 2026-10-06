@@ -692,7 +692,7 @@
         "contact_share"
       ]
     },
-    "slab_stack::evaluate::measure_vertical_extent": {
+    "slab_stack::reference::evaluate::measure_vertical_extent": {
       "count": 1,
       "providedBy": [
         "stack_distance"

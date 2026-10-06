@@ -412,7 +412,8 @@ ignoring ASCII case):
 | `levels_above`, `levels_below` `;levels=<kinds>;path=<steps>` | how many storeys of the source lie above or below the object's one storey by their `Elevation` attribute | built in, over the property and relationship services |
 | `storey_end;end=top\|bottom;storeys=<objects>[;relationship=…;direction=…\|path=<steps>][;follow_chain=…][;skip_absent_relationship_ends=…]` | 1 where the object's one storey is the highest or lowest of its source by the storeys' `Elevation` attribute, 0 where not, as `slab-contact` leaves it out | built in, over the property and relationship services |
 | `undecided_count[;objects=<objects>]` | how many objects other than this one a selection cannot decide; none without `objects` | built in, over the rule's selection |
-| `stack_distance;measure=top_to_top\|bottom_to_bottom\|top_to_bottom;slabs=<kinds>;ratio=<share>` | the distance to the next slab up in the slab's stack, none where none stacks above | built in, over `VerticalExtentService`, `PlanAreaService` |
+| `stack_distance;measure=top_to_top\|bottom_to_bottom\|top_to_bottom;slabs=<objects>;ratio=<share>` | the distance to the next slab up in the slab's stack, none where none stacks above | built in, over `VerticalExtentService`, `PlanAreaService` |
+| `stack_prevailing;measure=…;slabs=<objects>;ratio=<share>[;tolerance=<m>]` | the distance the consecutive slabs of the slab's stack prevailingly share within the tolerance, none where it has none above, its stack fewer than two pairs or none prevails | built in, over `VerticalExtentService`, `PlanAreaService` |
 | `shelf_length`, `shelf_clear_height` `;depth=…;horizontal=…;vertical=…;bottom=…;top=…;clearance=…;access=<steps>[;doors=<objects>][;openings=<objects>][;spaces=<objects>]` | a space's running metres of shelving and its clear height, as `shelf-capacity` measures them | built in, over `LinearQuantityService` |
 | `body_extent;axis=right\|forward\|up` | the body's depth along one of its own placement axes, as `body-extent` measures it | built in, over `ObjectFrameService`, `VerticalExtentService` |
 | `body_position;axis=right\|forward\|up;end=low\|high` | where the body begins or ends along one of its own placement axes, from the origin of the coordinates along it | built in, over `ObjectFrameService`, `VerticalExtentService` |
@@ -930,7 +931,7 @@ sites that cite a value exact:
 | `levels_above`, `levels_below`, `storey_end` | always: counted over stated elevations, which the property service answers exactly | nothing |
 | `contact_area`, `contact_gap`, `contact_share` | always: the contact service refuses inexact evidence | the share's division, rounded outward; the contact undecided candidates may add |
 | `undecided_count` | always: counted over the selection | nothing |
-| `stack_distance`, `body_extent`, `plan_area`, `triangle_count` | every extent, frame, area or count is exact | rounding |
+| `stack_distance`, `stack_prevailing`, `body_extent`, `plan_area`, `triangle_count` | every extent, frame, area or count is exact (for `stack_prevailing`, the prevailing pair's) | rounding |
 | `counterpart_uncovered_share` | every evidence is exact and every counterpart that may cover was read | the undecided cover, as `counterpart-coverage` cites it (`Cited`) |
 | `coordinate_*`, `map_*` | always: coordinate systems are exact by contract | the arithmetic's rounding, widened by a bound on it |
 | `opening_area`, `opening_count`, `opening_section_area`, `middle_face_area`, `opening_placements` | the body facts read are exact (they are, unless a source cites an estimate) | a sum of areas widened by its rounding; a single area's own arithmetic is not widened, which the capability's rounding allowance covers |
@@ -1281,7 +1282,7 @@ storey without a length elevation, is open.
 
 ### Stacks, shelving, extents and meshes
 
-`stack_distance;measure=…;slabs=<kinds>;ratio=<share>` pairs the slabs of
+`stack_distance;measure=…;slabs=<objects>;ratio=<share>` pairs the slabs of
 the kinds as `slab-stack-spacing` does (stacked when their footprints
 overlap by at least `ratio` of the smaller, ordered by their tops) and
 measures the rise from top to top, bottom to bottom, or the clear gap from

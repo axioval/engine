@@ -36796,7 +36796,968 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "slab-stack-spacing",
+        "refusals": "servicesPerObject",
+        "defaults": [
+          {
+            "parameter": "tolerance",
+            "value": {
+              "type": "quantity",
+              "value": 0.001,
+              "unit": "m"
+            }
+          }
+        ],
+        "declaration": [
+          {
+            "kind": "kind",
+            "parameter": "minimum_overlap_ratio"
+          },
+          {
+            "kind": "finite",
+            "parameters": [
+              "minimum_overlap_ratio"
+            ],
+            "above": 0.0,
+            "message": "minimum_overlap_ratio must lie in (0, 1]"
+          },
+          {
+            "kind": "atMost",
+            "parameters": [
+              "minimum_overlap_ratio"
+            ],
+            "value": 1.0,
+            "message": "minimum_overlap_ratio must lie in (0, 1]"
+          },
+          {
+            "kind": "nonNegativeLength",
+            "parameter": "top_to_top_minimum",
+            "message": "top_to_top_minimum must be a non-negative length"
+          },
+          {
+            "kind": "nonNegativeLength",
+            "parameter": "top_to_top_maximum",
+            "message": "top_to_top_maximum must be a non-negative length"
+          },
+          {
+            "kind": "ordered",
+            "low": "top_to_top_minimum",
+            "high": "top_to_top_maximum",
+            "message": "top_to_top_minimum exceeds top_to_top_maximum"
+          },
+          {
+            "kind": "nonNegativeLength",
+            "parameter": "bottom_to_bottom_minimum",
+            "message": "bottom_to_bottom_minimum must be a non-negative length"
+          },
+          {
+            "kind": "nonNegativeLength",
+            "parameter": "bottom_to_bottom_maximum",
+            "message": "bottom_to_bottom_maximum must be a non-negative length"
+          },
+          {
+            "kind": "ordered",
+            "low": "bottom_to_bottom_minimum",
+            "high": "bottom_to_bottom_maximum",
+            "message": "bottom_to_bottom_minimum exceeds bottom_to_bottom_maximum"
+          },
+          {
+            "kind": "nonNegativeLength",
+            "parameter": "top_to_bottom_minimum",
+            "message": "top_to_bottom_minimum must be a non-negative length"
+          },
+          {
+            "kind": "nonNegativeLength",
+            "parameter": "top_to_bottom_maximum",
+            "message": "top_to_bottom_maximum must be a non-negative length"
+          },
+          {
+            "kind": "ordered",
+            "low": "top_to_bottom_minimum",
+            "high": "top_to_bottom_maximum",
+            "message": "top_to_bottom_minimum exceeds top_to_bottom_maximum"
+          },
+          {
+            "kind": "amongEach",
+            "parameter": "consistent",
+            "options": [
+              "top_to_top",
+              "bottom_to_bottom",
+              "top_to_bottom"
+            ],
+            "message": "consistent names `{value}`; expected top_to_top, bottom_to_bottom or top_to_bottom"
+          },
+          {
+            "kind": "declaresListed",
+            "parameters": [
+              "top_to_top_minimum",
+              "top_to_top_maximum",
+              "bottom_to_bottom_minimum",
+              "bottom_to_bottom_maximum",
+              "top_to_bottom_minimum",
+              "top_to_bottom_maximum",
+              "consistent"
+            ],
+            "message": "declare a minimum, a maximum or a consistent measure"
+          },
+          {
+            "kind": "nonNegativeLength",
+            "parameter": "tolerance",
+            "message": "tolerance must be a non-negative length"
+          }
+        ],
+        "services": {
+          "needs": [
+            "vertical-extent",
+            "plan-area"
+          ],
+          "message": "slab-stack-spacing needs the vertical-extent and plan-area services"
+        },
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "next",
+                "expression": {
+                  "kind": "property",
+                  "propertySet": "axioval:measured",
+                  "property": "stack_distance;measure=top_to_top;slabs=@selection;ratio=@minimum_overlap_ratio"
+                },
+                "expect": "optional"
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "next",
+              "rounding": []
+            },
+            "fail": "",
+            "undecided": "",
+            "checks": [
+              {
+                "values": [
+                  {
+                    "name": "distance",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "stack_distance;measure=top_to_top;slabs=@selection;ratio=@minimum_overlap_ratio"
+                    }
+                  }
+                ],
+                "decision": {
+                  "kind": "within",
+                  "value": "distance",
+                  "minimum": [
+                    {
+                      "sign": "plus",
+                      "operand": {
+                        "kind": "parameter",
+                        "name": "top_to_top_minimum"
+                      }
+                    }
+                  ],
+                  "maximum": [
+                    {
+                      "sign": "plus",
+                      "operand": {
+                        "kind": "parameter",
+                        "name": "top_to_top_maximum"
+                      }
+                    }
+                  ],
+                  "rounding": []
+                },
+                "fail": "top-to-top distance to {distance:cited} is {distance:length}; required {bound}",
+                "undecided": "top-to-top distance to {distance:cited} is {distance:length}, which straddles the bound {bound}",
+                "related": "distance",
+                "applies": {
+                  "any": [
+                    "top_to_top_minimum",
+                    "top_to_top_maximum"
+                  ]
+                }
+              },
+              {
+                "values": [
+                  {
+                    "name": "distance",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "stack_distance;measure=top_to_top;slabs=@selection;ratio=@minimum_overlap_ratio"
+                    }
+                  },
+                  {
+                    "name": "prevailing",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "stack_prevailing;measure=top_to_top;slabs=@selection;ratio=@minimum_overlap_ratio;tolerance=@tolerance"
+                    },
+                    "expect": "optional"
+                  }
+                ],
+                "decision": {
+                  "kind": "near",
+                  "value": "distance",
+                  "reference": {
+                    "kind": "value",
+                    "value": "prevailing"
+                  },
+                  "tolerance": {
+                    "kind": "parameter",
+                    "name": "tolerance"
+                  }
+                },
+                "fail": "top-to-top distance to {distance:cited} is {distance:length}, which differs from the prevailing {prevailing:length} in this stack",
+                "undecided": "top-to-top distance to {distance:cited} is {distance:length}; whether it equals the prevailing {prevailing:length} within {tolerance:length} cannot be decided",
+                "related": "distance",
+                "applies": {
+                  "condition": {
+                    "kind": "lists",
+                    "parameter": "consistent",
+                    "value": "top_to_top"
+                  }
+                }
+              },
+              {
+                "values": [
+                  {
+                    "name": "distance",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "stack_distance;measure=bottom_to_bottom;slabs=@selection;ratio=@minimum_overlap_ratio"
+                    }
+                  }
+                ],
+                "decision": {
+                  "kind": "within",
+                  "value": "distance",
+                  "minimum": [
+                    {
+                      "sign": "plus",
+                      "operand": {
+                        "kind": "parameter",
+                        "name": "bottom_to_bottom_minimum"
+                      }
+                    }
+                  ],
+                  "maximum": [
+                    {
+                      "sign": "plus",
+                      "operand": {
+                        "kind": "parameter",
+                        "name": "bottom_to_bottom_maximum"
+                      }
+                    }
+                  ],
+                  "rounding": []
+                },
+                "fail": "bottom-to-bottom distance to {distance:cited} is {distance:length}; required {bound}",
+                "undecided": "bottom-to-bottom distance to {distance:cited} is {distance:length}, which straddles the bound {bound}",
+                "related": "distance",
+                "applies": {
+                  "any": [
+                    "bottom_to_bottom_minimum",
+                    "bottom_to_bottom_maximum"
+                  ]
+                }
+              },
+              {
+                "values": [
+                  {
+                    "name": "distance",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "stack_distance;measure=bottom_to_bottom;slabs=@selection;ratio=@minimum_overlap_ratio"
+                    }
+                  },
+                  {
+                    "name": "prevailing",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "stack_prevailing;measure=bottom_to_bottom;slabs=@selection;ratio=@minimum_overlap_ratio;tolerance=@tolerance"
+                    },
+                    "expect": "optional"
+                  }
+                ],
+                "decision": {
+                  "kind": "near",
+                  "value": "distance",
+                  "reference": {
+                    "kind": "value",
+                    "value": "prevailing"
+                  },
+                  "tolerance": {
+                    "kind": "parameter",
+                    "name": "tolerance"
+                  }
+                },
+                "fail": "bottom-to-bottom distance to {distance:cited} is {distance:length}, which differs from the prevailing {prevailing:length} in this stack",
+                "undecided": "bottom-to-bottom distance to {distance:cited} is {distance:length}; whether it equals the prevailing {prevailing:length} within {tolerance:length} cannot be decided",
+                "related": "distance",
+                "applies": {
+                  "condition": {
+                    "kind": "lists",
+                    "parameter": "consistent",
+                    "value": "bottom_to_bottom"
+                  }
+                }
+              },
+              {
+                "values": [
+                  {
+                    "name": "distance",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "stack_distance;measure=top_to_bottom;slabs=@selection;ratio=@minimum_overlap_ratio"
+                    }
+                  }
+                ],
+                "decision": {
+                  "kind": "within",
+                  "value": "distance",
+                  "minimum": [
+                    {
+                      "sign": "plus",
+                      "operand": {
+                        "kind": "parameter",
+                        "name": "top_to_bottom_minimum"
+                      }
+                    }
+                  ],
+                  "maximum": [
+                    {
+                      "sign": "plus",
+                      "operand": {
+                        "kind": "parameter",
+                        "name": "top_to_bottom_maximum"
+                      }
+                    }
+                  ],
+                  "rounding": []
+                },
+                "fail": "clear distance from top to underside to {distance:cited} is {distance:length}; required {bound}",
+                "undecided": "clear distance from top to underside to {distance:cited} is {distance:length}, which straddles the bound {bound}",
+                "related": "distance",
+                "applies": {
+                  "any": [
+                    "top_to_bottom_minimum",
+                    "top_to_bottom_maximum"
+                  ]
+                }
+              },
+              {
+                "values": [
+                  {
+                    "name": "distance",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "stack_distance;measure=top_to_bottom;slabs=@selection;ratio=@minimum_overlap_ratio"
+                    }
+                  },
+                  {
+                    "name": "prevailing",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "stack_prevailing;measure=top_to_bottom;slabs=@selection;ratio=@minimum_overlap_ratio;tolerance=@tolerance"
+                    },
+                    "expect": "optional"
+                  }
+                ],
+                "decision": {
+                  "kind": "near",
+                  "value": "distance",
+                  "reference": {
+                    "kind": "value",
+                    "value": "prevailing"
+                  },
+                  "tolerance": {
+                    "kind": "parameter",
+                    "name": "tolerance"
+                  }
+                },
+                "fail": "clear distance from top to underside to {distance:cited} is {distance:length}, which differs from the prevailing {prevailing:length} in this stack",
+                "undecided": "clear distance from top to underside to {distance:cited} is {distance:length}; whether it equals the prevailing {prevailing:length} within {tolerance:length} cannot be decided",
+                "related": "distance",
+                "applies": {
+                  "condition": {
+                    "kind": "lists",
+                    "parameter": "consistent",
+                    "value": "top_to_bottom"
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "and",
+                  "operands": [
+                    {
+                      "kind": "compare",
+                      "operator": "greaterThanOrEquals",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "stack_distance;measure=top_to_top;slabs=@selection;ratio=@minimum_overlap_ratio"
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "top_to_top_minimum"
+                      },
+                      "label": "at least the lower bound"
+                    },
+                    {
+                      "kind": "compare",
+                      "operator": "lessThanOrEquals",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "stack_distance;measure=top_to_top;slabs=@selection;ratio=@minimum_overlap_ratio"
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "top_to_top_maximum"
+                      },
+                      "label": "at most the upper bound"
+                    }
+                  ]
+                },
+                {
+                  "kind": "compare",
+                  "operator": "lessThanOrEquals",
+                  "left": {
+                    "kind": "abs",
+                    "operand": {
+                      "kind": "subtract",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "stack_distance;measure=top_to_top;slabs=@selection;ratio=@minimum_overlap_ratio"
+                      },
+                      "right": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "stack_prevailing;measure=top_to_top;slabs=@selection;ratio=@minimum_overlap_ratio;tolerance=@tolerance"
+                      }
+                    }
+                  },
+                  "right": {
+                    "kind": "parameter",
+                    "name": "tolerance"
+                  },
+                  "label": "within the tolerance"
+                },
+                {
+                  "kind": "and",
+                  "operands": [
+                    {
+                      "kind": "compare",
+                      "operator": "greaterThanOrEquals",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "stack_distance;measure=bottom_to_bottom;slabs=@selection;ratio=@minimum_overlap_ratio"
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "bottom_to_bottom_minimum"
+                      },
+                      "label": "at least the lower bound"
+                    },
+                    {
+                      "kind": "compare",
+                      "operator": "lessThanOrEquals",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "stack_distance;measure=bottom_to_bottom;slabs=@selection;ratio=@minimum_overlap_ratio"
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "bottom_to_bottom_maximum"
+                      },
+                      "label": "at most the upper bound"
+                    }
+                  ]
+                },
+                {
+                  "kind": "compare",
+                  "operator": "lessThanOrEquals",
+                  "left": {
+                    "kind": "abs",
+                    "operand": {
+                      "kind": "subtract",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "stack_distance;measure=bottom_to_bottom;slabs=@selection;ratio=@minimum_overlap_ratio"
+                      },
+                      "right": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "stack_prevailing;measure=bottom_to_bottom;slabs=@selection;ratio=@minimum_overlap_ratio;tolerance=@tolerance"
+                      }
+                    }
+                  },
+                  "right": {
+                    "kind": "parameter",
+                    "name": "tolerance"
+                  },
+                  "label": "within the tolerance"
+                },
+                {
+                  "kind": "and",
+                  "operands": [
+                    {
+                      "kind": "compare",
+                      "operator": "greaterThanOrEquals",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "stack_distance;measure=top_to_bottom;slabs=@selection;ratio=@minimum_overlap_ratio"
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "top_to_bottom_minimum"
+                      },
+                      "label": "at least the lower bound"
+                    },
+                    {
+                      "kind": "compare",
+                      "operator": "lessThanOrEquals",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "stack_distance;measure=top_to_bottom;slabs=@selection;ratio=@minimum_overlap_ratio"
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "top_to_bottom_maximum"
+                      },
+                      "label": "at most the upper bound"
+                    }
+                  ]
+                },
+                {
+                  "kind": "compare",
+                  "operator": "lessThanOrEquals",
+                  "left": {
+                    "kind": "abs",
+                    "operand": {
+                      "kind": "subtract",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "stack_distance;measure=top_to_bottom;slabs=@selection;ratio=@minimum_overlap_ratio"
+                      },
+                      "right": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "stack_prevailing;measure=top_to_bottom;slabs=@selection;ratio=@minimum_overlap_ratio;tolerance=@tolerance"
+                      }
+                    }
+                  },
+                  "right": {
+                    "kind": "parameter",
+                    "name": "tolerance"
+                  },
+                  "label": "within the tolerance"
+                },
+                {
+                  "kind": "literal",
+                  "value": {
+                    "type": "boolean",
+                    "value": true
+                  },
+                  "label": "read"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.and",
+                      "inputs": {
+                        "operands": {
+                          "blocks": [
+                            {
+                              "type": "expression.compare",
+                              "label": "at least the lower bound",
+                              "fields": {
+                                "operator": "greaterThanOrEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "measured.stack_distance",
+                                    "fields": {
+                                      "measure": "top_to_top",
+                                      "ratio": "@minimum_overlap_ratio",
+                                      "slabs": "@selection"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "top_to_top_minimum"
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "type": "expression.compare",
+                              "label": "at most the upper bound",
+                              "fields": {
+                                "operator": "lessThanOrEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "measured.stack_distance",
+                                    "fields": {
+                                      "measure": "top_to_top",
+                                      "ratio": "@minimum_overlap_ratio",
+                                      "slabs": "@selection"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "top_to_top_maximum"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.compare",
+                      "label": "within the tolerance",
+                      "fields": {
+                        "operator": "lessThanOrEquals"
+                      },
+                      "inputs": {
+                        "left": {
+                          "block": {
+                            "type": "expression.abs",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.subtract",
+                                  "inputs": {
+                                    "left": {
+                                      "block": {
+                                        "type": "measured.stack_distance",
+                                        "fields": {
+                                          "measure": "top_to_top",
+                                          "ratio": "@minimum_overlap_ratio",
+                                          "slabs": "@selection"
+                                        }
+                                      }
+                                    },
+                                    "right": {
+                                      "block": {
+                                        "type": "measured.stack_prevailing",
+                                        "fields": {
+                                          "measure": "top_to_top",
+                                          "ratio": "@minimum_overlap_ratio",
+                                          "slabs": "@selection",
+                                          "tolerance": "@tolerance"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "right": {
+                          "block": {
+                            "type": "expression.parameter",
+                            "fields": {
+                              "name": "tolerance"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.and",
+                      "inputs": {
+                        "operands": {
+                          "blocks": [
+                            {
+                              "type": "expression.compare",
+                              "label": "at least the lower bound",
+                              "fields": {
+                                "operator": "greaterThanOrEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "measured.stack_distance",
+                                    "fields": {
+                                      "measure": "bottom_to_bottom",
+                                      "ratio": "@minimum_overlap_ratio",
+                                      "slabs": "@selection"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "bottom_to_bottom_minimum"
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "type": "expression.compare",
+                              "label": "at most the upper bound",
+                              "fields": {
+                                "operator": "lessThanOrEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "measured.stack_distance",
+                                    "fields": {
+                                      "measure": "bottom_to_bottom",
+                                      "ratio": "@minimum_overlap_ratio",
+                                      "slabs": "@selection"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "bottom_to_bottom_maximum"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.compare",
+                      "label": "within the tolerance",
+                      "fields": {
+                        "operator": "lessThanOrEquals"
+                      },
+                      "inputs": {
+                        "left": {
+                          "block": {
+                            "type": "expression.abs",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.subtract",
+                                  "inputs": {
+                                    "left": {
+                                      "block": {
+                                        "type": "measured.stack_distance",
+                                        "fields": {
+                                          "measure": "bottom_to_bottom",
+                                          "ratio": "@minimum_overlap_ratio",
+                                          "slabs": "@selection"
+                                        }
+                                      }
+                                    },
+                                    "right": {
+                                      "block": {
+                                        "type": "measured.stack_prevailing",
+                                        "fields": {
+                                          "measure": "bottom_to_bottom",
+                                          "ratio": "@minimum_overlap_ratio",
+                                          "slabs": "@selection",
+                                          "tolerance": "@tolerance"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "right": {
+                          "block": {
+                            "type": "expression.parameter",
+                            "fields": {
+                              "name": "tolerance"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.and",
+                      "inputs": {
+                        "operands": {
+                          "blocks": [
+                            {
+                              "type": "expression.compare",
+                              "label": "at least the lower bound",
+                              "fields": {
+                                "operator": "greaterThanOrEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "measured.stack_distance",
+                                    "fields": {
+                                      "measure": "top_to_bottom",
+                                      "ratio": "@minimum_overlap_ratio",
+                                      "slabs": "@selection"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "top_to_bottom_minimum"
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "type": "expression.compare",
+                              "label": "at most the upper bound",
+                              "fields": {
+                                "operator": "lessThanOrEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "measured.stack_distance",
+                                    "fields": {
+                                      "measure": "top_to_bottom",
+                                      "ratio": "@minimum_overlap_ratio",
+                                      "slabs": "@selection"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "top_to_bottom_maximum"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.compare",
+                      "label": "within the tolerance",
+                      "fields": {
+                        "operator": "lessThanOrEquals"
+                      },
+                      "inputs": {
+                        "left": {
+                          "block": {
+                            "type": "expression.abs",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.subtract",
+                                  "inputs": {
+                                    "left": {
+                                      "block": {
+                                        "type": "measured.stack_distance",
+                                        "fields": {
+                                          "measure": "top_to_bottom",
+                                          "ratio": "@minimum_overlap_ratio",
+                                          "slabs": "@selection"
+                                        }
+                                      }
+                                    },
+                                    "right": {
+                                      "block": {
+                                        "type": "measured.stack_prevailing",
+                                        "fields": {
+                                          "measure": "top_to_bottom",
+                                          "ratio": "@minimum_overlap_ratio",
+                                          "slabs": "@selection",
+                                          "tolerance": "@tolerance"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "right": {
+                          "block": {
+                            "type": "expression.parameter",
+                            "fields": {
+                              "name": "tolerance"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.literal",
+                      "label": "read",
+                      "fields": {
+                        "value": {
+                          "type": "boolean",
+                          "value": true
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.space-boundary-coverage",
@@ -57883,20 +58844,20 @@
         {
           "key": "slabs",
           "kind": {
-            "type": "sourceKind"
+            "type": "objects"
           },
           "required": true,
           "help": [
             {
               "language": "en",
-              "text": "The source kinds of the slabs stacked, `,`-separated."
+              "text": "The slabs stacked: their source kinds, `,`-separated, or `@` a selector parameter of the rule (`@selection`, in a template, the rule's own selection), whose undecided objects may stack but are never measured from."
             },
             {
               "language": "de",
-              "text": "Die Quellarten der gestapelten Platten, durch `,` getrennt."
+              "text": "Die gestapelten Platten: ihre Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel (`@selection`, in einer Vorlage, die eigene Auswahl der Regel), deren unentschiedene Objekte gestapelt sein können, von denen aber nie gemessen wird."
             }
           ],
-          "references": "string"
+          "references": "selector"
         },
         {
           "key": "ratio",
@@ -57948,6 +58909,125 @@
         {
           "language": "de",
           "text": "Der Abstand von der Platte zur nächsthöheren Platte ihres Stapels, wie `slab-stack-spacing` sie paart und misst; keiner, wo keine Platte darüber liegt."
+        }
+      ],
+      "unit": "m",
+      "available": true
+    },
+    {
+      "name": "stack_prevailing",
+      "parameters": [
+        {
+          "key": "measure",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "top_to_top",
+              "bottom_to_bottom",
+              "top_to_bottom"
+            ]
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The distance the stack's consecutive slabs are compared by, as `stack_distance` measures it."
+            },
+            {
+              "language": "de",
+              "text": "Der Abstand, nach dem die aufeinanderfolgenden Platten des Stapels verglichen werden, wie `stack_distance` ihn misst."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "slabs",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The slabs stacked, as `stack_distance` reads them."
+            },
+            {
+              "language": "de",
+              "text": "Die gestapelten Platten, wie `stack_distance` sie liest."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "ratio",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The least share of the smaller footprint two slabs overlap by to stack."
+            },
+            {
+              "language": "de",
+              "text": "Der kleinste Anteil des kleineren Grundrisses, um den sich zwei Platten überlappen, um übereinander zu liegen."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "tolerance",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "default": "0.001",
+          "help": [
+            {
+              "language": "en",
+              "text": "How far distances may differ and still count as the same, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit Abstände voneinander abweichen dürfen und noch als gleich gelten, in Metern."
+            }
+          ],
+          "references": "length"
+        }
+      ],
+      "dimension": "length",
+      "services": [
+        "vertical-extent",
+        "plan-area",
+        "type-hierarchy"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "whether two slabs stack, or which is the next one up, cannot be decided",
+        "a slab of the kinds has no measurable extent"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Prevailing stack distance"
+        },
+        {
+          "language": "de",
+          "text": "Vorherrschender Stapelabstand"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The distance most consecutive slabs of the slab's stack share within the tolerance (the lowest of equally common ones), as `slab-stack-spacing` compares them; none where the slab has none above, its stack fewer than two pairs, or no distance prevails."
+        },
+        {
+          "language": "de",
+          "text": "Der Abstand, den die meisten aufeinanderfolgenden Platten des Stapels der Platte innerhalb der Toleranz teilen (der niedrigste unter gleich häufigen), wie `slab-stack-spacing` sie vergleicht; keiner, wo über der Platte keine liegt, ihr Stapel weniger als zwei Paare hat oder kein Abstand vorherrscht."
         }
       ],
       "unit": "m",

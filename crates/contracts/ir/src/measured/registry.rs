@@ -4170,12 +4170,18 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
                      nächsten.",
                 ),
             },
-            objects(
+            selected(
                 "slabs",
                 true,
                 &en_de(
-                    "The source kinds of the slabs stacked, `,`-separated.",
-                    "Die Quellarten der gestapelten Platten, durch `,` getrennt.",
+                    "The slabs stacked: their source kinds, `,`-separated, or `@` a selector \
+                     parameter of the rule (`@selection`, in a template, the rule's own \
+                     selection), whose undecided objects may stack but are never measured \
+                     from.",
+                    "Die gestapelten Platten: ihre Quellarten, durch `,` getrennt, oder mit \
+                     `@` ein Selektorparameter der Regel (`@selection`, in einer Vorlage, die \
+                     eigene Auswahl der Regel), deren unentschiedene Objekte gestapelt sein \
+                     können, von denen aber nie gemessen wird.",
                 ),
             ),
             MeasuredParameter {
@@ -4205,6 +4211,74 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              `slab-stack-spacing` pairs and measures them; none where no slab stacks above.",
             "Der Abstand von der Platte zur nächsthöheren Platte ihres Stapels, wie \
              `slab-stack-spacing` sie paart und misst; keiner, wo keine Platte darüber liegt.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "stack_prevailing",
+        parameters: &[
+            MeasuredParameter {
+                key: "measure",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["top_to_top", "bottom_to_bottom", "top_to_bottom"],
+                },
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The distance the stack's consecutive slabs are compared by, as \
+                     `stack_distance` measures it.",
+                    "Der Abstand, nach dem die aufeinanderfolgenden Platten des Stapels \
+                     verglichen werden, wie `stack_distance` ihn misst.",
+                ),
+            },
+            selected(
+                "slabs",
+                true,
+                &en_de(
+                    "The slabs stacked, as `stack_distance` reads them.",
+                    "Die gestapelten Platten, wie `stack_distance` sie liest.",
+                ),
+            ),
+            MeasuredParameter {
+                key: "ratio",
+                kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The least share of the smaller footprint two slabs overlap by to stack.",
+                    "Der kleinste Anteil des kleineren Grundrisses, um den sich zwei Platten \
+                     überlappen, um übereinander zu liegen.",
+                ),
+            },
+            MeasuredParameter {
+                key: "tolerance",
+                kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                required: false,
+                default: Some("0.001"),
+                help: &en_de(
+                    "How far distances may differ and still count as the same, in metres.",
+                    "Wie weit Abstände voneinander abweichen dürfen und noch als gleich \
+                     gelten, in Metern.",
+                ),
+            },
+        ],
+        dimension: Some(QuantityDimension::Length),
+        services: &["vertical-extent", "plan-area", "type-hierarchy"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[
+            NO_GEOMETRY,
+            "whether two slabs stack, or which is the next one up, cannot be decided",
+            "a slab of the kinds has no measurable extent",
+        ],
+        label: &en_de("Prevailing stack distance", "Vorherrschender Stapelabstand"),
+        help: &en_de(
+            "The distance most consecutive slabs of the slab's stack share within the \
+             tolerance (the lowest of equally common ones), as `slab-stack-spacing` compares \
+             them; none where the slab has none above, its stack fewer than two pairs, or no \
+             distance prevails.",
+            "Der Abstand, den die meisten aufeinanderfolgenden Platten des Stapels der \
+             Platte innerhalb der Toleranz teilen (der niedrigste unter gleich häufigen), wie \
+             `slab-stack-spacing` sie vergleicht; keiner, wo über der Platte keine liegt, ihr \
+             Stapel weniger als zwei Paare hat oder kein Abstand vorherrscht.",
         ),
     },
     MeasuredDescriptor {

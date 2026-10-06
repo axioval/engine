@@ -87,6 +87,26 @@ const PAIRS: &[Pair] = &[
         case: "storeys",
         reference: |registry| registry.replace(axioval::rules::reference::PlanAreaRange),
     },
+    Pair {
+        capability: "axioval:capability.level-spacing",
+        case: "storeys",
+        reference: |registry| registry.replace(axioval::rules::reference::LevelSpacing),
+    },
+    Pair {
+        capability: "axioval:capability.object-count",
+        case: "counts",
+        reference: |registry| registry.replace(axioval::rules::reference::ObjectCount),
+    },
+    Pair {
+        capability: "axioval:capability.related-count",
+        case: "counts",
+        reference: |registry| registry.replace(axioval::rules::reference::RelatedCount),
+    },
+    Pair {
+        capability: "axioval:capability.unique-value",
+        case: "counts",
+        reference: |registry| registry.replace(axioval::rules::reference::UniqueValue),
+    },
 ];
 
 /// Warm-up runs per side before measuring.

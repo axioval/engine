@@ -168,6 +168,32 @@ the reference's.
 | wall with opening and window | 9 | 1.11× / 1.05× | 0.99× / 1.01× | 1.04× / 1.01× | 1.05× / 0.86× |
 | tessellated column | 3 | 0.99× / 1.00× | 0.91× / 1.00× | 1.08× / 1.01× | 1.05× / 1.00× |
 
+The templates of #290, measured by the same gate:
+
+| input | objects | level-spacing | object-count | related-count | unique-value |
+| --- | ---: | --- | --- | --- | --- |
+| generated fixture, 400 walls | 421 | 0.83× / 1.00× | 1.20× / 1.24× | 0.99× / 1.00× | 1.14× / 1.12× |
+| building architecture (IFC4) | 38 | 1.11× / 1.13× | 1.09× / 1.04× | 1.15× / 1.12× | 1.04× / 1.00× |
+| building structural (IFC4) | 33 | 1.08× / 1.12× | 1.12× / 1.04× | 1.15× / 1.05× | 1.04× / 1.00× |
+| building HVAC (IFC4) | 18 | 1.10× / 1.12× | 1.15× / 1.04× | 1.18× / 1.11× | 1.00× / 1.00× |
+| infra road (IFC4) | 116 | 0.68× / 1.11× | 1.04× / 1.01× | 1.02× / 1.00× | 1.00× / 1.00× |
+| building architecture (IFC2x3) | 36 | 1.14× / 1.13× | 1.10× / 1.04× | 1.15× / 1.12× | 1.05× / 1.02× |
+| building structural (IFC2x3) | 30 | 1.10× / 1.13× | 1.11× / 1.05× | 1.16× / 1.05× | 1.04× / 1.00× |
+| building architecture (IFC4x3) | 37 | 1.19× / 1.12× | 1.11× / 1.04× | 1.14× / 1.12× | 1.04× / 1.02× |
+| building structural (IFC4x3) | 33 | 1.20× / 1.11× | 1.11× / 1.04× | 1.15× / 1.05× | 1.05× / 1.00× |
+| wall with opening and window | 9 | 1.08× / 1.10× | 1.23× / 1.08× | 1.19× / 1.05× | 1.06× / 1.02× |
+| tessellated column | 3 | 0.85× / 1.00× | 1.34× / 1.02× | 1.01× / 1.00× | 1.01× / 1.00× |
+
+They run the `storeys` case's `level-spacing` rules (three) and the
+`counts` case's `object-count`, `related-count` and `unique-value` rules
+(three, three and five). The tessellated column's `object-count` (1.34×)
+runs under the floor and is judged with the other small inputs, which hold
+together. `level-spacing` reads its members' populations only once an
+anchor is selected and shares one per selector between its nested parts,
+and its nested members' plain measured values are measured in batches like
+any form's; before that it ran 1.92× on the fixture, which holds no
+building, selecting storeys and spaces for nothing.
+
 `body-extent` and `plan-area` run the `elements` and `storeys` cases' rules
 of their capability (four and six), `property-predicate` and
 `triangle-count` the `elements` case's (two and one). `plan-area` runs

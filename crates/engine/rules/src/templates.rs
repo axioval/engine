@@ -707,6 +707,14 @@ fn check(check: &Check, rule: &CompiledRule, template: &Template) -> Result<(), 
             }
             Some(_) => Err(invalid(*angle)),
         },
+        Check::FiniteLength { parameter } => match Parameters(rule).quantity(parameter)? {
+            None => Ok(()),
+            Some((value, QuantityDimension::Length)) if value.is_finite() && value >= 0.0 => Ok(()),
+            Some((_, QuantityDimension::Length)) => Err(invalid(format!(
+                "`{parameter}` must be a finite length, not negative"
+            ))),
+            Some(_) => Err(invalid(format!("`{parameter}` is not a length"))),
+        },
         Check::When { flags, check: then } => {
             let mut on = false;
             for flag in *flags {

@@ -466,6 +466,56 @@ mod checked {
             "window-share: a strict rule is never loose"
         );
     }
+
+    /// A finite length of at least zero: a negative or infinite length and
+    /// a quantity of another dimension are refused, each in its words.
+    #[test]
+    fn a_length_is_finite_and_not_negative() {
+        let mut template = template();
+        template.parameters.push(ParameterDescriptor::optional(
+            "reach",
+            ParameterType::Quantity,
+        ));
+        template.declaration = vec![Check::FiniteLength { parameter: "reach" }];
+        let templated = Templated::new(template);
+        let refused = |reach: ParameterValue| {
+            let evaluation = rooms().evaluate(
+                &templated,
+                &rule(
+                    ID,
+                    kind("room"),
+                    parameters(vec![("maximum", number(5.0)), ("reach", reach)]),
+                ),
+            );
+            evaluation
+                .not_evaluated_outcomes()
+                .iter()
+                .map(|outcome| outcome.message().to_owned())
+                .collect::<Vec<_>>()
+        };
+        let quantity = |value: f64, unit: &str| ParameterValue::Quantity {
+            value,
+            unit: unit.into(),
+        };
+        assert_eq!(
+            refused(quantity(-1.0, "m")),
+            ["window-share: `reach` must be a finite length, not negative"]
+        );
+        // An infinite quantity is refused by the reader, as it words it.
+        assert_eq!(
+            refused(quantity(f64::INFINITY, "m")),
+            ["window-share: parameter `reach`: quantity is not finite"]
+        );
+        assert_eq!(
+            refused(quantity(2.0, "m2")),
+            ["window-share: `reach` is not a length"]
+        );
+        assert!(
+            refused(quantity(250.0, "mm"))
+                .iter()
+                .all(|message| !message.contains("reach"))
+        );
+    }
 }
 
 /// Values that leave an object unjudged, graded severities chosen by

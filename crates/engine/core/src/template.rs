@@ -426,6 +426,11 @@ pub enum Check {
         range: &'static str,
         angle: &'static str,
     },
+    /// A quantity parameter, where stated, is a finite length of at least
+    /// zero: otherwise `` `<parameter>` must be a finite length, not
+    /// negative ``, or `` `<parameter>` is not a length `` for a quantity of
+    /// another dimension (a wrong type refused as the reader words it).
+    FiniteLength { parameter: &'static str },
 }
 
 /// What [`Check::Rows`] requires of one column of every row.

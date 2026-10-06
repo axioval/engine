@@ -67,7 +67,7 @@ rules crate (`body_extent/template.rs`):
 | `defaults` | Values optional parameters take when unstated (`tolerance` 0 m). A default taking its value `from` other parameters takes the first of them the rule states, its literal where none is: one value a rule may state under either of two names (`horizontal` from `tolerance` or `horizontal_tolerance`), or the least severe of the thresholds stated. Such a name may be no parameter of the descriptor; messages, conditions and measured values (`@horizontal`) read it as any parameter. |
 | `declaration` | `Check`s over the rule's parameters, in order: `excludes` (where a mode is stated, no string parameter of a list states an option it does not combine with), `arguments` (where a mode is stated, the rule parameters a measured value names, checked as stated by the value's own argument check: a declaration, such as a table of rows, only the measurement knows how to read), `choice` (a string among options), `length` (a non-negative length), `count` (an integer of at least zero, stated where the descriptor requires it), `kind` (a parameter of its descriptor's kind, placed where the capability read it so refusals keep their order), `nonNegative` (numbers of at least zero), `traversal` (a valid `relationship` or `path`, declared only with one of the named parameters, or anywhere where it names none), `exclusive`, `anyOf`, `requires`, `ordered` (numbers, integers or quantities, as the descriptor types them), `disciplines` (a non-empty list of valid disciplines), `path` (a valid relationship path), `tolerance` (the rule's tolerance parameters valid together), `required` (a parameter stated, of its kind), `finite` (each parameter stated as a finite `number`, above or at least a bound where given), `increasing` (both numbers, the first below the second), `atMost` (each number stated at most a value: a share no greater than the whole), `when` (a check that applies only where one of some boolean parameters is stated true: a declaration a mode needs only while it is on), `amongEach` (every string a list states, trimmed, among options, `{value}` the one that is not), `declaresListed` (`declares`, a string list only where it lists one), `holds` (a `Condition` holds over the parameters, their defaults applied: a declaration stated as conditions, such as two switches not both off, or a share in `[0, 1)`), `exceeds` (where stated, a number above each earlier one stated: thresholds strictly increasing), `quantity` (where stated, a quantity of one dimension, of any sign) and `angleBelow` (where stated, a plane angle of at least zero and below a number of degrees, compared in degrees as the capability converted it). The first failing check leaves the rule not evaluated as an invalid declaration, worded as the capability worded it. |
 | `services` | The host services the values need (`Service`: `object-frame`, `vertical-extent`, `triangle-count`, `walking-surface`, `contact`, `plan-area`), and the message leaving the whole rule open without them, before anything is selected. |
-| `texts` | Named message parts, optionally conditional: `Condition::Positive` (a parameter above zero), `Condition::Inexact` (a value read from evidence that is not exact, such as a count of a tessellation), `Condition::Equals` (a string parameter or its default is a value), `Condition::Zero` (a value's lower end is zero: nothing surely counted), `Condition::All` (every one of several), `Condition::Not`, `Condition::Cites` (a value's measured reads cite an object: a search found a candidate), `Condition::Absent` (a value is `null`: a measurement found nothing near), `Condition::Below` and `Condition::Above` (a value surely below or above a number: its upper or lower end is), `Condition::Lists` (a string-list parameter lists a word), `Condition::AtLeast` and `Condition::Under` (a parameter, or its default, a number at least or below a number: a tolerance not negative), `Condition::Exceeds` (a value's lower or upper end above the number a parameter states, never where it states none: a share surely or possibly above a threshold). Several texts may share a name, each under its own condition: the first that holds is rendered (`plan area` or `facade area` by `measure`). |
+| `texts` | Named message parts, optionally conditional: `Condition::Positive` (a parameter above zero), `Condition::Inexact` (a value read from evidence that is not exact, such as a count of a tessellation), `Condition::Equals` (a string parameter or its default is a value), `Condition::Zero` (a value's lower end is zero: nothing surely counted), `Condition::All` (every one of several), `Condition::Not`, `Condition::Cites` (a value's measured reads cite an object: a search found a candidate), `Condition::Absent` (a value is `null`: a measurement found nothing near), `Condition::Below` and `Condition::Above` (a value surely below or above a number: its upper or lower end is), `Condition::Lists` (a string-list parameter lists a word), `Condition::AtLeast` and `Condition::Under` (a parameter, or its default, a number at least or below a number: a tolerance not negative), `Condition::Exceeds` (a value's lower or upper end above the number a parameter states, never where it states none: a share surely or possibly above a threshold), `Condition::Stated` (the rule states a parameter, or a default gives it). Several texts may share a name, each under its own condition: the first that holds is rendered (`plan area` or `facade area` by `measure`). |
 | `forms` | The compositions. The first form whose `when` parameters are all stated applies. |
 
 A `Form` holds:
@@ -106,7 +106,9 @@ A `Form` holds:
   its `Applies` holds (a measure the rule lists as consistent, a tolerance
   not negative), and decides by `Within` or by `Near`, its value against
   another value within a tolerance, as a member's judgement does. A check
-  that does not apply is never read, nor read ahead;
+  that does not apply is never read, nor read ahead, nor forked. A check's
+  `derived` values follow its own and the form's values, before its
+  decision: what only it reads (a capacity less an area);
 - `unless`: values that leave an object unjudged (`Unless`), read before
   anything else, each only where it `applies` (a boolean parameter stated
   true): one surely true (`true`, or a number surely other than zero)
@@ -191,7 +193,10 @@ their undecided members count with the first population's. A form's
 `derived` values follow the values read: `Derived::Difference`
 (`minuend − subtrahend`) and `Derived::Ratio` (`numerator / denominator`
 of values of at least zero), both in plain binary arithmetic over the
-intervals, as the capabilities computed them. A ratio whose denominator
+intervals, as the capabilities computed them, and `Derived::Open` (a value
+without an upper bound where another is surely above zero: a sum some of
+whose parts could not be read, which a measured value, always finite,
+states as the sum over what was read and how many were not). A ratio whose denominator
 may be zero has no upper bound (infinity), where the evaluator's
 division refuses a divisor holding zero, so a minimum it surely exceeds
 still decides; a denominator surely zero leaves the object open with
@@ -1006,7 +1011,7 @@ constant (`{minimum:fixed4}`: `0.5000`), or a value's lower or upper end
 reads were measured against (`{distance:cited}`: the next slab up, or
 nothing where they cite none), what they noted, each after `; `
 (`{share:notes}`: `; 1 counterpart(s) have no readable extent, so they may
-cover it`, or nothing), and a constant's number in coherent SI units as
+cover it`, or nothing; `{share:notes3}` the first three), and a constant's number in coherent SI units as
 Rust shows it (`{horizontal:si}`: `0.02`, a tolerance as the capability
 wrote it before its unit); a `Compare`
 form also reads `{target}` (the stated target as the rule declares it,
@@ -1057,6 +1062,11 @@ verdict is sound but may decide an anchor the template leaves open. Under
 `widen` the two agree. An unstated selector read as every object forks
 into an unfiltered aggregate (`Selector::All`); shared ends have no
 aggregate form, and such a rule is not forked.
+
+A form whose decision only reads a value (a `Within` without a bound,
+the checks deciding) requires that value stated (`isDefined`), unless it is
+optional: a `null` is the template's finding. Its fork does too, and leaves
+out every check that does not apply to the rule.
 
 A form with a `scope` expands into its decision over the aggregate of the
 rule's `selection`, as the catalogue shows it, but is never forked

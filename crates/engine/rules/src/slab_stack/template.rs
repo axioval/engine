@@ -195,6 +195,7 @@ fn checks() -> Vec<FormCheck> {
     for measure in &MEASURES {
         let distance = || measured("distance", measure.distance, None);
         checks.push(FormCheck {
+            derived: Vec::new(),
             values: vec![distance()],
             decision: Decision::Within {
                 value: "distance",
@@ -217,6 +218,7 @@ fn checks() -> Vec<FormCheck> {
             }),
         });
         checks.push(FormCheck {
+            derived: Vec::new(),
             values: vec![
                 distance(),
                 measured("prevailing", measure.prevailing, Some(Expect::Optional)),

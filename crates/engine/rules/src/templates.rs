@@ -1707,18 +1707,26 @@ fn placeholder(plan: &Plan<'_>, read: &Read, key: &str) -> Option<String> {
                 .join(", "),
         ),
         // What the value's measured reads noted, each after `; `: nothing
-        // where they noted nothing.
-        "notes" => Some(
-            read.notes
-                .iter()
-                .filter(|(read, _)| *read == name)
-                .flat_map(|(_, notes)| notes)
-                .fold(String::new(), |mut out, note| {
-                    out.push_str("; ");
-                    out.push_str(note);
-                    out
-                }),
-        ),
+        // where they noted nothing; the first few (`notes3`) where a
+        // number follows.
+        _ if format.starts_with("notes") => {
+            let most = match &format["notes".len()..] {
+                "" => usize::MAX,
+                count => count.parse::<usize>().ok()?,
+            };
+            Some(
+                read.notes
+                    .iter()
+                    .filter(|(read, _)| *read == name)
+                    .flat_map(|(_, notes)| notes)
+                    .take(most)
+                    .fold(String::new(), |mut out, note| {
+                        out.push_str("; ");
+                        out.push_str(note);
+                        out
+                    }),
+            )
+        }
         // A constant's number in coherent SI units, as Rust shows it
         // (`0.02`): a tolerance as the capability wrote it after its own
         // unit.
@@ -1830,6 +1838,7 @@ fn holds_over(
             Some(Constant::Other(ParameterValue::StringList { value: listed }))
                 if listed.iter().any(|listed| listed.trim() == value)
         ),
+        Some(Condition::Stated { parameter }) => constants.contains_key(parameter),
         Some(Condition::AtLeast { parameter, than }) => {
             number(parameter).is_some_and(|value| value >= than)
         }
@@ -2269,6 +2278,10 @@ fn judge_checks_in(
             outcomes.push(outcome);
             continue;
         }
+        if let Some(outcome) = derive_of(plan, &check.derived, &mut checked) {
+            outcomes.push(outcome);
+            continue;
+        }
         if let Decision::Items(judged) = &check.decision {
             outcomes.extend(items::judge_items(
                 plan, judged, &checked, context, object, leaves,
@@ -2535,6 +2548,18 @@ fn derive_of(plan: &Plan<'_>, derived: &[Derived], read: &mut Read) -> Option<Ou
                     top.0 / bottom.1,
                     upper,
                     axioval_engine::expression::Unit::NONE,
+                )
+            }
+            Derived::Open { name, value, open } => {
+                let Some(summed) = span(read, value) else {
+                    continue;
+                };
+                let unread = span(read, open).is_some_and(|(lower, _, _)| lower > 0.0);
+                (
+                    *name,
+                    summed.0,
+                    if unread { f64::INFINITY } else { summed.1 },
+                    summed.2,
                 )
             }
         };
@@ -3481,7 +3506,17 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
         form: &template.forms[binding.form],
         bound: Arc::new(binding),
     };
-    if !plan.form.derived.is_empty() {
+    // The checks applying to the rule: one that does not is never judged.
+    let applying: Vec<usize> = (0..plan.form.checks.len())
+        .filter(|index| {
+            plan.form.checks[*index]
+                .applies
+                .as_ref()
+                .is_none_or(|applies| each::applies(&plan, applies))
+        })
+        .collect();
+    let checks = || applying.iter().map(|index| &plan.form.checks[*index]);
+    if !plan.form.derived.is_empty() || checks().any(|check| !check.derived.is_empty()) {
         return Err(ForkError::Inexpressible(
             "a value derived in plain binary arithmetic (a difference, or a ratio whose \
              denominator may be zero) has no expression form the evaluator decides alike"
@@ -3500,12 +3535,7 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
             "members judged one by one against their neighbours have no expression form".to_owned(),
         ));
     }
-    if plan
-        .form
-        .checks
-        .iter()
-        .any(|check| matches!(check.decision, Decision::Items(_)))
-    {
+    if checks().any(|check| matches!(check.decision, Decision::Items(_))) {
         return Err(ForkError::Inexpressible(
             "items of a measured list judged one by one, each its own outcome, have no \
              expression form"
@@ -3620,7 +3650,13 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
                 |(_, expression)| expression.clone(),
             )
     };
-    let own = effective(&plan).expression(&|name| inline(&values, name));
+    let own = match plan.form.required_read() {
+        Some(read) => Expression::IsDefined {
+            operand: Box::new(inline(&values, read)),
+            label: Some("read".into()),
+        },
+        None => effective(&plan).expression(&|name| inline(&values, name)),
+    };
     // An object a value applying to the rule leaves unjudged passes.
     let unless: Vec<Expression> = plan
         .form
@@ -3641,14 +3677,6 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
         .collect();
     // Every check applying to the rule is required beside the form's own
     // decision, as the template finds each on its own.
-    let applying: Vec<usize> = (0..plan.form.checks.len())
-        .filter(|index| {
-            plan.form.checks[*index]
-                .applies
-                .as_ref()
-                .is_none_or(|applies| each::applies(&plan, applies))
-        })
-        .collect();
     let requirement = if applying.is_empty() {
         own
     } else {

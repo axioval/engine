@@ -823,6 +823,7 @@ mod near {
                 derived: Vec::new(),
                 related: None,
                 checks: vec![FormCheck {
+                    derived: Vec::new(),
                     values: vec![stated("reference", "Reference", Some(Expect::Optional))],
                     decision: Decision::Near {
                         value: "height",
@@ -1062,6 +1063,7 @@ mod thresholds {
                 derived: Vec::new(),
                 related: None,
                 checks: vec![FormCheck {
+                    derived: Vec::new(),
                     values: Vec::new(),
                     decision: Decision::Within {
                         value: "share",
@@ -1298,5 +1300,210 @@ mod thresholds {
                 .iter()
                 .all(|outcome| outcome.reason() != &NotEvaluatedReason::InvalidDeclaration)
         );
+    }
+}
+
+/// A check deriving values of its own, a sum without an upper bound where
+/// a part could not be read, texts on whether a parameter is stated, and a
+/// form that only reads a value requiring it stated: what
+/// `effective-coverage` composes, on a small template of its own.
+mod open_sums {
+    use super::*;
+    use axioval_engine::template::{
+        Applies, Condition, Derived, Difference, FormCheck, Refusals, Text,
+    };
+    use axioval_ir::PropertyValue;
+    use axioval_ir::contract::ScalarValue;
+
+    const ID: &str = "test:open-sums";
+
+    fn stated(name: &'static str, property: &str) -> TemplateValue {
+        TemplateValue {
+            name,
+            expression: Expression::Property {
+                property_set: Some("Pset".into()),
+                property: property.into(),
+                of: None,
+                label: None,
+            },
+            expect: None,
+            absent: None,
+            mismatch: None,
+        }
+    }
+
+    /// Each panel's area stated (`null` its finding), and, where
+    /// `capacity` is declared, its summed capacity, open above where a part
+    /// could not be read, at least its area.
+    fn template() -> Template {
+        let zero = TemplateValue {
+            name: "zero",
+            expression: Expression::Literal {
+                value: ScalarValue::Number { value: 0.0 },
+                label: None,
+            },
+            expect: None,
+            absent: None,
+            mismatch: None,
+        };
+        let mut area = stated("area", "Area");
+        area.absent = Some("no area{labelled}");
+        Template {
+            id: ID,
+            parameters: vec![
+                ParameterDescriptor::optional("capacity", ParameterType::Boolean),
+                ParameterDescriptor::optional("label", ParameterType::String),
+            ],
+            grades: false,
+            name: "open-sums",
+            refusals: Refusals::Rule,
+            defaults: Vec::new(),
+            declaration: Vec::new(),
+            services: None,
+            texts: vec![Text {
+                name: "labelled",
+                when: Some(Condition::Stated { parameter: "label" }),
+                text: " ({label})",
+            }],
+            forms: vec![Form {
+                when: &[],
+                values: vec![area],
+                decision: Decision::Within {
+                    value: "area",
+                    minimum: None,
+                    maximum: None,
+                    rounding: Vec::new(),
+                },
+                fail: "",
+                undecided: "",
+                members: None,
+                table: None,
+                scope: None,
+                derived: Vec::new(),
+                related: None,
+                checks: vec![FormCheck {
+                    values: vec![stated("sum", "Sum"), stated("unread", "Unread"), zero],
+                    derived: vec![
+                        Derived::Open {
+                            name: "capacity",
+                            value: "sum",
+                            open: "unread",
+                        },
+                        Derived::Difference(Difference {
+                            name: "spare",
+                            minuend: "capacity",
+                            subtrahend: "area",
+                        }),
+                    ],
+                    decision: Decision::Within {
+                        value: "spare",
+                        minimum: Some(vec![Term::plus(Operand::Value("zero"))]),
+                        maximum: None,
+                        rounding: Vec::new(),
+                    },
+                    fail: "capacity {capacity:area} for {area:area}{labelled}",
+                    undecided: "capacity {capacity:area} for {area:area} cannot be decided",
+                    related: None,
+                    grading: None,
+                    applies: Some(Applies {
+                        when: &["capacity"],
+                        any: &[],
+                        condition: None,
+                    }),
+                }],
+                unless: Vec::new(),
+                grading: None,
+            }],
+        }
+    }
+
+    fn panels() -> Model {
+        let number = PropertyValue::Decimal;
+        Model::default()
+            .object("short", "panel")
+            .value("short", "Pset", "Area", number(10.0))
+            .value("short", "Pset", "Sum", number(6.0))
+            .value("short", "Pset", "Unread", number(0.0))
+            .object("open", "panel")
+            .value("open", "Pset", "Area", number(10.0))
+            .value("open", "Pset", "Sum", number(6.0))
+            .value("open", "Pset", "Unread", number(1.0))
+            .object("enough", "panel")
+            .value("enough", "Pset", "Area", number(10.0))
+            .value("enough", "Pset", "Sum", number(12.0))
+            .value("enough", "Pset", "Unread", number(2.0))
+            .object("bare", "panel")
+            .value("bare", "Pset", "Area", PropertyValue::Null)
+    }
+
+    /// A part not read leaves the sum without an upper bound, so a shortfall
+    /// is open, while a sum enough already stands; a check derives what it
+    /// alone reads; a text holds where a parameter is stated.
+    #[test]
+    fn a_check_derives_a_sum_open_above_where_a_part_is_not_read() {
+        let templated = Templated::new(template());
+        let evaluation = panels().evaluate(
+            &templated,
+            &rule(
+                ID,
+                kind("panel"),
+                vec![
+                    ("capacity", common::boolean(true)),
+                    ("label", string("hall")),
+                ],
+            ),
+        );
+        let mut found = findings(&evaluation);
+        found.sort();
+        assert_eq!(
+            found,
+            [
+                ("bare".to_owned(), "no area (hall)".to_owned()),
+                ("short".to_owned(), "capacity 6 for 10 (hall)".to_owned()),
+            ]
+        );
+        assert_eq!(
+            evaluation
+                .not_evaluated_outcomes()
+                .iter()
+                .map(|outcome| {
+                    (
+                        outcome
+                            .object_id()
+                            .map_or_else(String::new, |object| object.local_id.clone()),
+                        outcome.message().to_owned(),
+                    )
+                })
+                .collect::<Vec<_>>(),
+            [(
+                "open".to_owned(),
+                "capacity between 6 and inf for 10 cannot be decided".to_owned()
+            )]
+        );
+        // Without the label, its text is nothing.
+        let unlabelled = panels().evaluate(
+            &templated,
+            &rule(ID, kind("panel"), vec![("capacity", common::boolean(true))]),
+        );
+        assert!(findings(&unlabelled).contains(&("bare".to_owned(), "no area".to_owned())));
+    }
+
+    /// Forked where the check does not apply, the rule requires the value
+    /// the form reads stated; where the check applies, its derived values
+    /// have no expression form.
+    #[test]
+    fn a_form_reading_a_value_forks_into_requiring_it_stated() {
+        let templated = Templated::new(template());
+        let forked = fork(&templated, &rule(ID, kind("panel"), Vec::new())).unwrap();
+        let text = serde_json::to_string(&forked.requirement).unwrap();
+        assert!(text.contains("\"kind\":\"isDefined\""), "{text}");
+        assert!(!text.contains("Sum"), "{text}");
+        assert!(matches!(
+            fork(
+                &templated,
+                &rule(ID, kind("panel"), vec![("capacity", common::boolean(true))])
+            ),
+            Err(ForkError::Inexpressible(_))
+        ));
     }
 }

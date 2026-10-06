@@ -541,6 +541,8 @@ pub enum Condition {
         parameter: &'static str,
         value: &'static str,
     },
+    /// The rule states the parameter, or a default gives it.
+    Stated { parameter: &'static str },
     /// The parameter (or its default) is a number of at least `than`.
     AtLeast { parameter: &'static str, than: f64 },
     /// The parameter (or its default) is a number below `than`.
@@ -659,6 +661,11 @@ pub struct Band {
 pub struct FormCheck {
     /// The values read for this check, in order.
     pub values: Vec<TemplateValue>,
+    /// Values derived from the form's and the check's values, after them
+    /// and before the check's decision, in order: what only this check
+    /// reads.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub derived: Vec<Derived>,
     /// How it decides.
     pub decision: Decision,
     /// The finding's message where it fails.
@@ -693,6 +700,14 @@ pub enum Derived {
         numerator: &'static str,
         denominator: &'static str,
         zero: &'static str,
+    },
+    /// The value `value`, without an upper bound (infinity) where the
+    /// value `open` is surely above zero: a sum some of whose parts could
+    /// not be read, and may be anything.
+    Open {
+        name: &'static str,
+        value: &'static str,
+        open: &'static str,
     },
 }
 
@@ -1700,6 +1715,28 @@ pub enum End {
 }
 
 impl Form {
+    /// The value a form whose decision only reads it requires stated: its
+    /// `Within` has no bound, and the value is not optional, so a `null`
+    /// is the template's finding (an element stating no area), which a
+    /// requirement states as `isDefined`.
+    #[must_use]
+    pub fn required_read(&self) -> Option<&'static str> {
+        let Decision::Within {
+            value,
+            minimum: None,
+            maximum: None,
+            ..
+        } = &self.decision
+        else {
+            return None;
+        };
+        self.values
+            .iter()
+            .find(|step| step.name == *value)
+            .filter(|step| step.expect != Some(Expect::Optional))
+            .map(|step| step.name)
+    }
+
     /// The form as one truth expression: the decision's expression form
     /// with each value's expression in place of its name, and with its
     /// checks' before it, all of them required. It still holds the
@@ -1714,9 +1751,20 @@ impl Form {
     /// `value` (its name and expression) first.
     #[must_use]
     pub fn requirement_with(&self, value: &dyn Fn(&str, &Expression) -> Expression) -> Expression {
-        let inline = |values: &[&TemplateValue], name: &str| self.inlined(values, name, value);
+        let inline = |values: &[&TemplateValue], derived: &[&Derived], name: &str| {
+            Self::inlined((values, derived), name, value)
+        };
         let own: Vec<&TemplateValue> = self.values.iter().collect();
-        let decided = self.decision.expression(&|name| inline(&own, name));
+        let derived: Vec<&Derived> = self.derived.iter().collect();
+        let decided = match self.required_read() {
+            Some(read) => Expression::IsDefined {
+                operand: boxed(inline(&own, &derived, read)),
+                label: Some("read".into()),
+            },
+            None => self
+                .decision
+                .expression(&|name| inline(&own, &derived, name)),
+        };
         let decided = if self.unless.is_empty() {
             decided
         } else {
@@ -1765,7 +1813,10 @@ impl Form {
             .iter()
             .map(|check| {
                 let values: Vec<&TemplateValue> = self.values.iter().chain(&check.values).collect();
-                check.decision.expression(&|name| inline(&values, name))
+                let derived: Vec<&Derived> = self.derived.iter().chain(&check.derived).collect();
+                check
+                    .decision
+                    .expression(&|name| inline(&values, &derived, name))
             })
             .collect();
         operands.push(decided);
@@ -1781,22 +1832,24 @@ impl Form {
     /// a denominator that may be zero where the evaluator refuses); any
     /// other name as a derived value of that name.
     fn inlined(
-        &self,
-        values: &[&TemplateValue],
+        (values, derived): (&[&TemplateValue], &[&Derived]),
         name: &str,
         value: &dyn Fn(&str, &Expression) -> Expression,
     ) -> Expression {
         if let Some(step) = values.iter().find(|step| step.name == name) {
             return value(step.name, &step.expression);
         }
-        let derived = self.derived.iter().find(|derived| match derived {
+        let found = derived.iter().find(|derived| match derived {
             Derived::Difference(difference) => difference.name == name,
-            Derived::Ratio { name: ratio, .. } => *ratio == name,
+            Derived::Ratio { name: ratio, .. } | Derived::Open { name: ratio, .. } => {
+                *ratio == name
+            }
         });
-        match derived {
+        let inline = |name: &str| Self::inlined((values, derived), name, value);
+        match found {
             Some(Derived::Difference(difference)) => Expression::Subtract {
-                left: boxed(self.inlined(values, difference.minuend, value)),
-                right: boxed(self.inlined(values, difference.subtrahend, value)),
+                left: boxed(inline(difference.minuend)),
+                right: boxed(inline(difference.subtrahend)),
                 label: Some(name.to_owned()),
             },
             Some(Derived::Ratio {
@@ -1804,10 +1857,13 @@ impl Form {
                 denominator,
                 ..
             }) => Expression::Divide {
-                left: boxed(self.inlined(values, numerator, value)),
-                right: boxed(self.inlined(values, denominator, value)),
+                left: boxed(inline(numerator)),
+                right: boxed(inline(denominator)),
                 label: Some(name.to_owned()),
             },
+            // The value as read: a part that cannot be read leaves the
+            // evaluator's sum not evaluated.
+            Some(Derived::Open { value: read, .. }) => inline(read),
             None => Expression::Derived {
                 name: name.to_owned(),
                 label: None,
@@ -2346,6 +2402,7 @@ mod tests {
             derived: Vec::new(),
             related: Some("count"),
             checks: vec![FormCheck {
+                derived: Vec::new(),
                 applies: None,
                 values: vec![value("height")],
                 decision: Decision::Within {

@@ -293,6 +293,30 @@ pub struct Form {
     /// selects there.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scope: Option<Scopes>,
+    /// Values derived from the values read, after them and before the
+    /// decision, in order.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub derived: Vec<Derived>,
+}
+
+/// A value derived from values already read, in plain binary arithmetic
+/// over their intervals, as the capabilities computed it.
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum Derived {
+    /// `minuend − subtrahend`.
+    Difference(Difference),
+    /// `numerator / denominator` of two values of at least zero (areas,
+    /// counts). A denominator that may be zero gives a ratio without an
+    /// upper bound (infinity) where the evaluator's division refuses; one
+    /// that is surely zero (no upper end above zero) leaves the object
+    /// open with `zero`.
+    Ratio {
+        name: &'static str,
+        numerator: &'static str,
+        denominator: &'static str,
+        zero: &'static str,
+    },
 }
 
 /// A form deciding once per source of the session (an empty source
@@ -396,6 +420,13 @@ pub struct Members {
     /// `{relation}` then ends `with the same ends via <path>`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub same_ends: Option<&'static str>,
+    /// Further selector parameters picking members of the same anchor
+    /// along the same traversal, each read as an aggregate over
+    /// [`Members::source`] of its own name: two populations, such as a
+    /// ratio's numerator and denominator. Their undecided members count
+    /// with the first population's for `undecided`.
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    pub more: &'static [&'static str],
 }
 
 impl Members {
@@ -626,10 +657,18 @@ pub enum Reference {
     /// the one most share within the tolerance, the lowest among equally
     /// common ones. Without one each subject is open with `missing`, or
     /// nothing is judged without a message.
-    Prevailing {
-        value: &'static str,
-        missing: Option<&'static str>,
-    },
+    Prevailing(Prevailing),
+}
+
+/// The prevailing exact value `value` among a judgement's subjects
+/// ([`Reference::Prevailing`]), and the message leaving each subject open
+/// without one.
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Prevailing {
+    pub value: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub missing: Option<&'static str>,
 }
 
 /// Objects a path reaches from each member (a storey's spaces, a level's
@@ -1074,7 +1113,7 @@ impl Decision {
             } => {
                 let reference = match reference {
                     Reference::Value(name) => value(name),
-                    Reference::Prevailing { value: name, .. } => Expression::Derived {
+                    Reference::Prevailing(Prevailing { value: name, .. }) => Expression::Derived {
                         name: format!("prevailing {name}"),
                         label: None,
                     },

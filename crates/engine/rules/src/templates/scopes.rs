@@ -309,7 +309,7 @@ fn judge(
             }
             match scope {
                 Scope::Source(source) => {
-                    evaluation.push_source_not_evaluated(source, reason, message)
+                    evaluation.push_source_not_evaluated(source, reason, message);
                 }
                 Scope::Project | Scope::Object(_) => evaluation.push_not_evaluated(reason, message),
             }
@@ -381,6 +381,7 @@ mod tests {
                         no_disciplines: "no disciplines",
                     },
                 }),
+                derived: Vec::new(),
             }],
         }
     }

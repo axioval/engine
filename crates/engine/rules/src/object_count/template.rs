@@ -93,6 +93,7 @@ fn form(when: &'static [&'static str], existence: bool) -> Form {
         members: None,
         table: None,
         scope: Some(scopes()),
+        derived: Vec::new(),
     }
 }
 

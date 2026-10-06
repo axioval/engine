@@ -106,6 +106,7 @@ fn stated_form() -> Form {
         members: None,
         table: None,
         scope: None,
+        derived: Vec::new(),
     }
 }
 
@@ -132,6 +133,7 @@ fn range_form() -> Form {
         members: None,
         table: None,
         scope: None,
+        derived: Vec::new(),
     }
 }
 

@@ -7,8 +7,8 @@
 
 use axioval_engine::template::{
     Applies, Check, Column, Condition, Decision, Difference, Each, Form, Highest, Judgement,
-    Members, Nested, Operand, ParameterDefault, Reference, Rise, Service, Services, Table,
-    Template, TemplateValue, Term, UndecidedMembers,
+    Members, Nested, Operand, ParameterDefault, Prevailing, Reference, Rise, Service, Services,
+    Table, Template, TemplateValue, Term, UndecidedMembers,
 };
 use axioval_engine::{ParameterDescriptor, ParameterType};
 use axioval_ir::QuantityDimension;
@@ -178,10 +178,10 @@ fn elevation(side: &'static str, sides: &'static [&'static str]) -> Judgement {
         },
         decision: Decision::Near {
             value: side,
-            reference: Reference::Prevailing {
+            reference: Reference::Prevailing(Prevailing {
                 value: side,
                 missing: Some(missing),
-            },
+            }),
             tolerance: Operand::Parameter("space_tolerance"),
         },
         fail,
@@ -213,6 +213,7 @@ fn spaces(name: &'static str, applies: Applies) -> Nested {
 }
 
 /// The members judged one by one.
+#[allow(clippy::too_many_lines)]
 fn each() -> Each {
     let order: Expression = serde_json::from_value(json!({
         "kind": "property",
@@ -341,10 +342,10 @@ fn each() -> Each {
                 },
                 decision: Decision::Near {
                     value: "height",
-                    reference: Reference::Prevailing {
+                    reference: Reference::Prevailing(Prevailing {
                         value: "height",
                         missing: None,
-                    },
+                    }),
                     tolerance: Operand::Parameter("tolerance"),
                 },
                 fail: "level height {height:length} differs from the prevailing \
@@ -430,9 +431,11 @@ pub(crate) fn template() -> Template {
                 },
                 every_when_unstated: false,
                 same_ends: None,
+                more: &[],
             }),
             table: None,
             scope: None,
+            derived: Vec::new(),
         }],
     }
 }

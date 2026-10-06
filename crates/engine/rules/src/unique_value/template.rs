@@ -104,6 +104,7 @@ pub(crate) fn template() -> Template {
             members: None,
             table: None,
             scope: None,
+            derived: Vec::new(),
         }],
     }
 }

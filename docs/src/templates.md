@@ -114,6 +114,24 @@ decision judges that interval, a verdict standing only where they cannot
 change it. A member's value that cannot be read leaves the anchor open
 worded as the member's measured value refused it.
 
+**Two populations and ratios.** `Members::more` names further selector
+parameters, each picking members of the same anchor along the same
+traversal, read as an aggregate over `Members::source` of its own name
+(a ratio's numerator and denominator); an unstated one picks none, and
+their undecided members count with the first population's. A form's
+`derived` values follow the values read: `Derived::Difference`
+(`minuend − subtrahend`) and `Derived::Ratio` (`numerator / denominator`
+of values of at least zero), both in plain binary arithmetic over the
+intervals, as the capabilities computed them. A ratio whose denominator
+may be zero has no upper bound (infinity), where the evaluator's
+division refuses a divisor holding zero, so a minimum it surely exceeds
+still decides; a denominator surely zero leaves the object open with
+`zero`. A form with derived values is not forked; one with further
+populations forks each into an aggregate along the same path, filtered by
+its selector. `tests/template_features.rs` holds both to a small
+template of its own until `area-ratio` and `relative-count` are rebuilt
+on them.
+
 `Members::every_when_unstated` reads an unstated selector parameter as
 every object (`Selector::All`) rather than refusing the rule.
 `Members::same_ends` names a string-list parameter holding a path: where

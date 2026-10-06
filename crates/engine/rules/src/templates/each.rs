@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 
 use axioval_engine::expression::{Interval, Unit, Value};
 use axioval_engine::template::{
-    Applies, Decision, Each, Judgement, Nested, Operand, Reference, UndecidedMembers,
+    Applies, Decision, Each, Judgement, Nested, Operand, Prevailing, Reference, UndecidedMembers,
 };
 use axioval_engine::{CapabilityEvaluation, CompiledRule, RuleContext};
 use axioval_ir::contract::{Expression, ScalarValue};
@@ -87,8 +87,9 @@ fn reads(decision: &Decision) -> Vec<&'static str> {
         Decision::Near {
             value, reference, ..
         } => match reference {
-            Reference::Value(name) => vec![*value, *name],
-            Reference::Prevailing { value: name, .. } => vec![*value, *name],
+            Reference::Value(name) | Reference::Prevailing(Prevailing { value: name, .. }) => {
+                vec![*value, *name]
+            }
         },
         _ => Vec::new(),
     }
@@ -142,6 +143,7 @@ fn tolerance_of(plan: &Plan<'_>, operand: Operand, subject: &Subject<'_>) -> Opt
 
 /// Judges `subjects` (members, or the nested members of `member`) by
 /// `judgement`, each its own outcome.
+#[allow(clippy::too_many_lines)]
 fn judge(
     plan: &Plan<'_>,
     rule: &CompiledRule,
@@ -166,7 +168,7 @@ fn judge(
     // The reference prevailing among the subjects, where one is asked for.
     let mut prevailing_reference = None;
     if let Decision::Near {
-        reference: Reference::Prevailing { value, missing },
+        reference: Reference::Prevailing(Prevailing { value, missing }),
         tolerance,
         ..
     } = &decision
@@ -182,21 +184,20 @@ fn judge(
             .first()
             .and_then(|subject| tolerance_of(plan, *tolerance, subject))
             .unwrap_or(0.0);
-        match prevailing(&exact, tolerance) {
-            Some(index) => prevailing_reference = Some(exact[index]),
-            None => {
-                if let Some(missing) = missing {
-                    for subject in &subjects {
-                        let read = read_of(subject, member);
-                        evaluation.push_object_not_evaluated(
-                            subject.object.id.clone(),
-                            NotEvaluatedReason::IncompleteEvidence,
-                            render(plan, &read, missing),
-                        );
-                    }
+        if let Some(index) = prevailing(&exact, tolerance) {
+            prevailing_reference = Some(exact[index]);
+        } else {
+            if let Some(missing) = missing {
+                for subject in &subjects {
+                    let read = read_of(subject, member);
+                    evaluation.push_object_not_evaluated(
+                        subject.object.id.clone(),
+                        NotEvaluatedReason::IncompleteEvidence,
+                        render(plan, &read, missing),
+                    );
                 }
-                return;
             }
+            return;
         }
     }
     for subject in subjects {
@@ -223,7 +224,7 @@ fn judge(
                 };
                 let reference = match reference {
                     Reference::Value(name) => value_of(subject, member, name),
-                    Reference::Prevailing { .. } => {
+                    Reference::Prevailing(_) => {
                         prevailing_reference.map(|reference| (reference, reference))
                     }
                 };
@@ -496,8 +497,10 @@ pub(super) fn run(
     let refuse = match &scope.members.undecided {
         UndecidedMembers::Refuse { message } => {
             scope.population.first.clone().map(|(reason, why)| {
-                let mut read = Read::default();
-                read.why = Some(why);
+                let read = Read {
+                    why: Some(why),
+                    ..Read::default()
+                };
                 (reason, render(plan, &read, message))
             })
         }
@@ -551,18 +554,16 @@ pub(super) fn run(
                 break;
             }
             let mut subject = Subject::new(object);
-            let order = match read.stated.get(each.order).cloned().flatten() {
-                Some(PropertyValue::Quantity {
-                    value,
-                    dimension: QuantityDimension::Length,
-                }) => value,
-                _ => {
-                    unordered = Some((
-                        NotEvaluatedReason::IncompleteEvidence,
-                        render(plan, &read, each.unordered),
-                    ));
-                    break;
-                }
+            let Some(PropertyValue::Quantity {
+                value: order,
+                dimension: QuantityDimension::Length,
+            }) = read.stated.get(each.order).cloned().flatten()
+            else {
+                unordered = Some((
+                    NotEvaluatedReason::IncompleteEvidence,
+                    render(plan, &read, each.unordered),
+                ));
+                break;
             };
             subject.values.insert(each.order, (order, order));
             for (name, value) in read.values.iter() {

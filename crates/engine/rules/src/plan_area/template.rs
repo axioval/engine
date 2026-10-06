@@ -96,9 +96,11 @@ fn members_form() -> Form {
             },
             every_when_unstated: false,
             same_ends: None,
+            more: &[],
         }),
         table: Some(areas()),
         scope: None,
+        derived: Vec::new(),
     }
 }
 
@@ -113,6 +115,7 @@ fn own_form() -> Form {
         members: None,
         table: Some(areas()),
         scope: None,
+        derived: Vec::new(),
     }
 }
 

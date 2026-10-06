@@ -50,9 +50,11 @@ fn form() -> Form {
             undecided: UndecidedMembers::Widen,
             every_when_unstated: true,
             same_ends: Some("same_ends"),
+            more: &[],
         }),
         table: None,
         scope: None,
+        derived: Vec::new(),
     }
 }
 

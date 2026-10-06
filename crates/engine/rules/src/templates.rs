@@ -20,8 +20,8 @@ use axioval_engine::expression::{
     Evaluation, ExpressionContext, NotEvaluated, Reason, Value, evaluate_untraced,
 };
 use axioval_engine::template::{
-    Check, Condition, Decision, End, Expect, Form, Members, Operand, Sign, Template, TemplateValue,
-    Term, UndecidedMembers,
+    Check, Condition, Decision, Derived, End, Expect, Form, Members, Operand, Sign, Template,
+    TemplateValue, Term, UndecidedMembers,
 };
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, Deviation, MeasuredValues, ParameterDescriptor,
@@ -288,6 +288,7 @@ fn count(rule: &CompiledRule, template: &Template, parameter: &str) -> Result<()
 }
 
 /// Runs `check` over the rule's parameters.
+#[allow(clippy::too_many_lines)]
 fn check(check: &Check, rule: &CompiledRule, template: &Template) -> Result<(), Unavailable> {
     let any = |names: &[&str]| names.iter().any(|name| stated(rule, name));
     match check {
@@ -1202,6 +1203,9 @@ struct Scope<'t> {
     traversal: Option<Traversal>,
     /// The path whose ends a member must share with its anchor.
     ends: Option<Traversal>,
+    /// The further populations (`Members::more`), each its selector
+    /// parameter and the objects it picks; an unstated one picks none.
+    more: Vec<(&'t str, Option<Population>)>,
 }
 
 impl<'t> Scope<'t> {
@@ -1232,11 +1236,25 @@ impl<'t> Scope<'t> {
                 .transpose()?,
             None => None,
         };
+        let more = members
+            .more
+            .iter()
+            .map(|name| {
+                let population = match plan.constants.get(*name) {
+                    Some(Constant::Other(ParameterValue::Selector { value: selector })) => {
+                        Some(Population::of(context, selector))
+                    }
+                    _ => None,
+                };
+                (*name, population)
+            })
+            .collect();
         Ok(Some(Self {
             members,
             population,
             traversal: Parameters(rule).traversal()?,
             ends,
+            more,
         }))
     }
 
@@ -1252,11 +1270,25 @@ impl<'t> Scope<'t> {
     /// The members of `anchor`: reached, then kept where they share its
     /// ends.
     fn tally(&self, context: &RuleContext<'_>, anchor: &Object) -> Result<Tally, Unavailable> {
-        let tallied = tally(context, self.traversal.as_ref(), anchor, &self.population)?;
+        self.tally_of(context, anchor, &self.population)
+    }
+
+    fn tally_of(
+        &self,
+        context: &RuleContext<'_>,
+        anchor: &Object,
+        population: &Population,
+    ) -> Result<Tally, Unavailable> {
+        let tallied = tally(context, self.traversal.as_ref(), anchor, population)?;
         match &self.ends {
             Some(ends) => same_ends(context, ends, anchor, tallied),
             None => Ok(tallied),
         }
+    }
+
+    /// Whether undecided members widen the aggregates over them.
+    fn widens(&self) -> bool {
+        matches!(self.members.undecided, UndecidedMembers::Widen)
     }
 }
 
@@ -1419,6 +1451,70 @@ fn read_values<'v>(
     None
 }
 
+/// Derives the form's `derived` values from those read, in plain binary
+/// arithmetic over their intervals: the outcome where one leaves the
+/// object open.
+fn derive(plan: &Plan<'_>, read: &mut Read) -> Option<Outcome> {
+    let span = |read: &Read, name: &str| match read.values.get(name) {
+        Some(Value::Number { value, unit }) => Some((value.lower, value.upper, unit.clone())),
+        _ => None,
+    };
+    for derived in &plan.form.derived {
+        let (name, lower, upper, unit) = match derived {
+            Derived::Difference(difference) => {
+                let (Some(minuend), Some(subtrahend)) = (
+                    span(read, difference.minuend),
+                    span(read, difference.subtrahend),
+                ) else {
+                    continue;
+                };
+                (
+                    difference.name,
+                    minuend.0 - subtrahend.1,
+                    minuend.1 - subtrahend.0,
+                    minuend.2,
+                )
+            }
+            Derived::Ratio {
+                name,
+                numerator,
+                denominator,
+                zero,
+            } => {
+                let (Some(top), Some(bottom)) = (span(read, numerator), span(read, denominator))
+                else {
+                    continue;
+                };
+                if bottom.1 <= 0.0 {
+                    return Some(Outcome::Open(
+                        NotEvaluatedReason::IncompleteEvidence,
+                        render(plan, read, zero),
+                    ));
+                }
+                let upper = if bottom.0 > 0.0 {
+                    top.1 / bottom.0
+                } else {
+                    f64::INFINITY
+                };
+                (
+                    *name,
+                    top.0 / bottom.1,
+                    upper,
+                    axioval_engine::expression::Unit::NONE,
+                )
+            }
+        };
+        read.values.insert(
+            name,
+            Value::Number {
+                value: axioval_engine::expression::Interval { lower, upper },
+                unit,
+            },
+        );
+    }
+    None
+}
+
 /// Whether `decision` judges the value `name` as the source states it,
 /// rather than as the evaluator reads it.
 fn judges_stated(decision: &Decision, name: &str) -> bool {
@@ -1426,6 +1522,7 @@ fn judges_stated(decision: &Decision, name: &str) -> bool {
 }
 
 /// Reads the plan's values for `object` and decides.
+#[allow(clippy::too_many_lines)]
 fn judge_object(
     (plan, decision, scope): (&Plan<'_>, &Decision, Option<&Scope<'_>>),
     context: &RuleContext<'_>,
@@ -1439,19 +1536,46 @@ fn judge_object(
     let mut members = None;
     if let Some(scope) = scope {
         match scope.tally(context, object) {
-            Ok(tally) => {
-                read.named.insert("undecided", tally.undecided.to_string());
+            Ok(mut tally) => {
                 read.named.insert("relation", scope.relation());
                 // Undecided members widen the aggregate only where the
                 // form says they may.
-                let possible = match scope.members.undecided {
-                    UndecidedMembers::Widen => tally.possible.as_slice(),
-                    UndecidedMembers::OnlyExcess { .. } | UndecidedMembers::Refuse { .. } => &[],
-                };
+                let possible: &[ObjectId] = if scope.widens() { &tally.possible } else { &[] };
                 leaves = leaves.supplying(
                     Members::source(scope.members.selector),
                     candidates(context, &tally.decided, possible),
                 );
+                // Further populations, reached alike.
+                for (name, population) in &scope.more {
+                    let further = match population {
+                        Some(population) => match scope.tally_of(context, object, population) {
+                            Ok(further) => further,
+                            Err((reason, message)) => {
+                                return Outcome::Open(reason, message).into();
+                            }
+                        },
+                        None => Tally {
+                            decided: Vec::new(),
+                            undecided: 0,
+                            possible: Vec::new(),
+                            evidence: Vec::new(),
+                        },
+                    };
+                    let possible: &[ObjectId] = if scope.widens() {
+                        &further.possible
+                    } else {
+                        &[]
+                    };
+                    leaves = leaves.supplying(
+                        Members::source(name),
+                        candidates(context, &further.decided, possible),
+                    );
+                    tally.undecided += further.undecided;
+                    tally.decided.extend(further.decided);
+                    tally.possible.extend(further.possible);
+                    tally.evidence.extend(further.evidence);
+                }
+                read.named.insert("undecided", tally.undecided.to_string());
                 members = Some(tally);
             }
             Err((reason, message)) => return Outcome::Open(reason, message).into(),
@@ -1466,6 +1590,9 @@ fn judge_object(
         &mut leaves,
         &mut read,
     ) {
+        return outcome.into();
+    }
+    if let Some(outcome) = derive(plan, &mut read) {
         return outcome.into();
     }
     let undecided = members.as_ref().map_or(0, |members| members.undecided);
@@ -1866,6 +1993,7 @@ pub enum ForkError {
 ///
 /// [`ForkError`] when `capability` is no template or `rule`'s parameters
 /// do not bind into it.
+#[allow(clippy::too_many_lines)]
 pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork, ForkError> {
     let template = capability
         .template()
@@ -1877,6 +2005,13 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
         form: &template.forms[binding.form],
         bound: Arc::new(binding),
     };
+    if !plan.form.derived.is_empty() {
+        return Err(ForkError::Inexpressible(
+            "a value derived in plain binary arithmetic (a difference, or a ratio whose \
+             denominator may be zero) has no expression form the evaluator decides alike"
+                .to_owned(),
+        ));
+    }
     if matches!(plan.form.decision, Decision::Each(_)) {
         return Err(ForkError::Inexpressible(
             "members judged one by one against their neighbours have no expression form".to_owned(),
@@ -1943,7 +2078,20 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
             };
             plan.values()
                 .map(|(step, expression)| {
-                    (step, along(expression, members.selector, &over, selector))
+                    // Each population's aggregates along the same path,
+                    // filtered by its own selector (none where unstated).
+                    let mut expression = along(expression, members.selector, &over, selector);
+                    for name in members.more {
+                        let none = Selector::Not {
+                            operand: Box::new(Selector::All),
+                        };
+                        let picks = match plan.constants.get(*name) {
+                            Some(Constant::Other(ParameterValue::Selector { value })) => value,
+                            _ => &none,
+                        };
+                        expression = along(&expression, name, &over, picks);
+                    }
+                    (step, expression)
                 })
                 .collect()
         }

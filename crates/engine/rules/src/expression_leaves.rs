@@ -74,7 +74,7 @@ pub(crate) struct ObjectLeaves<'a> {
     /// Members the caller states for one aggregate source in place of
     /// reaching them: a template's members of an anchor, or the objects
     /// selected in a scope.
-    supplied: Option<(AggregateSource, Vec<Candidate<'a>>)>,
+    supplied: Vec<(AggregateSource, Vec<Candidate<'a>>)>,
 }
 
 impl<'a> ObjectLeaves<'a> {
@@ -94,7 +94,7 @@ impl<'a> ObjectLeaves<'a> {
             fields: None,
             listed: Vec::new(),
             prefetched: Prefetch::new(),
-            supplied: None,
+            supplied: Vec::new(),
         }
     }
 
@@ -102,7 +102,7 @@ impl<'a> ObjectLeaves<'a> {
     /// with whether it surely belongs and the evidence that reached it)
     /// instead of the objects `over` reaches.
     pub(crate) fn supplying(mut self, over: AggregateSource, members: Vec<Candidate<'a>>) -> Self {
-        self.supplied = Some((over, members));
+        self.supplied.push((over, members));
         self
     }
 
@@ -119,7 +119,7 @@ impl<'a> ObjectLeaves<'a> {
             fields: None,
             listed: Vec::new(),
             prefetched: Prefetch::new(),
-            supplied: None,
+            supplied: Vec::new(),
         }
     }
 
@@ -136,7 +136,7 @@ impl<'a> ObjectLeaves<'a> {
             fields: Some(member),
             listed: Vec::new(),
             prefetched: Prefetch::new(),
-            supplied: None,
+            supplied: Vec::new(),
         }
     }
 
@@ -285,9 +285,7 @@ impl<'a> ObjectLeaves<'a> {
     /// The candidate members `over` reaches from the object in scope, each
     /// with whether it surely belongs and the evidence that reached it.
     fn candidates(&self, over: &AggregateSource) -> Result<Vec<Candidate<'a>>, String> {
-        if let Some((supplied, members)) = &self.supplied
-            && supplied == over
-        {
+        if let Some((_, members)) = self.supplied.iter().find(|(supplied, _)| supplied == over) {
             return Ok(members.clone());
         }
         let context = self.context;

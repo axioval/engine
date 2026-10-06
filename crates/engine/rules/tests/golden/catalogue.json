@@ -10602,8 +10602,7 @@
                     "reference": {
                       "kind": "prevailing",
                       "value": {
-                        "value": "height",
-                        "missing": null
+                        "value": "height"
                       }
                     },
                     "tolerance": {

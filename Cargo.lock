@@ -701,6 +701,7 @@ name = "axioval-engine"
 version = "0.3.0"
 dependencies = [
  "axioval-ir",
+ "foldhash",
  "indexmap",
  "quick-xml",
  "regex",

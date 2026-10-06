@@ -11,6 +11,7 @@ repository.workspace = true
 
 [dependencies]
 axioval-ir.workspace = true
+foldhash.workspace = true
 indexmap.workspace = true
 # Rule parameter tables from package data files: SHA-256 pins the bytes,
 # `zip` and `quick-xml` read an xlsx sheet (values only, never formulas).

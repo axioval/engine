@@ -13,7 +13,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::hash::Hash;
 use std::sync::{Arc, Mutex};
 
-use axioval_ir::measured::MeasuredCall;
+use axioval_ir::measured::{MeasuredArgument, MeasuredCall};
 use axioval_ir::{Evidence, ObjectId, Project, QuantityDimension};
 
 use crate::properties::PropertyResolutionError;
@@ -326,6 +326,11 @@ pub fn measured_members_bound(
     provider.members_cited(call, object, &context)
 }
 
+/// One table of the run's memo: its entries by key, hashed by a fast keyed
+/// hasher (each table seeded apart), since every value a template reads
+/// looks one up.
+type Table<K, V> = HashMap<K, V, foldhash::fast::RandomState>;
+
 /// What providers measured in one run, shared by every rule and template
 /// of it.
 ///
@@ -353,11 +358,11 @@ impl MeasuredMemo {
         K: Hash + Eq + Send + 'static,
         V: Clone + Send + 'static,
     {
-        let table = TypeId::of::<HashMap<K, V>>();
+        let table = TypeId::of::<Table<K, V>>();
         if let Ok(entries) = self.0.lock()
             && let Some(value) = entries
                 .get(&table)
-                .and_then(|entries| entries.downcast_ref::<HashMap<K, V>>())
+                .and_then(|entries| entries.downcast_ref::<Table<K, V>>())
                 .and_then(|entries| entries.get(&key))
         {
             return value.clone();
@@ -366,8 +371,8 @@ impl MeasuredMemo {
         if let Ok(mut entries) = self.0.lock()
             && let Some(entries) = entries
                 .entry(table)
-                .or_insert_with(|| Box::new(HashMap::<K, V>::new()))
-                .downcast_mut::<HashMap<K, V>>()
+                .or_insert_with(|| Box::new(Table::<K, V>::default()))
+                .downcast_mut::<Table<K, V>>()
         {
             entries.entry(key).or_insert_with(|| value.clone());
         }
@@ -393,8 +398,8 @@ impl MeasuredMemo {
     {
         let entries = self.0.lock().ok()?;
         entries
-            .get(&TypeId::of::<HashMap<K, V>>())?
-            .downcast_ref::<HashMap<K, V>>()?
+            .get(&TypeId::of::<Table<K, V>>())?
+            .downcast_ref::<Table<K, V>>()?
             .get(key)
             .map(read)
     }
@@ -409,11 +414,30 @@ impl MeasuredMemo {
     {
         if let Ok(mut entries) = self.0.lock()
             && let Some(entries) = entries
-                .entry(TypeId::of::<HashMap<K, V>>())
-                .or_insert_with(|| Box::new(HashMap::<K, V>::new()))
-                .downcast_mut::<HashMap<K, V>>()
+                .entry(TypeId::of::<Table<K, V>>())
+                .or_insert_with(|| Box::new(Table::<K, V>::default()))
+                .downcast_mut::<Table<K, V>>()
         {
             entries.insert(key, value);
+        }
+    }
+
+    /// Changes what is memoized for `key` (starting from the default) by
+    /// `change`, in place: for a provider adding to what it measured of a
+    /// key without copying it out and back. `change` runs with the memo
+    /// locked, so it must not read the memo itself.
+    pub fn update<K, V>(&self, key: K, change: impl FnOnce(&mut V))
+    where
+        K: Hash + Eq + Send + 'static,
+        V: Default + Send + 'static,
+    {
+        if let Ok(mut entries) = self.0.lock()
+            && let Some(entries) = entries
+                .entry(TypeId::of::<Table<K, V>>())
+                .or_insert_with(|| Box::new(Table::<K, V>::default()))
+                .downcast_mut::<Table<K, V>>()
+        {
+            change(entries.entry(key).or_default());
         }
     }
 
@@ -428,6 +452,154 @@ impl MeasuredMemo {
             Some(memo) => memo.get_or_measure(key, measure),
             None => measure(),
         }
+    }
+}
+
+/// A measured call's bound arguments as a [`MeasuredMemo`] keys them:
+/// every argument named (stated, defaulted or absent) with its value, in
+/// the order named. Two keys are equal exactly when every argument is,
+/// numbers by their bits and selections by their parameter and objects.
+///
+/// Its hash is computed once, when it is built, and it is cloned by
+/// reference; it never formats the arguments, so a selection of many
+/// objects costs its size and first object to hash.
+#[derive(Clone, Debug)]
+pub struct ArgumentsKey {
+    hash: u64,
+    arguments: Arc<[(&'static str, Option<MeasuredArgument>)]>,
+}
+
+impl ArgumentsKey {
+    /// Every argument of `call`, by key.
+    #[must_use]
+    pub fn of(call: &MeasuredCall) -> Self {
+        Self::from_parts(
+            call.arguments
+                .iter()
+                .map(|(key, argument)| (*key, Some(argument.clone())))
+                .collect(),
+        )
+    }
+
+    /// The arguments `keys` of `call`, each `None` where the call has none.
+    #[must_use]
+    pub fn of_keys(call: &MeasuredCall, keys: &[&'static str]) -> Self {
+        Self::from_parts(
+            keys.iter()
+                .map(|key| (*key, call.argument(key).cloned()))
+                .collect(),
+        )
+    }
+
+    fn from_parts(arguments: Arc<[(&'static str, Option<MeasuredArgument>)]>) -> Self {
+        use std::hash::Hasher as _;
+        // A fixed hasher: keys built apart hash alike.
+        let mut hasher =
+            std::hash::BuildHasher::build_hasher(&foldhash::fast::FixedState::default());
+        for (key, argument) in arguments.iter() {
+            key.hash(&mut hasher);
+            match argument {
+                Some(argument) => {
+                    hasher.write_u8(1);
+                    hash_argument(argument, &mut hasher);
+                }
+                None => hasher.write_u8(0),
+            }
+        }
+        Self {
+            hash: hasher.finish(),
+            arguments,
+        }
+    }
+}
+
+/// `argument` hashed consistently with [`same_argument`].
+fn hash_argument(argument: &MeasuredArgument, hasher: &mut impl std::hash::Hasher) {
+    std::mem::discriminant(argument).hash(hasher);
+    match argument {
+        MeasuredArgument::Path(steps) => steps.hash(hasher),
+        MeasuredArgument::SourceKind(text)
+        | MeasuredArgument::Text(text)
+        | MeasuredArgument::Parameter(text) => text.hash(hasher),
+        MeasuredArgument::Length(value) | MeasuredArgument::Number(value) => {
+            hasher.write_u64(value.to_bits());
+        }
+        MeasuredArgument::Choice(option) => option.hash(hasher),
+        MeasuredArgument::Vector(components) => {
+            for component in components {
+                hasher.write_u64(component.to_bits());
+            }
+        }
+        MeasuredArgument::Property { set, name } => {
+            set.hash(hasher);
+            name.hash(hasher);
+        }
+        MeasuredArgument::Polygon(vertices) => {
+            hasher.write_usize(vertices.len());
+            for [lateral, up] in vertices {
+                hasher.write_u64(lateral.to_bits());
+                hasher.write_u64(up.to_bits());
+            }
+        }
+        MeasuredArgument::Anchor => {}
+        // A selection hashes by its parameter, its sizes and its first
+        // object; equality compares every object.
+        MeasuredArgument::Objects(selection) => {
+            selection.parameter.hash(hasher);
+            hasher.write_usize(selection.matched.len());
+            selection.matched.first().hash(hasher);
+            hasher.write_usize(selection.undecided.len());
+            selection.undecided.first().hash(hasher);
+        }
+        // Rows hash by their count; equality compares them.
+        MeasuredArgument::Table(rows) => hasher.write_usize(rows.len()),
+        MeasuredArgument::Truth(value) => value.hash(hasher),
+    }
+}
+
+/// Whether `a` and `b` are the same argument, numbers compared by their
+/// bits so an argument is always the same as itself.
+fn same_argument(a: &MeasuredArgument, b: &MeasuredArgument) -> bool {
+    let same = |a: f64, b: f64| a.to_bits() == b.to_bits();
+    match (a, b) {
+        (MeasuredArgument::Length(a), MeasuredArgument::Length(b))
+        | (MeasuredArgument::Number(a), MeasuredArgument::Number(b)) => same(*a, *b),
+        (MeasuredArgument::Vector(a), MeasuredArgument::Vector(b)) => {
+            a.iter().zip(b).all(|(a, b)| same(*a, *b))
+        }
+        (MeasuredArgument::Polygon(a), MeasuredArgument::Polygon(b)) => {
+            a.len() == b.len()
+                && a.iter()
+                    .zip(b)
+                    .all(|([a0, a1], [b0, b1])| same(*a0, *b0) && same(*a1, *b1))
+        }
+        (a, b) => a == b,
+    }
+}
+
+impl PartialEq for ArgumentsKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.hash == other.hash
+            && (Arc::ptr_eq(&self.arguments, &other.arguments)
+                || (self.arguments.len() == other.arguments.len()
+                    && self.arguments.iter().zip(other.arguments.iter()).all(
+                        |((key, a), (other_key, b))| {
+                            key == other_key
+                                && match (a, b) {
+                                    (Some(a), Some(b)) => same_argument(a, b),
+                                    (None, None) => true,
+                                    _ => false,
+                                }
+                        },
+                    )))
+    }
+}
+
+impl Eq for ArgumentsKey {}
+
+impl Hash for ArgumentsKey {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        state.write_u64(self.hash);
     }
 }
 

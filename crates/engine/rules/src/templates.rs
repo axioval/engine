@@ -492,6 +492,20 @@ fn check(check: &Check, rule: &CompiledRule, template: &Template) -> Result<(), 
                 _ => Err(invalid(*message)),
             }
         }
+        Check::AtMost {
+            parameters,
+            value,
+            message,
+        } => {
+            if parameters
+                .iter()
+                .any(|name| stated_number(rule, name).is_some_and(|stated| stated > *value))
+            {
+                Err(invalid(*message))
+            } else {
+                Ok(())
+            }
+        }
         Check::Excludes {
             when,
             parameters,
@@ -1318,6 +1332,14 @@ fn placeholder(plan: &Plan<'_>, read: &Read, key: &str) -> Option<String> {
                 .and_then(Constant::number)
                 .map(metres)
         }
+        // A share as the coverage capabilities showed it: the value's upper
+        // end, at most the whole, to four decimals.
+        "share" => match read.values.get(name) {
+            Some(Value::Number { value, .. }) => {
+                Some(((value.upper.min(1.0) * 1e4).round() / 1e4).to_string())
+            }
+            _ => None,
+        },
         // A number with three decimals: a constant, or a value known as one
         // point.
         "fixed3" => match read.values.get(name) {

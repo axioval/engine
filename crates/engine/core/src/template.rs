@@ -187,6 +187,13 @@ pub enum Check {
         at_least: Option<f64>,
         message: &'static str,
     },
+    /// Every one of `parameters` stated as a `number` is at most `value`:
+    /// otherwise `message` (a share no greater than the whole).
+    AtMost {
+        parameters: &'static [&'static str],
+        value: f64,
+        message: &'static str,
+    },
     /// Both stated as numbers, `low` is below `high`: otherwise `message`.
     Increasing {
         low: &'static str,

@@ -8,8 +8,8 @@
 use serde::Serialize;
 
 use super::registry::{
-    ANGLE_TOLERANCE, FACE, FACE_AXES, FACING, MEMBER_PATH, NO_FACE, NO_GEOMETRY, OPENINGS_MINIMUM,
-    PAIRED, SPACED_MEMBERS, en_de,
+    ANGLE_TOLERANCE, EFFECT_SERVICES, EFFECT_UNMEASURED, EFFECTIVE, FACE, FACE_AXES, FACING,
+    MEMBER_PATH, NO_FACE, NO_GEOMETRY, OPENINGS_MINIMUM, PAIRED, SPACED_MEMBERS, en_de,
 };
 use super::{
     FACE_PIECES, LocalizedText, MeasuredCall, MeasuredDescriptor, MeasuredError, MeasuredExactness,
@@ -244,6 +244,52 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
     },
     walking::CLEAR_WIDTHS,
     walking::CLEARANCES,
+    MemberDescriptor {
+        list: MeasuredDescriptor {
+            name: "effective_missing",
+            parameters: EFFECTIVE,
+            dimension: None,
+            services: EFFECT_SERVICES,
+            exactness: MeasuredExactness::Stated,
+            not_evaluated: EFFECT_UNMEASURED,
+            label: &en_de("Missing capacities", "Fehlende Kapazitäten"),
+            help: &en_de(
+                "Each source surely contributing to `effective_capacity` that states no \
+                 capacity or multiplier (absent, null or blank).",
+                "Jede sicher zu `effective_capacity` beitragende Quelle, die keine Kapazität \
+                 oder keinen Faktor angibt (fehlend, null oder leer).",
+            ),
+        },
+        fields: &[
+            field(
+                "source",
+                MemberFieldKind::Objects,
+                &en_de("Source", "Quelle"),
+                &en_de(
+                    "The source stating nothing.",
+                    "Die Quelle, die nichts angibt.",
+                ),
+            ),
+            field(
+                "property",
+                MemberFieldKind::Text,
+                &en_de("Property", "Eigenschaft"),
+                &en_de(
+                    "The property it states nothing under, as the rule names it.",
+                    "Die Eigenschaft, unter der sie nichts angibt, wie die Regel sie nennt.",
+                ),
+            ),
+            field(
+                "missing",
+                MemberFieldKind::Truth,
+                &en_de("Missing", "Fehlend"),
+                &en_de(
+                    "Always true: the value is missing.",
+                    "Immer wahr: der Wert fehlt.",
+                ),
+            ),
+        ],
+    },
     walking::END_SPACES,
     MemberDescriptor {
         list: MeasuredDescriptor {

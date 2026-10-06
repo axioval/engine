@@ -207,7 +207,7 @@
         "counterpart_uncovered_share"
       ]
     },
-    "counterpart_coverage::bounds::bounds": {
+    "near::bounds::bounds": {
       "count": 1,
       "searchOnly": "candidate-filter",
       "reason": "the bounding boxes only propose the objects near enough to measure"
@@ -278,17 +278,14 @@
         "swings_into"
       ]
     },
-    "effective_coverage::checks::measure_coverage": {
+    "effective_coverage::measure::measure_coverage": {
       "count": 1,
       "providedBy": [
         "effect_covered_area",
-        "effect_covered_share"
+        "effect_covered_share",
+        "effective_covered",
+        "effective_share"
       ]
-    },
-    "effective_coverage::find::bounds": {
-      "count": 1,
-      "searchOnly": "candidate-filter",
-      "reason": "the bounding boxes only propose the objects near enough to measure"
     },
     "effective_coverage::touches::measure_distance": {
       "count": 1,

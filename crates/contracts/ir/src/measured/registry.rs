@@ -453,6 +453,163 @@ const COVERAGE: &[MeasuredParameter] = &[
     },
 ];
 
+/// What every measurement of `effective-coverage` takes, each named as the
+/// capability names its parameter.
+pub(super) const EFFECTIVE: &[MeasuredParameter] = &[
+    selected(
+        "sources",
+        true,
+        &en_de(
+            "The sources whose effect covers: source kinds, `,`-separated, or a selector \
+             parameter of the rule, those it cannot decide counting only possibly.",
+            "Die Quellen, deren Wirkung bedeckt: Quellarten, durch `,` getrennt, oder ein \
+             Selektorparameter der Regel, dessen unentschiedene Objekte nur möglicherweise \
+             zählen.",
+        ),
+    ),
+    selected(
+        "blockers",
+        false,
+        &en_de(
+            "What cuts travel and sight (`travel`, `visible`): source kinds or a selector \
+             parameter; a source never blocks.",
+            "Was Weg und Sicht unterbricht (`travel`, `visible`): Quellarten oder ein \
+             Selektorparameter; eine Quelle unterbricht nie.",
+        ),
+    ),
+    MeasuredParameter {
+        key: "mode",
+        kind: MeasuredParameterKind::Choice {
+            options: &["grown", "touching", "travel", "visible"],
+        },
+        required: false,
+        default: Some("grown"),
+        help: &en_de(
+            "How the effect reaches: a footprint grown by the range (`grown`, or `touching` \
+             counting only sources touching the element), or the free region within the \
+             range of travel (`travel`) or sight (`visible`).",
+            "Wie die Wirkung reicht: ein um die Reichweite vergrößerter Grundriss (`grown`, \
+             oder `touching` nur mit berührenden Quellen), oder der freie Bereich in \
+             Reichweite zu Fuß (`travel`) oder in Sicht (`visible`).",
+        ),
+    },
+    MeasuredParameter {
+        key: "range",
+        kind: MeasuredParameterKind::Length { minimum: 0.0 },
+        required: true,
+        default: None,
+        help: &en_de(
+            "How far the effect reaches, in metres.",
+            "Wie weit die Wirkung reicht, in Metern.",
+        ),
+    },
+    MeasuredParameter {
+        key: "touch_tolerance",
+        kind: MeasuredParameterKind::Length { minimum: 0.0 },
+        required: false,
+        default: None,
+        help: &en_de(
+            "With `touching`, how far apart a source's footprint and the element's may be \
+             and still touch, in metres; none without it.",
+            "Mit `touching`, wie weit der Grundriss einer Quelle von dem des Bauteils \
+             entfernt sein darf und noch berührt, in Metern.",
+        ),
+    },
+    MeasuredParameter {
+        key: "area_property",
+        kind: MeasuredParameterKind::Property,
+        required: false,
+        default: None,
+        help: &en_de(
+            "Where the element states its area, read in place of its footprint's.",
+            "Wo das Bauteil seine Fläche angibt, statt der Grundfläche gelesen.",
+        ),
+    },
+    MeasuredParameter {
+        key: "access_path",
+        kind: MeasuredParameterKind::Path,
+        required: false,
+        default: None,
+        help: &en_de(
+            "With `travel` or `visible`, the steps from a door or opening to the spaces it \
+             joins, through which the effect continues.",
+            "Mit `travel` oder `visible`, die Schritte von einer Tür oder Öffnung zu den \
+             Räumen, die sie verbindet und durch die die Wirkung weiterreicht.",
+        ),
+    },
+    selected(
+        "door_selector",
+        false,
+        &en_de(
+            "The doors `access_path` starts from.",
+            "Die Türen, von denen `access_path` ausgeht.",
+        ),
+    ),
+    selected(
+        "opening_selector",
+        false,
+        &en_de(
+            "The openings `access_path` starts from.",
+            "Die Öffnungen, von denen `access_path` ausgeht.",
+        ),
+    ),
+    selected(
+        "space_selector",
+        false,
+        &en_de(
+            "The spaces doors and openings join.",
+            "Die Räume, die Türen und Öffnungen verbinden.",
+        ),
+    ),
+    MeasuredParameter {
+        key: "capacity_property",
+        kind: MeasuredParameterKind::Property,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The capacity each source states, summed over the sources whose effect meets \
+             the footprint.",
+            "Die Kapazität jeder Quelle, summiert über die Quellen, deren Wirkung den \
+             Grundriss erreicht.",
+        ),
+    },
+    MeasuredParameter {
+        key: "capacity_multiplier",
+        kind: MeasuredParameterKind::Number { minimum: 0.0 },
+        required: false,
+        default: None,
+        help: &en_de(
+            "What every source's capacity is multiplied by.",
+            "Womit die Kapazität jeder Quelle multipliziert wird.",
+        ),
+    },
+    MeasuredParameter {
+        key: "capacity_multiplier_property",
+        kind: MeasuredParameterKind::Property,
+        required: false,
+        default: None,
+        help: &en_de(
+            "What each source states its capacity is multiplied by.",
+            "Womit jede Quelle ihre Kapazität multipliziert.",
+        ),
+    },
+];
+
+/// What `effective-coverage`'s values need.
+pub(super) const EFFECT_SERVICES: &[&str] = &[
+    "plan-area",
+    "proximity",
+    "relationship-selection",
+    "type-hierarchy",
+];
+
+/// Why `effective-coverage`'s values may not be measured.
+pub(super) const EFFECT_UNMEASURED: &[&str] = &[
+    NO_GEOMETRY,
+    UNDECIDED_KIND,
+    "the element's coverage cannot be measured",
+];
+
 /// Objects measured against, by source kind or through a selector
 /// parameter or the anchor of the rule reading the value.
 const fn selected(
@@ -2619,6 +2776,104 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         help: &en_de(
             "The share of the footprint the sources' effect areas cover, from 0 to 1.",
             "Der Anteil des Grundrisses, den die Wirkbereiche der Quellen bedecken, von 0 bis 1.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "effective_area",
+        parameters: EFFECTIVE,
+        dimension: Some(QuantityDimension::Area),
+        services: EFFECT_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: EFFECT_UNMEASURED,
+        label: &en_de("Area covered against", "Bezugsfläche der Bedeckung"),
+        help: &en_de(
+            "The area the sources' cover is a share of: the area the element states under \
+             `area_property`, or its footprint.",
+            "Die Fläche, deren Anteil die Quellen bedecken: die Fläche, die das Bauteil unter \
+             `area_property` angibt, oder seine Grundfläche.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "effective_capacity",
+        parameters: EFFECTIVE,
+        dimension: Some(QuantityDimension::Area),
+        services: EFFECT_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: EFFECT_UNMEASURED,
+        label: &en_de("Summed capacity", "Summierte Kapazität"),
+        help: &en_de(
+            "The capacity of the sources whose effect meets the footprint, each times its \
+             multiplier, from those surely contributing to every one that may, over the \
+             contributions read; `effective_unread` says how many cannot be.",
+            "Die Kapazität der Quellen, deren Wirkung den Grundriss erreicht, jede mal ihrem \
+             Faktor, von den sicher bis zu allen möglicherweise beitragenden, über die \
+             gelesenen Beiträge; `effective_unread` sagt, wie viele nicht lesbar sind.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "effective_covered",
+        parameters: EFFECTIVE,
+        dimension: Some(QuantityDimension::Area),
+        services: EFFECT_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: EFFECT_UNMEASURED,
+        label: &en_de("Area the sources cover", "Von den Quellen bedeckte Fläche"),
+        help: &en_de(
+            "The part of the footprint the sources' effect areas cover, as `effective-coverage` \
+             measures it: from what certain sources surely cover to what every source may.",
+            "Der Teil des Grundrisses, den die Wirkungsbereiche der Quellen bedecken, wie \
+             `effective-coverage` ihn misst: von der sicheren bis zur möglichen Bedeckung.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "effective_reaching",
+        parameters: EFFECTIVE,
+        dimension: None,
+        services: EFFECT_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: EFFECT_UNMEASURED,
+        label: &en_de("Sources reaching", "Erreichende Quellen"),
+        help: &en_de(
+            "How many sources reach the element; stated absent where the element states no \
+             area under `area_property`, which is then all there is to say of it.",
+            "Wie viele Quellen das Bauteil erreichen; als fehlend angegeben, wo das Bauteil \
+             unter `area_property` keine Fläche angibt, was dann alles ist, was sich sagen lässt.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "effective_share",
+        parameters: EFFECTIVE,
+        dimension: None,
+        services: EFFECT_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: EFFECT_UNMEASURED,
+        label: &en_de(
+            "Share the sources cover",
+            "Von den Quellen bedeckter Anteil",
+        ),
+        help: &en_de(
+            "The share of the element's area the sources' effect areas cover, from 0 to 1, as \
+             `effective-coverage` measures it; it cites the sources surely contributing.",
+            "Der Anteil der Fläche des Bauteils, den die Wirkungsbereiche der Quellen bedecken, \
+             von 0 bis 1, wie `effective-coverage` ihn misst; er nennt die sicher \
+             beitragenden Quellen.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "effective_unread",
+        parameters: EFFECTIVE,
+        dimension: None,
+        services: EFFECT_SERVICES,
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: EFFECT_UNMEASURED,
+        label: &en_de("Capacities not read", "Nicht gelesene Kapazitäten"),
+        help: &en_de(
+            "How many contributions to `effective_capacity` cannot be read: a source stating no \
+             capacity or multiplier, or none of another kind, and sources that cannot be \
+             placed.",
+            "Wie viele Beiträge zu `effective_capacity` nicht lesbar sind: eine Quelle ohne \
+             Kapazität oder Faktor oder mit einem anderer Art, und Quellen, die sich nicht \
+             verorten lassen.",
         ),
     },
     MeasuredDescriptor {

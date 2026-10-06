@@ -11,12 +11,13 @@ use std::sync::Arc;
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, Deviation, NotEvaluatedReason, ObjectBounds,
     ParameterDescriptor, ProximityProjection, RuleCapability, RuleContext,
-    projected_candidate_pairs,
+    VerticalExtentServiceHandle, projected_candidate_pairs,
 };
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId, QuantityDimension, Severity};
 
-use super::{Candidates, Config, Counterparts, Cover, Infill, Services, Share, Subject, bounds};
+use super::{Config, Counterparts, Cover, Infill, Services, Share, Subject};
+use crate::near::{Candidates, bounds};
 use crate::orientation::{Tri, angle_tolerance};
 use crate::pairs::refuse_all;
 use crate::plan_area::{footprint, shown};
@@ -358,7 +359,8 @@ fn checks(context: &RuleContext<'_>, subject: &Subject<'_, '_>, bands: &[Band]) 
             grade((share, what), &cover, bands)
         }));
     }
-    if let (Some(growth), Some(extents)) = (subject.config.vertical, subject.services.extents) {
+    let extents = context.services.get::<VerticalExtentServiceHandle>();
+    if let (Some(growth), Some(extents)) = (subject.config.vertical, extents) {
         checks.push(
             subject
                 .height_share(extents, &cover, growth)

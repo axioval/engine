@@ -135,6 +135,11 @@ const COVERED: &[(&str, &str, &str)] = &[
         "a_share_measured_on_a_tessellation_is_inexact",
     ),
     (
+        "effective_share",
+        "tests/effective_coverage.rs",
+        "an_effect_measured_inexactly_is_inexact",
+    ),
+    (
         "coordinate_shift",
         "tests/coordinate_consistency.rs",
         "a_departure_is_exact_only_as_stated_and_rounded_outward",

@@ -177,6 +177,11 @@ const PAIRS: &[Pair] = &[
         case: "coverage",
         reference: |registry| registry.replace(axioval::rules::reference::CounterpartCoverage),
     },
+    Pair {
+        capability: "axioval:capability.effective-coverage",
+        case: "coverage",
+        reference: |registry| registry.replace(axioval::rules::reference::EffectiveCoverage),
+    },
 ];
 
 /// Warm-up runs per side before measuring.

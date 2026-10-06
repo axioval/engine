@@ -10038,10 +10038,11 @@
                   ]
                 },
                 {
-                  "kind": "literal",
-                  "value": {
-                    "type": "boolean",
-                    "value": true
+                  "kind": "isDefined",
+                  "operand": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "counterpart_covering;by=@counterparts;measure=@measure;horizontal=@horizontal;vertical=@vertical;axis_tolerance=@axis_tolerance;frame=@infill_counterparts;infill_above=@infill_above"
                   },
                   "label": "read"
                 }
@@ -10173,12 +10174,22 @@
                       }
                     },
                     {
-                      "type": "expression.literal",
+                      "type": "expression.isDefined",
                       "label": "read",
-                      "fields": {
-                        "value": {
-                          "type": "boolean",
-                          "value": true
+                      "inputs": {
+                        "operand": {
+                          "block": {
+                            "type": "measured.counterpart_covering",
+                            "fields": {
+                              "axis_tolerance": "@axis_tolerance",
+                              "by": "@counterparts",
+                              "frame": "@infill_counterparts",
+                              "horizontal": "@horizontal",
+                              "infill_above": "@infill_above",
+                              "measure": "@measure",
+                              "vertical": "@vertical"
+                            }
+                          }
                         }
                       }
                     }
@@ -10898,7 +10909,791 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "effective-coverage",
+        "declaration": [
+          {
+            "kind": "choice",
+            "parameter": "mode",
+            "options": [
+              "grown",
+              "touching",
+              "travel",
+              "visible"
+            ]
+          },
+          {
+            "kind": "nonNegativeLength",
+            "parameter": "range",
+            "message": "range must be a non-negative length"
+          },
+          {
+            "kind": "anyOf",
+            "parameters": [
+              "range"
+            ],
+            "message": "range is required"
+          },
+          {
+            "kind": "kind",
+            "parameter": "minimum_ratio"
+          },
+          {
+            "kind": "finite",
+            "parameters": [
+              "minimum_ratio"
+            ],
+            "above": 0.0,
+            "message": "minimum_ratio must lie in (0, 1]"
+          },
+          {
+            "kind": "atMost",
+            "parameters": [
+              "minimum_ratio"
+            ],
+            "value": 1.0,
+            "message": "minimum_ratio must lie in (0, 1]"
+          },
+          {
+            "kind": "kind",
+            "parameter": "blockers"
+          },
+          {
+            "kind": "holds",
+            "condition": {
+              "kind": "not",
+              "condition": {
+                "kind": "all",
+                "conditions": [
+                  {
+                    "kind": "stated",
+                    "parameter": "blockers"
+                  },
+                  {
+                    "kind": "oneOf",
+                    "parameter": "mode",
+                    "values": [
+                      "grown",
+                      "touching"
+                    ]
+                  }
+                ]
+              }
+            },
+            "message": "blockers apply only to modes `travel` and `visible`"
+          },
+          {
+            "kind": "nonNegativeLength",
+            "parameter": "touch_tolerance",
+            "message": "touch_tolerance must be a non-negative length"
+          },
+          {
+            "kind": "requiresValue",
+            "parameter": "touch_tolerance",
+            "with": "mode",
+            "value": "touching",
+            "message": "touch_tolerance applies only to mode `touching`"
+          },
+          {
+            "kind": "arguments",
+            "when": [],
+            "value": "effective_share;sources=@sources;blockers=@blockers;mode=@mode;range=@range;touch_tolerance=@touch_tolerance;area_property=@area_property;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector;capacity_property=@capacity_property;capacity_multiplier=@capacity_multiplier;capacity_multiplier_property=@capacity_multiplier_property"
+          },
+          {
+            "kind": "holds",
+            "condition": {
+              "kind": "not",
+              "condition": {
+                "kind": "all",
+                "conditions": [
+                  {
+                    "kind": "stated",
+                    "parameter": "access_path"
+                  },
+                  {
+                    "kind": "oneOf",
+                    "parameter": "mode",
+                    "values": [
+                      "grown",
+                      "touching"
+                    ]
+                  }
+                ]
+              }
+            },
+            "message": "access_path applies only to modes `travel` and `visible`: a grown effect ignores walls already"
+          },
+          {
+            "kind": "required",
+            "parameter": "sources"
+          },
+          {
+            "kind": "kind",
+            "parameter": "capacity_property"
+          },
+          {
+            "kind": "kind",
+            "parameter": "capacity_multiplier"
+          },
+          {
+            "kind": "kind",
+            "parameter": "capacity_multiplier_property"
+          },
+          {
+            "kind": "holds",
+            "condition": {
+              "kind": "not",
+              "condition": {
+                "kind": "all",
+                "conditions": [
+                  {
+                    "kind": "stated",
+                    "parameter": "capacity_multiplier"
+                  },
+                  {
+                    "kind": "not",
+                    "condition": {
+                      "kind": "stated",
+                      "parameter": "capacity_multiplier_property"
+                    }
+                  },
+                  {
+                    "kind": "not",
+                    "condition": {
+                      "kind": "positive",
+                      "parameter": "capacity_multiplier"
+                    }
+                  }
+                ]
+              }
+            },
+            "message": "capacity_multiplier must be a positive number"
+          },
+          {
+            "kind": "exclusive",
+            "one": [
+              "capacity_multiplier"
+            ],
+            "other": [
+              "capacity_multiplier_property"
+            ],
+            "message": "declare capacity_multiplier or capacity_multiplier_property, not both"
+          },
+          {
+            "kind": "holds",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "not",
+                  "condition": {
+                    "kind": "all",
+                    "conditions": [
+                      {
+                        "kind": "stated",
+                        "parameter": "capacity_property"
+                      },
+                      {
+                        "kind": "not",
+                        "condition": {
+                          "kind": "stated",
+                          "parameter": "capacity_multiplier"
+                        }
+                      },
+                      {
+                        "kind": "not",
+                        "condition": {
+                          "kind": "stated",
+                          "parameter": "capacity_multiplier_property"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "not",
+                  "condition": {
+                    "kind": "all",
+                    "conditions": [
+                      {
+                        "kind": "not",
+                        "condition": {
+                          "kind": "stated",
+                          "parameter": "capacity_property"
+                        }
+                      },
+                      {
+                        "kind": "not",
+                        "condition": {
+                          "kind": "all",
+                          "conditions": [
+                            {
+                              "kind": "not",
+                              "condition": {
+                                "kind": "stated",
+                                "parameter": "capacity_multiplier"
+                              }
+                            },
+                            {
+                              "kind": "not",
+                              "condition": {
+                                "kind": "stated",
+                                "parameter": "capacity_multiplier_property"
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            "message": "capacity_property is declared together with capacity_multiplier or capacity_multiplier_property"
+          },
+          {
+            "kind": "kind",
+            "parameter": "area_property"
+          }
+        ],
+        "texts": [
+          {
+            "name": "named",
+            "when": {
+              "kind": "stated",
+              "parameter": "area_property"
+            },
+            "text": "the stated area ({area_property})"
+          },
+          {
+            "name": "named",
+            "text": "the footprint"
+          },
+          {
+            "name": "against",
+            "when": {
+              "kind": "stated",
+              "parameter": "area_property"
+            },
+            "text": "{named}"
+          },
+          {
+            "name": "against",
+            "text": "a footprint"
+          },
+          {
+            "name": "unreached",
+            "when": {
+              "kind": "below",
+              "value": "reaching",
+              "than": 0.5
+            },
+            "text": "; no source reaches it"
+          },
+          {
+            "name": "summed",
+            "when": {
+              "kind": "positive",
+              "parameter": "capacity_multiplier"
+            },
+            "text": "{capacity_property} summed over the sources reaching it, times {capacity_multiplier},"
+          },
+          {
+            "name": "summed",
+            "text": "{capacity_property} times {capacity_multiplier_property} summed over the sources reaching it"
+          }
+        ],
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "reaching",
+                "expression": {
+                  "kind": "property",
+                  "propertySet": "axioval:measured",
+                  "property": "effective_reaching;sources=@sources;blockers=@blockers;mode=@mode;range=@range;touch_tolerance=@touch_tolerance;area_property=@area_property;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector;capacity_property=@capacity_property;capacity_multiplier=@capacity_multiplier;capacity_multiplier_property=@capacity_multiplier_property"
+                },
+                "absent": "missing value: its {area_property} is not stated"
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "reaching",
+              "rounding": []
+            },
+            "fail": "",
+            "undecided": "",
+            "checks": [
+              {
+                "values": [
+                  {
+                    "name": "area",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "effective_area;sources=@sources;blockers=@blockers;mode=@mode;range=@range;touch_tolerance=@touch_tolerance;area_property=@area_property;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector;capacity_property=@capacity_property;capacity_multiplier=@capacity_multiplier;capacity_multiplier_property=@capacity_multiplier_property"
+                    }
+                  },
+                  {
+                    "name": "share",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "effective_share;sources=@sources;blockers=@blockers;mode=@mode;range=@range;touch_tolerance=@touch_tolerance;area_property=@area_property;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector;capacity_property=@capacity_property;capacity_multiplier=@capacity_multiplier;capacity_multiplier_property=@capacity_multiplier_property"
+                    }
+                  },
+                  {
+                    "name": "covered",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "effective_covered;sources=@sources;blockers=@blockers;mode=@mode;range=@range;touch_tolerance=@touch_tolerance;area_property=@area_property;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector;capacity_property=@capacity_property;capacity_multiplier=@capacity_multiplier;capacity_multiplier_property=@capacity_multiplier_property"
+                    }
+                  }
+                ],
+                "decision": {
+                  "kind": "within",
+                  "value": "share",
+                  "minimum": [
+                    {
+                      "sign": "plus",
+                      "operand": {
+                        "kind": "parameter",
+                        "name": "minimum_ratio"
+                      }
+                    }
+                  ],
+                  "rounding": []
+                },
+                "fail": "{share:area} of {named} ({covered:area} of {area:area} m²) lies within the sources' effect areas ({mode} by {range:si} m); required {bound:plain}{unreached}",
+                "undecided": "{share:area} of {named} ({covered:area} of {area:area} m²) lies within the sources' effect areas ({mode} by {range:si} m), which straddles the bound {bound:plain}{share:notes3}",
+                "related": "share"
+              },
+              {
+                "values": [
+                  {
+                    "name": "area",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "effective_area;sources=@sources;blockers=@blockers;mode=@mode;range=@range;touch_tolerance=@touch_tolerance;area_property=@area_property;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector;capacity_property=@capacity_property;capacity_multiplier=@capacity_multiplier;capacity_multiplier_property=@capacity_multiplier_property"
+                    }
+                  },
+                  {
+                    "name": "summed",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "effective_capacity;sources=@sources;blockers=@blockers;mode=@mode;range=@range;touch_tolerance=@touch_tolerance;area_property=@area_property;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector;capacity_property=@capacity_property;capacity_multiplier=@capacity_multiplier;capacity_multiplier_property=@capacity_multiplier_property"
+                    }
+                  },
+                  {
+                    "name": "unread",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "effective_unread;sources=@sources;blockers=@blockers;mode=@mode;range=@range;touch_tolerance=@touch_tolerance;area_property=@area_property;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector;capacity_property=@capacity_property;capacity_multiplier=@capacity_multiplier;capacity_multiplier_property=@capacity_multiplier_property"
+                    }
+                  },
+                  {
+                    "name": "zero",
+                    "expression": {
+                      "kind": "literal",
+                      "value": {
+                        "type": "number",
+                        "value": 0.0
+                      }
+                    }
+                  }
+                ],
+                "derived": [
+                  {
+                    "kind": "open",
+                    "name": "capacity",
+                    "value": "summed",
+                    "open": "unread"
+                  },
+                  {
+                    "kind": "difference",
+                    "name": "spare",
+                    "minuend": "capacity",
+                    "subtrahend": "area"
+                  }
+                ],
+                "decision": {
+                  "kind": "within",
+                  "value": "spare",
+                  "minimum": [
+                    {
+                      "sign": "plus",
+                      "operand": {
+                        "kind": "value",
+                        "name": "zero"
+                      }
+                    }
+                  ],
+                  "rounding": []
+                },
+                "fail": "capacity: {summed} is {capacity:area} m² for {against} of {area:area} m²",
+                "undecided": "capacity: {summed} is {capacity:area} m² for {against} of {area:area} m², which cannot be decided{summed:notes3}",
+                "related": "summed",
+                "applies": {
+                  "when": [
+                    "capacity_property"
+                  ]
+                }
+              },
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {
+                    "when": [
+                      "capacity_property"
+                    ]
+                  },
+                  "list": "effective_missing;sources=@sources;blockers=@blockers;mode=@mode;range=@range;touch_tolerance=@touch_tolerance;area_property=@area_property;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector;capacity_property=@capacity_property;capacity_multiplier=@capacity_multiplier;capacity_multiplier_property=@capacity_multiplier_property",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "judge": {
+                        "kind": "truth",
+                        "value": "missing",
+                        "finding": true
+                      },
+                      "fail": "missing value: {source}'s {property} is not stated",
+                      "undecided": "{why}",
+                      "related": "source"
+                    }
+                  ]
+                },
+                "fail": "",
+                "undecided": "",
+                "applies": {
+                  "when": [
+                    "capacity_property"
+                  ]
+                }
+              }
+            ]
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "and",
+                  "operands": [
+                    {
+                      "kind": "compare",
+                      "operator": "greaterThanOrEquals",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "effective_share;sources=@sources;blockers=@blockers;mode=@mode;range=@range;touch_tolerance=@touch_tolerance;area_property=@area_property;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector;capacity_property=@capacity_property;capacity_multiplier=@capacity_multiplier;capacity_multiplier_property=@capacity_multiplier_property"
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "minimum_ratio"
+                      },
+                      "label": "at least the lower bound"
+                    }
+                  ]
+                },
+                {
+                  "kind": "and",
+                  "operands": [
+                    {
+                      "kind": "compare",
+                      "operator": "greaterThanOrEquals",
+                      "left": {
+                        "kind": "subtract",
+                        "left": {
+                          "kind": "property",
+                          "propertySet": "axioval:measured",
+                          "property": "effective_capacity;sources=@sources;blockers=@blockers;mode=@mode;range=@range;touch_tolerance=@touch_tolerance;area_property=@area_property;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector;capacity_property=@capacity_property;capacity_multiplier=@capacity_multiplier;capacity_multiplier_property=@capacity_multiplier_property"
+                        },
+                        "right": {
+                          "kind": "property",
+                          "propertySet": "axioval:measured",
+                          "property": "effective_area;sources=@sources;blockers=@blockers;mode=@mode;range=@range;touch_tolerance=@touch_tolerance;area_property=@area_property;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector;capacity_property=@capacity_property;capacity_multiplier=@capacity_multiplier;capacity_multiplier_property=@capacity_multiplier_property"
+                        },
+                        "label": "spare"
+                      },
+                      "right": {
+                        "kind": "literal",
+                        "value": {
+                          "type": "number",
+                          "value": 0.0
+                        }
+                      },
+                      "label": "at least the lower bound"
+                    }
+                  ]
+                },
+                {
+                  "kind": "aggregate",
+                  "function": "none",
+                  "over": {
+                    "kind": "measured",
+                    "name": "effective_missing;sources=@sources;blockers=@blockers;mode=@mode;range=@range;touch_tolerance=@touch_tolerance;area_property=@area_property;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector;capacity_property=@capacity_property;capacity_multiplier=@capacity_multiplier;capacity_multiplier_property=@capacity_multiplier_property"
+                  },
+                  "value": {
+                    "kind": "not",
+                    "operand": {
+                      "kind": "and",
+                      "operands": [
+                        {
+                          "kind": "not",
+                          "operand": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "missing"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "label": "no item fails"
+                },
+                {
+                  "kind": "isDefined",
+                  "operand": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "effective_reaching;sources=@sources;blockers=@blockers;mode=@mode;range=@range;touch_tolerance=@touch_tolerance;area_property=@area_property;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector;capacity_property=@capacity_property;capacity_multiplier=@capacity_multiplier;capacity_multiplier_property=@capacity_multiplier_property"
+                  },
+                  "label": "read"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.and",
+                      "inputs": {
+                        "operands": {
+                          "blocks": [
+                            {
+                              "type": "expression.compare",
+                              "label": "at least the lower bound",
+                              "fields": {
+                                "operator": "greaterThanOrEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "measured.effective_share",
+                                    "fields": {
+                                      "access_path": "@access_path",
+                                      "area_property": "@area_property",
+                                      "blockers": "@blockers",
+                                      "capacity_multiplier": "@capacity_multiplier",
+                                      "capacity_multiplier_property": "@capacity_multiplier_property",
+                                      "capacity_property": "@capacity_property",
+                                      "door_selector": "@door_selector",
+                                      "mode": "@mode",
+                                      "opening_selector": "@opening_selector",
+                                      "range": "@range",
+                                      "sources": "@sources",
+                                      "space_selector": "@space_selector",
+                                      "touch_tolerance": "@touch_tolerance"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "minimum_ratio"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.and",
+                      "inputs": {
+                        "operands": {
+                          "blocks": [
+                            {
+                              "type": "expression.compare",
+                              "label": "at least the lower bound",
+                              "fields": {
+                                "operator": "greaterThanOrEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "expression.subtract",
+                                    "label": "spare",
+                                    "inputs": {
+                                      "left": {
+                                        "block": {
+                                          "type": "measured.effective_capacity",
+                                          "fields": {
+                                            "access_path": "@access_path",
+                                            "area_property": "@area_property",
+                                            "blockers": "@blockers",
+                                            "capacity_multiplier": "@capacity_multiplier",
+                                            "capacity_multiplier_property": "@capacity_multiplier_property",
+                                            "capacity_property": "@capacity_property",
+                                            "door_selector": "@door_selector",
+                                            "mode": "@mode",
+                                            "opening_selector": "@opening_selector",
+                                            "range": "@range",
+                                            "sources": "@sources",
+                                            "space_selector": "@space_selector",
+                                            "touch_tolerance": "@touch_tolerance"
+                                          }
+                                        }
+                                      },
+                                      "right": {
+                                        "block": {
+                                          "type": "measured.effective_area",
+                                          "fields": {
+                                            "access_path": "@access_path",
+                                            "area_property": "@area_property",
+                                            "blockers": "@blockers",
+                                            "capacity_multiplier": "@capacity_multiplier",
+                                            "capacity_multiplier_property": "@capacity_multiplier_property",
+                                            "capacity_property": "@capacity_property",
+                                            "door_selector": "@door_selector",
+                                            "mode": "@mode",
+                                            "opening_selector": "@opening_selector",
+                                            "range": "@range",
+                                            "sources": "@sources",
+                                            "space_selector": "@space_selector",
+                                            "touch_tolerance": "@touch_tolerance"
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.literal",
+                                    "fields": {
+                                      "value": {
+                                        "type": "number",
+                                        "value": 0.0
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.aggregate",
+                      "label": "no item fails",
+                      "fields": {
+                        "function": "none"
+                      },
+                      "inputs": {
+                        "over": {
+                          "block": {
+                            "type": "members.effective_missing",
+                            "fields": {
+                              "access_path": "@access_path",
+                              "area_property": "@area_property",
+                              "blockers": "@blockers",
+                              "capacity_multiplier": "@capacity_multiplier",
+                              "capacity_multiplier_property": "@capacity_multiplier_property",
+                              "capacity_property": "@capacity_property",
+                              "door_selector": "@door_selector",
+                              "mode": "@mode",
+                              "opening_selector": "@opening_selector",
+                              "range": "@range",
+                              "sources": "@sources",
+                              "space_selector": "@space_selector",
+                              "touch_tolerance": "@touch_tolerance"
+                            }
+                          }
+                        },
+                        "value": {
+                          "block": {
+                            "type": "expression.not",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.and",
+                                  "inputs": {
+                                    "operands": {
+                                      "blocks": [
+                                        {
+                                          "type": "expression.not",
+                                          "inputs": {
+                                            "operand": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "missing",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.isDefined",
+                      "label": "read",
+                      "inputs": {
+                        "operand": {
+                          "block": {
+                            "type": "measured.effective_reaching",
+                            "fields": {
+                              "access_path": "@access_path",
+                              "area_property": "@area_property",
+                              "blockers": "@blockers",
+                              "capacity_multiplier": "@capacity_multiplier",
+                              "capacity_multiplier_property": "@capacity_multiplier_property",
+                              "capacity_property": "@capacity_property",
+                              "door_selector": "@door_selector",
+                              "mode": "@mode",
+                              "opening_selector": "@opening_selector",
+                              "range": "@range",
+                              "sources": "@sources",
+                              "space_selector": "@space_selector",
+                              "touch_tolerance": "@touch_tolerance"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.empty-host",
@@ -31590,10 +32385,11 @@
                   "label": "no item fails"
                 },
                 {
-                  "kind": "literal",
-                  "value": {
-                    "type": "boolean",
-                    "value": true
+                  "kind": "isDefined",
+                  "operand": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "run_count"
                   },
                   "label": "read"
                 }
@@ -32797,12 +33593,13 @@
                       }
                     },
                     {
-                      "type": "expression.literal",
+                      "type": "expression.isDefined",
                       "label": "read",
-                      "fields": {
-                        "value": {
-                          "type": "boolean",
-                          "value": true
+                      "inputs": {
+                        "operand": {
+                          "block": {
+                            "type": "measured.run_count"
+                          }
                         }
                       }
                     }
@@ -47126,10 +47923,11 @@
                   "label": "no item fails"
                 },
                 {
-                  "kind": "literal",
-                  "value": {
-                    "type": "boolean",
-                    "value": true
+                  "kind": "isDefined",
+                  "operand": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "flight_rise;walking_line_offset=@walking_line_offset"
                   },
                   "label": "read"
                 }
@@ -48997,12 +49795,16 @@
                       }
                     },
                     {
-                      "type": "expression.literal",
+                      "type": "expression.isDefined",
                       "label": "read",
-                      "fields": {
-                        "value": {
-                          "type": "boolean",
-                          "value": true
+                      "inputs": {
+                        "operand": {
+                          "block": {
+                            "type": "measured.flight_rise",
+                            "fields": {
+                              "walking_line_offset": "@walking_line_offset"
+                            }
+                          }
                         }
                       }
                     }
@@ -54324,6 +55126,1707 @@
         {
           "language": "de",
           "text": "Der Anteil des Grundrisses, den die Wirkbereiche der Quellen bedecken, von 0 bis 1."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
+      "name": "effective_area",
+      "parameters": [
+        {
+          "key": "sources",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The sources whose effect covers: source kinds, `,`-separated, or a selector parameter of the rule, those it cannot decide counting only possibly."
+            },
+            {
+              "language": "de",
+              "text": "Die Quellen, deren Wirkung bedeckt: Quellarten, durch `,` getrennt, oder ein Selektorparameter der Regel, dessen unentschiedene Objekte nur möglicherweise zählen."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "blockers",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "What cuts travel and sight (`travel`, `visible`): source kinds or a selector parameter; a source never blocks."
+            },
+            {
+              "language": "de",
+              "text": "Was Weg und Sicht unterbricht (`travel`, `visible`): Quellarten oder ein Selektorparameter; eine Quelle unterbricht nie."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "mode",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "grown",
+              "touching",
+              "travel",
+              "visible"
+            ]
+          },
+          "required": false,
+          "default": "grown",
+          "help": [
+            {
+              "language": "en",
+              "text": "How the effect reaches: a footprint grown by the range (`grown`, or `touching` counting only sources touching the element), or the free region within the range of travel (`travel`) or sight (`visible`)."
+            },
+            {
+              "language": "de",
+              "text": "Wie die Wirkung reicht: ein um die Reichweite vergrößerter Grundriss (`grown`, oder `touching` nur mit berührenden Quellen), oder der freie Bereich in Reichweite zu Fuß (`travel`) oder in Sicht (`visible`)."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "range",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "How far the effect reaches, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit die Wirkung reicht, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "touch_tolerance",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `touching`, how far apart a source's footprint and the element's may be and still touch, in metres; none without it."
+            },
+            {
+              "language": "de",
+              "text": "Mit `touching`, wie weit der Grundriss einer Quelle von dem des Bauteils entfernt sein darf und noch berührt, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "area_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Where the element states its area, read in place of its footprint's."
+            },
+            {
+              "language": "de",
+              "text": "Wo das Bauteil seine Fläche angibt, statt der Grundfläche gelesen."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "access_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `travel` or `visible`, the steps from a door or opening to the spaces it joins, through which the effect continues."
+            },
+            {
+              "language": "de",
+              "text": "Mit `travel` oder `visible`, die Schritte von einer Tür oder Öffnung zu den Räumen, die sie verbindet und durch die die Wirkung weiterreicht."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "door_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The doors `access_path` starts from."
+            },
+            {
+              "language": "de",
+              "text": "Die Türen, von denen `access_path` ausgeht."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "opening_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The openings `access_path` starts from."
+            },
+            {
+              "language": "de",
+              "text": "Die Öffnungen, von denen `access_path` ausgeht."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "space_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The spaces doors and openings join."
+            },
+            {
+              "language": "de",
+              "text": "Die Räume, die Türen und Öffnungen verbinden."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "capacity_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The capacity each source states, summed over the sources whose effect meets the footprint."
+            },
+            {
+              "language": "de",
+              "text": "Die Kapazität jeder Quelle, summiert über die Quellen, deren Wirkung den Grundriss erreicht."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "capacity_multiplier",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "What every source's capacity is multiplied by."
+            },
+            {
+              "language": "de",
+              "text": "Womit die Kapazität jeder Quelle multipliziert wird."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "capacity_multiplier_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "What each source states its capacity is multiplied by."
+            },
+            {
+              "language": "de",
+              "text": "Womit jede Quelle ihre Kapazität multipliziert."
+            }
+          ],
+          "references": "property"
+        }
+      ],
+      "dimension": "area",
+      "services": [
+        "plan-area",
+        "proximity",
+        "relationship-selection",
+        "type-hierarchy"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "an object's kind cannot be decided",
+        "the element's coverage cannot be measured"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Area covered against"
+        },
+        {
+          "language": "de",
+          "text": "Bezugsfläche der Bedeckung"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The area the sources' cover is a share of: the area the element states under `area_property`, or its footprint."
+        },
+        {
+          "language": "de",
+          "text": "Die Fläche, deren Anteil die Quellen bedecken: die Fläche, die das Bauteil unter `area_property` angibt, oder seine Grundfläche."
+        }
+      ],
+      "unit": "m2",
+      "available": true
+    },
+    {
+      "name": "effective_capacity",
+      "parameters": [
+        {
+          "key": "sources",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The sources whose effect covers: source kinds, `,`-separated, or a selector parameter of the rule, those it cannot decide counting only possibly."
+            },
+            {
+              "language": "de",
+              "text": "Die Quellen, deren Wirkung bedeckt: Quellarten, durch `,` getrennt, oder ein Selektorparameter der Regel, dessen unentschiedene Objekte nur möglicherweise zählen."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "blockers",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "What cuts travel and sight (`travel`, `visible`): source kinds or a selector parameter; a source never blocks."
+            },
+            {
+              "language": "de",
+              "text": "Was Weg und Sicht unterbricht (`travel`, `visible`): Quellarten oder ein Selektorparameter; eine Quelle unterbricht nie."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "mode",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "grown",
+              "touching",
+              "travel",
+              "visible"
+            ]
+          },
+          "required": false,
+          "default": "grown",
+          "help": [
+            {
+              "language": "en",
+              "text": "How the effect reaches: a footprint grown by the range (`grown`, or `touching` counting only sources touching the element), or the free region within the range of travel (`travel`) or sight (`visible`)."
+            },
+            {
+              "language": "de",
+              "text": "Wie die Wirkung reicht: ein um die Reichweite vergrößerter Grundriss (`grown`, oder `touching` nur mit berührenden Quellen), oder der freie Bereich in Reichweite zu Fuß (`travel`) oder in Sicht (`visible`)."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "range",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "How far the effect reaches, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit die Wirkung reicht, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "touch_tolerance",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `touching`, how far apart a source's footprint and the element's may be and still touch, in metres; none without it."
+            },
+            {
+              "language": "de",
+              "text": "Mit `touching`, wie weit der Grundriss einer Quelle von dem des Bauteils entfernt sein darf und noch berührt, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "area_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Where the element states its area, read in place of its footprint's."
+            },
+            {
+              "language": "de",
+              "text": "Wo das Bauteil seine Fläche angibt, statt der Grundfläche gelesen."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "access_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `travel` or `visible`, the steps from a door or opening to the spaces it joins, through which the effect continues."
+            },
+            {
+              "language": "de",
+              "text": "Mit `travel` oder `visible`, die Schritte von einer Tür oder Öffnung zu den Räumen, die sie verbindet und durch die die Wirkung weiterreicht."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "door_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The doors `access_path` starts from."
+            },
+            {
+              "language": "de",
+              "text": "Die Türen, von denen `access_path` ausgeht."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "opening_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The openings `access_path` starts from."
+            },
+            {
+              "language": "de",
+              "text": "Die Öffnungen, von denen `access_path` ausgeht."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "space_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The spaces doors and openings join."
+            },
+            {
+              "language": "de",
+              "text": "Die Räume, die Türen und Öffnungen verbinden."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "capacity_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The capacity each source states, summed over the sources whose effect meets the footprint."
+            },
+            {
+              "language": "de",
+              "text": "Die Kapazität jeder Quelle, summiert über die Quellen, deren Wirkung den Grundriss erreicht."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "capacity_multiplier",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "What every source's capacity is multiplied by."
+            },
+            {
+              "language": "de",
+              "text": "Womit die Kapazität jeder Quelle multipliziert wird."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "capacity_multiplier_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "What each source states its capacity is multiplied by."
+            },
+            {
+              "language": "de",
+              "text": "Womit jede Quelle ihre Kapazität multipliziert."
+            }
+          ],
+          "references": "property"
+        }
+      ],
+      "dimension": "area",
+      "services": [
+        "plan-area",
+        "proximity",
+        "relationship-selection",
+        "type-hierarchy"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "an object's kind cannot be decided",
+        "the element's coverage cannot be measured"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Summed capacity"
+        },
+        {
+          "language": "de",
+          "text": "Summierte Kapazität"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The capacity of the sources whose effect meets the footprint, each times its multiplier, from those surely contributing to every one that may, over the contributions read; `effective_unread` says how many cannot be."
+        },
+        {
+          "language": "de",
+          "text": "Die Kapazität der Quellen, deren Wirkung den Grundriss erreicht, jede mal ihrem Faktor, von den sicher bis zu allen möglicherweise beitragenden, über die gelesenen Beiträge; `effective_unread` sagt, wie viele nicht lesbar sind."
+        }
+      ],
+      "unit": "m2",
+      "available": true
+    },
+    {
+      "name": "effective_covered",
+      "parameters": [
+        {
+          "key": "sources",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The sources whose effect covers: source kinds, `,`-separated, or a selector parameter of the rule, those it cannot decide counting only possibly."
+            },
+            {
+              "language": "de",
+              "text": "Die Quellen, deren Wirkung bedeckt: Quellarten, durch `,` getrennt, oder ein Selektorparameter der Regel, dessen unentschiedene Objekte nur möglicherweise zählen."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "blockers",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "What cuts travel and sight (`travel`, `visible`): source kinds or a selector parameter; a source never blocks."
+            },
+            {
+              "language": "de",
+              "text": "Was Weg und Sicht unterbricht (`travel`, `visible`): Quellarten oder ein Selektorparameter; eine Quelle unterbricht nie."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "mode",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "grown",
+              "touching",
+              "travel",
+              "visible"
+            ]
+          },
+          "required": false,
+          "default": "grown",
+          "help": [
+            {
+              "language": "en",
+              "text": "How the effect reaches: a footprint grown by the range (`grown`, or `touching` counting only sources touching the element), or the free region within the range of travel (`travel`) or sight (`visible`)."
+            },
+            {
+              "language": "de",
+              "text": "Wie die Wirkung reicht: ein um die Reichweite vergrößerter Grundriss (`grown`, oder `touching` nur mit berührenden Quellen), oder der freie Bereich in Reichweite zu Fuß (`travel`) oder in Sicht (`visible`)."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "range",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "How far the effect reaches, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit die Wirkung reicht, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "touch_tolerance",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `touching`, how far apart a source's footprint and the element's may be and still touch, in metres; none without it."
+            },
+            {
+              "language": "de",
+              "text": "Mit `touching`, wie weit der Grundriss einer Quelle von dem des Bauteils entfernt sein darf und noch berührt, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "area_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Where the element states its area, read in place of its footprint's."
+            },
+            {
+              "language": "de",
+              "text": "Wo das Bauteil seine Fläche angibt, statt der Grundfläche gelesen."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "access_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `travel` or `visible`, the steps from a door or opening to the spaces it joins, through which the effect continues."
+            },
+            {
+              "language": "de",
+              "text": "Mit `travel` oder `visible`, die Schritte von einer Tür oder Öffnung zu den Räumen, die sie verbindet und durch die die Wirkung weiterreicht."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "door_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The doors `access_path` starts from."
+            },
+            {
+              "language": "de",
+              "text": "Die Türen, von denen `access_path` ausgeht."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "opening_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The openings `access_path` starts from."
+            },
+            {
+              "language": "de",
+              "text": "Die Öffnungen, von denen `access_path` ausgeht."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "space_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The spaces doors and openings join."
+            },
+            {
+              "language": "de",
+              "text": "Die Räume, die Türen und Öffnungen verbinden."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "capacity_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The capacity each source states, summed over the sources whose effect meets the footprint."
+            },
+            {
+              "language": "de",
+              "text": "Die Kapazität jeder Quelle, summiert über die Quellen, deren Wirkung den Grundriss erreicht."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "capacity_multiplier",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "What every source's capacity is multiplied by."
+            },
+            {
+              "language": "de",
+              "text": "Womit die Kapazität jeder Quelle multipliziert wird."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "capacity_multiplier_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "What each source states its capacity is multiplied by."
+            },
+            {
+              "language": "de",
+              "text": "Womit jede Quelle ihre Kapazität multipliziert."
+            }
+          ],
+          "references": "property"
+        }
+      ],
+      "dimension": "area",
+      "services": [
+        "plan-area",
+        "proximity",
+        "relationship-selection",
+        "type-hierarchy"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "an object's kind cannot be decided",
+        "the element's coverage cannot be measured"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Area the sources cover"
+        },
+        {
+          "language": "de",
+          "text": "Von den Quellen bedeckte Fläche"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The part of the footprint the sources' effect areas cover, as `effective-coverage` measures it: from what certain sources surely cover to what every source may."
+        },
+        {
+          "language": "de",
+          "text": "Der Teil des Grundrisses, den die Wirkungsbereiche der Quellen bedecken, wie `effective-coverage` ihn misst: von der sicheren bis zur möglichen Bedeckung."
+        }
+      ],
+      "unit": "m2",
+      "available": true
+    },
+    {
+      "name": "effective_reaching",
+      "parameters": [
+        {
+          "key": "sources",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The sources whose effect covers: source kinds, `,`-separated, or a selector parameter of the rule, those it cannot decide counting only possibly."
+            },
+            {
+              "language": "de",
+              "text": "Die Quellen, deren Wirkung bedeckt: Quellarten, durch `,` getrennt, oder ein Selektorparameter der Regel, dessen unentschiedene Objekte nur möglicherweise zählen."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "blockers",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "What cuts travel and sight (`travel`, `visible`): source kinds or a selector parameter; a source never blocks."
+            },
+            {
+              "language": "de",
+              "text": "Was Weg und Sicht unterbricht (`travel`, `visible`): Quellarten oder ein Selektorparameter; eine Quelle unterbricht nie."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "mode",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "grown",
+              "touching",
+              "travel",
+              "visible"
+            ]
+          },
+          "required": false,
+          "default": "grown",
+          "help": [
+            {
+              "language": "en",
+              "text": "How the effect reaches: a footprint grown by the range (`grown`, or `touching` counting only sources touching the element), or the free region within the range of travel (`travel`) or sight (`visible`)."
+            },
+            {
+              "language": "de",
+              "text": "Wie die Wirkung reicht: ein um die Reichweite vergrößerter Grundriss (`grown`, oder `touching` nur mit berührenden Quellen), oder der freie Bereich in Reichweite zu Fuß (`travel`) oder in Sicht (`visible`)."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "range",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "How far the effect reaches, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit die Wirkung reicht, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "touch_tolerance",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `touching`, how far apart a source's footprint and the element's may be and still touch, in metres; none without it."
+            },
+            {
+              "language": "de",
+              "text": "Mit `touching`, wie weit der Grundriss einer Quelle von dem des Bauteils entfernt sein darf und noch berührt, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "area_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Where the element states its area, read in place of its footprint's."
+            },
+            {
+              "language": "de",
+              "text": "Wo das Bauteil seine Fläche angibt, statt der Grundfläche gelesen."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "access_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `travel` or `visible`, the steps from a door or opening to the spaces it joins, through which the effect continues."
+            },
+            {
+              "language": "de",
+              "text": "Mit `travel` oder `visible`, die Schritte von einer Tür oder Öffnung zu den Räumen, die sie verbindet und durch die die Wirkung weiterreicht."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "door_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The doors `access_path` starts from."
+            },
+            {
+              "language": "de",
+              "text": "Die Türen, von denen `access_path` ausgeht."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "opening_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The openings `access_path` starts from."
+            },
+            {
+              "language": "de",
+              "text": "Die Öffnungen, von denen `access_path` ausgeht."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "space_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The spaces doors and openings join."
+            },
+            {
+              "language": "de",
+              "text": "Die Räume, die Türen und Öffnungen verbinden."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "capacity_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The capacity each source states, summed over the sources whose effect meets the footprint."
+            },
+            {
+              "language": "de",
+              "text": "Die Kapazität jeder Quelle, summiert über die Quellen, deren Wirkung den Grundriss erreicht."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "capacity_multiplier",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "What every source's capacity is multiplied by."
+            },
+            {
+              "language": "de",
+              "text": "Womit die Kapazität jeder Quelle multipliziert wird."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "capacity_multiplier_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "What each source states its capacity is multiplied by."
+            },
+            {
+              "language": "de",
+              "text": "Womit jede Quelle ihre Kapazität multipliziert."
+            }
+          ],
+          "references": "property"
+        }
+      ],
+      "services": [
+        "plan-area",
+        "proximity",
+        "relationship-selection",
+        "type-hierarchy"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "an object's kind cannot be decided",
+        "the element's coverage cannot be measured"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Sources reaching"
+        },
+        {
+          "language": "de",
+          "text": "Erreichende Quellen"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "How many sources reach the element; stated absent where the element states no area under `area_property`, which is then all there is to say of it."
+        },
+        {
+          "language": "de",
+          "text": "Wie viele Quellen das Bauteil erreichen; als fehlend angegeben, wo das Bauteil unter `area_property` keine Fläche angibt, was dann alles ist, was sich sagen lässt."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
+      "name": "effective_share",
+      "parameters": [
+        {
+          "key": "sources",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The sources whose effect covers: source kinds, `,`-separated, or a selector parameter of the rule, those it cannot decide counting only possibly."
+            },
+            {
+              "language": "de",
+              "text": "Die Quellen, deren Wirkung bedeckt: Quellarten, durch `,` getrennt, oder ein Selektorparameter der Regel, dessen unentschiedene Objekte nur möglicherweise zählen."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "blockers",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "What cuts travel and sight (`travel`, `visible`): source kinds or a selector parameter; a source never blocks."
+            },
+            {
+              "language": "de",
+              "text": "Was Weg und Sicht unterbricht (`travel`, `visible`): Quellarten oder ein Selektorparameter; eine Quelle unterbricht nie."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "mode",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "grown",
+              "touching",
+              "travel",
+              "visible"
+            ]
+          },
+          "required": false,
+          "default": "grown",
+          "help": [
+            {
+              "language": "en",
+              "text": "How the effect reaches: a footprint grown by the range (`grown`, or `touching` counting only sources touching the element), or the free region within the range of travel (`travel`) or sight (`visible`)."
+            },
+            {
+              "language": "de",
+              "text": "Wie die Wirkung reicht: ein um die Reichweite vergrößerter Grundriss (`grown`, oder `touching` nur mit berührenden Quellen), oder der freie Bereich in Reichweite zu Fuß (`travel`) oder in Sicht (`visible`)."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "range",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "How far the effect reaches, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit die Wirkung reicht, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "touch_tolerance",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `touching`, how far apart a source's footprint and the element's may be and still touch, in metres; none without it."
+            },
+            {
+              "language": "de",
+              "text": "Mit `touching`, wie weit der Grundriss einer Quelle von dem des Bauteils entfernt sein darf und noch berührt, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "area_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Where the element states its area, read in place of its footprint's."
+            },
+            {
+              "language": "de",
+              "text": "Wo das Bauteil seine Fläche angibt, statt der Grundfläche gelesen."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "access_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `travel` or `visible`, the steps from a door or opening to the spaces it joins, through which the effect continues."
+            },
+            {
+              "language": "de",
+              "text": "Mit `travel` oder `visible`, die Schritte von einer Tür oder Öffnung zu den Räumen, die sie verbindet und durch die die Wirkung weiterreicht."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "door_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The doors `access_path` starts from."
+            },
+            {
+              "language": "de",
+              "text": "Die Türen, von denen `access_path` ausgeht."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "opening_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The openings `access_path` starts from."
+            },
+            {
+              "language": "de",
+              "text": "Die Öffnungen, von denen `access_path` ausgeht."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "space_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The spaces doors and openings join."
+            },
+            {
+              "language": "de",
+              "text": "Die Räume, die Türen und Öffnungen verbinden."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "capacity_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The capacity each source states, summed over the sources whose effect meets the footprint."
+            },
+            {
+              "language": "de",
+              "text": "Die Kapazität jeder Quelle, summiert über die Quellen, deren Wirkung den Grundriss erreicht."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "capacity_multiplier",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "What every source's capacity is multiplied by."
+            },
+            {
+              "language": "de",
+              "text": "Womit die Kapazität jeder Quelle multipliziert wird."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "capacity_multiplier_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "What each source states its capacity is multiplied by."
+            },
+            {
+              "language": "de",
+              "text": "Womit jede Quelle ihre Kapazität multipliziert."
+            }
+          ],
+          "references": "property"
+        }
+      ],
+      "services": [
+        "plan-area",
+        "proximity",
+        "relationship-selection",
+        "type-hierarchy"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "an object's kind cannot be decided",
+        "the element's coverage cannot be measured"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Share the sources cover"
+        },
+        {
+          "language": "de",
+          "text": "Von den Quellen bedeckter Anteil"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The share of the element's area the sources' effect areas cover, from 0 to 1, as `effective-coverage` measures it; it cites the sources surely contributing."
+        },
+        {
+          "language": "de",
+          "text": "Der Anteil der Fläche des Bauteils, den die Wirkungsbereiche der Quellen bedecken, von 0 bis 1, wie `effective-coverage` ihn misst; er nennt die sicher beitragenden Quellen."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
+      "name": "effective_unread",
+      "parameters": [
+        {
+          "key": "sources",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The sources whose effect covers: source kinds, `,`-separated, or a selector parameter of the rule, those it cannot decide counting only possibly."
+            },
+            {
+              "language": "de",
+              "text": "Die Quellen, deren Wirkung bedeckt: Quellarten, durch `,` getrennt, oder ein Selektorparameter der Regel, dessen unentschiedene Objekte nur möglicherweise zählen."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "blockers",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "What cuts travel and sight (`travel`, `visible`): source kinds or a selector parameter; a source never blocks."
+            },
+            {
+              "language": "de",
+              "text": "Was Weg und Sicht unterbricht (`travel`, `visible`): Quellarten oder ein Selektorparameter; eine Quelle unterbricht nie."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "mode",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "grown",
+              "touching",
+              "travel",
+              "visible"
+            ]
+          },
+          "required": false,
+          "default": "grown",
+          "help": [
+            {
+              "language": "en",
+              "text": "How the effect reaches: a footprint grown by the range (`grown`, or `touching` counting only sources touching the element), or the free region within the range of travel (`travel`) or sight (`visible`)."
+            },
+            {
+              "language": "de",
+              "text": "Wie die Wirkung reicht: ein um die Reichweite vergrößerter Grundriss (`grown`, oder `touching` nur mit berührenden Quellen), oder der freie Bereich in Reichweite zu Fuß (`travel`) oder in Sicht (`visible`)."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "range",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "How far the effect reaches, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit die Wirkung reicht, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "touch_tolerance",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `touching`, how far apart a source's footprint and the element's may be and still touch, in metres; none without it."
+            },
+            {
+              "language": "de",
+              "text": "Mit `touching`, wie weit der Grundriss einer Quelle von dem des Bauteils entfernt sein darf und noch berührt, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "area_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Where the element states its area, read in place of its footprint's."
+            },
+            {
+              "language": "de",
+              "text": "Wo das Bauteil seine Fläche angibt, statt der Grundfläche gelesen."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "access_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `travel` or `visible`, the steps from a door or opening to the spaces it joins, through which the effect continues."
+            },
+            {
+              "language": "de",
+              "text": "Mit `travel` oder `visible`, die Schritte von einer Tür oder Öffnung zu den Räumen, die sie verbindet und durch die die Wirkung weiterreicht."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "door_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The doors `access_path` starts from."
+            },
+            {
+              "language": "de",
+              "text": "Die Türen, von denen `access_path` ausgeht."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "opening_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The openings `access_path` starts from."
+            },
+            {
+              "language": "de",
+              "text": "Die Öffnungen, von denen `access_path` ausgeht."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "space_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The spaces doors and openings join."
+            },
+            {
+              "language": "de",
+              "text": "Die Räume, die Türen und Öffnungen verbinden."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "capacity_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The capacity each source states, summed over the sources whose effect meets the footprint."
+            },
+            {
+              "language": "de",
+              "text": "Die Kapazität jeder Quelle, summiert über die Quellen, deren Wirkung den Grundriss erreicht."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "capacity_multiplier",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "What every source's capacity is multiplied by."
+            },
+            {
+              "language": "de",
+              "text": "Womit die Kapazität jeder Quelle multipliziert wird."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "capacity_multiplier_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "What each source states its capacity is multiplied by."
+            },
+            {
+              "language": "de",
+              "text": "Womit jede Quelle ihre Kapazität multipliziert."
+            }
+          ],
+          "references": "property"
+        }
+      ],
+      "services": [
+        "plan-area",
+        "proximity",
+        "relationship-selection",
+        "type-hierarchy"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "an object's kind cannot be decided",
+        "the element's coverage cannot be measured"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Capacities not read"
+        },
+        {
+          "language": "de",
+          "text": "Nicht gelesene Kapazitäten"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "How many contributions to `effective_capacity` cannot be read: a source stating no capacity or multiplier, or none of another kind, and sources that cannot be placed."
+        },
+        {
+          "language": "de",
+          "text": "Wie viele Beiträge zu `effective_capacity` nicht lesbar sind: eine Quelle ohne Kapazität oder Faktor oder mit einem anderer Art, und Quellen, die sich nicht verorten lassen."
         }
       ],
       "unit": "1",
@@ -63128,6 +65631,368 @@
             {
               "language": "de",
               "text": "`flight` oder `ramp`."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "effective_missing",
+      "parameters": [
+        {
+          "key": "sources",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The sources whose effect covers: source kinds, `,`-separated, or a selector parameter of the rule, those it cannot decide counting only possibly."
+            },
+            {
+              "language": "de",
+              "text": "Die Quellen, deren Wirkung bedeckt: Quellarten, durch `,` getrennt, oder ein Selektorparameter der Regel, dessen unentschiedene Objekte nur möglicherweise zählen."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "blockers",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "What cuts travel and sight (`travel`, `visible`): source kinds or a selector parameter; a source never blocks."
+            },
+            {
+              "language": "de",
+              "text": "Was Weg und Sicht unterbricht (`travel`, `visible`): Quellarten oder ein Selektorparameter; eine Quelle unterbricht nie."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "mode",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "grown",
+              "touching",
+              "travel",
+              "visible"
+            ]
+          },
+          "required": false,
+          "default": "grown",
+          "help": [
+            {
+              "language": "en",
+              "text": "How the effect reaches: a footprint grown by the range (`grown`, or `touching` counting only sources touching the element), or the free region within the range of travel (`travel`) or sight (`visible`)."
+            },
+            {
+              "language": "de",
+              "text": "Wie die Wirkung reicht: ein um die Reichweite vergrößerter Grundriss (`grown`, oder `touching` nur mit berührenden Quellen), oder der freie Bereich in Reichweite zu Fuß (`travel`) oder in Sicht (`visible`)."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "range",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "How far the effect reaches, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit die Wirkung reicht, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "touch_tolerance",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `touching`, how far apart a source's footprint and the element's may be and still touch, in metres; none without it."
+            },
+            {
+              "language": "de",
+              "text": "Mit `touching`, wie weit der Grundriss einer Quelle von dem des Bauteils entfernt sein darf und noch berührt, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "area_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Where the element states its area, read in place of its footprint's."
+            },
+            {
+              "language": "de",
+              "text": "Wo das Bauteil seine Fläche angibt, statt der Grundfläche gelesen."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "access_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `travel` or `visible`, the steps from a door or opening to the spaces it joins, through which the effect continues."
+            },
+            {
+              "language": "de",
+              "text": "Mit `travel` oder `visible`, die Schritte von einer Tür oder Öffnung zu den Räumen, die sie verbindet und durch die die Wirkung weiterreicht."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "door_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The doors `access_path` starts from."
+            },
+            {
+              "language": "de",
+              "text": "Die Türen, von denen `access_path` ausgeht."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "opening_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The openings `access_path` starts from."
+            },
+            {
+              "language": "de",
+              "text": "Die Öffnungen, von denen `access_path` ausgeht."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "space_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The spaces doors and openings join."
+            },
+            {
+              "language": "de",
+              "text": "Die Räume, die Türen und Öffnungen verbinden."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "capacity_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The capacity each source states, summed over the sources whose effect meets the footprint."
+            },
+            {
+              "language": "de",
+              "text": "Die Kapazität jeder Quelle, summiert über die Quellen, deren Wirkung den Grundriss erreicht."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "capacity_multiplier",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "What every source's capacity is multiplied by."
+            },
+            {
+              "language": "de",
+              "text": "Womit die Kapazität jeder Quelle multipliziert wird."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "capacity_multiplier_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "What each source states its capacity is multiplied by."
+            },
+            {
+              "language": "de",
+              "text": "Womit jede Quelle ihre Kapazität multipliziert."
+            }
+          ],
+          "references": "property"
+        }
+      ],
+      "services": [
+        "plan-area",
+        "proximity",
+        "relationship-selection",
+        "type-hierarchy"
+      ],
+      "exactness": "stated",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "an object's kind cannot be decided",
+        "the element's coverage cannot be measured"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Missing capacities"
+        },
+        {
+          "language": "de",
+          "text": "Fehlende Kapazitäten"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "Each source surely contributing to `effective_capacity` that states no capacity or multiplier (absent, null or blank)."
+        },
+        {
+          "language": "de",
+          "text": "Jede sicher zu `effective_capacity` beitragende Quelle, die keine Kapazität oder keinen Faktor angibt (fehlend, null oder leer)."
+        }
+      ],
+      "fields": [
+        {
+          "name": "source",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Source"
+            },
+            {
+              "language": "de",
+              "text": "Quelle"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The source stating nothing."
+            },
+            {
+              "language": "de",
+              "text": "Die Quelle, die nichts angibt."
+            }
+          ]
+        },
+        {
+          "name": "property",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Property"
+            },
+            {
+              "language": "de",
+              "text": "Eigenschaft"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The property it states nothing under, as the rule names it."
+            },
+            {
+              "language": "de",
+              "text": "Die Eigenschaft, unter der sie nichts angibt, wie die Regel sie nennt."
+            }
+          ]
+        },
+        {
+          "name": "missing",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Missing"
+            },
+            {
+              "language": "de",
+              "text": "Fehlend"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Always true: the value is missing."
+            },
+            {
+              "language": "de",
+              "text": "Immer wahr: der Wert fehlt."
             }
           ]
         }

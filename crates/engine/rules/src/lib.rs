@@ -57,6 +57,7 @@ mod measured_kinds;
 mod measured_openings;
 mod measured_plan;
 mod name_sequence;
+mod near;
 mod numbering_consistency;
 mod object_count;
 mod object_parameters;
@@ -189,6 +190,7 @@ pub mod reference {
     pub use crate::conformance::reference::SelectorConformance;
     pub use crate::consistent_value::reference::ConsistentValue;
     pub use crate::counterpart_coverage::reference::CounterpartCoverage;
+    pub use crate::effective_coverage::reference::EffectiveCoverage;
     pub use crate::level_spacing::reference::LevelSpacing;
     pub use crate::object_count::reference::ObjectCount;
     pub use crate::plan_area::reference::PlanAreaRange;
@@ -307,6 +309,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(parking_bay::BayMeasures))
         .and_then(|registry| registry.register_measured(wall_spacing::SpacingMeasures))
         .and_then(|registry| registry.register_measured(counterpart_coverage::CoverageMeasures))
+        .and_then(|registry| registry.register_measured(effective_coverage::EffectMeasures))
         .and_then(|registry| registry.register_measured(triangle_count::TriangleMeasures))
         .and_then(|registry| registry.register_measured(body_extent::ExtentMeasures))
         .and_then(|registry| registry.register_measured(plan_area::AreaMeasures))

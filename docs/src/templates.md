@@ -34,8 +34,9 @@ requirements tables and `property-comparison` candidates against a target
 first judging the items of measured lists one by one, and
 `stair-geometry` the first judging the parts of what it selects as objects
 of their own ([#280](https://github.com/axioval/engine/issues/280)); `slab-contact` is the first to grade its findings itself and
-to leave objects unjudged, and `counterpart-coverage` the first graded by
-thresholds the rule states
+to leave objects unjudged, `counterpart-coverage` the first graded by
+thresholds the rule states, and `effective-coverage` the first deciding by
+a value without an upper bound
 ([#282](https://github.com/axioval/engine/issues/282)).
 
 ## The outside contract
@@ -936,6 +937,37 @@ one threshold stated, `measure` (`choice`), an elevation with both
 tolerances (`holds`), `axis_tolerance` (`angleBelow`) and the infill
 (`requires`, `requiresValue`, `holds`).
 
+### `effective-coverage`
+
+| Form | When | Values | Checks |
+| --- | --- | --- | --- |
+| one | always | `reaching` = `effective_reaching;sources=@sources;blockers=@blockers;mode=@mode;range=@range;touch_tolerance=@touch_tolerance;area_property=@area_property;access_path=@access_path;door_selector=@door_selector;opening_selector=@opening_selector;space_selector=@space_selector;capacity_property=@capacity_property;capacity_multiplier=@capacity_multiplier;capacity_multiplier_property=@capacity_multiplier_property` (unstated ones dropped) | coverage: `share` (`effective_share`) at least `minimum_ratio`, no rounding, over `area` and `covered`; capacity (`capacity_property` stated): `capacity` (`effective_capacity`, without an upper bound where `effective_unread` counts a contribution not read, `Derived::Open`) less `area` (`spare`, `Derived::Difference`) at least zero; missing values (likewise): each item of `effective_missing` a finding |
+
+Every value names every parameter as the rule names it, so they share one
+measurement per element. `reaching` is read first: missing services, an
+element whose extent cannot be read or whose coverage cannot be measured
+leave it open once, and one stating no area under `area_property` is the
+finding `missing value: its {area_property} is not stated` (`reaching` is
+then stated absent), checked no further, as the capability did. The
+coverage finding reads `{share:area} of {named} ({covered:area} of
+{area:area} m²) lies within the sources' effect areas ({mode} by
+{range:si} m); required {bound:plain}{unreached}` (`named` the stated area
+or the footprint, `unreached` `; no source reaches it` where `reaching` is
+zero), relating the sources surely contributing (`related: share`); a share
+straddling the minimum is open with `…, which straddles the bound
+{bound:plain}{share:notes3}`, the first three notes saying why it may be
+covered more. The capacity finding reads `capacity: {summed} is
+{capacity:area} m² for {against} of {area:area} m²` (`summed` the sum's
+words by the multiplier declared), relating the sources surely
+contributing; one that cannot be decided `…, which cannot be
+decided{summed:notes3}`. Each surely contributing source stating no
+capacity or multiplier is a finding of its own, after the capacity's:
+`missing value: {source}'s {property} is not stated`, relating the source
+(`Decision::Items`). The declaration keeps the capability's checks, words
+and order: the access declaration is the measured value's own argument
+check (`arguments`, `AccessDeclaration::parse`), the modes' exclusions and
+the capacity's combinations conditions (`holds`).
+
 ### `slab-stack-spacing`
 
 | Form | When | Values | Checks |
@@ -1333,6 +1365,18 @@ counterparts without geometry or of undecided selection, under random
 tolerances (some switched off), bands, axis tolerances, elevations and
 frames; and by the `counterpart-coverage` rules of the `coverage` case,
 recorded before the switch (D27).
+
+`effective-coverage` is held to `effective_coverage/reference.rs`
+(`axioval_rules::reference::EffectiveCoverage`, which measures through the
+same `Element`) on every fixture of `tests/effective_coverage.rs`, the
+template asking the plan-area service exactly what the capability asked;
+by generated rooms, devices of random effects (some of undecided
+selection, some without geometry), walls, stated areas and capacities
+(some missing, `null` or of another kind) under every mode, minimum and
+capacity declaration; by the `effective-coverage` rules of the `coverage`
+case, recorded before the switch; and its fork, which requires `reaching`
+stated and the share at least the minimum and reaches its verdicts. A rule
+declaring a capacity is never forked (D27).
 
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the

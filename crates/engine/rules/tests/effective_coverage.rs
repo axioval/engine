@@ -1,4 +1,9 @@
 //! Effective coverage of rooms by the effect areas of their devices.
+//!
+//! `effective-coverage` runs as a template (#282); every fixture runs it
+//! and the implementation it replaced
+//! (`axioval_rules::reference::EffectiveCoverage`) and holds the template
+//! to the whole outside contract (`Parity::contract()`).
 #![allow(missing_docs)]
 
 mod common;
@@ -16,6 +21,7 @@ use axioval_engine::{
 use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector};
 use axioval_ir::{Evidence, NotEvaluatedReason, ObjectId, PropertyValue};
 use axioval_rules::EffectiveCoverage;
+use axioval_rules::reference::EffectiveCoverage as Reference;
 use common::{
     Model, id, kind, number, property, rule, selector, source, string, strings, unevaluated,
 };
@@ -119,7 +125,14 @@ impl PlanAreaService for Plan {
         let passing = request.passages().iter().any(Participant::is_certain);
         let passable = !request.passages().is_empty();
         for source in request.sources() {
-            let (mut sure, mut most) = self.effects[source.object()];
+            // An object with no effect of its own (a wall a selection
+            // cannot rule out) reaches nothing.
+            let nowhere = [-1e3, -1e3, -1e3, -1e3];
+            let (mut sure, mut most) = self
+                .effects
+                .get(source.object())
+                .copied()
+                .unwrap_or((nowhere, nowhere));
             if let Some((inner, outer)) = self.through.get(source.object()) {
                 if passing {
                     sure = *inner;
@@ -273,15 +286,42 @@ fn model(plan: &Plan) -> Model {
     })
 }
 
+/// The template's evaluation, held to the replaced implementation's whole
+/// contract; the template asks the plan nothing the capability did not.
+#[allow(clippy::needless_pass_by_value)]
 fn run_with(model: Model, plan: Arc<Plan>, rule: &CompiledRule) -> CapabilityEvaluation {
-    model.evaluate_with(&EffectiveCoverage, rule, |services| {
+    let register = |services: &mut axioval_engine::ServiceRegistry| {
         services
             .register(PlanAreaServiceHandle::new(plan.clone()))
             .unwrap();
         services
-            .register(ProximityServiceHandle::new(plan))
+            .register(ProximityServiceHandle::new(plan.clone()))
             .unwrap();
-    })
+    };
+    let distinct = |from: usize| -> std::collections::BTreeSet<String> {
+        plan.asked.lock().unwrap()[from..]
+            .iter()
+            .map(|request| format!("{request:?}"))
+            .collect()
+    };
+    let before = plan.asked.lock().unwrap().len();
+    model.clone().evaluate_with(&Reference, rule, register);
+    let asked = distinct(before);
+    let both = plan.asked.lock().unwrap().len();
+    let evaluation =
+        model.holding_contract(&EffectiveCoverage, &Reference, rule, register, &[], 0.0);
+    assert_eq!(
+        distinct(both),
+        asked,
+        "the template asks what the capability asked"
+    );
+    // What the tests read first is what the template asked.
+    let mut recorded = plan.asked.lock().unwrap();
+    let tail = recorded.split_off(both);
+    recorded.truncate(before);
+    recorded.extend(tail);
+    drop(recorded);
+    evaluation
 }
 
 fn run(plan: Plan, rule: &CompiledRule) -> CapabilityEvaluation {
@@ -945,5 +985,278 @@ mod as_expressions {
             holds(&evidence);
             assert_eq!((evidence.found, evidence.open), (found, open));
         }
+    }
+}
+
+/// Generated rooms and devices, held to the replaced implementation's
+/// whole contract: random rooms, devices of random effects (some of
+/// undecided selection, some without geometry), walls, stated areas and
+/// capacities (some missing, `null` or of another kind) under every mode,
+/// minimum and capacity declaration.
+mod generated {
+    use proptest::collection::vec;
+    use proptest::prelude::*;
+
+    use super::*;
+
+    /// A device: where it stands along x and y (decimetres), how far its
+    /// effect surely and at most reaches (decimetres), whether its
+    /// selection is undecided or it has no geometry, its rating and its
+    /// multiplier (0 none, 1 `null`, 2 text, else a number).
+    type Device = ((u32, u32), (u32, u32), u32, (u32, u32));
+
+    fn device() -> impl Strategy<Value = Device> {
+        (
+            (0u32..120, 0u32..50),
+            (0u32..30, 0u32..20),
+            prop_oneof![6 => Just(0u32), 1 => Just(1u32), 1 => Just(2u32)],
+            (0u32..8, 0u32..8),
+        )
+    }
+
+    fn value(code: u32) -> Option<PropertyValue> {
+        match code {
+            0 => None,
+            1 => Some(PropertyValue::Null),
+            2 => Some(PropertyValue::String("many".into())),
+            number => Some(PropertyValue::Decimal(f64::from(number))),
+        }
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(96))]
+
+        #[test]
+        fn generated_rooms_hold_parity(
+            rooms in vec((0u32..3, prop_oneof![3 => Just(0u32), 1 => 1u32..4, 1 => Just(9u32)]), 1..4),
+            devices in vec(device(), 0..6),
+            walls in vec((0u32..120, 0u32..50), 0..3),
+            mode in 0u32..4,
+            minimum in 1u32..11,
+            capacity in 0u32..3,
+            stated_area in any::<bool>(),
+            unreadable_wall in any::<bool>(),
+        ) {
+            let mut plan = Plan::default();
+            let mut model = Model::default();
+            for (index, (width, stated)) in rooms.iter().enumerate() {
+                let local = format!("r{index}");
+                #[allow(clippy::cast_precision_loss)]
+                let x = index as f64 * 5.0;
+                plan = plan.with(&local, [x, 0.0, x + 4.0 + f64::from(*width), 4.0]);
+                model = model.object(&local, "room");
+                if stated_area {
+                    model = match stated {
+                        0 => model,
+                        9 => model.value(&local, "Pset", "Area", PropertyValue::Null),
+                        area => model.value(
+                            &local,
+                            "Pset",
+                            "Area",
+                            PropertyValue::Quantity {
+                                value: f64::from(*area) * 5.0,
+                                dimension: axioval_ir::QuantityDimension::Area,
+                            },
+                        ),
+                    };
+                }
+            }
+            for (index, ((x, y), (sure, most), kind, (rating, factor))) in devices.iter().enumerate() {
+                let local = format!("d{index}");
+                let (x, y) = (f64::from(*x) / 10.0, f64::from(*y) / 10.0);
+                let (sure, most) = (f64::from(*sure) / 10.0, f64::from(*sure + *most) / 10.0);
+                let rect = [x, y, x + 0.2, y + 0.2];
+                let grow = |by: f64| [x - by, y - by, x + 0.2 + by, y + 0.2 + by];
+                if *kind == 2 {
+                    // In the model, but without geometry.
+                    model = model.object(&local, "device");
+                } else {
+                    plan = plan.source(&local, rect, grow(sure), grow(most));
+                    model = model.object(&local, if *kind == 1 { "other" } else { "device" });
+                    if *kind == 1 {
+                        model = model.unreadable(&local);
+                    }
+                }
+                if let Some(rating) = value(*rating) {
+                    model = model.value(&local, "Pset", "Rating", rating);
+                }
+                if let Some(factor) = value(*factor) {
+                    model = model.value(&local, "Pset", "Factor", factor);
+                }
+            }
+            for (index, (x, y)) in walls.iter().enumerate() {
+                let local = format!("x{index}");
+                let (x, y) = (f64::from(*x) / 10.0, f64::from(*y) / 10.0);
+                plan = plan.with(&local, [x, y, x + 0.2, y + 2.0]);
+                model = model.object(&local, "wall");
+                if unreadable_wall && index == 0 {
+                    model = model.unreadable(&local);
+                }
+            }
+            let mode = ["grown", "touching", "travel", "visible"][mode as usize];
+            let mut extra = Vec::new();
+            if mode == "touching" {
+                extra.push(("touch_tolerance", metres(0.5)));
+            }
+            if matches!(mode, "travel" | "visible") {
+                extra.push(("blockers", selector(stated_or(kind("wall"), "Wall"))));
+            }
+            if stated_area {
+                extra.push(("area_property", property(Some("Pset"), "Area")));
+            }
+            match capacity {
+                1 => extra.extend([
+                    ("capacity_property", property(Some("Pset"), "Rating")),
+                    ("capacity_multiplier", number(2.5)),
+                ]),
+                2 => extra.extend([
+                    ("capacity_property", property(Some("Pset"), "Rating")),
+                    ("capacity_multiplier_property", property(Some("Pset"), "Factor")),
+                ]),
+                _ => {}
+            }
+            let mut declared = coverage(mode, extra);
+            declared
+                .parameters
+                .insert("minimum_ratio".into(), number(f64::from(minimum) / 10.0));
+            run_with(model, Arc::new(plan), &declared);
+        }
+    }
+}
+
+/// The rule forked from the template, an `expression` rule requiring the
+/// element measured (`effective_reaching` stated: an element stating no
+/// area is a finding) and its share at least the minimum, carrying the
+/// sources and the declaration, reaches the template's verdicts: the
+/// objects found and those left open. A capacity check, judged against a
+/// sum without an upper bound and finding each missing value apart, has no
+/// expression form, so such a rule is never forked.
+#[test]
+fn the_forked_rule_reaches_the_templates_verdicts() {
+    use axioval_rules::ExpressionRequirement;
+    use axioval_rules::templates::{Fork, ForkError, fork};
+    let verdicts = |evaluation: &CapabilityEvaluation| {
+        let mut found: Vec<ObjectId> = evaluation
+            .findings()
+            .iter()
+            .filter_map(|finding| match &finding.scope {
+                axioval_ir::Scope::Object(object) => Some(object.clone()),
+                _ => None,
+            })
+            .collect();
+        found.sort();
+        found.dedup();
+        let mut open: Vec<ObjectId> = evaluation
+            .not_evaluated_outcomes()
+            .iter()
+            .filter_map(|outcome| outcome.object_id().cloned())
+            .filter(|object| !found.contains(object))
+            .collect();
+        open.sort();
+        open.dedup();
+        (found, open)
+    };
+    let stated = ("area_property", property(Some("Pset"), "Area"));
+    let area = PropertyValue::Quantity {
+        value: 20.0,
+        dimension: axioval_ir::QuantityDimension::Area,
+    };
+    let cases: Vec<(Plan, Model, CompiledRule)> = vec![
+        (plan(), model(&plan()), coverage("grown", vec![])),
+        (
+            without(plan(), "b"),
+            model(&without(plan(), "b")),
+            coverage("grown", vec![]),
+        ),
+        (
+            plan(),
+            model(&plan()).unreadable("a"),
+            coverage("travel", vec![]),
+        ),
+        (
+            without(plan(), "b"),
+            model(&without(plan(), "b")).value("r", "Pset", "Area", area),
+            coverage("grown", vec![stated.clone()]),
+        ),
+        (
+            without(plan(), "b"),
+            model(&without(plan(), "b")),
+            coverage("grown", vec![stated.clone()]),
+        ),
+    ];
+    for (plan, model, bound) in cases {
+        let plan = Arc::new(plan);
+        let forked = fork(&EffectiveCoverage, &bound).unwrap();
+        let mut expression_rule = bound.clone();
+        expression_rule.capability = Fork::CAPABILITY.into();
+        expression_rule.parameters = forked.parameters();
+        let register = |services: &mut axioval_engine::ServiceRegistry| {
+            services
+                .register(PlanAreaServiceHandle::new(plan.clone()))
+                .unwrap();
+            services
+                .register(ProximityServiceHandle::new(plan.clone()))
+                .unwrap();
+        };
+        let template = model
+            .clone()
+            .evaluate_measured(&EffectiveCoverage, &bound, register);
+        let forked = model.evaluate_measured(&ExpressionRequirement, &expression_rule, register);
+        assert_eq!(
+            verdicts(&template),
+            verdicts(&forked),
+            "{:?}",
+            bound.parameters
+        );
+    }
+    let capacity = coverage(
+        "grown",
+        vec![
+            ("capacity_property", property(Some("Pset"), "Rating")),
+            ("capacity_multiplier", number(2.0)),
+        ],
+    );
+    assert!(matches!(
+        fork(&EffectiveCoverage, &capacity),
+        Err(ForkError::Inexpressible(_))
+    ));
+}
+
+/// Covered from an effect measured between bounds, the share and the part
+/// covered are never exact; measured exactly, they are. The area and the
+/// count of sources reaching are exact either way.
+#[test]
+fn an_effect_measured_inexactly_is_inexact() {
+    for (outer, exact) in [([0.0, 0.0, 6.0, 4.0], false), ([0.0, 0.0, 5.0, 4.0], true)] {
+        let plan = Plan::default().with("r", [0.0, 0.0, 10.0, 4.0]).source(
+            "a",
+            [2.4, 1.9, 2.6, 2.1],
+            [0.0, 0.0, 5.0, 4.0],
+            outer,
+        );
+        let (project, mut services) = model(&plan).services();
+        let shared = Arc::new(plan);
+        services
+            .register(PlanAreaServiceHandle::new(shared.clone()))
+            .unwrap();
+        services
+            .register(ProximityServiceHandle::new(shared))
+            .unwrap();
+        let read = |name: &str| {
+            common::measured_cited(
+                &services,
+                &project,
+                &id("r"),
+                &format!("{name};sources=device;range=3"),
+            )
+            .unwrap()
+            .unwrap()
+        };
+        let ((lower, upper), cited) = read("effective_share");
+        assert!(lower <= 0.5 && 0.5 <= upper, "{lower}..{upper}");
+        assert_eq!(cited, exact, "outer {outer:?}");
+        assert_eq!(read("effective_covered").1, exact);
+        assert!(read("effective_area").1);
+        assert_eq!(read("effective_reaching"), ((1.0, 1.0), true));
     }
 }

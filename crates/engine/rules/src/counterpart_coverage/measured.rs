@@ -23,21 +23,23 @@
 //! negative growth switches its check off, as the capability's tolerances
 //! do: the cover is then measured with none, and the check refused.
 //!
-//! The counterparts' extents are read once per run, each element's cover
-//! and shares once for every value and rule reading them.
+//! The counterparts' extents are read once per selection, and each
+//! element's cover with every share its growths switch on once per run,
+//! kept as the few numbers and words the values read.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use axioval_engine::{
-    Citation, MeasuredMemo, MeasuredProvider, Measurement, NotEvaluatedReason, PlanArea,
-    PropertyResolutionError, RuleContext,
+    Citation, MeasuredMemo, MeasuredProvider, Measurement, NotEvaluatedReason,
+    PropertyResolutionError, RuleContext, VerticalExtentServiceHandle,
 };
 use axioval_ir::measured::{MeasuredArgument, MeasuredCall, MeasuredSelection, SelectionIdentity};
 use axioval_ir::{Object, ObjectId, QuantityDimension};
 
-use super::{Candidates, Config, Counterparts, Cover, Infill, Services, Share, Subject, bounds};
+use super::{Config, Counterparts, Cover, Services, Share, Subject};
 use crate::measured_kinds::{refused, selection};
+use crate::near::{Candidates, bounds};
 use crate::orientation::Tri;
 use crate::plan_area::footprint;
 use crate::selection::object_by_id;
@@ -98,7 +100,7 @@ fn named(
     Ok(picked.map(|picked| (picked, identity)))
 }
 
-/// Everything a coverage measurement depends on, as a memo keys it.
+/// Everything an element's cover depends on, as a memo keys it.
 #[derive(Clone, Hash, PartialEq, Eq)]
 struct Key {
     by: Named,
@@ -115,7 +117,12 @@ struct Key {
 /// One call, read.
 struct Asked {
     check: Check,
-    config: Config,
+    /// The services this call needs, as the capability asked for them for
+    /// its check.
+    services: Config,
+    /// What the element's cover is measured with: every check the growths
+    /// switch on.
+    cover: Config,
     by: MeasuredSelection,
     frame: Option<MeasuredSelection>,
     key: Key,
@@ -144,33 +151,35 @@ fn asked(context: &RuleContext<'_>, call: &MeasuredCall) -> Result<Asked, Unavai
     if !(0.0..1.0).contains(&infill_above) {
         return Err(invalid("infill_above must lie in [0, 1)"));
     }
-    let config = Config {
+    let cover = Config {
         horizontal: on("horizontal"),
-        vertical: if check == Check::Plan {
-            None
-        } else {
-            on("vertical")
-        },
+        vertical: on("vertical"),
         axis: number(call, "axis_tolerance"),
         elevation,
         infill: frame.as_ref().map(|_| infill_above),
     };
+    let services = Config {
+        // A plan share needs no extents.
+        vertical: if check == Check::Plan {
+            None
+        } else {
+            cover.vertical
+        },
+        ..cover
+    };
     let key = Key {
         by: by_named,
         frame: frame.as_ref().map(|(_, named)| named.clone()),
-        horizontal: config.horizontal.map(f64::to_bits),
-        vertical: if elevation {
-            config.vertical.map(f64::to_bits)
-        } else {
-            None
-        },
-        axis: config.axis.map(f64::to_bits),
+        horizontal: cover.horizontal.map(f64::to_bits),
+        vertical: cover.vertical.map(f64::to_bits),
+        axis: cover.axis.map(f64::to_bits),
         elevation,
-        infill: config.infill.map(f64::to_bits),
+        infill: cover.infill.map(f64::to_bits),
     };
     Ok(Asked {
         check,
-        config,
+        services,
+        cover,
         by,
         frame: frame.map(|(selection, _)| selection),
         key,
@@ -212,122 +221,131 @@ fn near(
     }
 }
 
-/// What one element's cover came to: in plan, its footprint and cover; in
-/// the elevation, the whole share.
+/// One check's share, as the values read it.
 #[derive(Clone)]
-enum Measured {
-    Plan {
-        area: PlanArea,
-        cover: Cover,
-    },
-    Elevation {
-        share: Share,
-        cover: Cover,
-        infill: Option<Infill>,
-    },
+struct Part {
+    share: (f64, f64),
+    uncovered: (f64, f64),
+    whole: (f64, f64),
+    /// Measured from exact evidence, every counterpart that may cover read.
+    exact: bool,
 }
 
-/// The element's cover, measured once per run for every value reading it:
-/// the services `asked`'s check needs first, then the element's extent.
-fn measured(
-    context: &RuleContext<'_>,
-    asked: &Asked,
-    object: &Object,
-) -> Result<(Arc<Measured>, Arc<Candidates>), Unavailable> {
-    #[derive(Hash, PartialEq, Eq)]
-    struct Cached(ObjectId, Key);
-    let services = Services::of(context, &asked.config)?;
-    let counterparts = candidates(context, &services, &asked.by, &asked.key.by);
-    let key = Cached(object.id.clone(), asked.key.clone());
-    let measured: Result<Arc<Measured>, Unavailable> =
-        MeasuredMemo::of(context.services, key, || {
-            let own = bounds(services.proximity, &object.id).map_err(|(reason, message)| {
-                (reason, format!("{message}; its coverage was not checked"))
-            })?;
-            let margin = asked.config.margin();
-            let found = near(counterparts.clone(), &object.id, &own, margin);
-            let frame = match (&asked.frame, &asked.key.frame) {
-                (Some(picked), Some(named)) => Some(near(
-                    candidates(context, &services, picked, named),
-                    &object.id,
-                    &own,
-                    margin,
-                )),
-                _ => None,
-            };
-            let subject = Subject {
-                config: &asked.config,
-                services: &services,
-                counterparts: &found,
-                frame: frame.as_ref(),
-                object,
-            };
-            if asked.config.elevation {
-                let (share, cover, infill) = subject.elevation_share()?;
-                return Ok(Arc::new(Measured::Elevation {
-                    share,
-                    cover,
-                    infill,
-                }));
-            }
-            let area = footprint(context, &object.id)?;
-            let cover = subject.cover(&area);
-            Ok(Arc::new(Measured::Plan { area, cover }))
-        });
-    Ok((measured?, counterparts))
+/// What an element's cover came to: the counterparts surely covering,
+/// how many may, why it may be covered more, each check's share and the
+/// frame's infill.
+struct Summary {
+    least: Vec<ObjectId>,
+    counted: (usize, usize),
+    notes: Vec<String>,
+    plan: Option<Result<Part, Unavailable>>,
+    height: Option<Result<Part, Unavailable>>,
+    elevation: Option<Part>,
+    infill: Option<(Tri, Vec<ObjectId>)>,
 }
 
-/// The share `asked`'s check measures of `object`, with the cover it was
-/// measured against.
-fn share(
-    context: &RuleContext<'_>,
-    asked: &Asked,
-    object: &Object,
-) -> Result<(Share, Cover), Unavailable> {
-    /// One share of an element's cover, as a memo keys it: the element,
-    /// the cover, whether in height and the vertical growth.
-    #[derive(Hash, PartialEq, Eq)]
-    struct Shared(ObjectId, Key, bool, Option<u64>);
-    let (measured, counterparts) = measured(context, asked, object)?;
-    match measured.as_ref() {
-        Measured::Elevation { share, cover, .. } => Ok((share.clone(), cover.clone())),
-        Measured::Plan { area, cover } => {
-            let services = Services::of(context, &asked.config)?;
-            let found = Counterparts {
-                candidates: counterparts,
-                near: BTreeMap::new(),
-            };
-            let subject = Subject {
-                config: &asked.config,
-                services: &services,
-                counterparts: &found,
-                frame: None,
-                object,
-            };
-            let height = asked.check == Check::Height;
-            let key = Shared(
-                object.id.clone(),
-                asked.key.clone(),
-                height,
-                asked.config.vertical.map(f64::to_bits),
-            );
-            let share: Result<Share, Unavailable> = MeasuredMemo::of(context.services, key, || {
-                if height {
-                    let (Some(growth), Some(extents)) = (asked.config.vertical, services.extents)
-                    else {
-                        return Err(invalid("the height check is off: `vertical` is negative"));
-                    };
-                    subject.height_share(extents, cover, growth)
-                } else {
-                    let growth = asked.config.horizontal.ok_or_else(|| {
-                        invalid("the plan check is off: `horizontal` is negative")
-                    })?;
-                    subject.plan_share(area, cover, growth)
-                }
-            });
-            Ok((share?, cover.clone()))
+fn part(share: &Share, cover: &Cover) -> Part {
+    Part {
+        share: share.interval,
+        uncovered: share.uncovered,
+        whole: share.whole,
+        exact: cover.unknown.is_empty() && share.evidence.iter().all(|cited| cited.exact),
+    }
+}
+
+impl Summary {
+    fn of(cover: &Cover) -> Self {
+        // The counterparts surely covering (a frame's members are no
+        // counterparts), to every one that may, unread ones included.
+        let sure = cover
+            .least
+            .iter()
+            .filter(|counterpart| cover.most.contains(counterpart))
+            .count();
+        Self {
+            least: cover.least.clone(),
+            counted: (sure, cover.most.len() + cover.unread),
+            notes: cover.unknown.iter().chain(&cover.axes).cloned().collect(),
+            plan: None,
+            height: None,
+            elevation: None,
+            infill: None,
         }
     }
+}
+
+/// The element's cover and every share its growths switch on, measured
+/// once per run for every value reading it.
+fn summary(
+    context: &RuleContext<'_>,
+    asked: &Asked,
+    object: &Object,
+) -> Result<Arc<Summary>, Unavailable> {
+    #[derive(Hash, PartialEq, Eq)]
+    struct Cached(ObjectId, Key);
+    // Every check's services but the extents, which only the height asks.
+    let services = Services::of(
+        context,
+        &Config {
+            vertical: None,
+            ..asked.cover
+        },
+    )?;
+    let key = Cached(object.id.clone(), asked.key.clone());
+    MeasuredMemo::of(context.services, key, || {
+        let counterparts = candidates(context, &services, &asked.by, &asked.key.by);
+        let own = bounds(services.proximity, &object.id).map_err(|(reason, message)| {
+            (reason, format!("{message}; its coverage was not checked"))
+        })?;
+        let margin = asked.cover.margin();
+        let found = near(counterparts, &object.id, &own, margin);
+        let frame = match (&asked.frame, &asked.key.frame) {
+            (Some(picked), Some(named)) => Some(near(
+                candidates(context, &services, picked, named),
+                &object.id,
+                &own,
+                margin,
+            )),
+            _ => None,
+        };
+        let subject = Subject {
+            config: &asked.cover,
+            services: &services,
+            counterparts: &found,
+            frame: frame.as_ref(),
+            object,
+        };
+        if asked.cover.elevation {
+            let (share, cover, infill) = subject.elevation_share()?;
+            let mut summary = Summary::of(&cover);
+            summary.elevation = Some(part(&share, &cover));
+            summary.infill = infill.map(|infill| (infill.applies, infill.members));
+            return Ok(Arc::new(summary));
+        }
+        let area = footprint(context, &object.id)?;
+        let cover = subject.cover(&area);
+        let mut summary = Summary::of(&cover);
+        summary.plan = asked.cover.horizontal.map(|growth| {
+            subject
+                .plan_share(&area, &cover, growth)
+                .map(|share| part(&share, &cover))
+        });
+        summary.height = asked.cover.vertical.map(|growth| {
+            let extents = context
+                .services
+                .get::<VerticalExtentServiceHandle>()
+                .ok_or_else(|| {
+                    (
+                        NotEvaluatedReason::MissingService,
+                        "vertical-extent service is not registered".to_owned(),
+                    )
+                })?;
+            subject
+                .height_share(extents, &cover, growth)
+                .map(|share| part(&share, &cover))
+        });
+        Ok(Arc::new(summary))
+    })
 }
 
 /// The value `call` names of `object`, with what it cites.
@@ -337,59 +355,39 @@ fn value(
     context: &RuleContext<'_>,
 ) -> Result<(Measurement, Citation), Unavailable> {
     let asked = asked(context, call)?;
+    // The services the call's check needs, before anything is measured.
+    Services::of(context, &asked.services)?;
+    let summary = summary(context, &asked, object)?;
     let locator = format!("{}:{}", call.name(), object.id);
+    let cited = |lower: f64, upper: f64, dimension, exact| Measurement::Cited {
+        lower,
+        upper,
+        dimension,
+        locator: locator.clone(),
+        exact,
+    };
     match call.name() {
         COVERING => {
-            let (measured, _) = measured(context, &asked, object)?;
-            let cover = match measured.as_ref() {
-                Measured::Plan { cover, .. } | Measured::Elevation { cover, .. } => cover,
-            };
-            // The counterparts surely covering (a frame's members are no
-            // counterparts), to every one that may, unread ones included.
-            let sure = cover
-                .least
-                .iter()
-                .filter(|counterpart| cover.most.contains(counterpart))
-                .count();
             #[allow(clippy::cast_precision_loss)]
-            let (least, most) = (sure as f64, (cover.most.len() + cover.unread) as f64);
+            let (least, most) = (summary.counted.0 as f64, summary.counted.1 as f64);
             // Counted over what was read, exactly; the interval holds the
             // undecided cover.
-            return Ok((
-                Measurement::Cited {
-                    lower: least,
-                    upper: most,
-                    dimension: None,
-                    locator,
-                    exact: true,
-                },
-                Citation::default(),
-            ));
+            return Ok((cited(least, most, None, true), Citation::default()));
         }
         INFILL => {
-            let (measured, _) = measured(context, &asked, object)?;
-            let (flag, members) = match measured.as_ref() {
-                Measured::Elevation {
-                    infill: Some(infill),
-                    ..
-                } => (
-                    match infill.applies {
+            let (flag, members) = match &summary.infill {
+                Some((applies, members)) => (
+                    match applies {
                         Tri::Yes => (1.0, 1.0),
                         Tri::Maybe => (0.0, 1.0),
                         Tri::No => (0.0, 0.0),
                     },
-                    infill.members.clone(),
+                    members.clone(),
                 ),
-                _ => ((0.0, 0.0), Vec::new()),
+                None => ((0.0, 0.0), Vec::new()),
             };
             return Ok((
-                Measurement::Cited {
-                    lower: flag.0,
-                    upper: flag.1,
-                    dimension: None,
-                    locator,
-                    exact: true,
-                },
+                cited(flag.0, flag.1, None, true),
                 Citation {
                     related: members,
                     evidence: Vec::new(),
@@ -399,42 +397,53 @@ fn value(
         }
         _ => {}
     }
-    let (share, cover) = share(context, &asked, object)?;
-    // Measured from exact evidence, the share is cited exact, as the
-    // capability cites it; its interval holds the undecided cover, not
-    // only rounding, so it is cited rather than rounded.
-    let exact = cover.unknown.is_empty() && share.evidence.iter().all(|cited| cited.exact);
+    let part = match asked.check {
+        Check::Plan | Check::Both => summary
+            .plan
+            .clone()
+            .ok_or_else(|| invalid("the plan check is off: `horizontal` is negative"))??,
+        Check::Height => summary
+            .height
+            .clone()
+            .ok_or_else(|| invalid("the height check is off: `vertical` is negative"))??,
+        Check::Elevation => summary
+            .elevation
+            .clone()
+            .ok_or_else(|| invalid("the elevation is measured with both growths"))?,
+    };
     let dimension = if asked.check == Check::Height {
         QuantityDimension::Length
     } else {
         QuantityDimension::Area
     };
-    let ((lower, upper), dimension) = match call.name() {
-        UNCOVERED => (share.uncovered, Some(dimension)),
-        WHOLE => (share.whole, Some(dimension)),
-        _ => (share.interval, None),
-    };
-    let citation = if call.name() == SHARE {
-        Citation {
-            // What surely covers part of it, which a finding relates.
-            related: cover.least.clone(),
-            evidence: Vec::new(),
-            // Why it may be covered more than measured.
-            notes: cover.unknown.iter().chain(&cover.axes).cloned().collect(),
-        }
-    } else {
-        Citation::default()
-    };
-    Ok((
-        Measurement::Cited {
-            lower,
-            upper,
-            dimension,
-            locator,
-            exact,
-        },
-        citation,
-    ))
+    // Measured from exact evidence, the share is cited exact, as the
+    // capability cites it; its interval holds the undecided cover, not
+    // only rounding, so it is cited rather than rounded.
+    Ok(match call.name() {
+        UNCOVERED => (
+            cited(
+                part.uncovered.0,
+                part.uncovered.1,
+                Some(dimension),
+                part.exact,
+            ),
+            Citation::default(),
+        ),
+        WHOLE => (
+            cited(part.whole.0, part.whole.1, Some(dimension), part.exact),
+            Citation::default(),
+        ),
+        _ => (
+            cited(part.share.0, part.share.1, None, part.exact),
+            Citation {
+                // What surely covers part of it, which a finding relates.
+                related: summary.least.clone(),
+                evidence: Vec::new(),
+                // Why it may be covered more than measured.
+                notes: summary.notes.clone(),
+            },
+        ),
+    })
 }
 
 impl MeasuredProvider for CoverageMeasures {

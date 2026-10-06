@@ -639,7 +639,7 @@ impl Summed {
 /// names, under the keys it names them by, which are the mode's own
 /// parameter names (`overall_width=@overall_width`), so the chain is read
 /// and refused in the mode's words.
-fn synthesised(parameters: BTreeMap<String, ParameterValue>) -> CompiledRule {
+pub(crate) fn synthesised(parameters: BTreeMap<String, ParameterValue>) -> CompiledRule {
     CompiledRule {
         id: RuleId::new("axioval-measured-light-area").expect("a valid rule id"),
         capability: "axioval:capability.area-ratio".into(),

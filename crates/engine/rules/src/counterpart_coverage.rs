@@ -6,20 +6,20 @@
 //! the measured values of [`CoverageMeasures`]); how serious it is, is the
 //! template's policy (`counterpart_coverage/template.rs`).
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::sync::{Arc, LazyLock};
 
 use axioval_engine::template::Template;
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, ElevationCover, ElevationRequest, NotEvaluatedReason,
-    ObjectBounds, ParameterDescriptor, PlanArea, PlanAreaServiceHandle, PlanRectangle,
-    PlanSpanServiceHandle, ProximityServiceHandle, RuleCapability, RuleContext, VerticalExtent,
-    VerticalExtentError, VerticalExtentServiceHandle,
+    ParameterDescriptor, PlanArea, PlanAreaServiceHandle, PlanRectangle, PlanSpanServiceHandle,
+    ProximityServiceHandle, RuleCapability, RuleContext, VerticalExtent, VerticalExtentError,
+    VerticalExtentServiceHandle,
 };
 use axioval_ir::{Evidence, Object, ObjectId};
 
+use crate::near::Candidates;
 use crate::orientation::{Alignment, Tri, aligned, rectangle, rectangle_service};
-use crate::pairs::reason as proximity_reason;
 use crate::plan_area::unavailable;
 use crate::support::Unavailable;
 
@@ -158,13 +158,13 @@ impl Config {
 pub(crate) struct Services<'a> {
     pub(crate) areas: &'a PlanAreaServiceHandle,
     pub(crate) proximity: &'a ProximityServiceHandle,
-    pub(crate) extents: Option<&'a VerticalExtentServiceHandle>,
     pub(crate) rectangles: Option<&'a PlanSpanServiceHandle>,
 }
 
 impl<'a> Services<'a> {
     /// The services `config`'s checks need, in the order the capability
-    /// asked for them.
+    /// asked for them: the vertical extents where the height is checked
+    /// (read where it is measured).
     pub(crate) fn of(context: &RuleContext<'a>, config: &Config) -> Result<Self, Unavailable> {
         let missing = |what: &str| {
             (
@@ -172,24 +172,26 @@ impl<'a> Services<'a> {
                 format!("{what} service is not registered"),
             )
         };
+        let areas = context
+            .services
+            .get::<PlanAreaServiceHandle>()
+            .ok_or_else(|| missing("plan-area"))?;
+        let proximity = context
+            .services
+            .get::<ProximityServiceHandle>()
+            .ok_or_else(|| missing("proximity"))?;
+        if config.vertical.is_some()
+            && !config.elevation
+            && context
+                .services
+                .get::<VerticalExtentServiceHandle>()
+                .is_none()
+        {
+            return Err(missing("vertical-extent"));
+        }
         Ok(Self {
-            areas: context
-                .services
-                .get::<PlanAreaServiceHandle>()
-                .ok_or_else(|| missing("plan-area"))?,
-            proximity: context
-                .services
-                .get::<ProximityServiceHandle>()
-                .ok_or_else(|| missing("proximity"))?,
-            extents: match config.vertical {
-                Some(_) if !config.elevation => Some(
-                    context
-                        .services
-                        .get::<VerticalExtentServiceHandle>()
-                        .ok_or_else(|| missing("vertical-extent"))?,
-                ),
-                _ => None,
-            },
+            areas,
+            proximity,
             rectangles: if config.axis.is_some() || config.elevation {
                 Some(rectangle_service(context)?)
             } else {
@@ -197,95 +199,6 @@ impl<'a> Services<'a> {
             },
         })
     }
-}
-
-/// The plan extent of `object` as the proximity service bounds it.
-pub(crate) fn bounds(
-    proximity: &ProximityServiceHandle,
-    object: &ObjectId,
-) -> Result<ObjectBounds, Unavailable> {
-    match proximity.bounds(object) {
-        Ok(extent) if extent.object() == object => Ok(extent),
-        Ok(_) => Err((
-            NotEvaluatedReason::InvalidEvidence,
-            "proximity bounds name a different object".to_owned(),
-        )),
-        Err(error) => Err((proximity_reason(error), error.to_string())),
-    }
-}
-
-/// The counterparts a selection picks, read once: those surely picked,
-/// the plan boxes of those picked or undecided, and those whose extent
-/// cannot be read, which may stand near any subject.
-pub(crate) struct Candidates {
-    /// Counterparts the selector picks.
-    pub(crate) matched: BTreeSet<ObjectId>,
-    /// Each extent's box flattened into the plan, enclosing its geometry
-    /// (grown by its chord deviation), as the plan broad phase compares
-    /// them, by identity.
-    pub(crate) flat: Vec<(ObjectId, axioval_engine::Bounds3)>,
-    /// Counterparts picked or undecided whose extent cannot be read.
-    pub(crate) blind: BTreeSet<ObjectId>,
-}
-
-impl Candidates {
-    /// The candidates `matched` and `undecided` name, and the extents of
-    /// those that can be read.
-    pub(crate) fn read(
-        proximity: &ProximityServiceHandle,
-        matched: BTreeSet<ObjectId>,
-        undecided: &BTreeSet<ObjectId>,
-    ) -> (Self, Vec<ObjectBounds>) {
-        let mut blind = BTreeSet::new();
-        let mut extents: Vec<ObjectBounds> = Vec::new();
-        for counterpart in matched.iter().chain(undecided) {
-            match bounds(proximity, counterpart) {
-                Ok(extent) => extents.push(extent),
-                Err(_) => {
-                    blind.insert(counterpart.clone());
-                }
-            }
-        }
-        let mut flat: Vec<(ObjectId, axioval_engine::Bounds3)> = extents
-            .iter()
-            .filter_map(|extent| Some((extent.object().clone(), plan_box(extent)?)))
-            .collect();
-        flat.sort_by(|left, right| left.0.cmp(&right.0));
-        flat.dedup_by(|left, right| left.0 == right.0);
-        (
-            Self {
-                matched,
-                flat,
-                blind,
-            },
-            extents,
-        )
-    }
-
-    /// The candidates whose plan box lies within `margin` of `subject`'s,
-    /// by identity, the subject itself left out: every pair the plan broad
-    /// phase keeps for one subject.
-    pub(crate) fn near(&self, subject: &ObjectBounds, margin: f64) -> Vec<ObjectId> {
-        let Some(own) = plan_box(subject) else {
-            return Vec::new();
-        };
-        self.flat
-            .iter()
-            .filter(|(id, flat)| id != subject.object() && own.gap(flat) <= margin)
-            .map(|(id, _)| id.clone())
-            .collect()
-    }
-}
-
-/// `extent`'s box in the plan, enclosing its geometry as the plan broad
-/// phase flattens it (`projected_candidate_pairs`).
-fn plan_box(extent: &ObjectBounds) -> Option<axioval_engine::Bounds3> {
-    let (min, max) = (extent.bounds().min(), extent.bounds().max());
-    let flat =
-        axioval_engine::Bounds3::try_new([min[0], min[1], 0.0], [max[0], max[1], 0.0]).ok()?;
-    ObjectBounds::try_new(extent.object().clone(), flat, extent.fidelity())
-        .ok()
-        .map(|flat| flat.enclosing())
 }
 
 /// The counterparts near each subject.

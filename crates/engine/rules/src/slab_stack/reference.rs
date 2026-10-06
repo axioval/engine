@@ -353,3 +353,59 @@ fn consistency(
         }
     }
 }
+
+// The measures, distances and pairs as the replaced implementation named,
+// showed and walked them.
+
+impl Measure {
+    const ALL: [Self; 3] = [Self::TopToTop, Self::BottomToBottom, Self::TopToBottom];
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::TopToTop => "top_to_top",
+            Self::BottomToBottom => "bottom_to_bottom",
+            Self::TopToBottom => "top_to_bottom",
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::TopToTop => "top-to-top distance",
+            Self::BottomToBottom => "bottom-to-bottom distance",
+            Self::TopToBottom => "clear distance from top to underside",
+        }
+    }
+}
+
+impl Interval {
+    fn shown(self) -> String {
+        let (lower, upper) = (metres(self.lower), metres(self.upper));
+        if lower == upper {
+            lower
+        } else {
+            format!("between {lower} and {upper}")
+        }
+    }
+}
+
+impl Stacks<'_> {
+    /// Each selected slab paired with the next slab up in its stack, with
+    /// the evidence that they stack. Slabs whose next one is uncertain are
+    /// reported not evaluated instead.
+    fn consecutive(&mut self, unevaluated: &mut Unevaluated) -> Vec<(usize, usize, Vec<Evidence>)> {
+        let mut pairs = Vec::new();
+        for slab in 0..self.members.len() {
+            if !self.members[slab].selected {
+                continue;
+            }
+            match self.next_up(slab) {
+                Ok(Some((next, evidence))) => pairs.push((slab, next, evidence)),
+                Ok(None) => {}
+                Err((reason, message)) => {
+                    unevaluated.push(self.members[slab].id.clone(), reason, message);
+                }
+            }
+        }
+        pairs
+    }
+}

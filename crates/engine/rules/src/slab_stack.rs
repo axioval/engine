@@ -29,8 +29,6 @@ mod template;
 
 pub(crate) use measured::StackMeasures;
 
-use crate::level_spacing::metres;
-use crate::pairs::Unevaluated;
 use crate::support::Unavailable;
 
 /// Checks the distances between consecutive slabs of each stack.
@@ -92,24 +90,6 @@ enum Measure {
 }
 
 impl Measure {
-    const ALL: [Self; 3] = [Self::TopToTop, Self::BottomToBottom, Self::TopToBottom];
-
-    fn name(self) -> &'static str {
-        match self {
-            Self::TopToTop => "top_to_top",
-            Self::BottomToBottom => "bottom_to_bottom",
-            Self::TopToBottom => "top_to_bottom",
-        }
-    }
-
-    fn label(self) -> &'static str {
-        match self {
-            Self::TopToTop => "top-to-top distance",
-            Self::BottomToBottom => "bottom-to-bottom distance",
-            Self::TopToBottom => "clear distance from top to underside",
-        }
-    }
-
     /// The distance from `lower` up to `upper`, as an interval.
     fn between(self, lower: &VerticalExtent, upper: &VerticalExtent) -> Interval {
         let (from, to) = match self {
@@ -133,15 +113,6 @@ struct Interval {
 impl Interval {
     fn midpoint(self) -> f64 {
         f64::midpoint(self.lower, self.upper)
-    }
-
-    fn shown(self) -> String {
-        let (lower, upper) = (metres(self.lower), metres(self.upper));
-        if lower == upper {
-            lower
-        } else {
-            format!("between {lower} and {upper}")
-        }
     }
 }
 
@@ -309,26 +280,6 @@ impl Stacks<'_> {
         } else {
             Partnership::Stacked(evidence)
         }
-    }
-
-    /// Each selected slab paired with the next slab up in its stack, with
-    /// the evidence that they stack. Slabs whose next one is uncertain are
-    /// reported not evaluated instead.
-    fn consecutive(&mut self, unevaluated: &mut Unevaluated) -> Vec<(usize, usize, Vec<Evidence>)> {
-        let mut pairs = Vec::new();
-        for slab in 0..self.members.len() {
-            if !self.members[slab].selected {
-                continue;
-            }
-            match self.next_up(slab) {
-                Ok(Some((next, evidence))) => pairs.push((slab, next, evidence)),
-                Ok(None) => {}
-                Err((reason, message)) => {
-                    unevaluated.push(self.members[slab].id.clone(), reason, message);
-                }
-            }
-        }
-        pairs
     }
 
     fn next_up(&mut self, slab: usize) -> Result<Option<(usize, Vec<Evidence>)>, Unavailable> {

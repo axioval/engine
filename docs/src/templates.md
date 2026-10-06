@@ -107,8 +107,24 @@ is cited. Members the selector cannot decide leave the anchor as
 keeps only a value surely above its maximum and leaves the anchor
 otherwise not evaluated with its message (`{undecided}` the count,
 `{relation}` how they are reached), and the anchor has no row: its value
-is known only from below. A member's value that cannot be read leaves the
-anchor open worded as the member's measured value refused it.
+is known only from below. `widen` makes them possible members of the
+aggregate instead: a count runs from the members surely picked to every
+member that may be (as the evaluator widens any aggregate), and the
+decision judges that interval, a verdict standing only where they cannot
+change it. A member's value that cannot be read leaves the anchor open
+worded as the member's measured value refused it.
+
+`Members::every_when_unstated` reads an unstated selector parameter as
+every object (`Selector::All`) rather than refusing the rule.
+`Members::same_ends` names a string-list parameter holding a path: where
+stated, only members from which that path reaches the same objects as
+from the anchor are kept (`counts::same_ends`, a revolving door's swing
+door between the same two spaces), a member whose ends cannot be read is
+possible, an anchor whose ends cannot be read or reach nothing is open,
+and `{relation}` ends `with the same ends via <path>`; `Check::Path`
+refuses a path the step grammar does not read. The runner supplies an
+anchor's members to the evaluator in place of the aggregate's source
+(`ObjectLeaves::supplying`), in the project's order.
 
 `Decision::Within` is the generic range judge: a value between a minimum
 and a maximum, each a left-to-right sum of values and parameters
@@ -305,7 +321,10 @@ chain and skipped absent ends have no aggregate path, and such a rule is
 not forked (`ForkError::Inexpressible`, naming why). An aggregate counts
 an undecided member as possibly there, where the template leaves the
 anchor open unless it already exceeds its maximum (D7): the fork's
-verdict is sound but may decide an anchor the template leaves open.
+verdict is sound but may decide an anchor the template leaves open. Under
+`widen` the two agree. An unstated selector read as every object forks
+into an unfiltered aggregate (`Selector::All`); shared ends have no
+aggregate form, and such a rule is not forked.
 
 A form with a `scope` expands into its decision over the aggregate of the
 rule's `selection`, as the catalogue shows it, but is never forked

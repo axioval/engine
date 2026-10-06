@@ -153,6 +153,10 @@ pub enum Check {
     /// discipline: otherwise `` `<parameter>` is empty `` or the
     /// discipline's refusal.
     Disciplines { parameter: &'static str },
+    /// A string-list parameter, where stated, is a valid relationship path
+    /// (the step grammar every path shares), refused as the path reader
+    /// words it.
+    Path { parameter: &'static str },
 }
 
 /// The host services a template's values need, and the message leaving
@@ -329,8 +333,8 @@ pub const SELECTION: &str = "selection";
 /// the rule's traversal (`relationship` or `path`) reaches from the
 /// anchor, or, without one, every such object of the anchor's own source
 /// but the anchor. A value reads them as an aggregate over
-/// [`Members::source`]; the runner narrows it to the anchor's members.
-/// Findings relate the members surely picked.
+/// [`Members::source`]; the runner supplies the anchor's members in its
+/// place. Findings relate the members surely picked.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Members {
@@ -338,6 +342,18 @@ pub struct Members {
     pub selector: &'static str,
     /// What members the selector cannot decide leave.
     pub undecided: UndecidedMembers,
+    /// Whether an unstated selector parameter picks every object, rather
+    /// than leaving the rule open as required.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub every_when_unstated: bool,
+    /// The string-list parameter naming a path that, where stated, keeps
+    /// only the members from which it reaches the same objects as from
+    /// the anchor (a revolving door's swing door between the same two
+    /// spaces). A member whose ends cannot be read is a possible member;
+    /// an anchor whose ends cannot be read, or reach nothing, is open.
+    /// `{relation}` then ends `with the same ends via <path>`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub same_ends: Option<&'static str>,
 }
 
 impl Members {
@@ -367,6 +383,12 @@ pub enum UndecidedMembers {
     /// undecided members, `{relation}` how they are reached). The anchor
     /// has no row in the form's table: its value is known only from below.
     OnlyExcess { message: &'static str },
+    /// Undecided members are possible members of the aggregate: a count
+    /// widens over them (from the members surely picked to every member
+    /// that may be), as the evaluator widens any aggregate, and the
+    /// decision judges the widened value, a verdict standing only where
+    /// they cannot change it. `{undecided}` is their count.
+    Widen,
 }
 
 /// A report table a form fills: one row per selected object whose values

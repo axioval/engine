@@ -33,7 +33,7 @@ use axioval_ir::{
 use serde_json::Value as Json;
 
 use crate::body_extent::rounding_slack;
-use crate::counts::{Population, relation_text, tally};
+use crate::counts::{Population, Tally, relation_text, same_ends, tally};
 use crate::expression_leaves::{Candidate, ObjectLeaves, Prefetch};
 use crate::expression_requirement::reason_of;
 use crate::level_spacing::{metres, shown};
@@ -361,6 +361,11 @@ fn check(check: &Check, rule: &CompiledRule, template: &Template) -> Result<(), 
                 Ok(())
             }
         }
+        Check::Path { parameter } => Parameters(rule)
+            .strings(parameter)?
+            .map(Traversal::path)
+            .transpose()
+            .map(|_| ()),
         Check::Disciplines { parameter } => match Parameters(rule).strings(parameter)? {
             Some([]) => Err(invalid(format!("`{parameter}` is empty"))),
             Some(names) => names
@@ -1076,6 +1081,8 @@ struct Scope<'t> {
     members: &'t Members,
     population: Population,
     traversal: Option<Traversal>,
+    /// The path whose ends a member must share with its anchor.
+    ends: Option<Traversal>,
 }
 
 impl<'t> Scope<'t> {
@@ -1087,19 +1094,50 @@ impl<'t> Scope<'t> {
         let Some(members) = &plan.form.members else {
             return Ok(None);
         };
-        let Some(Constant::Other(ParameterValue::Selector { value: selector })) =
-            plan.constants.get(members.selector)
-        else {
-            return Err(invalid(format!(
-                "parameter `{}` is required",
-                members.selector
-            )));
+        let population = match plan.constants.get(members.selector) {
+            Some(Constant::Other(ParameterValue::Selector { value: selector })) => {
+                Population::of(context, selector)
+            }
+            _ if members.every_when_unstated => Population::of(context, &Selector::All),
+            _ => {
+                return Err(invalid(format!(
+                    "parameter `{}` is required",
+                    members.selector
+                )));
+            }
+        };
+        let ends = match members.same_ends {
+            Some(parameter) => Parameters(rule)
+                .strings(parameter)?
+                .map(Traversal::path)
+                .transpose()?,
+            None => None,
         };
         Ok(Some(Self {
             members,
-            population: Population::of(context, selector),
+            population,
             traversal: Parameters(rule).traversal()?,
+            ends,
         }))
+    }
+
+    /// How a message names the way members are reached (`{relation}`).
+    fn relation(&self) -> String {
+        let via = relation_text(self.traversal.as_ref());
+        match &self.ends {
+            Some(ends) => format!("{via} with the same ends via {}", ends.relationship),
+            None => via,
+        }
+    }
+
+    /// The members of `anchor`: reached, then kept where they share its
+    /// ends.
+    fn tally(&self, context: &RuleContext<'_>, anchor: &Object) -> Result<Tally, Unavailable> {
+        let tallied = tally(context, self.traversal.as_ref(), anchor, &self.population)?;
+        match &self.ends {
+            Some(ends) => same_ends(context, ends, anchor, tallied),
+            None => Ok(tallied),
+        }
     }
 }
 
@@ -1280,14 +1318,19 @@ fn judge_object(
     let mut read = Read::default();
     let mut members = None;
     if let Some(scope) = scope {
-        match tally(context, scope.traversal.as_ref(), object, &scope.population) {
+        match scope.tally(context, object) {
             Ok(tally) => {
                 read.named.insert("undecided", tally.undecided.to_string());
-                read.named
-                    .insert("relation", relation_text(scope.traversal.as_ref()));
+                read.named.insert("relation", scope.relation());
+                // Undecided members widen the aggregate only where the
+                // form says they may.
+                let possible = match scope.members.undecided {
+                    UndecidedMembers::Widen => tally.possible.as_slice(),
+                    UndecidedMembers::OnlyExcess { .. } => &[],
+                };
                 leaves = leaves.supplying(
                     Members::source(scope.members.selector),
-                    candidates(context, &tally.decided, &[]),
+                    candidates(context, &tally.decided, possible),
                 );
                 members = Some(tally);
             }
@@ -1347,8 +1390,8 @@ fn judge_object(
     read.bounds = Some((judged.minimum, judged.maximum));
     if undecided > 0
         && let Some(scope) = scope
+        && let UndecidedMembers::OnlyExcess { message } = &scope.members.undecided
     {
-        let UndecidedMembers::OnlyExcess { message } = &scope.members.undecided;
         // Undecided members can only add: only an excess stands.
         if !judged.maximum.is_some_and(|maximum| judged.lower > maximum) {
             return Judgement {
@@ -1731,14 +1774,27 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
             .map(|(step, expression)| (step, expression.clone()))
             .collect::<Vec<_>>(),
         Some(members) => {
+            if members
+                .same_ends
+                .is_some_and(|parameter| plan.constants.contains_key(parameter))
+            {
+                return Err(ForkError::Inexpressible(
+                    "an aggregate does not compare the ends a path reaches from each member \
+                     with the anchor's"
+                        .to_owned(),
+                ));
+            }
             let over = member_path(rule)?;
-            let Some(Constant::Other(ParameterValue::Selector { value: selector })) =
-                plan.constants.get(members.selector)
-            else {
-                return Err(ForkError::Declaration(format!(
-                    "{}: parameter `{}` is required",
-                    template.name, members.selector
-                )));
+            let every = Selector::All;
+            let selector: &Selector = match plan.constants.get(members.selector) {
+                Some(Constant::Other(ParameterValue::Selector { value: selector })) => selector,
+                _ if members.every_when_unstated => &every,
+                _ => {
+                    return Err(ForkError::Declaration(format!(
+                        "{}: parameter `{}` is required",
+                        template.name, members.selector
+                    )));
+                }
             };
             plan.values()
                 .map(|(step, expression)| {

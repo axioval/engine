@@ -94,6 +94,8 @@ fn members_form() -> Form {
             undecided: UndecidedMembers::OnlyExcess {
                 message: "{undecided} member(s) {relation} cannot be assigned",
             },
+            every_when_unstated: false,
+            same_ends: None,
         }),
         table: Some(areas()),
         scope: None,

@@ -642,6 +642,14 @@ fn constant(
         ParameterType::Number => parameters
             .number(name)?
             .map(|value| Constant::Scalar(ScalarValue::Number { value })),
+        // Read as the capabilities read them, so a value of another kind
+        // is refused as theirs was.
+        ParameterType::Boolean => parameters
+            .boolean(name)?
+            .map(|value| Constant::Scalar(ScalarValue::Boolean { value })),
+        ParameterType::Integer => parameters
+            .integer(name)?
+            .map(|value| Constant::Scalar(ScalarValue::Integer { value })),
         ParameterType::Selector => parameters.selector(name)?.map(|selector| {
             Constant::Other(ParameterValue::Selector {
                 value: Box::new(selector.clone()),

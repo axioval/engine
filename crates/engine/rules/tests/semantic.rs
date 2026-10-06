@@ -340,6 +340,17 @@ mod unique {
         )
     }
 
+    /// A flag stated as another kind is refused, as the capability read
+    /// it.
+    #[test]
+    fn a_flag_of_another_kind_is_refused() {
+        let evaluation = check(vec![("trim", string("yes"))]);
+        assert_eq!(
+            evaluation.not_evaluated_outcomes()[0].message(),
+            "unique-value: parameter `trim` has the wrong type"
+        );
+    }
+
     #[test]
     fn values_repeat_after_trimming_and_without_regard_to_case() {
         let evaluation = check(vec![]);

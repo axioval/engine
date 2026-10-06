@@ -267,6 +267,22 @@ object open (`inapplicable`, `not_finite`, `inexact`). Messages read
 that no object of the scope's `selection` states the checked object's key
 with another value; a rule is never forked from it.
 
+`Decision::Conforms` is the third: each selected object satisfies the
+selector parameter `Conformance::requirement` (an agreed list, an `anyOf`
+of `allOf` rows), decided by the selector evaluation every rule shares;
+an object it cannot decide is left open for the selector's reason. The
+objects it rejects are worded by the stated values of the properties the
+selector consults, in the order it names them (a related selector or a
+pattern names none): an object none of whose consulted properties has a
+value is a finding of its own (`no_value`, `{properties}`), and the
+objects holding one combination of values (text folded, an empty value
+as no value) share one finding on the first of them, relating the others
+(`unknown`, `{values}`). A selector consulting no property, or one whose
+properties cannot be read, finds the object alone (`alone`). Its
+expression form names the test (`` `requirement` holds ``), since no
+expression applies a selector to the object in scope; a rule is never
+forked from it.
+
 `Decision::Each` judges an anchor's members one by one (`Each`), with
 three relations no aggregate states:
 

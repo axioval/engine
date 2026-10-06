@@ -1,18 +1,23 @@
 //! Group decisions ([`axioval_engine::template::Decision::Unique`],
-//! [`axioval_engine::template::Decision::Consistent`]): each object's
-//! stated value compared with those of the other objects of its group.
+//! [`axioval_engine::template::Decision::Consistent`],
+//! [`axioval_engine::template::Decision::Conforms`]): each object's stated
+//! values compared with those of the other objects of its group.
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use axioval_engine::template::{Consistent, ConsistentMessages, Unique};
+use axioval_engine::template::{Conformance, Consistent, ConsistentMessages, Unique};
 use axioval_engine::{CapabilityEvaluation, CompiledRule, RuleContext};
-use axioval_ir::contract::ScalarValue;
-use axioval_ir::{Evidence, NotEvaluatedReason, Object, PropertyValue, QuantityDimension};
+use axioval_ir::contract::{Expression, ParameterValue, ScalarValue, Selector};
+use axioval_ir::{
+    Evidence, NotEvaluatedReason, Object, ObjectId, PropertyValue, QuantityDimension,
+};
 
 use super::{Constant, Outcome, Plan, Read, read_values, render};
 use crate::expression_leaves::ObjectLeaves;
-use crate::selection::select_objects;
-use crate::support::{Parameters, display, finding, scope_key, undefined, value_key};
+use crate::selection::{Selection, select_objects, selector_matches};
+use crate::support::{
+    Parameters, PropertyRef, display, finding, resolve, scope_key, undefined, value_key,
+};
 
 /// An object holding a value: the object, the value, its evidence.
 type Holder<'a> = (&'a Object, PropertyValue, Vec<Evidence>);
@@ -642,5 +647,159 @@ impl Spreading<'_, '_, '_, '_> {
                 render(plan, &read, messages.undecided),
             );
         }
+    }
+}
+
+/// The key part of an absent, `null` or blank value in a [`Conformance`]
+/// combination. Real values carry a `text:` or `value:` prefix, so this
+/// cannot collide with one.
+const NO_VALUE: &str = "no value";
+
+/// Objects holding one combination of values a [`Conformance`] rejects.
+struct Combination {
+    shown: String,
+    objects: Vec<ObjectId>,
+    evidence: Vec<Evidence>,
+}
+
+/// Runs a form judging each object by the requirement selector, grouping
+/// the objects it rejects by the values the selector consults.
+pub(super) fn conforms(
+    plan: &Plan<'_>,
+    conformance: &Conformance,
+    context: &RuleContext<'_>,
+    rule: &CompiledRule,
+) -> CapabilityEvaluation {
+    let Some(Constant::Other(ParameterValue::Selector { value: requirement })) =
+        plan.constants.get(conformance.requirement)
+    else {
+        // The declaration requires it (`Check::Required`).
+        return CapabilityEvaluation::default();
+    };
+    let mut consulted = Vec::new();
+    consulted_properties(requirement, &mut consulted);
+    let (selected, mut evaluation) = select_objects(context, &rule.selector);
+    let mut rejected: BTreeMap<Vec<String>, Combination> = BTreeMap::new();
+    for object in selected {
+        let mut evidence = Vec::new();
+        match selector_matches(context, requirement, object, &mut evidence) {
+            Selection::Match => continue,
+            Selection::NotEvaluated(reason, why) => {
+                evaluation.push_object_not_evaluated(object.id.clone(), reason, why);
+                continue;
+            }
+            Selection::NoMatch => {}
+        }
+        let answers: Result<Vec<_>, _> = consulted
+            .iter()
+            .map(|property| resolve(context, object, *property))
+            .collect();
+        let answers = match answers {
+            Ok(answers) if !answers.is_empty() => answers,
+            // Nothing to name or group by: the object alone.
+            _ => {
+                let message = render(plan, &Read::default(), conformance.alone);
+                evaluation.push_finding(finding(rule, &object.id, message, evidence, vec![]));
+                continue;
+            }
+        };
+        for answer in &answers {
+            evidence.extend(answer.evidence());
+        }
+        if answers.iter().all(|answer| undefined(answer.value())) {
+            let names: Vec<String> = consulted.iter().map(ToString::to_string).collect();
+            let mut read = Read::default();
+            read.named.insert("properties", names.join(", "));
+            let message = render(plan, &read, conformance.no_value);
+            evaluation.push_finding(finding(rule, &object.id, message, evidence, vec![]));
+            continue;
+        }
+        let key = answers
+            .iter()
+            .map(|answer| match answer.value() {
+                Some(value) if !undefined(Some(value)) => value_key(value, false, true),
+                _ => NO_VALUE.to_owned(),
+            })
+            .collect();
+        let combination = rejected.entry(key).or_insert_with(|| Combination {
+            shown: consulted
+                .iter()
+                .zip(&answers)
+                .map(|(property, answer)| format!("{property} {}", display(answer.value())))
+                .collect::<Vec<_>>()
+                .join(", "),
+            objects: Vec::new(),
+            evidence: Vec::new(),
+        });
+        combination.objects.push(object.id.clone());
+        combination.evidence.extend(evidence);
+    }
+    for combination in rejected.into_values() {
+        let mut objects = combination.objects.into_iter();
+        if let Some(subject) = objects.next() {
+            let mut read = Read::default();
+            read.named.insert("values", combination.shown);
+            evaluation.push_finding(finding(
+                rule,
+                &subject,
+                render(plan, &read, conformance.unknown),
+                combination.evidence,
+                objects.collect(),
+            ));
+        }
+    }
+    evaluation
+}
+
+/// The distinct properties `selector` consults, in declaration order: what
+/// a [`Conformance`] names. A related selector consults other objects and
+/// a pattern names no one property, so neither adds any.
+fn consulted_properties<'a>(selector: &'a Selector, found: &mut Vec<PropertyRef<'a>>) {
+    let mut add = |set: Option<&'a str>, name: &'a str| {
+        if !found
+            .iter()
+            .any(|seen| seen.set == set && seen.name == name)
+        {
+            found.push(PropertyRef { set, name });
+        }
+    };
+    match selector {
+        Selector::Property {
+            property_set,
+            property,
+            ..
+        } => add(property_set.as_deref(), property),
+        Selector::AllOf { operands } | Selector::AnyOf { operands } => {
+            for operand in operands {
+                consulted_properties(operand, found);
+            }
+        }
+        Selector::Not { operand } => consulted_properties(operand, found),
+        Selector::Expression { expression } => {
+            let mut pending: Vec<&'a Expression> = vec![expression];
+            while let Some(node) = pending.pop() {
+                if let Expression::Property {
+                    property_set,
+                    property,
+                    ..
+                } = node
+                {
+                    add(property_set.as_deref(), property);
+                }
+                // Operands in written order: the stack takes them reversed.
+                pending.extend(node.children().into_iter().rev());
+            }
+        }
+        Selector::All
+        | Selector::PropertyPattern { .. }
+        | Selector::EntityType { .. }
+        | Selector::Classification { .. }
+        | Selector::DerivedClass { .. }
+        | Selector::DerivedGroup { .. }
+        | Selector::Discipline { .. }
+        | Selector::Source { .. }
+        | Selector::RuleOutcome { .. }
+        | Selector::Objects { .. }
+        | Selector::Related { .. } => {}
     }
 }

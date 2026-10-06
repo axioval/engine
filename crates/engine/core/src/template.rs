@@ -708,6 +708,11 @@ pub enum Decision {
         value: &'static str,
         consistent: Consistent,
     },
+    /// A group decision: each selected object satisfies the selector a
+    /// rule states; those that do not are grouped by the values of the
+    /// properties the selector consults, one finding per combination
+    /// ([`Conformance`]).
+    Conforms(Conformance),
     /// The anchor's members ([`Form::members`]) read and judged one by
     /// one, against their neighbours, a reference prevailing among them,
     /// and their own nested members ([`Each`]). Findings are on the
@@ -965,6 +970,31 @@ pub struct Consistent {
     pub tolerance: &'static str,
     pub tolerance_quantity: &'static str,
     pub messages: ConsistentMessages,
+}
+
+/// What [`Decision::Conforms`] reads of the rule.
+///
+/// Each selected object is judged by the selector parameter `requirement`
+/// (an agreed list: an `anyOf` of `allOf` rows), through the selector
+/// evaluation every rule shares; an object it cannot decide is left open
+/// for the selector's reason. An object it rejects is worded by the
+/// stated values of the properties the selector consults, in the order it
+/// names them (related selectors and patterns name none): where none of
+/// them has a value (absent, `null` or blank) it is a finding of its own
+/// (`no_value`, `{properties}` naming them); otherwise the objects holding
+/// one combination (folded text, an empty value as no value) share one
+/// finding against the first of them, relating the others (`unknown`,
+/// `{values}` naming each property and its value). Where the selector
+/// consults no property, or one of them cannot be read, the object is a
+/// finding of its own (`alone`). Every finding cites the facts the
+/// selector consulted.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Conformance {
+    pub requirement: &'static str,
+    pub alone: &'static str,
+    pub no_value: &'static str,
+    pub unknown: &'static str,
 }
 
 /// How [`Consistent`] words its outcomes.
@@ -1453,6 +1483,13 @@ impl Decision {
                     label: None,
                 }
             }
+            // The selector holds of the checked object: an expression has
+            // no operator applying a selector to the object in scope, so the
+            // catalogue names the test the runner makes.
+            Self::Conforms(conformance) => Expression::Derived {
+                name: format!("`{}` holds", conformance.requirement),
+                label: Some("the requirement selector holds".into()),
+            },
             Self::Consistent {
                 key,
                 value: subject,
@@ -1724,6 +1761,26 @@ mod tests {
         )
         .unwrap();
         assert!(widened.contains("rounding allowance"), "{widened}");
+    }
+
+    /// A conformance decision names the selector test it makes, since no
+    /// expression applies a selector to the object in scope.
+    #[test]
+    fn a_conformance_names_its_requirement() {
+        let decision = Decision::Conforms(Conformance {
+            requirement: "requirement",
+            alone: "",
+            no_value: "",
+            unknown: "",
+        });
+        let value = |name: &str| Expression::Derived {
+            name: name.to_owned(),
+            label: None,
+        };
+        assert!(matches!(
+            decision.expression(&value),
+            Expression::Derived { name, .. } if name == "`requirement` holds"
+        ));
     }
 
     /// A consistency decision reads, for the catalogue, as no object of

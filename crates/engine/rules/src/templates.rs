@@ -2255,6 +2255,9 @@ pub(crate) fn run(
     {
         return groups::consistent(&plan, (key, value), consistent, context, rule);
     }
+    if let Decision::Conforms(conformance) = &plan.form.decision {
+        return groups::conforms(&plan, conformance, context, rule);
+    }
     if let Some(scopes) = &plan.form.scope {
         return scopes::run(&plan, &effective(&plan), scopes, context, rule);
     }
@@ -2645,7 +2648,7 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
     }
     if matches!(
         plan.form.decision,
-        Decision::Unique { .. } | Decision::Consistent { .. }
+        Decision::Unique { .. } | Decision::Consistent { .. } | Decision::Conforms(_)
     ) {
         return Err(ForkError::Inexpressible(
             "an expression rule judges each object on its own, not against the values of its group"

@@ -65,6 +65,7 @@ fn measured(name: &'static str, property: &'static str) -> TemplateValue {
         expect: None,
         absent: None,
         mismatch: None,
+        refused: None,
     }
 }
 
@@ -372,6 +373,7 @@ fn form() -> Form {
                 expect: None,
                 absent: None,
                 mismatch: None,
+                refused: None,
             },
         ],
         decision: Decision::Within {

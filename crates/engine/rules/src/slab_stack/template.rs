@@ -108,6 +108,7 @@ fn measured(name: &'static str, property: &'static str, expect: Option<Expect>) 
         expect,
         absent: None,
         mismatch: None,
+        refused: None,
     }
 }
 

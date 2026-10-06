@@ -32,6 +32,7 @@ fn measured(name: &'static str, call: &str) -> TemplateValue {
         expect: None,
         absent: None,
         mismatch: None,
+        refused: None,
     }
 }
 

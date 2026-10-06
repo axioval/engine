@@ -28,6 +28,7 @@ fn count() -> TemplateValue {
         expect: None,
         absent: None,
         mismatch: None,
+        refused: None,
     }
 }
 
@@ -42,6 +43,7 @@ fn one() -> TemplateValue {
         expect: None,
         absent: None,
         mismatch: None,
+        refused: None,
     }
 }
 

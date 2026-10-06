@@ -66,6 +66,7 @@ fn measured(name: &'static str, property: &'static str) -> TemplateValue {
         expect: None,
         absent: None,
         mismatch: None,
+        refused: None,
     }
 }
 
@@ -351,6 +352,7 @@ fn capacity() -> FormCheck {
         expect: None,
         absent: None,
         mismatch: None,
+        refused: None,
     };
     FormCheck {
         values: vec![

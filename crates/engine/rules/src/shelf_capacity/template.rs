@@ -51,6 +51,7 @@ fn metres(name: &'static str, measured: &str) -> TemplateValue {
         expect: None,
         absent: None,
         mismatch: None,
+        refused: None,
     }
 }
 

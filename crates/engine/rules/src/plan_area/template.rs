@@ -48,6 +48,7 @@ fn value(area: Expression) -> Vec<TemplateValue> {
         expect: None,
         absent: None,
         mismatch: None,
+        refused: None,
     }]
 }
 

@@ -86,7 +86,8 @@ A `Form` holds:
 
 - `values`: `TemplateValue`s, each a named expression, read in order for
   each selected object. A value may `expect` a kind (`length`, `area`), and words
-  a stated absence (`absent`) and a value of the wrong kind (`mismatch`);
+  a stated absence (`absent`), a value of the wrong kind (`mismatch`) and
+  one that cannot be read (`refused`, `{why}` its refusal);
   one expected `optional` that is stated absent passes the form, or the
   check, it belongs to without a finding (no slab above to measure to); one
   expected `words` is read only to word the outcome and cites nothing (the

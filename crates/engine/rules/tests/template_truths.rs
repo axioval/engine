@@ -26,6 +26,7 @@ fn value(name: &'static str, expression: &serde_json::Value) -> TemplateValue {
         expect: None,
         absent: None,
         mismatch: None,
+        refused: None,
     }
 }
 

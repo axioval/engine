@@ -33,6 +33,7 @@ fn measured(name: &'static str) -> TemplateValue {
         expect: None,
         absent: None,
         mismatch: None,
+        refused: None,
     }
 }
 
@@ -305,6 +306,7 @@ fn each() -> Each {
             expect: None,
             absent: None,
             mismatch: None,
+            refused: None,
         }],
         order: "elevation",
         unordered: "{member} has no length {order} ({elevation:stated}), so the levels cannot \

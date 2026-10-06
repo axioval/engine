@@ -140,6 +140,7 @@ pub(crate) fn template() -> Template {
                 expect: None,
                 absent: None,
                 mismatch: None,
+                refused: None,
             }],
             decision: Decision::Within {
                 value: "judged",

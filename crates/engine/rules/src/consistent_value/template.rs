@@ -77,6 +77,7 @@ fn stated(name: &'static str) -> TemplateValue {
         expect: None,
         absent: None,
         mismatch: None,
+        refused: None,
     }
 }
 

@@ -29,6 +29,7 @@ fn count(name: &'static str, selector: &str) -> TemplateValue {
         expect: None,
         absent: None,
         mismatch: None,
+        refused: None,
     }
 }
 
@@ -242,6 +243,7 @@ mod checked {
             expect: None,
             absent: None,
             mismatch: None,
+            refused: None,
         }
     }
 
@@ -547,6 +549,7 @@ mod graded {
             expect: None,
             absent: None,
             mismatch: None,
+            refused: None,
         }
     }
 
@@ -828,6 +831,7 @@ mod near {
             expect,
             absent: None,
             mismatch: None,
+            refused: None,
         }
     }
 
@@ -1016,6 +1020,7 @@ mod thresholds {
             expect: None,
             absent: None,
             mismatch: None,
+            refused: None,
         }
     }
 
@@ -1397,6 +1402,7 @@ mod open_sums {
             expect: None,
             absent: None,
             mismatch: None,
+            refused: None,
         }
     }
 
@@ -1413,6 +1419,7 @@ mod open_sums {
             expect: None,
             absent: None,
             mismatch: None,
+            refused: None,
         };
         let mut area = stated("area", "Area");
         area.absent = Some("no area{labelled}");
@@ -1634,6 +1641,7 @@ mod joined {
             expect: None,
             absent: None,
             mismatch: None,
+            refused: None,
         }
     }
 
@@ -1674,6 +1682,7 @@ mod joined {
             expect: None,
             absent: None,
             mismatch: None,
+            refused: None,
         };
         let mut share = check(
             "Share",
@@ -1924,6 +1933,7 @@ mod stated {
             expect: None,
             absent: None,
             mismatch: None,
+            refused: None,
         };
         let zero = TemplateValue {
             name: "zero",
@@ -1934,6 +1944,7 @@ mod stated {
             expect: None,
             absent: None,
             mismatch: None,
+            refused: None,
         };
         Template {
             id: ID,

@@ -2853,7 +2853,11 @@ fn read_values<'v>(
                     Reason::Unreadable(message) => refusal(message, expression, object),
                     other => other.to_string(),
                 });
-                return Some(Outcome::Open(reason, read.why.clone().unwrap_or_default()));
+                let message = match step.refused {
+                    Some(refused) => render(plan, read, refused),
+                    None => read.why.clone().unwrap_or_default(),
+                };
+                return Some(Outcome::Open(reason, message));
             }
         }
     }

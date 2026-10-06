@@ -109,6 +109,7 @@ fn count(name: &'static str, selector: &str) -> TemplateValue {
         expect: None,
         absent: None,
         mismatch: None,
+        refused: None,
     }
 }
 
@@ -158,6 +159,7 @@ fn groups() -> Form {
         expect: None,
         absent: None,
         mismatch: None,
+        refused: None,
     };
     form(
         &["group_property"],

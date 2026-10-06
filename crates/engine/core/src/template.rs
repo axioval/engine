@@ -1117,6 +1117,10 @@ pub struct TemplateValue {
     pub absent: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mismatch: Option<&'static str>,
+    /// How a value that cannot be read leaves the object open (`{why}` its
+    /// refusal); without it, its refusal alone.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refused: Option<&'static str>,
 }
 
 /// The kind of value a [`TemplateValue`] must have.
@@ -2627,6 +2631,7 @@ mod tests {
             expect: None,
             absent: None,
             mismatch: None,
+            refused: None,
         };
         let form = Form {
             when: &[],

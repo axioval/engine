@@ -45,6 +45,7 @@ fn measured(name: &'static str, property: &'static str) -> TemplateValue {
         expect: None,
         absent: None,
         mismatch: None,
+        refused: None,
     }
 }
 
@@ -557,6 +558,7 @@ fn walls() -> Template {
                     expect: None,
                     absent: None,
                     mismatch: None,
+                    refused: None,
                 },
             ],
             decision: Decision::Within {

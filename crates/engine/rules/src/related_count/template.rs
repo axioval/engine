@@ -35,6 +35,7 @@ fn form() -> Form {
             expect: None,
             absent: None,
             mismatch: None,
+            refused: None,
         }],
         decision: Decision::Within {
             value: "count",

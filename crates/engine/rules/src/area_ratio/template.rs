@@ -104,6 +104,7 @@ fn value(name: &'static str, expression: Expression) -> TemplateValue {
         expect: None,
         absent: None,
         mismatch: None,
+        refused: None,
     }
 }
 

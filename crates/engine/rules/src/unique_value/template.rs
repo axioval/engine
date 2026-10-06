@@ -89,6 +89,7 @@ pub(crate) fn template() -> Template {
                 expect: None,
                 absent: None,
                 mismatch: None,
+                refused: None,
             }],
             decision: Decision::Unique {
                 value: "value",

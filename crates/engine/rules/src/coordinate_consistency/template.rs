@@ -163,6 +163,7 @@ fn form() -> Form {
                 expect: None,
                 absent: None,
                 mismatch: None,
+                refused: None,
             },
             applies: None,
             refused: "coordinate-consistency: {why}",

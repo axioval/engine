@@ -36,6 +36,7 @@ fn extent_values() -> Vec<TemplateValue> {
         expect: None,
         absent: None,
         mismatch: None,
+        refused: None,
     };
     vec![
         value("extent", "body_extent;axis={axis}"),
@@ -75,6 +76,7 @@ fn stated_form() -> Form {
                 expect: Some(Expect::Length),
                 absent: Some("{measured}; `{target_property}` is absent"),
                 mismatch: Some("`{target_property}` is {target:stated}, not a length"),
+                refused: None,
             });
             values
         },

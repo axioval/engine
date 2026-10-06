@@ -46,6 +46,7 @@ fn value(name: &'static str, property: &'static str) -> TemplateValue {
         expect: None,
         absent: None,
         mismatch: None,
+        refused: None,
     }
 }
 

@@ -359,6 +359,7 @@ pub(crate) fn template() -> Template {
         expect: None,
         absent: None,
         mismatch: None,
+        refused: None,
     };
     let surfaces = TemplateValue {
         name: "surfaces",
@@ -371,6 +372,7 @@ pub(crate) fn template() -> Template {
         expect: None,
         absent: None,
         mismatch: None,
+        refused: None,
     };
     Template {
         id: ID,

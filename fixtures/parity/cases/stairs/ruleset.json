@@ -1,0 +1,787 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:parity.public.stairs",
+    "name": {
+      "default": "Public parity ruleset, stairs and ramps",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "stair-geometry and ramp-geometry, recorded before they became templates.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "definitionPackages": [
+    "axioval:parity.public.stairs.definitions"
+  ],
+  "root": {
+    "id": "root",
+    "name": {
+      "default": "Stairs and ramps",
+      "translations": {}
+    },
+    "rules": [
+      {
+        "id": "flight-steps",
+        "definitionId": "axioval:parity.public.stairs.stair-geometry",
+        "name": {
+          "default": "flight-steps",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.stairs.slab",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "riser_minimum": {
+            "type": "quantity",
+            "value": 0.15,
+            "unit": "m"
+          },
+          "riser_maximum": {
+            "type": "quantity",
+            "value": 0.19,
+            "unit": "m"
+          },
+          "going_minimum": {
+            "type": "quantity",
+            "value": 0.26,
+            "unit": "m"
+          },
+          "going_maximum": {
+            "type": "quantity",
+            "value": 0.32,
+            "unit": "m"
+          },
+          "step_length_minimum": {
+            "type": "quantity",
+            "value": 0.59,
+            "unit": "m"
+          },
+          "step_length_maximum": {
+            "type": "quantity",
+            "value": 0.65,
+            "unit": "m"
+          },
+          "nosing_maximum": {
+            "type": "quantity",
+            "value": 0.04,
+            "unit": "m"
+          },
+          "minimum_risers": {
+            "type": "integer",
+            "value": 3
+          },
+          "maximum_risers": {
+            "type": "integer",
+            "value": 18
+          },
+          "maximum_rise": {
+            "type": "quantity",
+            "value": 3.0,
+            "unit": "m"
+          },
+          "riser_tolerance": {
+            "type": "quantity",
+            "value": 0.005,
+            "unit": "m"
+          },
+          "going_tolerance": {
+            "type": "quantity",
+            "value": 0.005,
+            "unit": "m"
+          },
+          "forbid_open_risers": {
+            "type": "boolean",
+            "value": true
+          },
+          "width_minimum": {
+            "type": "quantity",
+            "value": 1.0,
+            "unit": "m"
+          },
+          "width_maximum": {
+            "type": "quantity",
+            "value": 3.0,
+            "unit": "m"
+          }
+        }
+      },
+      {
+        "id": "flight-clearances",
+        "definitionId": "axioval:parity.public.stairs.stair-geometry",
+        "name": {
+          "default": "flight-clearances",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.stairs.slab",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "minimum_headroom": {
+            "type": "quantity",
+            "value": 2.0,
+            "unit": "m"
+          },
+          "headroom_obstacles": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.stairs.beam",
+              "includeSubtypes": true
+            }
+          },
+          "minimum_headroom_below": {
+            "type": "quantity",
+            "value": 2.0,
+            "unit": "m"
+          },
+          "headroom_below_spaces": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.stairs.space",
+              "includeSubtypes": true
+            }
+          },
+          "clear_width_minimum": {
+            "type": "quantity",
+            "value": 1.0,
+            "unit": "m"
+          },
+          "clear_width_obstacles": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.stairs.column",
+              "includeSubtypes": true
+            }
+          },
+          "clear_width_band_from": {
+            "type": "quantity",
+            "value": 0.0,
+            "unit": "m"
+          },
+          "clear_width_band_to": {
+            "type": "quantity",
+            "value": 2.0,
+            "unit": "m"
+          }
+        }
+      },
+      {
+        "id": "flight-landings",
+        "definitionId": "axioval:parity.public.stairs.stair-geometry",
+        "name": {
+          "default": "flight-landings",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.stairs.slab",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "landing_objects": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.stairs.slab",
+              "includeSubtypes": true
+            }
+          },
+          "landing_depth_minimum": {
+            "type": "quantity",
+            "value": 1.2,
+            "unit": "m"
+          },
+          "landing_width_minimum": {
+            "type": "quantity",
+            "value": 1.0,
+            "unit": "m"
+          },
+          "landing_at_least_walking_width": {
+            "type": "boolean",
+            "value": true
+          },
+          "landings_required": {
+            "type": "boolean",
+            "value": true
+          },
+          "landing_doors": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.stairs.door",
+              "includeSubtypes": true
+            }
+          },
+          "landing_door_height": {
+            "type": "quantity",
+            "value": 2.0,
+            "unit": "m"
+          },
+          "landing_door_swing": {
+            "type": "boolean",
+            "value": true
+          },
+          "end_space_depth": {
+            "type": "quantity",
+            "value": 1.5,
+            "unit": "m"
+          },
+          "end_space_width": {
+            "type": "quantity",
+            "value": 1.5,
+            "unit": "m"
+          },
+          "end_space_height": {
+            "type": "quantity",
+            "value": 2.0,
+            "unit": "m"
+          },
+          "end_space_obstacles": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.stairs.wall",
+              "includeSubtypes": true
+            }
+          },
+          "tactile_objects": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.stairs.covering",
+              "includeSubtypes": true
+            }
+          },
+          "tactile_offset": {
+            "type": "quantity",
+            "value": 0.3,
+            "unit": "m"
+          },
+          "tactile_depth": {
+            "type": "quantity",
+            "value": 0.6,
+            "unit": "m"
+          },
+          "landing_clear_width_minimum": {
+            "type": "quantity",
+            "value": 1.0,
+            "unit": "m"
+          },
+          "total_clear_width_minimum": {
+            "type": "quantity",
+            "value": 1.0,
+            "unit": "m"
+          },
+          "clear_width_obstacles": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.stairs.column",
+              "includeSubtypes": true
+            }
+          },
+          "clear_width_band_from": {
+            "type": "quantity",
+            "value": 0.0,
+            "unit": "m"
+          },
+          "clear_width_band_to": {
+            "type": "quantity",
+            "value": 2.0,
+            "unit": "m"
+          }
+        }
+      },
+      {
+        "id": "flight-handrails",
+        "definitionId": "axioval:parity.public.stairs.stair-geometry",
+        "name": {
+          "default": "flight-handrails",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.stairs.slab",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "handrail_objects": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.stairs.beam",
+              "includeSubtypes": true
+            }
+          },
+          "handrail_reach_across": {
+            "type": "quantity",
+            "value": 0.3,
+            "unit": "m"
+          },
+          "handrail_reach_above": {
+            "type": "quantity",
+            "value": 1.2,
+            "unit": "m"
+          },
+          "handrail_height_minimum": {
+            "type": "quantity",
+            "value": 0.85,
+            "unit": "m"
+          },
+          "handrail_height_maximum": {
+            "type": "quantity",
+            "value": 1.0,
+            "unit": "m"
+          },
+          "handrail_extension_minimum": {
+            "type": "quantity",
+            "value": 0.3,
+            "unit": "m"
+          },
+          "handrail_gap_maximum": {
+            "type": "quantity",
+            "value": 0.05,
+            "unit": "m"
+          },
+          "handrail_sides": {
+            "type": "string",
+            "value": "one"
+          },
+          "handrail_both_sides_above_width": {
+            "type": "quantity",
+            "value": 1.5,
+            "unit": "m"
+          }
+        }
+      },
+      {
+        "id": "stair-whole",
+        "definitionId": "axioval:parity.public.stairs.stair-geometry",
+        "name": {
+          "default": "stair-whole",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.stairs.storey",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "stair_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelContainedInSpatialStructure"
+            ]
+          },
+          "stair_flights": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.stairs.slab",
+              "includeSubtypes": true
+            }
+          },
+          "maximum_total_rise": {
+            "type": "quantity",
+            "value": 4.0,
+            "unit": "m"
+          },
+          "riser_maximum": {
+            "type": "quantity",
+            "value": 0.19,
+            "unit": "m"
+          },
+          "handrail_objects": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.stairs.beam",
+              "includeSubtypes": true
+            }
+          },
+          "handrail_reach_across": {
+            "type": "quantity",
+            "value": 0.3,
+            "unit": "m"
+          },
+          "handrail_reach_above": {
+            "type": "quantity",
+            "value": 1.2,
+            "unit": "m"
+          },
+          "handrail_height_minimum": {
+            "type": "quantity",
+            "value": 0.85,
+            "unit": "m"
+          },
+          "handrail_height_maximum": {
+            "type": "quantity",
+            "value": 1.0,
+            "unit": "m"
+          },
+          "handrail_extension_minimum": {
+            "type": "quantity",
+            "value": 0.3,
+            "unit": "m"
+          },
+          "handrail_gap_maximum": {
+            "type": "quantity",
+            "value": 0.05,
+            "unit": "m"
+          },
+          "handrail_sides": {
+            "type": "string",
+            "value": "both"
+          },
+          "handrail_continuous_across_landings": {
+            "type": "boolean",
+            "value": true
+          }
+        }
+      },
+      {
+        "id": "ramp-slopes",
+        "definitionId": "axioval:parity.public.stairs.ramp-geometry",
+        "name": {
+          "default": "ramp-slopes",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.stairs.slab",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "slope_limits": {
+            "type": "table",
+            "value": [
+              {
+                "maximum_slope": {
+                  "type": "number",
+                  "value": 0.0833
+                },
+                "maximum_length": {
+                  "type": "quantity",
+                  "value": 10.0,
+                  "unit": "m"
+                }
+              },
+              {
+                "maximum_slope": {
+                  "type": "number",
+                  "value": 0.06
+                },
+                "maximum_rise": {
+                  "type": "quantity",
+                  "value": 1.0,
+                  "unit": "m"
+                }
+              }
+            ]
+          },
+          "slope_tolerance": {
+            "type": "number",
+            "value": 0.01
+          },
+          "minimum_headroom": {
+            "type": "quantity",
+            "value": 2.0,
+            "unit": "m"
+          },
+          "headroom_obstacles": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.stairs.beam",
+              "includeSubtypes": true
+            }
+          },
+          "minimum_headroom_below": {
+            "type": "quantity",
+            "value": 2.0,
+            "unit": "m"
+          },
+          "headroom_below_spaces": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.stairs.space",
+              "includeSubtypes": true
+            }
+          },
+          "clear_width_minimum": {
+            "type": "quantity",
+            "value": 1.0,
+            "unit": "m"
+          },
+          "clear_width_obstacles": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.stairs.column",
+              "includeSubtypes": true
+            }
+          },
+          "clear_width_band_from": {
+            "type": "quantity",
+            "value": 0.0,
+            "unit": "m"
+          },
+          "clear_width_band_to": {
+            "type": "quantity",
+            "value": 2.0,
+            "unit": "m"
+          },
+          "width_minimum": {
+            "type": "quantity",
+            "value": 1.2,
+            "unit": "m"
+          }
+        }
+      },
+      {
+        "id": "ramp-landings",
+        "definitionId": "axioval:parity.public.stairs.ramp-geometry",
+        "name": {
+          "default": "ramp-landings",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.stairs.slab",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "landing_objects": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.stairs.slab",
+              "includeSubtypes": true
+            }
+          },
+          "landing_depth_minimum": {
+            "type": "quantity",
+            "value": 1.2,
+            "unit": "m"
+          },
+          "landing_width_minimum": {
+            "type": "quantity",
+            "value": 1.0,
+            "unit": "m"
+          },
+          "landing_at_least_walking_width": {
+            "type": "boolean",
+            "value": true
+          },
+          "landings_required": {
+            "type": "boolean",
+            "value": true
+          },
+          "landing_doors": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.stairs.door",
+              "includeSubtypes": true
+            }
+          },
+          "landing_door_height": {
+            "type": "quantity",
+            "value": 2.0,
+            "unit": "m"
+          },
+          "landing_door_swing": {
+            "type": "boolean",
+            "value": true
+          },
+          "end_space_depth": {
+            "type": "quantity",
+            "value": 1.5,
+            "unit": "m"
+          },
+          "end_space_width": {
+            "type": "quantity",
+            "value": 1.5,
+            "unit": "m"
+          },
+          "end_space_height": {
+            "type": "quantity",
+            "value": 2.0,
+            "unit": "m"
+          },
+          "end_space_obstacles": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.stairs.wall",
+              "includeSubtypes": true
+            }
+          },
+          "end_landing_depth_minimum": {
+            "type": "quantity",
+            "value": 1.5,
+            "unit": "m"
+          },
+          "end_landing_width_minimum": {
+            "type": "quantity",
+            "value": 1.5,
+            "unit": "m"
+          }
+        }
+      },
+      {
+        "id": "ramp-handrails",
+        "definitionId": "axioval:parity.public.stairs.ramp-geometry",
+        "name": {
+          "default": "ramp-handrails",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.stairs.slab",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "handrail_objects": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.stairs.beam",
+              "includeSubtypes": true
+            }
+          },
+          "handrail_reach_across": {
+            "type": "quantity",
+            "value": 0.3,
+            "unit": "m"
+          },
+          "handrail_reach_above": {
+            "type": "quantity",
+            "value": 1.2,
+            "unit": "m"
+          },
+          "handrail_height_minimum": {
+            "type": "quantity",
+            "value": 0.85,
+            "unit": "m"
+          },
+          "handrail_height_maximum": {
+            "type": "quantity",
+            "value": 1.0,
+            "unit": "m"
+          },
+          "handrail_extension_minimum": {
+            "type": "quantity",
+            "value": 0.3,
+            "unit": "m"
+          },
+          "handrail_gap_maximum": {
+            "type": "quantity",
+            "value": 0.05,
+            "unit": "m"
+          },
+          "handrail_sides": {
+            "type": "string",
+            "value": "one"
+          },
+          "handrail_both_sides_above_width": {
+            "type": "quantity",
+            "value": 1.5,
+            "unit": "m"
+          },
+          "check_continuous_handrails": {
+            "type": "boolean",
+            "value": true
+          },
+          "handrail_continuity_tolerance": {
+            "type": "quantity",
+            "value": 0.1,
+            "unit": "m"
+          },
+          "check_rails_obstruction": {
+            "type": "boolean",
+            "value": true
+          },
+          "accessible_surface_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.stairs.slab",
+              "includeSubtypes": true
+            }
+          }
+        }
+      },
+      {
+        "id": "beam-ramps",
+        "definitionId": "axioval:parity.public.stairs.ramp-geometry",
+        "name": {
+          "default": "beam-ramps",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.stairs.beam",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "slope_limits": {
+            "type": "table",
+            "value": [
+              {
+                "maximum_slope": {
+                  "type": "number",
+                  "value": 0.0833
+                },
+                "maximum_length": {
+                  "type": "quantity",
+                  "value": 10.0,
+                  "unit": "m"
+                }
+              },
+              {
+                "maximum_slope": {
+                  "type": "number",
+                  "value": 0.06
+                },
+                "maximum_rise": {
+                  "type": "quantity",
+                  "value": 1.0,
+                  "unit": "m"
+                }
+              }
+            ]
+          },
+          "slope_tolerance": {
+            "type": "number",
+            "value": 0.01
+          },
+          "width_minimum": {
+            "type": "quantity",
+            "value": 0.1,
+            "unit": "m"
+          }
+        }
+      }
+    ]
+  }
+}

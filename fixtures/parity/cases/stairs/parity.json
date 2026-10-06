@@ -1,0 +1,17 @@
+{
+  "description": "stair-geometry and ramp-geometry over every public model, meshed, recorded before they became templates (#280).",
+  "models": "*",
+  "pairs": [],
+  "recorded": [
+    {"rule": "flight-steps", "comparison": "contract", "reason": "stair-geometry and ramp-geometry become templates (#280); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "flight-clearances", "comparison": "contract", "reason": "stair-geometry and ramp-geometry become templates (#280); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "flight-landings", "comparison": "contract", "reason": "stair-geometry and ramp-geometry become templates (#280); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "flight-handrails", "comparison": "contract", "reason": "stair-geometry and ramp-geometry become templates (#280); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "stair-whole", "comparison": "contract", "reason": "stair-geometry and ramp-geometry become templates (#280); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "ramp-slopes", "comparison": "contract", "reason": "stair-geometry and ramp-geometry become templates (#280); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "ramp-landings", "comparison": "contract", "reason": "stair-geometry and ramp-geometry become templates (#280); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "ramp-handrails", "comparison": "contract", "reason": "stair-geometry and ramp-geometry become templates (#280); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "beam-ramps", "comparison": "contract", "reason": "stair-geometry and ramp-geometry become templates (#280); the outcomes their implementation reported, recorded before it was replaced, are the contract."}
+  ],
+  "divergences": []
+}

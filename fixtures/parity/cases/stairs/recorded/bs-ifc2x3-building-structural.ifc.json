@@ -1,0 +1,166 @@
+{
+  "findings": [],
+  "not_evaluated": [
+    {
+      "message": "walking surface unsupported: ifc-step:bs-ifc2x3-building-structural.ifc/#1012 has no sloped face looking up, so no ramp run",
+      "object_id": {
+        "local_id": "#1012",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "beam-ramps"
+    },
+    {
+      "message": "walking surface unsupported: a face of ifc-step:bs-ifc2x3-building-structural.ifc/#1054 slopes at 45°, neither walkable nor steep",
+      "object_id": {
+        "local_id": "#1054",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "beam-ramps"
+    },
+    {
+      "message": "walking surface unsupported: a face of ifc-step:bs-ifc2x3-building-structural.ifc/#837 slopes at 45°, neither walkable nor steep",
+      "object_id": {
+        "local_id": "#837",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "beam-ramps"
+    },
+    {
+      "message": "walking surface unsupported: a face of ifc-step:bs-ifc2x3-building-structural.ifc/#886 slopes at 45°, neither walkable nor steep",
+      "object_id": {
+        "local_id": "#886",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "beam-ramps"
+    },
+    {
+      "message": "walking surface unsupported: a face of ifc-step:bs-ifc2x3-building-structural.ifc/#928 slopes at 45°, neither walkable nor steep",
+      "object_id": {
+        "local_id": "#928",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "beam-ramps"
+    },
+    {
+      "message": "walking surface unsupported: a face of ifc-step:bs-ifc2x3-building-structural.ifc/#970 slopes at 45°, neither walkable nor steep",
+      "object_id": {
+        "local_id": "#970",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "beam-ramps"
+    },
+    {
+      "message": "the stair's rise is not measured: IfcRelContainedInSpatialStructure reaches no selected flight",
+      "object_id": {
+        "local_id": "#36",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "stair-whole"
+    },
+    {
+      "message": "whether the handrails continue across the stair's landings is not judged: IfcRelContainedInSpatialStructure reaches no selected flight",
+      "object_id": {
+        "local_id": "#36",
+        "source": {
+          "document": "bs-ifc2x3-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "stair-whole"
+    }
+  ],
+  "rules": [
+    {
+      "checked": 6,
+      "failed": 0,
+      "not_evaluated": 6,
+      "rule_id": "beam-ramps",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "flight-clearances",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "flight-handrails",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "flight-landings",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "flight-steps",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "ramp-handrails",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "ramp-landings",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "ramp-slopes",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "stair-whole",
+      "status": "not_evaluated"
+    }
+  ]
+}

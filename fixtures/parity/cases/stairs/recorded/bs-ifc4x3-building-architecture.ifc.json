@@ -1,0 +1,358 @@
+{
+  "findings": [],
+  "not_evaluated": [
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4x3-building-architecture.ifc/#261 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#261",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4x3-building-architecture.ifc/#285 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#285",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4x3-building-architecture.ifc/#53 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#53",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4x3-building-architecture.ifc/#261 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#261",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4x3-building-architecture.ifc/#285 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#285",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4x3-building-architecture.ifc/#53 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#53",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4x3-building-architecture.ifc/#261 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#261",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4x3-building-architecture.ifc/#285 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#285",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4x3-building-architecture.ifc/#53 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#53",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4x3-building-architecture.ifc/#261 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#261",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4x3-building-architecture.ifc/#285 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#285",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4x3-building-architecture.ifc/#53 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#53",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4x3-building-architecture.ifc/#261 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#261",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4x3-building-architecture.ifc/#285 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#285",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4x3-building-architecture.ifc/#53 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#53",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4x3-building-architecture.ifc/#261 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#261",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4x3-building-architecture.ifc/#285 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#285",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4x3-building-architecture.ifc/#53 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#53",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4x3-building-architecture.ifc/#261 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#261",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4x3-building-architecture.ifc/#285 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#285",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4x3-building-architecture.ifc/#53 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#53",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "the stair's rise is not measured: flight ifc-step:bs-ifc4x3-building-architecture.ifc/#53 is not measured: walking surface unsupported: the mesh of ifc-step:bs-ifc4x3-building-architecture.ifc/#53 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "stair-whole"
+    },
+    {
+      "message": "whether the handrails continue across the stair's landings is not judged: flight ifc-step:bs-ifc4x3-building-architecture.ifc/#53 is not measured: walking surface unsupported: the mesh of ifc-step:bs-ifc4x3-building-architecture.ifc/#53 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "stair-whole"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4x3-building-architecture.ifc/#53 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#53",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "stair-whole"
+    }
+  ],
+  "rules": [
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "beam-ramps",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 3,
+      "failed": 0,
+      "not_evaluated": 3,
+      "rule_id": "flight-clearances",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 3,
+      "failed": 0,
+      "not_evaluated": 3,
+      "rule_id": "flight-handrails",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 3,
+      "failed": 0,
+      "not_evaluated": 3,
+      "rule_id": "flight-landings",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 3,
+      "failed": 0,
+      "not_evaluated": 3,
+      "rule_id": "flight-steps",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 3,
+      "failed": 0,
+      "not_evaluated": 3,
+      "rule_id": "ramp-handrails",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 3,
+      "failed": 0,
+      "not_evaluated": 3,
+      "rule_id": "ramp-landings",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 3,
+      "failed": 0,
+      "not_evaluated": 3,
+      "rule_id": "ramp-slopes",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 2,
+      "rule_id": "stair-whole",
+      "status": "not_evaluated"
+    }
+  ]
+}

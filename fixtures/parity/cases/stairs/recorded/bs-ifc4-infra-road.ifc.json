@@ -1,0 +1,2758 @@
+{
+  "findings": [],
+  "not_evaluated": [
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#1014 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#1014",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#108 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#108",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#131 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#131",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#188 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#188",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#207 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#207",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#276 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#276",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#294 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#294",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#323 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#323",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#337 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#337",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#350 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#350",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#363 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#363",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#398 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#398",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#412 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#412",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#460 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#460",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#473 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#473",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#541 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#541",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#560 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#560",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#578 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#578",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#596 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#596",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#61 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#61",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#645 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#645",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#659 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#659",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#672 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#672",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#685 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#685",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#744 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#744",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#761 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#761",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#823 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#823",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#839 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#839",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#85 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#919 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#919",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#936 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#936",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#998 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#998",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-clearances"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#1014 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#1014",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#108 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#108",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#131 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#131",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#188 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#188",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#207 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#207",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#276 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#276",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#294 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#294",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#323 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#323",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#337 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#337",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#350 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#350",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#363 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#363",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#398 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#398",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#412 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#412",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#460 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#460",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#473 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#473",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#541 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#541",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#560 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#560",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#578 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#578",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#596 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#596",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#61 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#61",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#645 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#645",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#659 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#659",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#672 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#672",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#685 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#685",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#744 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#744",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#761 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#761",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#823 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#823",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#839 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#839",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#85 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#919 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#919",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#936 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#936",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#998 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#998",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#1014 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#1014",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#108 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#108",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#131 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#131",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#188 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#188",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#207 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#207",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#276 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#276",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#294 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#294",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#323 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#323",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#337 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#337",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#350 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#350",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#363 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#363",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#398 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#398",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#412 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#412",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#460 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#460",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#473 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#473",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#541 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#541",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#560 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#560",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#578 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#578",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#596 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#596",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#61 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#61",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#645 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#645",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#659 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#659",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#672 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#672",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#685 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#685",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#744 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#744",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#761 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#761",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#823 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#823",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#839 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#839",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#85 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#919 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#919",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#936 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#936",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#998 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#998",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#1014 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#1014",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#108 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#108",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#131 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#131",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#188 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#188",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#207 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#207",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#276 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#276",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#294 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#294",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#323 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#323",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#337 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#337",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#350 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#350",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#363 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#363",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#398 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#398",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#412 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#412",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#460 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#460",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#473 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#473",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#541 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#541",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#560 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#560",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#578 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#578",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#596 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#596",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#61 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#61",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#645 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#645",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#659 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#659",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#672 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#672",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#685 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#685",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#744 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#744",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#761 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#761",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#823 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#823",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#839 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#839",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#85 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#919 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#919",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#936 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#936",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#998 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#998",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "flight-steps"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#1014 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#1014",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#108 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#108",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#131 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#131",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#188 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#188",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#207 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#207",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#276 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#276",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#294 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#294",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#323 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#323",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#337 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#337",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#350 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#350",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#363 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#363",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#398 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#398",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#412 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#412",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#460 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#460",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#473 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#473",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#541 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#541",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#560 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#560",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#578 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#578",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#596 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#596",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#61 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#61",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#645 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#645",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#659 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#659",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#672 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#672",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#685 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#685",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#744 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#744",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#761 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#761",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#823 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#823",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#839 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#839",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#85 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#919 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#919",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#936 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#936",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#998 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#998",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-handrails"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#1014 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#1014",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#108 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#108",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#131 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#131",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#188 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#188",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#207 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#207",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#276 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#276",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#294 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#294",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#323 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#323",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#337 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#337",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#350 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#350",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#363 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#363",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#398 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#398",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#412 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#412",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#460 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#460",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#473 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#473",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#541 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#541",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#560 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#560",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#578 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#578",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#596 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#596",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#61 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#61",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#645 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#645",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#659 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#659",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#672 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#672",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#685 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#685",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#744 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#744",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#761 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#761",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#823 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#823",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#839 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#839",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#85 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#919 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#919",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#936 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#936",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#998 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#998",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-landings"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#1014 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#1014",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#108 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#108",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#131 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#131",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#188 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#188",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#207 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#207",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#276 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#276",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#294 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#294",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#323 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#323",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#337 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#337",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#350 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#350",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#363 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#363",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#398 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#398",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#412 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#412",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#460 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#460",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#473 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#473",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#541 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#541",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#560 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#560",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#578 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#578",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#596 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#596",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#61 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#61",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#645 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#645",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#659 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#659",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#672 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#672",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#685 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#685",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#744 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#744",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#761 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#761",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#823 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#823",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#839 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#839",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#85 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#919 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#919",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#936 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#936",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    },
+    {
+      "message": "walking surface unsupported: the mesh of ifc-step:bs-ifc4-infra-road.ifc/#998 is not a closed surface, so which faces look up is unknown",
+      "object_id": {
+        "local_id": "#998",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ramp-slopes"
+    }
+  ],
+  "rules": [
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "beam-ramps",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 32,
+      "failed": 0,
+      "not_evaluated": 32,
+      "rule_id": "flight-clearances",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 32,
+      "failed": 0,
+      "not_evaluated": 32,
+      "rule_id": "flight-handrails",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 32,
+      "failed": 0,
+      "not_evaluated": 32,
+      "rule_id": "flight-landings",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 32,
+      "failed": 0,
+      "not_evaluated": 32,
+      "rule_id": "flight-steps",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 32,
+      "failed": 0,
+      "not_evaluated": 32,
+      "rule_id": "ramp-handrails",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 32,
+      "failed": 0,
+      "not_evaluated": 32,
+      "rule_id": "ramp-landings",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 32,
+      "failed": 0,
+      "not_evaluated": 32,
+      "rule_id": "ramp-slopes",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "stair-whole",
+      "status": "nothing_selected"
+    }
+  ]
+}

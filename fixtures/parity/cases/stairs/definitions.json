@@ -1,0 +1,1148 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:parity.public.stairs.definitions",
+    "name": {
+      "default": "Public parity definitions, stairs and ramps",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "Terms for holding stair-geometry and ramp-geometry to the outcomes recorded before they became templates.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "objectTypes": {
+    "axioval:parity.public.stairs.slab": {
+      "id": "axioval:parity.public.stairs.slab",
+      "name": {
+        "default": "slab",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcSlab"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcSlab"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcSlab"
+        }
+      ]
+    },
+    "axioval:parity.public.stairs.beam": {
+      "id": "axioval:parity.public.stairs.beam",
+      "name": {
+        "default": "beam",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcBeam"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcBeam"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcBeam"
+        }
+      ]
+    },
+    "axioval:parity.public.stairs.space": {
+      "id": "axioval:parity.public.stairs.space",
+      "name": {
+        "default": "space",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcSpace"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcSpace"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcSpace"
+        }
+      ]
+    },
+    "axioval:parity.public.stairs.door": {
+      "id": "axioval:parity.public.stairs.door",
+      "name": {
+        "default": "door",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcDoor"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcDoor"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcDoor"
+        }
+      ]
+    },
+    "axioval:parity.public.stairs.wall": {
+      "id": "axioval:parity.public.stairs.wall",
+      "name": {
+        "default": "wall",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcWall"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcWall"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcWall"
+        }
+      ]
+    },
+    "axioval:parity.public.stairs.storey": {
+      "id": "axioval:parity.public.stairs.storey",
+      "name": {
+        "default": "storey",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcBuildingStorey"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcBuildingStorey"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcBuildingStorey"
+        }
+      ]
+    },
+    "axioval:parity.public.stairs.covering": {
+      "id": "axioval:parity.public.stairs.covering",
+      "name": {
+        "default": "covering",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcCovering"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcCovering"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcCovering"
+        }
+      ]
+    },
+    "axioval:parity.public.stairs.column": {
+      "id": "axioval:parity.public.stairs.column",
+      "name": {
+        "default": "column",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcColumn"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcColumn"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcColumn"
+        }
+      ]
+    }
+  },
+  "properties": {},
+  "propertySets": {},
+  "definitions": {
+    "axioval:parity.public.stairs.stair-geometry": {
+      "id": "axioval:parity.public.stairs.stair-geometry",
+      "name": {
+        "default": "stair-geometry",
+        "translations": {}
+      },
+      "capability": "axioval:capability.stair-geometry",
+      "parameters": {
+        "riser_minimum": {
+          "id": "riser_minimum",
+          "name": {
+            "default": "riser_minimum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "riser_maximum": {
+          "id": "riser_maximum",
+          "name": {
+            "default": "riser_maximum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "going_minimum": {
+          "id": "going_minimum",
+          "name": {
+            "default": "going_minimum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "going_maximum": {
+          "id": "going_maximum",
+          "name": {
+            "default": "going_maximum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "step_length_minimum": {
+          "id": "step_length_minimum",
+          "name": {
+            "default": "step_length_minimum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "step_length_maximum": {
+          "id": "step_length_maximum",
+          "name": {
+            "default": "step_length_maximum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "nosing_minimum": {
+          "id": "nosing_minimum",
+          "name": {
+            "default": "nosing_minimum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "nosing_maximum": {
+          "id": "nosing_maximum",
+          "name": {
+            "default": "nosing_maximum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "minimum_risers": {
+          "id": "minimum_risers",
+          "name": {
+            "default": "minimum_risers",
+            "translations": {}
+          },
+          "kind": "integer",
+          "required": false
+        },
+        "maximum_risers": {
+          "id": "maximum_risers",
+          "name": {
+            "default": "maximum_risers",
+            "translations": {}
+          },
+          "kind": "integer",
+          "required": false
+        },
+        "maximum_rise": {
+          "id": "maximum_rise",
+          "name": {
+            "default": "maximum_rise",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "riser_tolerance": {
+          "id": "riser_tolerance",
+          "name": {
+            "default": "riser_tolerance",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "going_tolerance": {
+          "id": "going_tolerance",
+          "name": {
+            "default": "going_tolerance",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "walking_line_offset": {
+          "id": "walking_line_offset",
+          "name": {
+            "default": "walking_line_offset",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "winder_angle_maximum": {
+          "id": "winder_angle_maximum",
+          "name": {
+            "default": "winder_angle_maximum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "winder_angle_minimum": {
+          "id": "winder_angle_minimum",
+          "name": {
+            "default": "winder_angle_minimum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "forbid_open_risers": {
+          "id": "forbid_open_risers",
+          "name": {
+            "default": "forbid_open_risers",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "handrail_extension_from": {
+          "id": "handrail_extension_from",
+          "name": {
+            "default": "handrail_extension_from",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
+        "minimum_headroom": {
+          "id": "minimum_headroom",
+          "name": {
+            "default": "minimum_headroom",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "headroom_obstacles": {
+          "id": "headroom_obstacles",
+          "name": {
+            "default": "headroom_obstacles",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "width_minimum": {
+          "id": "width_minimum",
+          "name": {
+            "default": "width_minimum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "width_maximum": {
+          "id": "width_maximum",
+          "name": {
+            "default": "width_maximum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "landing_objects": {
+          "id": "landing_objects",
+          "name": {
+            "default": "landing_objects",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "landing_depth_minimum": {
+          "id": "landing_depth_minimum",
+          "name": {
+            "default": "landing_depth_minimum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "landing_width_minimum": {
+          "id": "landing_width_minimum",
+          "name": {
+            "default": "landing_width_minimum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "landing_at_least_walking_width": {
+          "id": "landing_at_least_walking_width",
+          "name": {
+            "default": "landing_at_least_walking_width",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "landings_required": {
+          "id": "landings_required",
+          "name": {
+            "default": "landings_required",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "minimum_headroom_below": {
+          "id": "minimum_headroom_below",
+          "name": {
+            "default": "minimum_headroom_below",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "headroom_below_spaces": {
+          "id": "headroom_below_spaces",
+          "name": {
+            "default": "headroom_below_spaces",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "handrail_objects": {
+          "id": "handrail_objects",
+          "name": {
+            "default": "handrail_objects",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "handrail_reach_across": {
+          "id": "handrail_reach_across",
+          "name": {
+            "default": "handrail_reach_across",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "handrail_reach_above": {
+          "id": "handrail_reach_above",
+          "name": {
+            "default": "handrail_reach_above",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "handrail_height_minimum": {
+          "id": "handrail_height_minimum",
+          "name": {
+            "default": "handrail_height_minimum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "handrail_height_maximum": {
+          "id": "handrail_height_maximum",
+          "name": {
+            "default": "handrail_height_maximum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "handrail_extension_minimum": {
+          "id": "handrail_extension_minimum",
+          "name": {
+            "default": "handrail_extension_minimum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "handrail_extension_maximum": {
+          "id": "handrail_extension_maximum",
+          "name": {
+            "default": "handrail_extension_maximum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "handrail_gap_maximum": {
+          "id": "handrail_gap_maximum",
+          "name": {
+            "default": "handrail_gap_maximum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "handrail_sides": {
+          "id": "handrail_sides",
+          "name": {
+            "default": "handrail_sides",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
+        "handrail_both_sides_above_width": {
+          "id": "handrail_both_sides_above_width",
+          "name": {
+            "default": "handrail_both_sides_above_width",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "landing_doors": {
+          "id": "landing_doors",
+          "name": {
+            "default": "landing_doors",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "landing_door_height": {
+          "id": "landing_door_height",
+          "name": {
+            "default": "landing_door_height",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "landing_door_swing": {
+          "id": "landing_door_swing",
+          "name": {
+            "default": "landing_door_swing",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "end_space_depth": {
+          "id": "end_space_depth",
+          "name": {
+            "default": "end_space_depth",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "end_space_width": {
+          "id": "end_space_width",
+          "name": {
+            "default": "end_space_width",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "end_space_height": {
+          "id": "end_space_height",
+          "name": {
+            "default": "end_space_height",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "end_space_obstacles": {
+          "id": "end_space_obstacles",
+          "name": {
+            "default": "end_space_obstacles",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "clear_width_minimum": {
+          "id": "clear_width_minimum",
+          "name": {
+            "default": "clear_width_minimum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "clear_width_obstacles": {
+          "id": "clear_width_obstacles",
+          "name": {
+            "default": "clear_width_obstacles",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "clear_width_band_from": {
+          "id": "clear_width_band_from",
+          "name": {
+            "default": "clear_width_band_from",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "clear_width_band_to": {
+          "id": "clear_width_band_to",
+          "name": {
+            "default": "clear_width_band_to",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "stair_path": {
+          "id": "stair_path",
+          "name": {
+            "default": "stair_path",
+            "translations": {}
+          },
+          "kind": "stringList",
+          "required": false
+        },
+        "stair_flights": {
+          "id": "stair_flights",
+          "name": {
+            "default": "stair_flights",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "maximum_total_rise": {
+          "id": "maximum_total_rise",
+          "name": {
+            "default": "maximum_total_rise",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "handrail_continuous_across_landings": {
+          "id": "handrail_continuous_across_landings",
+          "name": {
+            "default": "handrail_continuous_across_landings",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "handrail_break_doors": {
+          "id": "handrail_break_doors",
+          "name": {
+            "default": "handrail_break_doors",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "tactile_objects": {
+          "id": "tactile_objects",
+          "name": {
+            "default": "tactile_objects",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "tactile_offset": {
+          "id": "tactile_offset",
+          "name": {
+            "default": "tactile_offset",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "tactile_depth": {
+          "id": "tactile_depth",
+          "name": {
+            "default": "tactile_depth",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "tactile_on_intermediate_landings": {
+          "id": "tactile_on_intermediate_landings",
+          "name": {
+            "default": "tactile_on_intermediate_landings",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "landing_clear_width_minimum": {
+          "id": "landing_clear_width_minimum",
+          "name": {
+            "default": "landing_clear_width_minimum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "total_clear_width_minimum": {
+          "id": "total_clear_width_minimum",
+          "name": {
+            "default": "total_clear_width_minimum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        }
+      }
+    },
+    "axioval:parity.public.stairs.ramp-geometry": {
+      "id": "axioval:parity.public.stairs.ramp-geometry",
+      "name": {
+        "default": "ramp-geometry",
+        "translations": {}
+      },
+      "capability": "axioval:capability.ramp-geometry",
+      "parameters": {
+        "slope_limits": {
+          "id": "slope_limits",
+          "name": {
+            "default": "slope_limits",
+            "translations": {}
+          },
+          "kind": "table",
+          "required": false,
+          "columns": [
+            {
+              "id": "maximum_slope",
+              "kind": "number",
+              "name": {
+                "default": "maximum_slope",
+                "translations": {}
+              },
+              "required": true
+            },
+            {
+              "id": "maximum_length",
+              "kind": "quantity",
+              "name": {
+                "default": "maximum_length",
+                "translations": {}
+              },
+              "required": false
+            },
+            {
+              "id": "maximum_rise",
+              "kind": "quantity",
+              "name": {
+                "default": "maximum_rise",
+                "translations": {}
+              },
+              "required": false
+            }
+          ]
+        },
+        "slope_tolerance": {
+          "id": "slope_tolerance",
+          "name": {
+            "default": "slope_tolerance",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": false
+        },
+        "minimum_headroom": {
+          "id": "minimum_headroom",
+          "name": {
+            "default": "minimum_headroom",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "headroom_obstacles": {
+          "id": "headroom_obstacles",
+          "name": {
+            "default": "headroom_obstacles",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "width_minimum": {
+          "id": "width_minimum",
+          "name": {
+            "default": "width_minimum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "width_maximum": {
+          "id": "width_maximum",
+          "name": {
+            "default": "width_maximum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "landing_objects": {
+          "id": "landing_objects",
+          "name": {
+            "default": "landing_objects",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "landing_depth_minimum": {
+          "id": "landing_depth_minimum",
+          "name": {
+            "default": "landing_depth_minimum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "landing_width_minimum": {
+          "id": "landing_width_minimum",
+          "name": {
+            "default": "landing_width_minimum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "landing_at_least_walking_width": {
+          "id": "landing_at_least_walking_width",
+          "name": {
+            "default": "landing_at_least_walking_width",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "landings_required": {
+          "id": "landings_required",
+          "name": {
+            "default": "landings_required",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "minimum_headroom_below": {
+          "id": "minimum_headroom_below",
+          "name": {
+            "default": "minimum_headroom_below",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "headroom_below_spaces": {
+          "id": "headroom_below_spaces",
+          "name": {
+            "default": "headroom_below_spaces",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "handrail_objects": {
+          "id": "handrail_objects",
+          "name": {
+            "default": "handrail_objects",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "handrail_reach_across": {
+          "id": "handrail_reach_across",
+          "name": {
+            "default": "handrail_reach_across",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "handrail_reach_above": {
+          "id": "handrail_reach_above",
+          "name": {
+            "default": "handrail_reach_above",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "handrail_height_minimum": {
+          "id": "handrail_height_minimum",
+          "name": {
+            "default": "handrail_height_minimum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "handrail_height_maximum": {
+          "id": "handrail_height_maximum",
+          "name": {
+            "default": "handrail_height_maximum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "handrail_extension_minimum": {
+          "id": "handrail_extension_minimum",
+          "name": {
+            "default": "handrail_extension_minimum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "handrail_extension_maximum": {
+          "id": "handrail_extension_maximum",
+          "name": {
+            "default": "handrail_extension_maximum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "handrail_gap_maximum": {
+          "id": "handrail_gap_maximum",
+          "name": {
+            "default": "handrail_gap_maximum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "handrail_sides": {
+          "id": "handrail_sides",
+          "name": {
+            "default": "handrail_sides",
+            "translations": {}
+          },
+          "kind": "string",
+          "required": false
+        },
+        "handrail_both_sides_above_width": {
+          "id": "handrail_both_sides_above_width",
+          "name": {
+            "default": "handrail_both_sides_above_width",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "landing_doors": {
+          "id": "landing_doors",
+          "name": {
+            "default": "landing_doors",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "landing_door_height": {
+          "id": "landing_door_height",
+          "name": {
+            "default": "landing_door_height",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "landing_door_swing": {
+          "id": "landing_door_swing",
+          "name": {
+            "default": "landing_door_swing",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "end_space_depth": {
+          "id": "end_space_depth",
+          "name": {
+            "default": "end_space_depth",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "end_space_width": {
+          "id": "end_space_width",
+          "name": {
+            "default": "end_space_width",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "end_space_height": {
+          "id": "end_space_height",
+          "name": {
+            "default": "end_space_height",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "end_space_obstacles": {
+          "id": "end_space_obstacles",
+          "name": {
+            "default": "end_space_obstacles",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "clear_width_minimum": {
+          "id": "clear_width_minimum",
+          "name": {
+            "default": "clear_width_minimum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "clear_width_obstacles": {
+          "id": "clear_width_obstacles",
+          "name": {
+            "default": "clear_width_obstacles",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "clear_width_band_from": {
+          "id": "clear_width_band_from",
+          "name": {
+            "default": "clear_width_band_from",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "clear_width_band_to": {
+          "id": "clear_width_band_to",
+          "name": {
+            "default": "clear_width_band_to",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "end_landing_depth_minimum": {
+          "id": "end_landing_depth_minimum",
+          "name": {
+            "default": "end_landing_depth_minimum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "end_landing_width_minimum": {
+          "id": "end_landing_width_minimum",
+          "name": {
+            "default": "end_landing_width_minimum",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "check_continuous_handrails": {
+          "id": "check_continuous_handrails",
+          "name": {
+            "default": "check_continuous_handrails",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "handrail_continuity_tolerance": {
+          "id": "handrail_continuity_tolerance",
+          "name": {
+            "default": "handrail_continuity_tolerance",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "check_rails_obstruction": {
+          "id": "check_rails_obstruction",
+          "name": {
+            "default": "check_rails_obstruction",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": false
+        },
+        "accessible_surface_selector": {
+          "id": "accessible_surface_selector",
+          "name": {
+            "default": "accessible_surface_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        }
+      }
+    }
+  }
+}

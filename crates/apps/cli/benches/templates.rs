@@ -66,11 +66,28 @@ struct Pair {
 
 /// Every rebuilt capability with a live reference. A rebuild adds its
 /// pair here when it moves the implementation behind `parity-reference`.
-const PAIRS: &[Pair] = &[Pair {
-    capability: "axioval:capability.body-extent",
-    case: "elements",
-    reference: |registry| registry.replace(axioval::rules::reference::BodyExtent),
-}];
+const PAIRS: &[Pair] = &[
+    Pair {
+        capability: "axioval:capability.body-extent",
+        case: "elements",
+        reference: |registry| registry.replace(axioval::rules::reference::BodyExtent),
+    },
+    Pair {
+        capability: "axioval:capability.property-predicate",
+        case: "elements",
+        reference: |registry| registry.replace(axioval::rules::reference::PropertyPredicate),
+    },
+    Pair {
+        capability: "axioval:capability.triangle-count",
+        case: "elements",
+        reference: |registry| registry.replace(axioval::rules::reference::TriangleCountLimit),
+    },
+    Pair {
+        capability: "axioval:capability.plan-area",
+        case: "storeys",
+        reference: |registry| registry.replace(axioval::rules::reference::PlanAreaRange),
+    },
+];
 
 /// Warm-up runs per side before measuring.
 const WARM_UP: usize = 3;
@@ -106,7 +123,8 @@ struct Case {
 impl Case {
     /// The case's packages, its ruleset cut down to the rules whose
     /// definition is bound to the pair's capability.
-    fn of(pair: &Pair) -> Result<Self, Box<dyn Error>> {
+    /// `None` when `AXIOVAL_BENCH_RULES` names none of them.
+    fn of(pair: &Pair) -> Result<Option<Self>, Box<dyn Error>> {
         let case = root().join("fixtures/parity/cases").join(pair.case);
         let definitions = read_json(&case.join("definitions.json"))?;
         let bound: Vec<&str> = definitions["definitions"]
@@ -122,6 +140,9 @@ impl Case {
         let mut ruleset = read_json(&case.join("ruleset.json"))?;
         let mut rules = Vec::new();
         retain(&mut ruleset["root"], (&bound, only.as_deref()), &mut rules);
+        if rules.is_empty() && only.is_some() {
+            return Ok(None);
+        }
         if rules.is_empty() {
             return Err(format!("case `{}` has no rule of {}", pair.case, pair.capability).into());
         }
@@ -134,12 +155,12 @@ impl Case {
                 .collect(),
             _ => public_models()?,
         };
-        Ok(Self {
+        Ok(Some(Self {
             definitions: serde_json::from_value(definitions)?,
             ruleset: serde_json::from_value(ruleset)?,
             rules,
             models,
-        })
+        }))
     }
 }
 
@@ -412,7 +433,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let models = models_dir();
     let mut records = Vec::new();
     for pair in PAIRS {
-        let case = Case::of(pair)?;
+        let Some(case) = Case::of(pair)? else {
+            continue;
+        };
         let templates = axioval::default_registry()?;
         let plan =
             axioval::engine::compile_rulesets(&templates, &[case.definitions], &[case.ruleset])?;

@@ -92,6 +92,18 @@ class JudgeTest(unittest.TestCase):
         self.assertFalse(bench.retimed(heavy))
         self.assertFalse(bench.retimed([]))
 
+    def test_a_recorded_exception_has_its_own_ceiling(self) -> None:
+        budget = dict(BUDGET, exceptions=[{
+            "capability": "axioval:capability.body-extent",
+            "input": "fixture-400-walls.ifc",
+            "time": 1.5,
+            "reason": "services that cost nothing",
+        }])
+        self.assertEqual(bench.judge([record(time_ratio=1.4), public()], budget, True), [])
+        self.assertEqual(len(bench.judge([record(time_ratio=1.6), public()], budget, True)), 1)
+        # Only on its own input.
+        self.assertEqual(len(bench.judge([record(), public(time_ratio=1.4)], budget, True)), 1)
+
     def test_the_table_lists_every_record(self) -> None:
         rendered = bench.table([record(), public(parity=False)])
         self.assertIn("| body-extent | fixture-400-walls.ifc |", rendered)

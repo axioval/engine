@@ -130,27 +130,54 @@ registering its reference in the template's place. Its gate must pass
 before the rebuild is done (step 8 of
 [Rebuilding a capability as a template](./templates.md#rebuilding-a-capability-as-a-template)).
 
+### Recorded exceptions
+
+An input may hold a template to a ceiling of its own only as a recorded
+exception in `scripts/bench_budget.json` (`exceptions`: capability, input,
+`time` or `memory`, and the reason), so a regression past it still fails.
+Two are recorded, both on the generated fixture, where services cost
+almost nothing and a template's fixed cost per object (one read, its
+evidence, the judge) shows alone:
+
+- `triangle-count` (1.6×): the fixture's meshes are twelve-triangle boxes;
+  on every public model it runs within 1.13×.
+- `property-predicate` (1.45×): the fixture states none of the case's
+  properties, so every wall is a finding worded through the template's
+  messages; on every public model it runs within 1.03×.
+
+Never record an exception for a public model, and never to let a rebuild
+through: optimize the runner or the capability's provider instead.
+
 ## Latest measurements
 
-`body-extent`, the four rules of the `elements` case (wall thickness, wall
-layers, wall length, slab thickness), measured by the gate:
+Measured by the gate (`flock … python3 scripts/bench.py gate`), the
+median of 21 interleaved runs; time and peak heap are the template's over
+the reference's.
 
-| input | objects | template | reference | time | peak heap |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| generated fixture, 400 walls | 421 | 5049 µs | 4364 µs | 1.16× | 1.43× |
-| building architecture (IFC4) | 38 | 143 µs | 124 µs | 1.15× | 1.15× |
-| building structural (IFC4) | 33 | 158 µs | 159 µs | 0.99× | 1.03× |
-| building HVAC (IFC4) | 18 | 37 µs | 38 µs | 0.99× | 1.00× |
-| infra road (IFC4) | 116 | 339 µs | 289 µs | 1.17× | 1.29× |
-| building architecture (IFC2x3) | 36 | 138 µs | 118 µs | 1.17× | 1.15× |
-| building structural (IFC2x3) | 30 | 124 µs | 122 µs | 1.01× | 1.03× |
-| building architecture (IFC4x3) | 37 | 144 µs | 126 µs | 1.14× | 1.15× |
-| building structural (IFC4x3) | 33 | 134 µs | 136 µs | 0.99× | 1.03× |
-| wall with opening and window | 9 | 39 µs | 35 µs | 1.12× | 1.05× |
-| tessellated column | 3 | 13 µs | 13 µs | 0.98× | 1.00× |
+| input | objects | body-extent | property-predicate | triangle-count | plan-area |
+| --- | ---: | --- | --- | --- | --- |
+| generated fixture, 400 walls | 421 | 1.21× / 1.43× | 1.24× / 1.11× | 1.38× / 1.00× | 1.11× / 1.20× |
+| building architecture (IFC4) | 38 | 1.15× / 1.15× | 1.03× / 1.03× | 1.07× / 1.01× | 0.70× / 0.97× |
+| building structural (IFC4) | 33 | 0.98× / 1.03× | 1.02× / 1.03× | 1.09× / 1.01× | 1.03× / 0.96× |
+| building HVAC (IFC4) | 18 | 1.01× / 1.00× | 0.95× / 1.00× | 1.03× / 1.00× | 1.14× / 1.00× |
+| infra road (IFC4) | 116 | 1.18× / 1.27× | 1.02× / 1.02× | 1.09× / 1.02× | 1.02× / 1.03× |
+| building architecture (IFC2x3) | 36 | 1.15× / 1.15× | 1.03× / 1.03× | 1.08× / 1.01× | 0.72× / 0.96× |
+| building structural (IFC2x3) | 30 | 1.05× / 1.03× | 1.03× / 1.03× | 1.13× / 1.01× | 0.51× / 0.97× |
+| building architecture (IFC4x3) | 37 | 1.16× / 1.15× | 1.02× / 1.03× | 1.07× / 1.01× | 0.69× / 0.97× |
+| building structural (IFC4x3) | 33 | 0.99× / 1.03× | 1.02× / 1.03× | 1.08× / 1.01× | 1.04× / 0.96× |
+| wall with opening and window | 9 | 1.11× / 1.05× | 0.99× / 1.01× | 1.04× / 1.01× | 1.05× / 0.86× |
+| tessellated column | 3 | 0.99× / 1.00× | 0.91× / 1.00× | 1.08× / 1.01× | 1.05× / 1.00× |
 
-Before this work the template ran 2.3 to 3.8 times as long as the
-reference (the fixture 3.8×): every value went through a request, a
+`body-extent` and `plan-area` run the `elements` and `storeys` cases' rules
+of their capability (four and six), `property-predicate` and
+`triangle-count` the `elements` case's (two and one). `plan-area` runs
+faster than its reference where storeys sum their members' areas: its
+provider keeps each object's area for the run (`AreaKey` in
+`plan_area/measured.rs`), so a member measured by its own rule is not
+measured again for its storey.
+
+Before this work `body-extent`'s template ran 2.3 to 3.8 times as long as
+its reference (the fixture 3.8×): every value went through a request, a
 resolution and the evaluator's explanation, and the extent was measured
-three times per rule. The peak heap above is mostly the memo: one body per
+three times per rule. Its peak heap is mostly the memo: one body per
 measured object, kept for the run.

@@ -45,12 +45,27 @@ def load_budget(path: Path = BUDGET) -> dict:
         value = budget.get(key)
         if not isinstance(value, (int, float)) or value <= 0:
             raise SystemExit(f"{path}: `{key}` must be a positive number")
+    for exception in budget.get("exceptions", []):
+        if not exception.get("reason") or not exception.get("capability") or not exception.get("input"):
+            raise SystemExit(f"{path}: an exception names its capability, input and reason")
     return budget
 
 
 def load_records(path: Path) -> list[dict]:
     lines = path.read_text(encoding="utf-8").splitlines()
     return [json.loads(line) for line in lines if line.strip()]
+
+
+def allowance(budget: dict, record: dict) -> dict:
+    """The ceilings `record` is held to: the budget's, or a recorded
+    exception's for its capability and input."""
+    for exception in budget.get("exceptions", []):
+        if (exception["capability"], exception["input"]) == (record["capability"], record["input"]):
+            return {
+                "time": exception.get("time", budget["time"]),
+                "memory": exception.get("memory", budget["memory"]),
+            }
+    return {"time": budget["time"], "memory": budget["memory"]}
 
 
 def judge(records: list[dict], budget: dict, gate: bool) -> list[str]:
@@ -67,16 +82,17 @@ def judge(records: list[dict], budget: dict, gate: bool) -> list[str]:
             continue
         if not record.get("parity", False):
             failures.append(f"{name}: template and reference differ under the parity contract")
-        if record["memory_ratio"] > budget["memory"]:
+        allowed = allowance(budget, record)
+        if record["memory_ratio"] > allowed["memory"]:
             failures.append(
                 f"{name}: peak heap {record['memory_ratio']:.2f}x the reference's "
-                f"exceeds {budget['memory']}x"
+                f"exceeds {allowed['memory']}x"
             )
         if record["reference"]["median_ns"] >= budget["floor_ns"]:
-            if record["time_ratio"] > budget["time"]:
+            if record["time_ratio"] > allowed["time"]:
                 failures.append(
                     f"{name}: run time {record['time_ratio']:.2f}x the reference's "
-                    f"exceeds {budget['time']}x"
+                    f"exceeds {allowed['time']}x"
                 )
         else:
             small.setdefault(record["capability"], []).append(record)

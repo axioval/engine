@@ -2112,7 +2112,9 @@ not known exactly and an unreadable coordinate system leave the source not
 evaluated. A source without a map conversion is not georeferenced: it is not
 evaluated (`NotRecorded`), or with `require_map_conversion` a finding, the
 reference included. One source, or no coordinate-system service, leaves the
-rule not evaluated.
+rule not evaluated. It runs as a template: the reference read once per rule,
+then every source judged by the words of its differences
+([Capability templates](./templates.md#coordinate-consistency)).
 
 Federated geometry is never re-aligned. A host meshes each source in its own
 model coordinates, and the set is one frame only for sources whose world

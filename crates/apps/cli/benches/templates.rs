@@ -202,6 +202,13 @@ const PAIRS: &[Pair] = &[
         case: "proximity",
         reference: |registry| registry.replace(axioval::rules::reference::ComponentVisibility),
     },
+    Pair {
+        capability: "axioval:capability.coordinate-consistency",
+        case: "storeys",
+        reference: |registry| {
+            registry.replace(axioval::rules::reference::CoordinateConsistencyCheck)
+        },
+    },
 ];
 
 /// Warm-up runs per side before measuring.

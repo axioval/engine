@@ -9769,7 +9769,197 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "coordinate-consistency",
+        "defaults": [
+          {
+            "parameter": "length_tolerance",
+            "value": {
+              "type": "number",
+              "value": 0.001
+            }
+          },
+          {
+            "parameter": "angle_tolerance",
+            "value": {
+              "type": "number",
+              "value": 0.01
+            }
+          },
+          {
+            "parameter": "scale_tolerance",
+            "value": {
+              "type": "number",
+              "value": 0.0
+            }
+          },
+          {
+            "parameter": "require_map_conversion",
+            "value": {
+              "type": "boolean",
+              "value": false
+            }
+          }
+        ],
+        "declaration": [
+          {
+            "kind": "kind",
+            "parameter": "length_tolerance"
+          },
+          {
+            "kind": "kind",
+            "parameter": "angle_tolerance"
+          },
+          {
+            "kind": "kind",
+            "parameter": "scale_tolerance"
+          },
+          {
+            "kind": "nonNegative",
+            "parameters": [
+              "length_tolerance"
+            ],
+            "message": "the length tolerance must be finite and not negative"
+          },
+          {
+            "kind": "nonNegative",
+            "parameters": [
+              "angle_tolerance"
+            ],
+            "message": "the angle tolerance must be finite and not negative"
+          },
+          {
+            "kind": "nonNegative",
+            "parameters": [
+              "scale_tolerance"
+            ],
+            "message": "the scale tolerance must be finite and not negative"
+          },
+          {
+            "kind": "kind",
+            "parameter": "reference"
+          },
+          {
+            "kind": "kind",
+            "parameter": "require_map_conversion"
+          }
+        ],
+        "services": {
+          "needs": [
+            "coordinate-system"
+          ],
+          "message": "coordinate-consistency: no coordinate-system service is registered"
+        },
+        "texts": [
+          {
+            "name": "verdict",
+            "when": {
+              "kind": "scope",
+              "value": "reference"
+            },
+            "text": "`{source}`, the reference, {found}"
+          },
+          {
+            "name": "verdict",
+            "text": "`{source}` does not share the coordinate system of `{reference:source}`: {found}"
+          }
+        ],
+        "forms": [
+          {
+            "when": [],
+            "values": [],
+            "decision": {
+              "kind": "joined",
+              "list": "coordinate_differences;reference=@reference;length=@length_tolerance;angle=@angle_tolerance;scale=@scale_tolerance;require_map=@require_map_conversion",
+              "found": "found",
+              "words": "finding",
+              "recorded": "recorded",
+              "separator": "; ",
+              "refused": "coordinate-consistency: {why}"
+            },
+            "fail": "{verdict}",
+            "undecided": "coordinate-consistency: `{source}` against `{reference:source}`: {open}",
+            "scope": {
+              "across": "",
+              "sources": "every",
+              "messages": {
+                "source": "in source `{source}`",
+                "project": "in the project",
+                "noSource": "coordinate-consistency: the run checks no source",
+                "noDiscipline": "coordinate-consistency: no source plays {disciplines}",
+                "undeclared": "coordinate-consistency: `{source}` declares no discipline",
+                "undeclaredMember": "coordinate-consistency: `{source}` declares no discipline",
+                "unlisted": "coordinate-consistency: the objects of `{source}` cannot be listed: {why}",
+                "noDisciplines": "coordinate-consistency: source disciplines are not available"
+              }
+            },
+            "once": [
+              {
+                "value": {
+                  "name": "reference",
+                  "expression": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "coordinate_reference;reference=@reference"
+                  }
+                },
+                "refused": "coordinate-consistency: {why}",
+                "required": true
+              }
+            ]
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "aggregate",
+              "function": "none",
+              "over": {
+                "kind": "measured",
+                "name": "coordinate_differences;reference=@reference;length=@length_tolerance;angle=@angle_tolerance;scale=@scale_tolerance;require_map=@require_map_conversion"
+              },
+              "value": {
+                "kind": "property",
+                "propertySet": "axioval:member",
+                "property": "found"
+              },
+              "label": "no item differs"
+            },
+            "blocks": {
+              "type": "expression.aggregate",
+              "label": "no item differs",
+              "fields": {
+                "function": "none"
+              },
+              "inputs": {
+                "over": {
+                  "block": {
+                    "type": "members.coordinate_differences",
+                    "fields": {
+                      "angle": "@angle_tolerance",
+                      "length": "@length_tolerance",
+                      "reference": "@reference",
+                      "require_map": "@require_map_conversion",
+                      "scale": "@scale_tolerance"
+                    }
+                  }
+                },
+                "value": {
+                  "block": {
+                    "type": "expression.property",
+                    "fields": {
+                      "property": "found",
+                      "propertySet": "axioval:member"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.corridor-end-openings",

@@ -14,7 +14,7 @@ use axioval_engine::{
 use axioval_ir::contract::ParameterValue;
 use axioval_ir::{Discipline, Evidence, NotEvaluatedReason, Scope, SourceId};
 use axioval_rules::CoordinateConsistencyCheck;
-use common::{Model, boolean, kind, number, rule, string};
+use common::{Held, Model, boolean, kind, number, rule, string};
 
 const ID: &str = "axioval:capability.coordinate-consistency";
 
@@ -90,25 +90,29 @@ fn evaluate(
             .push(SourceSnapshot::try_new(document(name), "r", format!("sha256:{name}")).unwrap());
         disciplines.push((document(name), Discipline::new(*name).unwrap()));
     }
-    let systems = systems
-        .into_iter()
-        .map(|(name, system)| (document(name), system))
-        .collect();
-    model.evaluate_with(
-        &CoordinateConsistencyCheck,
-        &rule(ID, kind("wall"), parameters),
-        |services| {
-            services
-                .register(CoordinateSystemServiceHandle::new(Arc::new(Systems(
-                    snapshots, systems,
-                ))))
-                .unwrap();
-            services
-                .register(SourceDisciplines::new(disciplines))
-                .unwrap();
-        },
-    )
+    let systems = Arc::new(Systems(
+        snapshots,
+        systems
+            .into_iter()
+            .map(|(name, system)| (document(name), system))
+            .collect(),
+    ));
+    model.evaluate_measured(&HELD, &rule(ID, kind("wall"), parameters), |services| {
+        services
+            .register(CoordinateSystemServiceHandle::new(systems.clone()))
+            .unwrap();
+        services
+            .register(SourceDisciplines::new(disciplines.clone()))
+            .unwrap();
+    })
 }
+
+/// The template, held to the implementation it replaced on every
+/// evaluation (`Parity::contract()`).
+const HELD: Held = Held(
+    &CoordinateConsistencyCheck,
+    &axioval_rules::reference::CoordinateConsistencyCheck,
+);
 
 fn by_architecture() -> Vec<(&'static str, ParameterValue)> {
     vec![("reference", string("architecture"))]
@@ -357,16 +361,22 @@ fn one_source_or_no_service_is_not_evaluated() {
         unevaluated(&evaluation),
         vec![("-".into(), NotEvaluatedReason::IncompleteEvidence)]
     );
+    assert_eq!(
+        evaluation.not_evaluated_outcomes()[0].message(),
+        "coordinate-consistency: the run checks 1 source(s); coordinate consistency compares at \
+         least two"
+    );
     let evaluation = Model::default()
         .object_in("a", "#1", "wall")
         .object_in("b", "#1", "wall")
-        .evaluate(
-            &CoordinateConsistencyCheck,
-            &rule(ID, kind("wall"), Vec::new()),
-        );
+        .evaluate_measured(&HELD, &rule(ID, kind("wall"), Vec::new()), |_| {});
     assert_eq!(
         unevaluated(&evaluation),
         vec![("-".into(), NotEvaluatedReason::MissingService)]
+    );
+    assert_eq!(
+        evaluation.not_evaluated_outcomes()[0].message(),
+        "coordinate-consistency: no coordinate-system service is registered"
     );
 }
 
@@ -731,5 +741,182 @@ mod as_expressions {
             by_architecture(),
             &consistent(BY_ARCHITECTURE, 0.001, false),
         );
+    }
+}
+
+/// Federations of generated coordinate systems, each held to the
+/// implementation the template replaced under `Parity::contract()`:
+/// shifted, turned and one-sided world frames, true norths, map conversions
+/// (targets, offsets, rotations, scales, units stated, defaulted or
+/// unknown) and sites, unreadable systems, an empty source, disciplines
+/// declared once, twice or not at all, under every tolerance and
+/// requirement.
+mod generated {
+    use std::collections::BTreeMap;
+    use std::sync::Arc;
+
+    use axioval_engine::{
+        CoordinateSystemError, CoordinateSystemServiceHandle, MapConversion, ServiceRegistry,
+        SessionSources, SitePlacement, SourceCoordinateSystem, SourceDisciplines, SourceSnapshot,
+    };
+    use axioval_ir::contract::ParameterValue;
+    use axioval_ir::{Discipline, Evidence};
+    use proptest::collection::vec;
+    use proptest::prelude::*;
+
+    use super::common::{Model, boolean, kind, number, rule, string};
+    use super::{CoordinateConsistencyCheck, ID, Systems, document, frame};
+
+    /// One source: whether its system reads (0 unreadable), its world frame
+    /// (0 none, else shifted by `n` half-millimetres along x), true north
+    /// (0 none, else turned by `n` hundredths of a degree), its map (0
+    /// none, else the easting `n` metres off, its unit stated in metres, in
+    /// millimetres, defaulted or unknown, its target another or not, its
+    /// scale another or not, its rotation turned or not), its site (0
+    /// absent, 1 unknown, else shifted), and its discipline (0 none, 1
+    /// architecture, 2 structural).
+    type Source = (u32, u32, u32, (u32, u32, bool, bool, bool), u32, u32);
+
+    fn source() -> impl Strategy<Value = Source> {
+        (
+            0u32..6,
+            0u32..4,
+            0u32..4,
+            (
+                0u32..4,
+                0u32..4,
+                any::<bool>(),
+                any::<bool>(),
+                any::<bool>(),
+            ),
+            0u32..4,
+            0u32..3,
+        )
+    }
+
+    fn system(
+        name: &str,
+        (_, world, north, (map, unit, target, scale, turned), site, _): Source,
+    ) -> SourceCoordinateSystem {
+        let world = (world > 0).then(|| frame([f64::from(world - 1) * 0.0005, 0.0, 0.0]));
+        let north = (north > 0).then(|| {
+            let angle = (f64::from(north - 1) * 0.01).to_radians();
+            [angle.sin(), angle.cos()]
+        });
+        let map = (map > 0).then(|| {
+            let metres = match unit {
+                1 => Some(0.001),
+                3 => None,
+                _ => Some(1.0),
+            };
+            let per_unit = metres.unwrap_or(1.0);
+            let easting = 500_000.0 + f64::from(map - 1);
+            let conversion = MapConversion::try_new(
+                Some(if target { "EPSG:25833" } else { "EPSG:25832" }.into()),
+                [easting / per_unit, 5_600_000.0 / per_unit, 0.0],
+                if turned { [1.0, 0.001] } else { [1.0, 0.0] },
+                if scale { 1.0001 } else { 1.0 },
+                metres,
+            )
+            .unwrap();
+            if unit == 2 {
+                conversion.with_map_unit_by_default()
+            } else {
+                conversion
+            }
+        });
+        SourceCoordinateSystem::try_new(
+            document(name),
+            world,
+            north,
+            map,
+            Evidence::exact(document(name), format!("crs:{name}")),
+        )
+        .unwrap()
+        .with_site(match site {
+            0 => SitePlacement::Absent,
+            1 => SitePlacement::Unknown("2 sites".into()),
+            _ => SitePlacement::Stated(frame([0.0, f64::from(site - 2) * 0.002, 0.0])),
+        })
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(96))]
+
+        #[test]
+        fn generated_federations_hold_parity(
+            sources in vec(source(), 1..5),
+            empty in any::<bool>(),
+            reference in any::<bool>(),
+            length in proptest::option::of(0u32..3),
+            angle in proptest::option::of(0u32..3),
+            require in proptest::option::of(any::<bool>()),
+        ) {
+            let mut model = Model::default();
+            let mut snapshots = Vec::new();
+            let mut disciplines = Vec::new();
+            let mut held = BTreeMap::new();
+            let mut session = Vec::new();
+            for (index, generated) in sources.iter().enumerate() {
+                let name = format!("s{index}");
+                model = model.object_in(&name, "#1", "wall");
+                snapshots.push(
+                    SourceSnapshot::try_new(document(&name), "r", format!("sha256:{name}"))
+                        .unwrap(),
+                );
+                match generated.5 {
+                    1 => disciplines.push((document(&name), Discipline::new("architecture").unwrap())),
+                    2 => disciplines.push((document(&name), Discipline::new("structural").unwrap())),
+                    _ => {}
+                }
+                held.insert(
+                    document(&name),
+                    if generated.0 == 0 {
+                        Err(CoordinateSystemError::Ambiguous("2 model contexts".into()))
+                    } else {
+                        Ok(system(&name, *generated))
+                    },
+                );
+                session.push(document(&name));
+            }
+            if empty {
+                // A source holding no object: judged all the same.
+                let name = "zz-empty";
+                held.insert(document(name), Ok(system(name, (1, 1, 1, (1, 0, false, false, false), 0, 2))));
+                session.push(document(name));
+                disciplines.push((document(name), Discipline::new("structural").unwrap()));
+            }
+            let systems = Arc::new(Systems(snapshots, held));
+            let mut parameters: Vec<(&str, ParameterValue)> = Vec::new();
+            if reference {
+                parameters.push(("reference", string("architecture")));
+            }
+            if let Some(length) = length {
+                parameters.push(("length_tolerance", number(f64::from(length) * 0.0007)));
+            }
+            if let Some(angle) = angle {
+                parameters.push(("angle_tolerance", number(f64::from(angle) * 0.007)));
+            }
+            if let Some(require) = require {
+                parameters.push(("require_map_conversion", boolean(require)));
+            }
+            let register = |services: &mut ServiceRegistry| {
+                services
+                    .register(CoordinateSystemServiceHandle::new(systems.clone()))
+                    .unwrap();
+                services
+                    .register(SourceDisciplines::new(disciplines.clone()))
+                    .unwrap();
+                services.register(SessionSources::new(session.clone())).unwrap();
+            };
+            model.holding_contract(
+                &CoordinateConsistencyCheck,
+                &axioval_rules::reference::CoordinateConsistencyCheck,
+                &rule(ID, kind("wall"), parameters),
+                register,
+                &[],
+                0.0,
+            );
+        }
     }
 }

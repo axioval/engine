@@ -1155,6 +1155,34 @@ view, none allowed: {seen}`. Services missing and an eye that is not a
 point leave each component open, as the view reports them. The
 declaration keeps the capability's checks, words and order (`holds` for a
 positive minimum).
+### `coordinate-consistency`
+
+| Form | When | Once | Scopes | Decision |
+| --- | --- | --- | --- | --- |
+| one | always | `reference` = `coordinate_reference;reference=@reference`, required | every source (`every`) | `Joined` over `coordinate_differences;reference=@reference;length=@length_tolerance;angle=@angle_tolerance;scale=@scale_tolerance;require_map=@require_map_conversion` |
+
+The reference source is read once per rule, of the project: fewer than
+two sources, a discipline no source or several declare, sources declaring
+none and a run without declared disciplines leave the rule open, after
+`coordinate-consistency:`, and nothing else is judged. Every source of the
+session, one holding no object too, is then judged by the differences
+its coordinate system shows against the reference's
+([Coordinate systems](./derived.md#coordinate-systems)), in
+`compare_coordinate_systems`' words and order, the georeference last:
+a finding reads `` `{source}` does not share the coordinate system of
+`{reference:source}`: {found} `` (the words joined by `; `), the
+reference's own missing map conversion `` `{source}`, the reference,
+{found} `` (`Condition::Scope`), and a source with nothing found but a
+statement it cannot compare is open, ``coordinate-consistency:
+`{source}` against `{reference:source}`: {open}``, as not recorded where
+only the georeference is unknown. A system that cannot be read (the
+reference's, for every other source) leaves the source open after
+`coordinate-consistency:`. The declaration reads the three tolerances'
+kinds, then checks each is not negative (`the length tolerance must be
+finite and not negative`), then reads `reference` and
+`require_map_conversion`, in the capability's order; the defaults are a
+millimetre, a hundredth of a degree and an identical scale. Without the
+coordinate-system service the rule is open before anything is read.
 
 ## Binding and running a rule
 
@@ -1590,6 +1618,18 @@ by a wall or by a pillar of undecided selection, or undecided, some
 answered approximately, under either mode and many minimums; and by the
 `component-visibility` rules of the `proximity` case, recorded before the
 switch. It is never forked (D29).
+`coordinate-consistency` is held to `coordinate_consistency/reference.rs`
+(`axioval_rules::reference::CoordinateConsistencyCheck`, which shares the
+comparison and the choice of the reference) through `common::Held` on
+every fixture of `tests/coordinate_consistency.rs`, its refusals asserted
+word for word; by generated federations of shifted, turned and one-sided
+world frames, true norths, map conversions (targets, offsets, rotations,
+scales, units stated, defaulted or unknown) and sites, unreadable systems,
+a source holding no object and disciplines declared once, twice or not at
+all, under random tolerances and requirements; and by the `coordinates`
+rule of the `storeys` case, recorded before the switch. It is never
+forked; its measured values `coordinate_shift` and the rest, now values
+of a source, still reach its verdicts as expressions over each object.
 
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the

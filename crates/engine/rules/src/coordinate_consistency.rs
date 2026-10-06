@@ -14,20 +14,25 @@
 //! comparison decides whether a host may put several sources' geometry into
 //! one frame ([`CoordinateConsistency::shares_frame`]).
 
+use std::sync::LazyLock;
+
+use axioval_engine::template::Template;
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, CoordinateFrame, CoordinateSystemServiceHandle,
-    MapConversion, NotEvaluatedReason, ParameterDescriptor, ParameterType, RuleCapability,
-    RuleContext, SitePlacement, SourceCoordinateSystem, SourceDisciplines,
+    CapabilityEvaluation, CompiledRule, CoordinateFrame, MapConversion, NotEvaluatedReason,
+    ParameterDescriptor, RuleCapability, RuleContext, SitePlacement, SourceCoordinateSystem,
+    SourceDisciplines,
 };
-use axioval_ir::{Finding, Scope, SourceId};
+use axioval_ir::SourceId;
 
 mod measured;
+#[cfg(feature = "parity-reference")]
+pub(crate) mod reference;
+mod template;
 
 pub(crate) use measured::CoordinateMeasures;
 
 use crate::comparison::{distance, plan_angle, rotation};
-use crate::pairs::severity;
-use crate::support::{Parameters, Unavailable, invalid, sources};
+use crate::support::{Unavailable, sources};
 
 /// How far two coordinate systems may differ and still agree.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -393,185 +398,33 @@ fn maps(
 /// makes, a map unit that is not known exactly and an unreadable coordinate
 /// system leave the source not evaluated. A source without a map conversion
 /// is a finding with `require_map_conversion`, and not evaluated otherwise.
+///
+/// It runs as a template ([`axioval_engine::template`]): the reference read
+/// once per rule (`coordinate_reference`), then each source judged by the
+/// differences its coordinate system shows (`coordinate_differences`),
+/// their words joined into one finding.
 pub struct CoordinateConsistencyCheck;
 
-struct Declaration<'a> {
-    reference: Option<&'a str>,
-    tolerance: CoordinateTolerance,
-    require_map: bool,
-}
+static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
 
-impl<'a> Declaration<'a> {
-    fn read(rule: &'a CompiledRule) -> Result<Self, Unavailable> {
-        let parameters = Parameters(rule);
-        let length = parameters.number("length_tolerance")?.unwrap_or(0.001);
-        let angle = parameters.number("angle_tolerance")?.unwrap_or(0.01);
-        let scale = parameters.number("scale_tolerance")?.unwrap_or(0.0);
-        let tolerance =
-            CoordinateTolerance::try_new(length, angle.to_radians(), scale).map_err(invalid)?;
-        Ok(Self {
-            reference: parameters.string("reference")?,
-            tolerance,
-            require_map: parameters
-                .boolean("require_map_conversion")?
-                .unwrap_or(false),
-        })
-    }
-}
+/// The plans of the rules bound to it, kept across runs.
+static PLANS: crate::templates::Plans = crate::templates::Plans::new();
 
 impl RuleCapability for CoordinateConsistencyCheck {
     fn id(&self) -> &'static str {
-        "axioval:capability.coordinate-consistency"
+        template::ID
     }
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
-        vec![
-            ParameterDescriptor::optional("reference", ParameterType::String),
-            ParameterDescriptor::optional("length_tolerance", ParameterType::Number),
-            ParameterDescriptor::optional("angle_tolerance", ParameterType::Number),
-            ParameterDescriptor::optional("scale_tolerance", ParameterType::Number),
-            ParameterDescriptor::optional("require_map_conversion", ParameterType::Boolean),
-        ]
+        TEMPLATE.parameters.clone()
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let declared = Declaration::read(rule).and_then(|declaration| {
-            let Some(service) = context.services.get::<CoordinateSystemServiceHandle>() else {
-                return Err((
-                    NotEvaluatedReason::MissingService,
-                    "no coordinate-system service is registered".into(),
-                ));
-            };
-            let sources = reference_source(context, declaration.reference)?;
-            Ok((declaration, service, sources))
-        });
-        let (declaration, service, (reference, others)) = match declared {
-            Ok(declared) => declared,
-            Err((reason, message)) => {
-                return CapabilityEvaluation::not_evaluated(
-                    reason,
-                    format!("coordinate-consistency: {message}"),
-                );
-            }
-        };
-        let mut evaluation = CapabilityEvaluation::default();
-        let base = match service.coordinate_system(&reference) {
-            Ok(base) => base,
-            Err(error) => {
-                for source in others {
-                    evaluation.push_source_not_evaluated(
-                        source,
-                        NotEvaluatedReason::IncompleteEvidence,
-                        format!(
-                            "coordinate-consistency: the reference `{reference}`'s coordinate system cannot be read: {error}"
-                        ),
-                    );
-                }
-                return evaluation;
-            }
-        };
-        if declaration.require_map && base.map().is_none() {
-            evaluation.push_finding(
-                Finding::new(
-                    rule.id.clone(),
-                    Scope::Source(reference.clone()),
-                    severity(rule),
-                    format!(
-                        "`{reference}`, the reference, states no map conversion; the federation requires one"
-                    ),
-                )
-                .with_evidence(vec![base.evidence().clone()]),
-            );
-        }
-        for source in others {
-            let system = match service.coordinate_system(&source) {
-                Ok(system) => system,
-                Err(error) => {
-                    evaluation.push_source_not_evaluated(
-                        source,
-                        NotEvaluatedReason::IncompleteEvidence,
-                        format!("coordinate-consistency: {error}"),
-                    );
-                    continue;
-                }
-            };
-            judge(
-                rule,
-                &declaration,
-                (&reference, &base),
-                (&source, &system),
-                &mut evaluation,
-            );
-        }
-        evaluation
+        crate::templates::run((&TEMPLATE, &PLANS), context, rule)
     }
-}
 
-fn judge(
-    rule: &CompiledRule,
-    declaration: &Declaration<'_>,
-    (reference, base): (&SourceId, &SourceCoordinateSystem),
-    (source, system): (&SourceId, &SourceCoordinateSystem),
-    evaluation: &mut CapabilityEvaluation,
-) {
-    let consistency = compare_coordinate_systems(base, system, declaration.tolerance);
-    let mut differences: Vec<String> = consistency
-        .differences
-        .iter()
-        .map(|(_, difference)| difference.clone())
-        .collect();
-    let mut unknown: Vec<String> = consistency
-        .unknown
-        .iter()
-        .map(|(_, reason)| reason.clone())
-        .collect();
-    let mut not_recorded = false;
-    match consistency.georeferenced {
-        (_, false) if declaration.require_map => {
-            differences.push("states no map conversion".into());
-        }
-        (true, true) => {}
-        // The reference's own missing conversion is its own finding.
-        (false, true) if declaration.require_map => {}
-        (reference_map, source_map) => {
-            not_recorded = true;
-            unknown.push(format!(
-                "{} no map conversion, so whether the georeferences agree is unknown",
-                match (reference_map, source_map) {
-                    (true, false) => "this source states",
-                    (false, true) => "the reference states",
-                    _ => "neither source states",
-                }
-            ));
-        }
-    }
-    if !differences.is_empty() {
-        evaluation.push_finding(
-            Finding::new(
-                rule.id.clone(),
-                Scope::Source(source.clone()),
-                severity(rule),
-                format!(
-                    "`{source}` does not share the coordinate system of `{reference}`: {}",
-                    differences.join("; ")
-                ),
-            )
-            .with_evidence(vec![base.evidence().clone(), system.evidence().clone()]),
-        );
-    } else if !unknown.is_empty() {
-        let reason = if not_recorded && unknown.len() == 1 {
-            NotEvaluatedReason::NotRecorded
-        } else {
-            NotEvaluatedReason::IncompleteEvidence
-        };
-        evaluation.push_source_not_evaluated(
-            source.clone(),
-            reason,
-            format!(
-                "coordinate-consistency: `{source}` against `{reference}`: {}",
-                unknown.join("; ")
-            ),
-        );
+    fn template(&self) -> Option<&Template> {
+        Some(&TEMPLATE)
     }
 }
 

@@ -191,6 +191,7 @@ pub mod reference {
     pub use crate::component_visibility::reference::ComponentVisibility;
     pub use crate::conformance::reference::SelectorConformance;
     pub use crate::consistent_value::reference::ConsistentValue;
+    pub use crate::coordinate_consistency::reference::CoordinateConsistencyCheck;
     pub use crate::counterpart_coverage::reference::CounterpartCoverage;
     pub use crate::effective_coverage::reference::EffectiveCoverage;
     pub use crate::level_spacing::reference::LevelSpacing;

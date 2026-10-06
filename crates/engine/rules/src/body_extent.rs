@@ -17,6 +17,7 @@ mod template;
 pub(crate) use measured::ExtentMeasures;
 
 use crate::support::{Unavailable, invalid};
+use crate::templates::Plans;
 
 /// Requires each selected object's body, measured along one of its own
 /// placement axes, to be as long as a property states or within a range.
@@ -49,6 +50,9 @@ pub struct BodyExtent;
 
 static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
 
+/// The plans of the rules bound to it, kept across runs.
+static PLANS: Plans = Plans::new();
+
 impl RuleCapability for BodyExtent {
     fn id(&self) -> &'static str {
         template::ID
@@ -59,7 +63,7 @@ impl RuleCapability for BodyExtent {
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        crate::templates::run(&TEMPLATE, context, rule)
+        crate::templates::run((&TEMPLATE, &PLANS), context, rule)
     }
 
     fn template(&self) -> Option<&Template> {
@@ -67,7 +71,7 @@ impl RuleCapability for BodyExtent {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum Axis {
     Right,
     Forward,
@@ -83,6 +87,15 @@ impl Axis {
             other => Err(invalid(format!(
                 "axis `{other}` is unsupported; use `right`, `forward` or `up`"
             ))),
+        }
+    }
+
+    /// The axis's place among the frame's: right, forward, up.
+    fn index(self) -> usize {
+        match self {
+            Self::Right => 0,
+            Self::Forward => 1,
+            Self::Up => 2,
         }
     }
 

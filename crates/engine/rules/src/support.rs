@@ -3,8 +3,8 @@
 
 use axioval_engine::{
     AbsentEndPolicy, CompiledRule, NotEvaluatedReason, ParameterDescriptor, ParameterType,
-    PathSegment, PropertyResolution, PropertyResolutionServiceHandle, RelationshipSelectionError,
-    RelationshipSelectionServiceHandle, RuleContext, SessionSources,
+    PathSegment, PropertyResolution, PropertyResolutionError, PropertyResolutionServiceHandle,
+    RelationshipSelectionError, RelationshipSelectionServiceHandle, RuleContext, SessionSources,
 };
 use axioval_ir::contract::{CategoryLevel, ParameterValue, Selector};
 use axioval_ir::{
@@ -233,9 +233,16 @@ pub(crate) fn resolve(
         ));
     };
     let request = bound_property_request(context, object, property.set, property.name)?;
-    match service.resolve(&request) {
+    resolved(service.resolve(&request))
+}
+
+/// A resolution as a capability reads it.
+fn resolved(
+    resolution: Result<PropertyResolution, PropertyResolutionError>,
+) -> Result<Resolved, Unavailable> {
+    match resolution {
         Ok(PropertyResolution::Present(resolved)) => {
-            Ok(Resolved::Present(resolved.property().clone()))
+            Ok(Resolved::Present(resolved.into_property()))
         }
         Ok(PropertyResolution::Absent(proof)) => Ok(Resolved::Absent(proof.evidence().clone())),
         Err(error) => Err(property_error(error)),

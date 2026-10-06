@@ -267,6 +267,8 @@ impl Model {
             .unwrap();
         extra(&mut inner);
         registry.install_measured(&mut inner, &project);
+        // A template reads a measured value directly, as a run reads it.
+        let values = axioval_engine::MeasuredValues::of(&inner, &project);
         // What the capability reads: the same, the measured set answered.
         let mut services = ServiceRegistry::new();
         services
@@ -282,6 +284,7 @@ impl Model {
         extra(&mut services);
         // Aggregates over measured members ask the providers directly.
         registry.install_measured(&mut services, &project);
+        services.register(values).unwrap();
         capability.evaluate(
             &RuleContext {
                 project: &project,

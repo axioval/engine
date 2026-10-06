@@ -33,6 +33,9 @@ pub struct TriangleCountLimit;
 
 static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
 
+/// The plans of the rules bound to it, kept across runs.
+static PLANS: crate::templates::Plans = crate::templates::Plans::new();
+
 impl RuleCapability for TriangleCountLimit {
     fn id(&self) -> &'static str {
         template::ID
@@ -43,7 +46,7 @@ impl RuleCapability for TriangleCountLimit {
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        crate::templates::run(&TEMPLATE, context, rule)
+        crate::templates::run((&TEMPLATE, &PLANS), context, rule)
     }
 
     fn template(&self) -> Option<&Template> {

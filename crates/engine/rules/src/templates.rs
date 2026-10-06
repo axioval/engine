@@ -9,17 +9,20 @@
 //! it composes: the starting point for a stricter or extended rule.
 
 use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex};
 
 mod compare;
 
-use axioval_engine::expression::{Evaluation, Reason, Value, evaluate};
+use axioval_engine::expression::{
+    Evaluation, ExpressionContext, NotEvaluated, Reason, Value, evaluate_untraced,
+};
 use axioval_engine::template::{
     Check, Condition, Decision, End, Expect, Form, Members, Operand, Sign, Template, TemplateValue,
     Term, UndecidedMembers,
 };
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, Deviation, ParameterDescriptor, ParameterType,
-    RuleCapability, RuleContext,
+    CapabilityEvaluation, CompiledRule, Deviation, MeasuredValues, ParameterDescriptor,
+    ParameterType, RuleCapability, RuleContext,
 };
 use axioval_ir::contract::{AggregateSource, Expression, ParameterValue, ScalarValue, Selector};
 use axioval_ir::{
@@ -30,21 +33,21 @@ use serde_json::Value as Json;
 
 use crate::body_extent::rounding_slack;
 use crate::counts::{Population, relation_text, tally};
-use crate::expression_leaves::ObjectLeaves;
+use crate::expression_leaves::{ObjectLeaves, Prefetched};
 use crate::expression_requirement::reason_of;
 use crate::level_spacing::{metres, shown};
 use crate::plan_area::{Verdict, deviation, judge};
-use crate::selection::select_objects;
+use crate::selection::{bound_property_request, property_error, select_objects};
 use crate::support::{Parameters, Traversal, Unavailable, display, finding, invalid};
 
 /// A built-in capability run as its template.
-pub struct Templated(Template);
+pub struct Templated(Template, Plans);
 
 impl Templated {
     /// The capability `template` describes.
     #[must_use]
     pub fn new(template: Template) -> Self {
-        Self(template)
+        Self(template, Plans::new())
     }
 }
 
@@ -62,7 +65,7 @@ impl RuleCapability for Templated {
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        run(&self.0, context, rule)
+        run((&self.0, &self.1), context, rule)
     }
 
     fn template(&self) -> Option<&Template> {
@@ -134,11 +137,85 @@ impl Constant {
 struct Plan<'t> {
     template: &'t Template,
     form: &'t Form,
-    constants: BTreeMap<&'t str, Constant>,
-    /// Each value step with its expression, the rule's parameters bound in.
-    values: Vec<(&'t TemplateValue, Expression)>,
+    bound: Arc<Bound>,
+}
+
+/// What binding a rule into its template comes to. A pure function of the
+/// template and the rule's parameters, so it is kept ([`Plans`]).
+struct Bound {
+    /// The form's place among the template's.
+    form: usize,
+    constants: BTreeMap<String, Constant>,
+    /// Each value step's expression, the rule's parameters bound in, in the
+    /// form's order.
+    expressions: Vec<Expression>,
     /// The comparison a [`Decision::Compare`] judges, bound.
     comparison: Option<compare::Bound>,
+}
+
+impl std::ops::Deref for Plan<'_> {
+    type Target = Bound;
+
+    fn deref(&self) -> &Bound {
+        &self.bound
+    }
+}
+
+impl Plan<'_> {
+    /// Each value step with its expression, the rule's parameters bound in.
+    fn values(&self) -> impl Iterator<Item = (&TemplateValue, &Expression)> {
+        self.form.values.iter().zip(&self.bound.expressions)
+    }
+}
+
+/// The plans of a template's rules, bound once and kept: a rule binds the
+/// same way every time it runs, so a host checking model after model binds
+/// it once. Kept by the rule's parameters; at most [`PLANS_KEPT`], the
+/// oldest dropped first. A rule that does not bind is never kept.
+#[derive(Default)]
+pub(crate) struct Plans(Mutex<Vec<Kept>>);
+
+/// A bound plan kept with the parameters it was bound from.
+type Kept = (BTreeMap<String, ParameterValue>, Arc<Bound>);
+
+/// How many bound plans a template keeps.
+const PLANS_KEPT: usize = 64;
+
+impl Plans {
+    /// No plan kept yet.
+    pub(crate) const fn new() -> Self {
+        Self(Mutex::new(Vec::new()))
+    }
+}
+
+/// `rule`'s plan in `template`: kept in `plans`, or bound now and kept.
+fn plan<'t>(
+    template: &'t Template,
+    plans: &Plans,
+    rule: &CompiledRule,
+) -> Result<Plan<'t>, Unavailable> {
+    let kept = plans.0.lock().ok().and_then(|kept| {
+        kept.iter()
+            .find(|(parameters, _)| *parameters == rule.parameters)
+            .map(|(_, bound)| bound.clone())
+    });
+    let bound = if let Some(bound) = kept {
+        bound
+    } else {
+        let bound = Arc::new(bind(template, rule)?);
+        if let Ok(mut kept) = plans.0.lock() {
+            if kept.len() >= PLANS_KEPT {
+                kept.remove(0);
+            }
+            kept.push((rule.parameters.clone(), bound.clone()));
+        }
+        bound
+    };
+    Ok(Plan {
+        template,
+        form: &template.forms[bound.form],
+        bound,
+    })
 }
 
 fn stated(rule: &CompiledRule, name: &str) -> bool {
@@ -358,56 +435,103 @@ fn constant(
 /// (`{axis}`, `{target_property.set}`, `{target_property.name}`) filled.
 /// A field holding only the set slot of a reference without a set is
 /// dropped.
-fn bound(expression: &Expression, constants: &BTreeMap<&str, Constant>) -> Expression {
-    fn fill(json: &mut Json, constants: &BTreeMap<&str, Constant>) {
-        match json {
-            Json::Object(fields) => {
-                if fields.get("kind").and_then(Json::as_str) == Some("parameter")
-                    && let Some(literal) = fields
-                        .get("name")
-                        .and_then(Json::as_str)
-                        .and_then(|name| constants.get(name))
-                        .and_then(Constant::literal)
-                {
-                    let mut replaced = serde_json::Map::new();
-                    replaced.insert("kind".into(), "literal".into());
-                    replaced.insert(
-                        "value".into(),
-                        serde_json::to_value(literal).unwrap_or_default(),
-                    );
-                    if let Some(label) = fields.get("label") {
-                        replaced.insert("label".into(), label.clone());
-                    }
-                    *fields = replaced;
-                    return;
-                }
-                let mut dropped = Vec::new();
-                for (key, value) in fields.iter_mut() {
-                    if let Json::String(text) = value {
-                        match slot(text, constants) {
-                            Some(Slot::Filled(filled)) => *text = filled,
-                            Some(Slot::Dropped) => dropped.push(key.clone()),
-                            None => {}
-                        }
-                    } else {
-                        fill(value, constants);
-                    }
-                }
-                for key in dropped {
-                    fields.remove(&key);
-                }
-            }
-            Json::Array(items) => {
-                for item in items {
-                    fill(item, constants);
-                }
-            }
-            _ => {}
-        }
+fn bound(expression: &Expression, constants: &BTreeMap<String, Constant>) -> Expression {
+    // A plain property read, the shape of most values, is filled in place;
+    // anything else through its JSON form, every string field alike.
+    if let Some(bound) = bound_read(expression, constants) {
+        return bound;
     }
     let mut json = serde_json::to_value(expression).unwrap_or_default();
     fill(&mut json, constants);
     serde_json::from_value(json).unwrap_or_else(|_| expression.clone())
+}
+
+/// A plain property read with its string fields filled as [`fill`] fills
+/// them; `None` for any other expression.
+fn bound_read(
+    expression: &Expression,
+    constants: &BTreeMap<String, Constant>,
+) -> Option<Expression> {
+    let Expression::Property {
+        property_set,
+        property,
+        of,
+        label,
+    } = expression
+    else {
+        return None;
+    };
+    let filled = |text: &str| match slot(text, constants) {
+        Some(Slot::Filled(filled)) => Some(Some(filled)),
+        Some(Slot::Dropped) => Some(None),
+        None => None,
+    };
+    let optional = |field: &Option<String>| match field.as_deref().map(filled) {
+        Some(Some(filled)) => filled,
+        _ => field.clone(),
+    };
+    let property = match filled(property) {
+        Some(Some(filled)) => filled,
+        // A required field dropped leaves no expression to bind into.
+        Some(None) => return Some(expression.clone()),
+        None => property.clone(),
+    };
+    Some(Expression::Property {
+        property_set: optional(property_set),
+        property,
+        of: *of,
+        label: optional(label),
+    })
+}
+
+/// `json`, an expression's JSON form, with every `parameter` read of a
+/// constant replaced by its literal and every slot in a string field
+/// filled.
+fn fill(json: &mut Json, constants: &BTreeMap<String, Constant>) {
+    match json {
+        Json::Object(fields) => {
+            if fields.get("kind").and_then(Json::as_str) == Some("parameter")
+                && let Some(literal) = fields
+                    .get("name")
+                    .and_then(Json::as_str)
+                    .and_then(|name| constants.get(name))
+                    .and_then(Constant::literal)
+            {
+                let mut replaced = serde_json::Map::new();
+                replaced.insert("kind".into(), "literal".into());
+                replaced.insert(
+                    "value".into(),
+                    serde_json::to_value(literal).unwrap_or_default(),
+                );
+                if let Some(label) = fields.get("label") {
+                    replaced.insert("label".into(), label.clone());
+                }
+                *fields = replaced;
+                return;
+            }
+            let mut dropped = Vec::new();
+            for (key, value) in fields.iter_mut() {
+                if let Json::String(text) = value {
+                    match slot(text, constants) {
+                        Some(Slot::Filled(filled)) => *text = filled,
+                        Some(Slot::Dropped) => dropped.push(key.clone()),
+                        None => {}
+                    }
+                } else {
+                    fill(value, constants);
+                }
+            }
+            for key in dropped {
+                fields.remove(&key);
+            }
+        }
+        Json::Array(items) => {
+            for item in items {
+                fill(item, constants);
+            }
+        }
+        _ => {}
+    }
 }
 
 /// A string field with its slots filled.
@@ -419,7 +543,7 @@ enum Slot {
 }
 
 /// `text` with its slots filled; `None` where it holds none.
-fn slot(text: &str, constants: &BTreeMap<&str, Constant>) -> Option<Slot> {
+fn slot(text: &str, constants: &BTreeMap<String, Constant>) -> Option<Slot> {
     if !text.contains('{') {
         return None;
     }
@@ -461,14 +585,14 @@ fn slot(text: &str, constants: &BTreeMap<&str, Constant>) -> Option<Slot> {
 
 /// Binds `rule` into `template`: checks its declaration, folds its
 /// parameters into constants and chooses its form.
-fn bind<'t>(template: &'t Template, rule: &CompiledRule) -> Result<Plan<'t>, Unavailable> {
+fn bind(template: &Template, rule: &CompiledRule) -> Result<Bound, Unavailable> {
     for each in &template.declaration {
         check(each, rule, template)?;
     }
     let mut constants = BTreeMap::new();
     for descriptor in &template.parameters {
         if let Some(constant) = constant(rule, descriptor)? {
-            constants.insert(descriptor.name.as_str(), constant);
+            constants.insert(descriptor.name.clone(), constant);
         }
     }
     for default in &template.defaults {
@@ -481,28 +605,28 @@ fn bind<'t>(template: &'t Template, rule: &CompiledRule) -> Result<Plan<'t>, Una
                 ScalarValue::String { value } => Constant::Text(value.clone()),
                 other => Constant::Scalar(other.clone()),
             };
-            constants.insert(default.parameter, constant);
+            constants.insert(default.parameter.to_owned(), constant);
         }
     }
-    let form = template
+    let index = template
         .forms
         .iter()
-        .find(|form| form.when.iter().all(|name| stated(rule, name)))
+        .position(|form| form.when.iter().all(|name| stated(rule, name)))
         .ok_or_else(|| invalid("no form of the template applies to the rule's parameters"))?;
-    let values = form
+    let form = &template.forms[index];
+    let expressions = form
         .values
         .iter()
-        .map(|step| (step, bound(&step.expression, &constants)))
+        .map(|step| bound(&step.expression, &constants))
         .collect();
     let comparison = match &form.decision {
         Decision::Compare { comparison, .. } => Some(compare::bind(rule, comparison)?),
         Decision::Within { .. } => None,
     };
-    Ok(Plan {
-        template,
-        form,
+    Ok(Bound {
+        form: index,
         constants,
-        values,
+        expressions,
         comparison,
     })
 }
@@ -974,14 +1098,14 @@ impl From<Outcome> for Judgement {
 /// Reads the plan's values for `object` and decides.
 #[allow(clippy::too_many_lines)]
 fn judge_object(
-    plan: &Plan<'_>,
-    decision: &Decision,
-    scope: Option<&Scope<'_>>,
+    (plan, decision, scope): (&Plan<'_>, &Decision, Option<&Scope<'_>>),
     context: &RuleContext<'_>,
     rule: &CompiledRule,
     object: &Object,
+    prefetched: Vec<Prefetched>,
 ) -> Judgement {
-    let mut leaves = ObjectLeaves::new(context, object, Some(&rule.parameters));
+    let mut leaves =
+        ObjectLeaves::new(context, object, Some(&rule.parameters)).with_prefetched(prefetched);
     let mut read = Read::default();
     let mut members = None;
     if let Some(scope) = scope {
@@ -995,16 +1119,16 @@ fn judge_object(
             Err((reason, message)) => return Outcome::Open(reason, message).into(),
         }
     }
-    for (step, expression) in &plan.values {
+    for (step, expression) in plan.values() {
         let expression = match (scope, &members) {
             (Some(scope), Some(members)) => {
                 narrowed(expression, scope.members.selector, &members.decided)
             }
             _ => expression.clone(),
         };
-        let evaluation = evaluate(&expression, step.name, &mut leaves);
+        let (outcome, evidence) = read_step(&expression, step.name, &mut leaves);
         let before = read.evidence.len();
-        read.evidence.extend(evidence_of(&evaluation));
+        read.evidence.extend(evidence);
         if read.evidence[before..]
             .iter()
             .any(|evidence| !evidence.exact)
@@ -1041,7 +1165,7 @@ fn judge_object(
                 }
             }
         }
-        match evaluation.outcome {
+        match outcome {
             Ok(Value::Null) => {
                 let message = step.absent.map_or_else(
                     || format!("`{}` is stated absent", step.name),
@@ -1179,11 +1303,11 @@ fn report_table(plan: &Plan<'_>, rule: &CompiledRule) -> Option<ReportTable> {
 
 /// Runs `template` for `rule`.
 pub(crate) fn run(
-    template: &Template,
+    (template, plans): (&Template, &Plans),
     context: &RuleContext<'_>,
     rule: &CompiledRule,
 ) -> CapabilityEvaluation {
-    let plan = match bind(template, rule) {
+    let plan = match plan(template, plans, rule) {
         Ok(plan) => plan,
         Err((reason, message)) => {
             return CapabilityEvaluation::not_evaluated(
@@ -1215,28 +1339,59 @@ pub(crate) fn run(
     let decision = effective(&plan);
     let mut table = report_table(&plan, rule);
     let (selected, mut evaluation) = select_objects(context, &rule.selector);
-    for object in selected {
-        let Judgement { outcome, row } =
-            judge_object(&plan, &decision, scope.as_ref(), context, rule, object);
-        if let (Some(table), Some(row)) = (&mut table, row) {
-            // Selected objects are distinct, so rows never collide.
-            let _ = table.push_row(object.id.clone(), row);
-        }
-        match outcome {
-            Outcome::Passed => {}
-            Outcome::Finding {
-                message,
-                evidence,
-                related,
-                deviation,
-            } => {
-                evaluation.push_finding_deviating(
-                    finding(rule, &object.id, message, evidence, related),
-                    deviation,
-                );
+    let batched = batched(&plan, context, selected.first().copied());
+    let values = context.services.get::<MeasuredValues>();
+    for chunk in selected.chunks(BATCH) {
+        // Each measured value of every object of the chunk, measured
+        // together; an object reads them as it would resolve them alone.
+        let ids: Vec<&ObjectId> = chunk.iter().map(|object| &object.id).collect();
+        let mut columns: Vec<_> = match values {
+            Some(values) => batched
+                .iter()
+                .map(|(_, name)| {
+                    values
+                        .read_batch(name, &ids)
+                        .into_iter()
+                        .map(|read| read.map_err(property_error))
+                })
+                .collect(),
+            None => Vec::new(),
+        };
+        for object in chunk {
+            let prefetched = batched
+                .iter()
+                .zip(columns.iter_mut())
+                .filter_map(|((set, name), column)| {
+                    column.next().map(|read| (set.clone(), name.clone(), read))
+                })
+                .collect();
+            let Judgement { outcome, row } = judge_object(
+                (&plan, &decision, scope.as_ref()),
+                context,
+                rule,
+                object,
+                prefetched,
+            );
+            if let (Some(table), Some(row)) = (&mut table, row) {
+                // Selected objects are distinct, so rows never collide.
+                let _ = table.push_row(object.id.clone(), row);
             }
-            Outcome::Open(reason, message) => {
-                evaluation.push_object_not_evaluated(object.id.clone(), reason, message);
+            match outcome {
+                Outcome::Passed => {}
+                Outcome::Finding {
+                    message,
+                    evidence,
+                    related,
+                    deviation,
+                } => {
+                    evaluation.push_finding_deviating(
+                        finding(rule, &object.id, message, evidence, related),
+                        deviation,
+                    );
+                }
+                Outcome::Open(reason, message) => {
+                    evaluation.push_object_not_evaluated(object.id.clone(), reason, message);
+                }
             }
         }
     }
@@ -1244,6 +1399,73 @@ pub(crate) fn run(
         evaluation.push_table(table);
     }
     evaluation
+}
+
+/// How many objects' values are measured together: enough to share each
+/// value's parsing and provider set-up, few enough that what is measured
+/// ahead stays small beside the run.
+const BATCH: usize = 32;
+
+/// The measured values the plan reads directly, as `(set, name)`: each is
+/// read for a chunk of objects together. Any other read (a stated
+/// property, a value inside an arithmetic) is resolved as it is read, and
+/// so is a measured value whose request does not bind (the read refuses it
+/// as resolving it would).
+fn batched(
+    plan: &Plan<'_>,
+    context: &RuleContext<'_>,
+    first: Option<&Object>,
+) -> Vec<(Option<Arc<str>>, Arc<str>)> {
+    let Some(first) = first else {
+        return Vec::new();
+    };
+    plan.values()
+        .filter_map(|(_, expression)| match property_read(expression) {
+            Some((Some(set), name))
+                if set == axioval_ir::MEASURED_SET
+                    && bound_property_request(context, first, Some(set), name).is_ok() =>
+            {
+                Some((Some(Arc::from(set)), Arc::from(name)))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// One value step of `object`: a plain property read straight through the
+/// object's leaves, anything else through the evaluator. Both read the same
+/// leaf, spend the same budget and answer the same value, evidence and
+/// refusal; the plain read only skips recording the step. A plain read is
+/// never narrowed to an anchor's members, so its prefetched value holds.
+fn read_step(
+    expression: &Expression,
+    root: &str,
+    leaves: &mut ObjectLeaves<'_>,
+) -> (Result<Value, NotEvaluated>, Vec<Evidence>) {
+    if let Expression::Property {
+        property_set,
+        property,
+        of: None,
+        ..
+    } = expression
+    {
+        let here = |reason| NotEvaluated {
+            path: root.to_owned(),
+            label: expression.label().map(str::to_owned),
+            reason,
+        };
+        if !leaves.spend() {
+            return (Err(here(Reason::BudgetExhausted)), Vec::new());
+        }
+        let leaf = leaves.property(property_set.as_deref(), property);
+        return (
+            leaf.value.map_err(|why| here(Reason::Unreadable(why))),
+            leaf.evidence,
+        );
+    }
+    let evaluation = evaluate_untraced(expression, root, leaves);
+    let evidence = evidence_of(&evaluation).collect();
+    (evaluation.outcome, evidence)
 }
 
 /// A rule bound to a template, copied into the `expression` rule it
@@ -1363,14 +1585,18 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
     let template = capability
         .template()
         .ok_or_else(|| ForkError::NotATemplate(capability.id().to_owned()))?;
-    let plan = bind(template, rule)
+    let binding = bind(template, rule)
         .map_err(|(_, message)| ForkError::Declaration(format!("{}: {message}", template.name)))?;
+    let plan = Plan {
+        template,
+        form: &template.forms[binding.form],
+        bound: Arc::new(binding),
+    };
     if let (Decision::Compare { value: subject, .. }, Some(comparison)) =
         (&plan.form.decision, &plan.comparison)
     {
         let value = plan
-            .values
-            .iter()
+            .values()
             .find(|(step, _)| step.name == *subject)
             .map_or_else(
                 || Expression::Derived {
@@ -1387,7 +1613,10 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
         });
     }
     let values = match &plan.form.members {
-        None => plan.values.clone(),
+        None => plan
+            .values()
+            .map(|(step, expression)| (step, expression.clone()))
+            .collect::<Vec<_>>(),
         Some(members) => {
             let over = member_path(rule)?;
             let Some(Constant::Other(ParameterValue::Selector { value: selector })) =
@@ -1398,10 +1627,9 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
                     template.name, members.selector
                 )));
             };
-            plan.values
-                .iter()
+            plan.values()
                 .map(|(step, expression)| {
-                    (*step, along(expression, members.selector, &over, selector))
+                    (step, along(expression, members.selector, &over, selector))
                 })
                 .collect()
         }

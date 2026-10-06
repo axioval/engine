@@ -51,6 +51,9 @@ pub struct PropertyPredicate;
 
 static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
 
+/// The plans of the rules bound to it, kept across runs.
+static PLANS: crate::templates::Plans = crate::templates::Plans::new();
+
 impl RuleCapability for PropertyPredicate {
     fn id(&self) -> &'static str {
         template::ID
@@ -64,7 +67,7 @@ impl RuleCapability for PropertyPredicate {
         if crate::object_parameters::has_object_parameters(rule) {
             return crate::object_parameters::per_object(self, context, rule);
         }
-        crate::templates::run(&TEMPLATE, context, rule)
+        crate::templates::run((&TEMPLATE, &PLANS), context, rule)
     }
 
     fn template(&self) -> Option<&Template> {

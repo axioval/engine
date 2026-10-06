@@ -3,13 +3,15 @@
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use axioval_engine::expression::{
     EvaluationBudget, ExpressionContext, Interval, Leaf, Member, RuleRead, Unit, Value,
     derived_value, evaluate,
 };
 use axioval_engine::{
-    MeasuredMember, Measurement, MemberValue, ObjectVerdict, RuleContext, RuleOutcomes,
+    MeasuredMember, MeasuredRead, Measurement, MemberValue, ObjectVerdict, RuleContext,
+    RuleOutcomes,
 };
 use axioval_ir::contract::{
     AggregateSource, Expression, ParameterValue, ScalarValue, Selector, TableRow,
@@ -21,7 +23,11 @@ use crate::support::table::{Matched, RowSelection, RowTest, TextPattern, match_r
 use crate::support::{PropertyRef, Resolved, Traversal, resolve};
 
 /// A stated property read: its set, its name and its value as stated.
-type StatedRead = (Option<String>, String, Option<axioval_ir::PropertyValue>);
+type StatedRead = (
+    Option<Arc<str>>,
+    Arc<str>,
+    Option<axioval_ir::PropertyValue>,
+);
 
 /// What the source states for a property: its value, or `None` where it
 /// states the property absent.
@@ -31,6 +37,15 @@ pub(crate) struct Stated(pub(crate) Option<axioval_ir::PropertyValue>);
 /// A candidate member: the object, whether it surely belongs, and the
 /// evidence that reached it.
 type Candidate<'a> = (&'a Object, bool, Vec<Evidence>);
+
+/// A measured value of the object in scope read ahead of its read, by set
+/// and name: what [`resolve`] would answer for it, read for many objects
+/// together through the run's `MeasuredValues`.
+pub(crate) type Prefetched = (
+    Option<Arc<str>>,
+    Arc<str>,
+    Result<MeasuredRead, (NotEvaluatedReason, String)>,
+);
 
 /// Answers an expression's leaves for one selected object.
 pub(crate) struct ObjectLeaves<'a> {
@@ -51,6 +66,8 @@ pub(crate) struct ObjectLeaves<'a> {
     fields: Option<&'a MeasuredMember>,
     /// The evidence of the measured member list last listed.
     listed: Vec<Evidence>,
+    /// Properties of the object resolved ahead in a batch, each read once.
+    prefetched: Vec<Prefetched>,
 }
 
 impl<'a> ObjectLeaves<'a> {
@@ -69,6 +86,7 @@ impl<'a> ObjectLeaves<'a> {
             stated: RefCell::new(Vec::new()),
             fields: None,
             listed: Vec::new(),
+            prefetched: Vec::new(),
         }
     }
 
@@ -84,6 +102,7 @@ impl<'a> ObjectLeaves<'a> {
             stated: RefCell::new(Vec::new()),
             fields: None,
             listed: Vec::new(),
+            prefetched: Vec::new(),
         }
     }
 
@@ -99,7 +118,16 @@ impl<'a> ObjectLeaves<'a> {
             stated: RefCell::new(Vec::new()),
             fields: Some(member),
             listed: Vec::new(),
+            prefetched: Vec::new(),
         }
+    }
+
+    /// The leaves of the object, with properties resolved ahead in a batch
+    /// (`support::resolve_batch`): a read of one takes its answer instead
+    /// of resolving it again, and reads it exactly as a resolved one.
+    pub(crate) fn with_prefetched(mut self, prefetched: Vec<Prefetched>) -> Self {
+        self.prefetched = prefetched;
+        self
     }
 
     /// The field `name` of the measured member in scope.
@@ -317,7 +345,7 @@ impl<'a> ObjectLeaves<'a> {
             .borrow()
             .iter()
             .rev()
-            .find(|(read_set, read_name, _)| read_set.as_deref() == set && read_name == name)
+            .find(|(read_set, read_name, _)| read_set.as_deref() == set && &**read_name == name)
             .map(|(_, _, value)| Stated(value.clone()))
     }
 
@@ -360,19 +388,43 @@ impl ExpressionContext for ObjectLeaves<'_> {
         if set == Some(axioval_ir::VALUE_SET) {
             return self.derived(name);
         }
-        match resolve(self.context, self.object, PropertyRef { set, name }) {
-            Ok(resolved) => {
-                self.stated.borrow_mut().push((
-                    set.map(str::to_owned),
-                    name.to_owned(),
-                    resolved.value().cloned(),
-                ));
-                let evidence = resolved.evidence();
-                let value = match &resolved {
+        // The value as the source states it (`None`: stated absent) and
+        // the evidence cited, read ahead in a batch or resolved now.
+        let (key, read) =
+            match self.prefetched.iter().position(|(read_set, read_name, _)| {
+                read_set.as_deref() == set && &**read_name == name
+            }) {
+                Some(index) => {
+                    let (read_set, read_name, read) = self.prefetched.swap_remove(index);
+                    let read = read.map(|read| match read {
+                        MeasuredRead::Value(value, evidence) => {
+                            (Some(value), evidence.into_iter().collect())
+                        }
+                        MeasuredRead::Absent(evidence) => (None, vec![evidence]),
+                    });
+                    ((read_set, read_name), read)
+                }
+                None => (
+                    (set.map(Arc::from), Arc::from(name)),
+                    resolve(self.context, self.object, PropertyRef { set, name }).map(|resolved| {
+                        match resolved {
+                            Resolved::Present(property) => (
+                                Some(property.value),
+                                property.evidence.into_iter().collect(),
+                            ),
+                            Resolved::Absent(evidence) => (None, vec![evidence]),
+                        }
+                    }),
+                ),
+            };
+        match read {
+            Ok((stated, evidence)) => {
+                let value = match &stated {
                     // A stated absence is `null`, never a value not read.
-                    Resolved::Absent(_) => Ok(Value::Null),
-                    Resolved::Present(property) => Value::from_property(&property.value),
+                    None => Ok(Value::Null),
+                    Some(value) => Value::from_property(value),
                 };
+                self.stated.borrow_mut().push((key.0, key.1, stated));
                 if value.is_err() {
                     self.reasons
                         .borrow_mut()

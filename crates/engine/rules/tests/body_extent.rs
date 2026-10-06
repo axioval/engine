@@ -600,6 +600,113 @@ fn the_measured_extent_along_an_own_axis_is_the_body_extent() {
     }
 }
 
+/// Services counting what they are asked.
+struct Counting<T> {
+    inner: T,
+    asked: std::sync::atomic::AtomicUsize,
+}
+
+impl<T> Counting<T> {
+    fn new(inner: T) -> Arc<Self> {
+        Arc::new(Self {
+            inner,
+            asked: std::sync::atomic::AtomicUsize::new(0),
+        })
+    }
+
+    fn ask(&self) -> &T {
+        self.asked
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        &self.inner
+    }
+
+    fn asked(&self) -> usize {
+        self.asked.load(std::sync::atomic::Ordering::Relaxed)
+    }
+}
+
+impl ObjectFrameService for Counting<Frames> {
+    fn source_snapshots(&self) -> &[SourceSnapshot] {
+        self.inner.source_snapshots()
+    }
+
+    fn object_frame(&self, object: &ObjectId) -> Result<ObjectFrame, ObjectFrameError> {
+        self.ask().object_frame(object)
+    }
+}
+
+impl VerticalExtentService for Counting<Boxes> {
+    fn measure_vertical_extent(
+        &self,
+        object: &ObjectId,
+    ) -> Result<VerticalExtent, VerticalExtentError> {
+        self.ask().measure_vertical_extent(object)
+    }
+
+    fn measure_directional_extent(
+        &self,
+        object: &ObjectId,
+        along: MetricDirection,
+    ) -> Result<DirectionalExtent, VerticalExtentError> {
+        self.ask().measure_directional_extent(object, along)
+    }
+}
+
+/// A run measures each body's frame once and its extent once per axis,
+/// however many values and rules read them (#279): `body_extent` and both
+/// ends of `body_position` along two axes, read directly for many objects
+/// and resolved one by one, take one frame and two extents per wall. Read
+/// directly, each value is exactly what resolving it answers.
+#[test]
+fn a_run_measures_each_body_once_per_axis() {
+    use axioval_engine::{MeasuredRead, MeasuredValues, PropertyResolution, measured_value};
+    let (mut model, frames, boxes) = walls();
+    model = model.object("unplaced", "wall");
+    let project = model.project();
+    let (frames, boxes) = (Counting::new(frames), Counting::new(boxes));
+    let mut services = ServiceRegistry::new();
+    services
+        .register(ObjectFrameServiceHandle::new(frames.clone()))
+        .unwrap();
+    services
+        .register(VerticalExtentServiceHandle::new(boxes.clone()))
+        .unwrap();
+    axioval_rules::register_builtins(axioval_engine::CapabilityRegistry::new())
+        .unwrap()
+        .install_measured(&mut services, &project);
+    let walls: Vec<ObjectId> = project.objects().map(|wall| wall.id.clone()).collect();
+    let ids: Vec<&ObjectId> = walls.iter().collect();
+    let values = MeasuredValues::of(&services, &project);
+    for axis in ["forward", "right"] {
+        for name in [
+            format!("body_extent;axis={axis}"),
+            format!("body_position;axis={axis};end=low"),
+            format!("body_position;axis={axis};end=high"),
+        ] {
+            let direct = values.read_batch(&name, &ids);
+            assert_eq!(direct.len(), walls.len());
+            for (wall, direct) in walls.iter().zip(direct) {
+                let resolved = measured_value(&services, &project, wall, &name).map(|resolution| {
+                    match resolution {
+                        PropertyResolution::Present(resolved) => {
+                            let property = resolved.into_property();
+                            MeasuredRead::Value(property.value, property.evidence)
+                        }
+                        PropertyResolution::Absent(proof) => {
+                            MeasuredRead::Absent(proof.evidence().clone())
+                        }
+                    }
+                });
+                assert_eq!(direct, resolved, "{wall} {name}");
+            }
+        }
+    }
+    // Four placed walls and one unplaced, whose frame is asked for once and
+    // refuses every extent.
+    assert_eq!(frames.asked(), walls.len());
+    assert_eq!(boxes.asked(), 2 * (walls.len() - 1));
+}
+
 /// Measured on a tessellated body, an extent along an own axis is never
 /// exact, whether built-in code or the engine measures it; on an exact body
 /// it is.

@@ -77,7 +77,9 @@ A `Form` holds:
   each selected object. A value may `expect` a kind (`length`), and words
   a stated absence (`absent`) and a value of the wrong kind (`mismatch`);
   one expected `optional` that is stated absent passes the form, or the
-  check, it belongs to without a finding (no slab above to measure to). A
+  check, it belongs to without a finding (no slab above to measure to); one
+  expected `words` is read only to word the outcome and cites nothing (the
+  part uncovered beside its share, which cites the measurement). A
   measured value's reference to a parameter the template defaults binds
   the default, and `@selection` the objects the rule itself selects (the
   stack a slab belongs to); a rule reading that is never forked;

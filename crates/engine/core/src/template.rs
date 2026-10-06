@@ -955,6 +955,10 @@ pub enum Expect {
     /// or the check, it belongs to without a finding (nothing to judge,
     /// such as no slab above to measure to).
     Optional,
+    /// Any value, read only to word the outcome (the part uncovered beside
+    /// its share): its evidence is not cited, the value the decision reads
+    /// citing the measurement both come from.
+    Words,
 }
 
 /// How a form's values decide.

@@ -1382,7 +1382,16 @@ mod open_sums {
                 derived: Vec::new(),
                 related: None,
                 checks: vec![FormCheck {
-                    values: vec![stated("sum", "Sum"), stated("unread", "Unread"), zero],
+                    values: vec![
+                        stated("sum", "Sum"),
+                        stated("unread", "Unread"),
+                        zero,
+                        // Read only to word the finding.
+                        TemplateValue {
+                            expect: Some(axioval_engine::template::Expect::Words),
+                            ..stated("name", "Name")
+                        },
+                    ],
                     derived: vec![
                         Derived::Open {
                             name: "capacity",
@@ -1421,15 +1430,23 @@ mod open_sums {
         let number = PropertyValue::Decimal;
         Model::default()
             .object("short", "panel")
+            .value(
+                "short",
+                "Pset",
+                "Name",
+                PropertyValue::String(String::new()),
+            )
             .value("short", "Pset", "Area", number(10.0))
             .value("short", "Pset", "Sum", number(6.0))
             .value("short", "Pset", "Unread", number(0.0))
             .object("open", "panel")
             .value("open", "Pset", "Area", number(10.0))
+            .value("open", "Pset", "Name", PropertyValue::String("o".into()))
             .value("open", "Pset", "Sum", number(6.0))
             .value("open", "Pset", "Unread", number(1.0))
             .object("enough", "panel")
             .value("enough", "Pset", "Area", number(10.0))
+            .value("enough", "Pset", "Name", PropertyValue::String("e".into()))
             .value("enough", "Pset", "Sum", number(12.0))
             .value("enough", "Pset", "Unread", number(2.0))
             .object("bare", "panel")
@@ -1486,6 +1503,21 @@ mod open_sums {
             &rule(ID, kind("panel"), vec![("capacity", common::boolean(true))]),
         );
         assert!(findings(&unlabelled).contains(&("bare".to_owned(), "no area".to_owned())));
+        // A value read only to word the finding is not cited.
+        let short = evaluation
+            .findings()
+            .iter()
+            .find(|finding| common::subject(finding) == "short")
+            .unwrap();
+        assert!(!short.evidence.is_empty());
+        assert!(
+            short
+                .evidence
+                .iter()
+                .all(|evidence| !evidence.locator.contains("Name")),
+            "{:?}",
+            short.evidence
+        );
     }
 
     /// Forked where the check does not apply, the rule requires the value

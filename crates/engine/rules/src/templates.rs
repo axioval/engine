@@ -1518,7 +1518,7 @@ fn near_judged(
 /// source states where it was read as stated.
 fn expected(expect: Expect, value: &Value, stated: Option<&Option<PropertyValue>>) -> bool {
     match expect {
-        Expect::Optional => true,
+        Expect::Optional | Expect::Words => true,
         Expect::Length => match stated {
             Some(Some(PropertyValue::Quantity {
                 value,
@@ -2411,12 +2411,12 @@ fn read_values<'v>(
             read.notes.push((step.name, noted));
         }
         let before = read.evidence.len();
-        read.evidence.extend(evidence);
-        if read.evidence[before..]
-            .iter()
-            .any(|evidence| !evidence.exact)
-        {
+        if evidence.iter().any(|evidence| !evidence.exact) {
             read.inexact.insert(step.name, ());
+        }
+        // A value read only to word the outcome cites nothing of its own.
+        if step.expect != Some(Expect::Words) {
+            read.evidence.extend(evidence);
         }
         let stated = property_read(expression)
             .and_then(|(set, name)| leaves.stated(set, name))

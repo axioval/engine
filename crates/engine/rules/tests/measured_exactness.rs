@@ -180,6 +180,13 @@ const COVERED: &[(&str, &str, &str)] = &[
         "tests/slab_contact.rs",
         "a_contact_cited_approximate_is_refused",
     ),
+    // An envelope service's evidence must be exact and reviewable: one
+    // cited approximate is refused before it reaches a value.
+    (
+        "on_envelope",
+        "tests/external_wall_validation.rs",
+        "an_envelope_cited_approximate_is_refused",
+    ),
     // Counted over a selection, which nothing measures.
     (
         "undecided_count",

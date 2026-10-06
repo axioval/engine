@@ -799,7 +799,7 @@ impl MeasuredProvider for LightMeasures {
             Ok(lit) if cites => Citation {
                 related: Vec::new(),
                 evidence: vec![lit.record],
-                notes: Vec::new(),
+                ..Citation::default()
             },
             _ => Citation::default(),
         };

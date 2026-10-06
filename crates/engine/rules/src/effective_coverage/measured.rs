@@ -445,6 +445,7 @@ fn value(
                 evidence: Vec::new(),
                 // Why it may be covered more than measured.
                 notes: summary.notes.clone(),
+                sources: Vec::new(),
             },
         ),
         name => {
@@ -467,6 +468,7 @@ fn value(
                         evidence: Vec::new(),
                         // Why the sum cannot be bounded above.
                         notes: summed.unknown.clone(),
+                        sources: Vec::new(),
                     },
                 )
             }

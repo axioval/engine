@@ -417,71 +417,6 @@ impl<'a> Declaration<'a> {
                 .unwrap_or(false),
         })
     }
-
-    /// The reference source, and every other source.
-    fn sources(&self, context: &RuleContext<'_>) -> Result<(SourceId, Vec<SourceId>), Unavailable> {
-        let all: Vec<SourceId> = sources(context).into_iter().collect();
-        if all.len() < 2 {
-            return Err((
-                NotEvaluatedReason::IncompleteEvidence,
-                format!(
-                    "the run checks {} source(s); coordinate consistency compares at least two",
-                    all.len()
-                ),
-            ));
-        }
-        let reference = match self.reference {
-            None => all[0].clone(),
-            Some(discipline) => {
-                let Some(disciplines) = context.services.get::<SourceDisciplines>() else {
-                    return Err((
-                        NotEvaluatedReason::MissingService,
-                        "source disciplines are not available outside an evidence session".into(),
-                    ));
-                };
-                let mut found = Vec::new();
-                let mut undeclared = 0_usize;
-                for source in &all {
-                    match disciplines.of(source).map(axioval_ir::Discipline::as_str) {
-                        Some(declared) if declared == discipline => found.push(source.clone()),
-                        Some(_) => {}
-                        None => undeclared += 1,
-                    }
-                }
-                match <[SourceId; 1]>::try_from(found) {
-                    Ok([source]) => source,
-                    Err(found) if found.is_empty() && undeclared > 0 => {
-                        return Err((
-                            NotEvaluatedReason::NotRecorded,
-                            format!(
-                                "no source declares discipline `{discipline}`, and {undeclared} declare none"
-                            ),
-                        ));
-                    }
-                    Err(found) if found.is_empty() => {
-                        return Err((
-                            NotEvaluatedReason::IncompleteEvidence,
-                            format!("no source of discipline `{discipline}` is checked"),
-                        ));
-                    }
-                    Err(found) => {
-                        return Err((
-                            NotEvaluatedReason::InvalidEvidence,
-                            format!(
-                                "{} sources declare discipline `{discipline}`; the reference is one",
-                                found.len()
-                            ),
-                        ));
-                    }
-                }
-            }
-        };
-        let others = all
-            .into_iter()
-            .filter(|source| *source != reference)
-            .collect();
-        Ok((reference, others))
-    }
 }
 
 impl RuleCapability for CoordinateConsistencyCheck {
@@ -507,7 +442,7 @@ impl RuleCapability for CoordinateConsistencyCheck {
                     "no coordinate-system service is registered".into(),
                 ));
             };
-            let sources = declaration.sources(context)?;
+            let sources = reference_source(context, declaration.reference)?;
             Ok((declaration, service, sources))
         });
         let (declaration, service, (reference, others)) = match declared {
@@ -638,6 +573,82 @@ fn judge(
             ),
         );
     }
+}
+
+/// The reference source of `context`'s run, and every other source, in
+/// identity order: the one source of `discipline`, or, without one, the
+/// first source. Fewer than two sources, a discipline no source or several
+/// sources declare, and a discipline without the run's declared
+/// disciplines refuse.
+///
+/// # Errors
+///
+/// Why there is no one reference, for its reason.
+pub(crate) fn reference_source(
+    context: &RuleContext<'_>,
+    discipline: Option<&str>,
+) -> Result<(SourceId, Vec<SourceId>), Unavailable> {
+    let all: Vec<SourceId> = sources(context).into_iter().collect();
+    if all.len() < 2 {
+        return Err((
+            NotEvaluatedReason::IncompleteEvidence,
+            format!(
+                "the run checks {} source(s); coordinate consistency compares at least two",
+                all.len()
+            ),
+        ));
+    }
+    let reference = match discipline {
+        None => all[0].clone(),
+        Some(discipline) => {
+            let Some(disciplines) = context.services.get::<SourceDisciplines>() else {
+                return Err((
+                    NotEvaluatedReason::MissingService,
+                    "source disciplines are not available outside an evidence session".into(),
+                ));
+            };
+            let mut found = Vec::new();
+            let mut undeclared = 0_usize;
+            for source in &all {
+                match disciplines.of(source).map(axioval_ir::Discipline::as_str) {
+                    Some(declared) if declared == discipline => found.push(source.clone()),
+                    Some(_) => {}
+                    None => undeclared += 1,
+                }
+            }
+            match <[SourceId; 1]>::try_from(found) {
+                Ok([source]) => source,
+                Err(found) if found.is_empty() && undeclared > 0 => {
+                    return Err((
+                        NotEvaluatedReason::NotRecorded,
+                        format!(
+                            "no source declares discipline `{discipline}`, and {undeclared} declare none"
+                        ),
+                    ));
+                }
+                Err(found) if found.is_empty() => {
+                    return Err((
+                        NotEvaluatedReason::IncompleteEvidence,
+                        format!("no source of discipline `{discipline}` is checked"),
+                    ));
+                }
+                Err(found) => {
+                    return Err((
+                        NotEvaluatedReason::InvalidEvidence,
+                        format!(
+                            "{} sources declare discipline `{discipline}`; the reference is one",
+                            found.len()
+                        ),
+                    ));
+                }
+            }
+        }
+    };
+    let others = all
+        .into_iter()
+        .filter(|source| *source != reference)
+        .collect();
+    Ok((reference, others))
 }
 
 #[cfg(test)]

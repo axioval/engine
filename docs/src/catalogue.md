@@ -24,7 +24,7 @@ takes the host's texts for every capability it registered.
 | `valueTypes` | The value types expression fields take and nodes yield. |
 | `units` | The base units, every unit symbol a written unit may use (scale, exponents, aliases), and the dimensions measured values are answered in. |
 | `capabilities` | Every registered capability by id: whether it grades deviations or takes authored parameters, and each parameter's package kind, requirement, whether it may be per object, the type an expression parameter must have, and a table's columns. A capability built as a [template](./templates.md) also carries `template`: its declaration checks, services, message texts and forms, and `requirements`, each form as one expression with its block tree, for an editor to expand. |
-| `measuredValues` | The registry of measured values: parameters, dimension and unit, services, exactness, what leaves them not evaluated, and whether this host measures them (`available`). |
+| `measuredValues` | The registry of measured values: parameters, dimension and unit, services, exactness, whose value each is (`subject`: `source` or `project`, each object's where left out; since 1.2.0), what leaves them not evaluated, and whether this host measures them (`available`). |
 | `measuredMembers` | The measured member lists with their fields. |
 | `expressionCategories`, `expressionKinds` | Every expression node kind: its `kind` tag, category, fields (each an expression of the value types it accepts, a list of them, a name and what it names, a choice, a flag, a selector, a path or a literal), and how its result type follows (`resultRule`). |
 | `expressionComparisons` | The operators of `compare`, with the value types each compares. |

@@ -401,7 +401,7 @@ fn contact_value(
                 Vec::new()
             },
             evidence: Vec::new(),
-            notes: Vec::new(),
+            ..Citation::default()
         },
     ))
 }

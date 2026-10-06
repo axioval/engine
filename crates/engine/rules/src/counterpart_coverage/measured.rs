@@ -393,6 +393,7 @@ fn value(
                     related: members,
                     evidence: Vec::new(),
                     notes: Vec::new(),
+                    sources: Vec::new(),
                 },
             ));
         }
@@ -442,6 +443,7 @@ fn value(
                 evidence: Vec::new(),
                 // Why it may be covered more than measured.
                 notes: summary.notes.clone(),
+                sources: Vec::new(),
             },
         ),
     })

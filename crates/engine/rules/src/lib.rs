@@ -328,5 +328,6 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(slab_contact::ContactMeasures))
         .and_then(|registry| registry.register_measured(measured_kinds::SelectionMeasures))
         .and_then(|registry| registry.register_measured(coordinate_consistency::CoordinateMeasures))
+        .and_then(|registry| registry.register_measured(external_wall_validation::EnvelopeMeasures))
         .map(|registry| registry.with_refiner(Refiner))
 }

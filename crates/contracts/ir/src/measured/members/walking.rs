@@ -6,6 +6,7 @@
 use super::super::registry::en_de;
 use super::super::{
     LocalizedText, MeasuredDescriptor, MeasuredExactness, MeasuredParameter, MeasuredParameterKind,
+    MeasuredSubject,
 };
 use super::{
     FLIGHTS, LENGTH, MemberDescriptor, MemberField, MemberFieldKind, RATIO, TRUTH,
@@ -70,6 +71,7 @@ const fn list(
         dimension: None,
         services,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated,
         label,
         help,

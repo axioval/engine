@@ -423,7 +423,11 @@ ignoring ASCII case):
 | `body_extent;axis=right\|forward\|up` | the body's depth along one of its own placement axes, as `body-extent` measures it | built in, over `ObjectFrameService`, `VerticalExtentService` |
 | `body_position;axis=right\|forward\|up;end=low\|high` | where the body begins or ends along one of its own placement axes, from the origin of the coordinates along it | built in, over `ObjectFrameService`, `VerticalExtentService` |
 | `triangle_count` | how many triangles the host's mesh of the body holds | built in, over `TriangleCountService` |
-| `coordinate_shift;of=world\|site\|map`, `coordinate_turn;of=world\|site\|north\|map`, `map_scale_change`, `map_target_change`, `map_conversion[;of=own\|reference]` `[;reference=<discipline>]` | how the object's source's coordinate system departs from the reference source's | built in, over `CoordinateSystemService` |
+| `coordinate_shift;of=world\|site\|map`, `coordinate_turn;of=world\|site\|north\|map`, `map_scale_change`, `map_target_change`, `map_conversion[;of=own\|reference]` `[;reference=<discipline>]` | of a source: how its coordinate system departs from the reference source's | built in, over `CoordinateSystemService` |
+| `coordinate_reference[;reference=<discipline>]` | of the project: how many sources are compared with the reference source, which it cites | built in, over `SourceDisciplines` |
+| `envelope_size;derivation=all-spaces\|gross-area-groups[;bounding=<objects>][;groups=<objects>;group_path=<steps>]` | of the project: how many objects the derivation places on the building envelope | built in, over `EnvelopeMembershipService` |
+| `on_envelope`, `declared_external`, `bounds_envelope` `;derivation=…[;bounding=…][;groups=…;group_path=…]` | whether the derivation places the object on the envelope, whether the model declares it external, whether the envelope is derived around it | built in, over `EnvelopeMembershipService` |
+| `external_declarations;derivations=<derivations>[;bounding=…][;groups=…;group_path=…];objects=<objects>` | of a source: how many of its objects the model declares external in any derivation, up to those of unknown declaration | built in, over `EnvelopeMembershipService` |
 | `station`, `offset[;side=left\|right]`, `height_above_gradient` `;alignment=<kinds>[;path=<steps>]` | the reference point's station along an alignment, its signed plan offset from it and its height above the gradient line, each a length | `AlignmentService::measure_alignment_position`, `TypeHierarchyService`, `RelationshipSelectionService` for a path |
 | `alignment_curvature`, `alignment_radius`, `alignment_gradient`, `alignment_cant` `;alignment=<kinds>[;path=<steps>]` | the alignment's plan curvature (per metre) and radius, gradient and cant at the reference point's station | `AlignmentService::measure_alignment_parameter` |
 | `station_section_area`, `station_section_thickness[;direction=lateral\|up]` `;alignment=<kinds>[;path=<steps>];station=<m>` | the area and the vertical or horizontal reach of the object's own body in the section normal to the alignment at a station | `AlignmentService::measure_section` |
@@ -457,6 +461,7 @@ parameter's `references`):
 | --- | --- |
 | `length` | a `number` or `integer` of metres, or a `quantity` of length, at least the parameter's minimum |
 | `path` | a `stringList` of steps |
+| `choices` | a `stringList` of its options, each once |
 | `choice`, `text`, `sourceKind` | a `string` (a choice among its options) |
 | `objects` | a `selector`; or `@anchor` |
 | `property` | a `propertyReference` |
@@ -505,12 +510,15 @@ them.
 Every measured name is declared once, in `axioval_ir::measured`
 (`MEASURED_VALUES`, sorted by name). A descriptor states the name, its
 typed parameters (`path`, a `sourceKind`, a `length` with a minimum, a
-`choice`, a `vector`, a `property`, a `text`, such as a discipline, or a
+`choice`, `choices` (several options, `,`-separated, each once), a
+`vector`, a `property`, a `text`, such as a discipline, or a
 `polygon` of `lateral:up` vertices, `,`-separated, at least three and never
 crossing or touching itself;
 required or with a default), the dimension and SI unit of the value, the
-services a run needs, its exactness (`stated` or `measured`), what leaves
-it not evaluated, and an English and German label and help text. Editors
+services a run needs, its exactness (`stated` or `measured`), its subject
+(`subject`: `source` or `project`, each object's where left out; see
+[Subjects](#subjects)), what leaves it not evaluated, and an English and
+German label and help text. Editors
 and catalogues read the same descriptors; a new measured value is
 registered there, never parsed anywhere else.
 
@@ -1090,6 +1098,7 @@ and declare their parameters and typed fields:
 | `well_requirements` (`members`, `requirements`) | one item: the plan section a light well's spaces share and the row of `requirements` its height selects | `count`, `area` (`null` for no shared section), `width`, `height`, `row`, `required_area`, `required_width`, `members` |
 | `centre_line_sides` (`walls`, `centre_line`, `sides`, `reach`, `inset`) | each side of the centre line a `centre-line-distance` rule judges, or the nearer of the two | `label`, `distance` (from every wall that may lie there to the nearest sure one, or just past `reach`; `null` for none within it), `lower`, `sure`, `wall` |
 | `sight_view` (`targets`, `blockers`, `eye_height`, `radius`) | one item: the targets within the radius in view from an eye above the component, as `component-visibility` sees them | `visible` (from those surely in view to every one that may be), `sure`, `hidden`, `seen`, `found`, `within`, `undecided` |
+| `coordinate_differences` (`reference`, `length`, `angle`, `scale`, `require_map`), of a source | each statement in which the source's coordinate system departs from the reference's, or cannot be compared, then the georeference ([Coordinate systems](#coordinate-systems)) | `found`, `finding`, `recorded` |
 | `end_walls` (`corridor`, `kinds`) | the walls the ends of the corridors an opening faces run into | `gap`, `facing` |
 | `exit_pairs` (`exits`, `kinds`, `between`) | every pair of a space's exits | `separation` |
 | `free_placements` (`shape`, `diameter`, `width`, `length`, `height`, `obstacles`, `band_from`, `band_to`, `merge`, `swings`, `entrance_width`, `access`, `doors`, `openings`) | a placement of the shape on a space's free floor: one found, none possible, or one undecided | none |
@@ -1346,6 +1355,31 @@ tessellation is a point whose evidence is not exact
 (`Measurement::Cited` with `exact: false`), as the capability cites it, so at most the
 maximum reaches `triangle-count`'s verdicts and evidence.
 
+### Subjects
+
+A measured value is each object's own, unless the registry declares it a
+source's or the project's (`MeasuredSubject`, the descriptor's `subject`):
+
+- **A source's** value (`coordinate_shift`, `external_declarations`, the
+  member list `coordinate_differences`) read on an object is the value of
+  the object's source, measured for the source
+  (`MeasuredProvider::measure_source`, `members_of_source`) however many
+  of its objects read it, and identified by the source's
+  source-qualified identity. A template judging the sources themselves
+  reads it for every source of the session in identity order, one holding
+  no object included ([Capability templates](./templates.md)).
+- **The project's** value (`coordinate_reference`, `envelope_size`) is
+  one value of the run (`MeasuredProvider::measure_project`): read on an
+  object, it is the same for every object, and a template reads it once
+  per rule, its refusal leaving the whole rule open.
+
+A provider may cite the sources a value was measured against
+(`Citation::sources`: the reference source), which a template's message
+names (`{reference:source}`). Since no object is measured, a value of a
+source or the project never takes `@anchor`: the registry refuses it when
+the name is read (`EngineError::InvalidMeasured` at compilation and in a
+draft's diagnostics).
+
 ### Coordinate systems
 
 The coordinate system of an object's source is compared with the reference
@@ -1364,7 +1398,46 @@ tolerance, the map comparisons last (so a missing map conversion is not
 recorded only when nothing else is unknown), and with a required map
 conversion `map_conversion` 1 and the map comparisons only where the
 reference states one, reach the capability's verdicts on its fixtures; the
-capability judges a source, the rewrite each object of it.
+capability judges a source, the rewrite each object of it. Each is a value
+of a source: read on an object it is its source's, and a template judges
+the sources themselves.
+
+`coordinate_reference` is the project's: how many sources are compared
+with the reference source (the one of the discipline `reference` names,
+or the first in identity order), which it cites. Fewer than two sources, a
+discipline no source or several declare, or sources declaring none, leave
+it not evaluated, as `coordinate-consistency` words them. The member list
+`coordinate_differences` (`reference`, `length` in metres, `angle` in
+degrees, `scale`, `require_map`) lists of a source each statement in which
+its coordinate system departs from the reference's beyond the tolerances
+(`found` true, its words `finding`: `map offset moved by 1.0000 m`) or
+cannot be compared (`found` undecided, why), as `compare_coordinate_systems`
+reports them and in its order, then the georeference: a missing map
+conversion `require_map` asks for is a difference (`states no map
+conversion`), and otherwise one only the reference or the source states,
+or neither, is undecided and not `recorded`. The reference itself lists
+only its own missing map conversion `require_map` asks for, and nothing
+where its coordinate system cannot be read.
+
+### Building envelopes
+
+`envelope_size`, `on_envelope`, `declared_external` and `bounds_envelope`
+read one derivation of the building envelope (`derivation`: `all-spaces`
+around the `bounding` objects, `gross-area-groups` around the members the
+`groups` reach along `group_path`), asked of the envelope-membership
+service once per run for its bounding objects (`EnvelopeMembershipRequest`).
+A bounding selection that leaves an object undecided or picks none, groups
+reaching no member, and a service refusing the derivation leave each value
+not evaluated, as `external-wall-validation` words them.
+`envelope_size` (the project's) counts the objects placed on the
+envelope; `on_envelope` is 1 where geometry places the object on it
+whatever the model declares, `declared_external` 1 where the model
+declares it external (not evaluated where it states neither external nor
+internal, or its body could not be measured) and `bounds_envelope` 1
+where the envelope is derived around it. `external_declarations` (a
+source's) counts the source's `objects` (those surely picked) declared
+external in any of `derivations` that can be derived: an interval up to
+those whose declaration is unknown in one.
 
 ### Alignments
 

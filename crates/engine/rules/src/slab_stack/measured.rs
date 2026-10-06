@@ -265,7 +265,7 @@ fn distance(
                     ])
                     .cloned()
                     .collect(),
-                notes: Vec::new(),
+                ..Citation::default()
             },
         ));
     }

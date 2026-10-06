@@ -155,6 +155,28 @@ fn a_measured_reference_to_an_unstated_parameter_is_positioned_at_its_read() {
     );
 }
 
+/// A value of a source never names the anchor, since no object is
+/// measured: the draft is refused at the read, naming the subject.
+#[test]
+fn a_value_of_a_source_naming_the_anchor_is_refused_at_its_read() {
+    let declared = json!({"kind": "property", "propertySet": "axioval:measured", "property":
+        "external_declarations;derivations=all-spaces;bounding=IfcSpace;objects=@anchor"});
+    let one = json!({"kind": "literal", "value": {"type": "integer", "value": 1}});
+    let diagnostic = refused(&cover_rule("draft", at_least(declared, one)));
+    assert!(
+        diagnostic.message.contains("measured for each source"),
+        "{diagnostic:?}"
+    );
+    assert!(
+        diagnostic
+            .pointer
+            .as_deref()
+            .unwrap()
+            .starts_with("/parameters/requirement/value"),
+        "{diagnostic:?}"
+    );
+}
+
 #[test]
 fn a_unit_mismatch_names_the_comparison() {
     let area =

@@ -1,27 +1,39 @@
-//! How an object's source's coordinate system departs from the reference
-//! source's, statement by statement, as values: compared exactly as
-//! `coordinate-consistency` compares them, so a tolerance on each is an
-//! expression and the verdict the capability's.
+//! How a source's coordinate system departs from the reference source's,
+//! as measured values of the source: compared exactly as
+//! [`compare_coordinate_systems`] compares them, the one comparison
+//! `coordinate-consistency` and hosts share.
 //!
-//! A statement one side makes and the other does not cannot be compared,
-//! and neither can map conversions one source leaves unrecorded; a
-//! statement neither makes, where that is no unknown, has no value.
+//! Every value here is a source's (or the project's), never an object's:
+//! read on an object, it is the value of the object's source, and a
+//! template judging the sources reads it for a source holding no object.
+//!
+//! - `coordinate_shift`, `coordinate_turn`, `map_conversion`,
+//!   `map_scale_change` and `map_target_change`: one statement compared, a
+//!   number. A statement one side makes and the other does not cannot be
+//!   compared, and neither can map conversions one source leaves
+//!   unrecorded; a statement neither makes, where that is no unknown, has
+//!   no value.
+//! - `coordinate_reference` (of the project): how many sources are
+//!   compared with the reference, which it cites.
+//! - `coordinate_differences` (a member list): each statement differing
+//!   beyond the tolerances, or not comparable, in words, then the
+//!   georeference.
 
 use axioval_engine::{
-    CoordinateSystemServiceHandle, MeasuredProvider, Measurement, NotEvaluatedReason,
-    PropertyResolutionError, RuleContext, SourceCoordinateSystem,
+    Citation, CoordinateSystemServiceHandle, MeasuredMember, MeasuredProvider, Measurement,
+    MemberValue, NotEvaluatedReason, PropertyResolutionError, RuleContext, SourceCoordinateSystem,
 };
 use axioval_ir::measured::{MeasuredArgument, MeasuredCall};
-use axioval_ir::{ObjectId, QuantityDimension, SourceId};
+use axioval_ir::{Evidence, ObjectId, QuantityDimension, SourceId};
 
 use super::{
-    Compared, CoordinateTolerance, Declaration, map_conversions, sites, true_norths, world_frames,
+    Compared, CoordinateConsistency, CoordinateTolerance, compare_coordinate_systems,
+    map_conversions, reference_source, sites, true_norths, world_frames,
 };
-use crate::measured_kinds::refused;
-use crate::support::{Unavailable, sources};
+use crate::measured_kinds::resolution_error;
+use crate::support::{Unavailable, invalid};
 
-/// Measures `coordinate_shift`, `coordinate_turn`, `map_conversion`,
-/// `map_scale_change` and `map_target_change`.
+/// Measures the coordinate values of a source and of the project.
 pub(crate) struct CoordinateMeasures;
 
 const COORDINATE_SHIFT: &str = "coordinate_shift";
@@ -29,37 +41,31 @@ const COORDINATE_TURN: &str = "coordinate_turn";
 const MAP_CONVERSION: &str = "map_conversion";
 const MAP_SCALE_CHANGE: &str = "map_scale_change";
 const MAP_TARGET_CHANGE: &str = "map_target_change";
+const COORDINATE_REFERENCE: &str = "coordinate_reference";
+const COORDINATE_DIFFERENCES: &str = "coordinate_differences";
 
-/// The reference source: the one of the discipline `reference` names, or
-/// the first source in identity order.
-fn reference(call: &MeasuredCall, context: &RuleContext<'_>) -> Result<SourceId, Unavailable> {
-    let discipline = match call.argument("reference") {
-        Some(MeasuredArgument::Text(discipline)) => Some(discipline.as_str()),
-        _ => None,
-    };
-    if discipline.is_none() {
-        return sources(context).into_iter().next().ok_or_else(|| {
-            (
-                NotEvaluatedReason::IncompleteEvidence,
-                "the run checks no source".to_owned(),
-            )
-        });
-    }
-    let declaration = Declaration {
-        reference: discipline,
-        tolerance: CoordinateTolerance::default(),
-        require_map: false,
-    };
-    declaration.sources(context).map(|(reference, _)| reference)
+/// A refusal of `name` of `subject` (a source, or the project), as a
+/// property resolution states it.
+fn refused(
+    name: &str,
+    subject: impl std::fmt::Display,
+) -> impl Fn(Unavailable) -> PropertyResolutionError {
+    move |(reason, why)| resolution_error((reason, format!("`{name}` of {subject}: {why}")))
 }
 
-/// The coordinate systems of the reference and of `object`'s source.
-fn systems(
-    call: &MeasuredCall,
-    object: &ObjectId,
-    context: &RuleContext<'_>,
-) -> Result<(SourceCoordinateSystem, SourceCoordinateSystem), Unavailable> {
-    let service = context
+/// The discipline `reference` names, if any.
+fn discipline(call: &MeasuredCall) -> Option<&str> {
+    match call.argument("reference") {
+        Some(MeasuredArgument::Text(discipline)) => Some(discipline.as_str()),
+        _ => None,
+    }
+}
+
+/// The run's coordinate-system service.
+fn service<'a>(
+    context: &RuleContext<'a>,
+) -> Result<&'a CoordinateSystemServiceHandle, Unavailable> {
+    context
         .services
         .get::<CoordinateSystemServiceHandle>()
         .ok_or_else(|| {
@@ -67,7 +73,33 @@ fn systems(
                 NotEvaluatedReason::MissingService,
                 "no coordinate-system service is registered".to_owned(),
             )
-        })?;
+        })
+}
+
+/// The reference source: the one of the discipline `reference` names, or
+/// the first source in identity order.
+fn reference(call: &MeasuredCall, context: &RuleContext<'_>) -> Result<SourceId, Unavailable> {
+    let Some(discipline) = discipline(call) else {
+        return crate::support::sources(context)
+            .into_iter()
+            .next()
+            .ok_or_else(|| {
+                (
+                    NotEvaluatedReason::IncompleteEvidence,
+                    "the run checks no source".to_owned(),
+                )
+            });
+    };
+    reference_source(context, Some(discipline)).map(|(reference, _)| reference)
+}
+
+/// The coordinate systems of the reference and of `source`.
+fn systems(
+    call: &MeasuredCall,
+    source: &SourceId,
+    context: &RuleContext<'_>,
+) -> Result<(SourceCoordinateSystem, SourceCoordinateSystem), Unavailable> {
+    let service = service(context)?;
     let reference = reference(call, context)?;
     let base = service.coordinate_system(&reference).map_err(|error| {
         (
@@ -76,7 +108,7 @@ fn systems(
         )
     })?;
     let own = service
-        .coordinate_system(&object.source)
+        .coordinate_system(source)
         .map_err(|error| (NotEvaluatedReason::IncompleteEvidence, error.to_string()))?;
     Ok((base, own))
 }
@@ -148,12 +180,14 @@ fn stated(
 }
 
 impl CoordinateMeasures {
-    fn measure_object(
+    /// One statement of `source`'s coordinate system compared with the
+    /// reference's.
+    fn measure_of(
         call: &MeasuredCall,
-        object: &ObjectId,
+        source: &SourceId,
         context: &RuleContext<'_>,
     ) -> Result<Measurement, Unavailable> {
-        let (base, own) = systems(call, object, context)?;
+        let (base, own) = systems(call, source, context)?;
         let locator = format!(
             "{}: {} against {}",
             call.name(),
@@ -227,11 +261,165 @@ impl CoordinateMeasures {
             },
         })
     }
+
+    /// How many sources are compared with the reference, which it cites.
+    fn reference_of(
+        call: &MeasuredCall,
+        context: &RuleContext<'_>,
+    ) -> Result<(Measurement, Citation), Unavailable> {
+        let (reference, others) = reference_source(context, discipline(call))?;
+        #[allow(clippy::cast_precision_loss)]
+        let compared = others.len() as f64;
+        Ok((
+            Measurement::Rounded {
+                lower: compared,
+                upper: compared,
+                dimension: None,
+                locator: format!("{COORDINATE_REFERENCE}: `{reference}`"),
+            },
+            Citation {
+                sources: vec![reference],
+                ..Citation::default()
+            },
+        ))
+    }
+
+    /// Each statement of `source`'s coordinate system departing from the
+    /// reference's beyond the tolerances, or not comparable, in
+    /// [`compare_coordinate_systems`]'s words and order, then the
+    /// georeference; of the reference itself, only a missing map
+    /// conversion the call requires. The evidence of both systems.
+    fn differences_of(
+        call: &MeasuredCall,
+        source: &SourceId,
+        context: &RuleContext<'_>,
+    ) -> Result<(Vec<MeasuredMember>, Vec<Evidence>), Unavailable> {
+        let number = |key: &str| match call.argument(key) {
+            Some(MeasuredArgument::Length(value) | MeasuredArgument::Number(value)) => Ok(*value),
+            _ => Err(invalid(format!("`{key}` states no number"))),
+        };
+        let tolerance = CoordinateTolerance::try_new(
+            number("length")?,
+            number("angle")?.to_radians(),
+            number("scale")?,
+        )
+        .map_err(invalid)?;
+        let require_map = matches!(
+            call.argument("require_map"),
+            Some(MeasuredArgument::Truth(true))
+        );
+        let service = service(context)?;
+        let reference = reference(call, context)?;
+        if *source == reference {
+            // The reference is never compared with itself; a coordinate
+            // system it cannot read leaves every other source open instead.
+            let Ok(base) = service.coordinate_system(&reference) else {
+                return Ok((Vec::new(), Vec::new()));
+            };
+            let members = if require_map && base.map().is_none() {
+                vec![item(
+                    Some(true),
+                    "states no map conversion; the federation requires one",
+                    true,
+                    base.evidence().exact,
+                )]
+            } else {
+                Vec::new()
+            };
+            return Ok((members, vec![base.evidence().clone()]));
+        }
+        let (base, own) = systems(call, source, context)?;
+        let exact = base.evidence().exact && own.evidence().exact;
+        let consistency = compare_coordinate_systems(&base, &own, tolerance);
+        let mut members: Vec<MeasuredMember> = consistency
+            .differences
+            .iter()
+            .map(|(_, words)| item(Some(true), words, true, exact))
+            .chain(
+                consistency
+                    .unknown
+                    .iter()
+                    .map(|(_, why)| item(None, why, true, exact)),
+            )
+            .collect();
+        if let Some((found, words, recorded)) = georeference(&consistency, require_map) {
+            members.push(item(found, &words, recorded, exact));
+        }
+        Ok((
+            members,
+            vec![base.evidence().clone(), own.evidence().clone()],
+        ))
+    }
+}
+
+/// Whether two sources' georeferences agree, from whether each states a
+/// map conversion: `None` where they are compared (both state one) or
+/// nothing is to say; otherwise whether that is a difference (`Some(true)`,
+/// a source stating none where one is required) or unknown (`None`), its
+/// words and whether it is recorded.
+fn georeference(
+    consistency: &CoordinateConsistency,
+    require_map: bool,
+) -> Option<(Option<bool>, String, bool)> {
+    match consistency.georeferenced {
+        (_, false) if require_map => Some((Some(true), "states no map conversion".into(), true)),
+        (true, true) => None,
+        // The reference's own missing conversion is its own finding.
+        (false, true) if require_map => None,
+        (reference_map, source_map) => Some((
+            None,
+            format!(
+                "{} no map conversion, so whether the georeferences agree is unknown",
+                match (reference_map, source_map) {
+                    (true, false) => "this source states",
+                    (false, true) => "the reference states",
+                    _ => "neither source states",
+                }
+            ),
+            false,
+        )),
+    }
+}
+
+/// One statement compared: found (`Some(true)`), or undecided (`None`)
+/// with why, in `words`.
+fn item(found: Option<bool>, words: &str, recorded: bool, exact: bool) -> MeasuredMember {
+    let found = match found {
+        Some(value) => MemberValue::Truth {
+            value,
+            locator: format!("{COORDINATE_DIFFERENCES}: {words}"),
+        },
+        None => MemberValue::Undecided {
+            why: words.to_owned(),
+        },
+    };
+    MeasuredMember {
+        certain: true,
+        exact,
+        fields: [
+            ("found", found),
+            (
+                "finding",
+                MemberValue::Text {
+                    text: words.to_owned(),
+                },
+            ),
+            (
+                "recorded",
+                MemberValue::Truth {
+                    value: recorded,
+                    locator: format!("{COORDINATE_DIFFERENCES}: {words}"),
+                },
+            ),
+        ]
+        .into(),
+    }
 }
 
 impl MeasuredProvider for CoordinateMeasures {
     fn names(&self) -> &'static [&'static str] {
         &[
+            COORDINATE_REFERENCE,
             COORDINATE_SHIFT,
             COORDINATE_TURN,
             MAP_CONVERSION,
@@ -240,12 +428,46 @@ impl MeasuredProvider for CoordinateMeasures {
         ]
     }
 
+    fn member_lists(&self) -> &'static [&'static str] {
+        &[COORDINATE_DIFFERENCES]
+    }
+
+    /// A source's value, read on an object: its source's.
     fn measure(
         &self,
         call: &MeasuredCall,
         object: &ObjectId,
         context: &RuleContext<'_>,
     ) -> Result<Measurement, PropertyResolutionError> {
-        Self::measure_object(call, object, context).map_err(refused(call.name(), object))
+        self.measure_source(call, &object.source, context)
+            .map(|(measurement, _)| measurement)
+    }
+
+    fn measure_source(
+        &self,
+        call: &MeasuredCall,
+        source: &SourceId,
+        context: &RuleContext<'_>,
+    ) -> Result<(Measurement, Citation), PropertyResolutionError> {
+        Self::measure_of(call, source, context)
+            .map(|measurement| (measurement, Citation::default()))
+            .map_err(refused(call.name(), source))
+    }
+
+    fn measure_project(
+        &self,
+        call: &MeasuredCall,
+        context: &RuleContext<'_>,
+    ) -> Result<(Measurement, Citation), PropertyResolutionError> {
+        Self::reference_of(call, context).map_err(refused(call.name(), "the project"))
+    }
+
+    fn members_of_source(
+        &self,
+        call: &MeasuredCall,
+        source: &SourceId,
+        context: &RuleContext<'_>,
+    ) -> Result<(Vec<MeasuredMember>, Vec<Evidence>), PropertyResolutionError> {
+        Self::differences_of(call, source, context).map_err(refused(call.name(), source))
     }
 }

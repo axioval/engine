@@ -234,7 +234,15 @@ fn bound(
             }
             MeasuredArgument::Path(steps.iter().map(|step| step.trim().to_owned()).collect())
         }
-        (MeasuredParameterKind::Path, _) => return Err(not("a string list")),
+        (MeasuredParameterKind::Choices { options }, ParameterValue::StringList { value }) => {
+            MeasuredArgument::Choices(
+                axioval_ir::measured::choices(options, value.iter().map(String::as_str))
+                    .map_err(|why| invalid(format!("{reference}: {why}")))?,
+            )
+        }
+        (MeasuredParameterKind::Path | MeasuredParameterKind::Choices { .. }, _) => {
+            return Err(not("a string list"));
+        }
         (
             MeasuredParameterKind::Choice { .. }
             | MeasuredParameterKind::Text

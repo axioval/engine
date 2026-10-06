@@ -14,7 +14,7 @@ use std::hash::Hash;
 use std::sync::{Arc, Mutex};
 
 use axioval_ir::measured::{MeasuredArgument, MeasuredCall};
-use axioval_ir::{Evidence, ObjectId, Project, QuantityDimension};
+use axioval_ir::{Evidence, ObjectId, Project, QuantityDimension, SourceId};
 
 use crate::properties::PropertyResolutionError;
 use crate::{RuleContext, ServiceRegistry};
@@ -146,6 +146,9 @@ pub struct Citation {
     /// measured (a counterpart whose extent cannot be read), in the order
     /// found.
     pub notes: Vec<String>,
+    /// The sources measured against, sorted by identity: the reference
+    /// source a source is compared with. A message names them.
+    pub sources: Vec<SourceId>,
 }
 
 /// Trusted code measuring registered values.
@@ -221,6 +224,68 @@ pub trait MeasuredProvider: Send + Sync + 'static {
         object: &ObjectId,
         context: &RuleContext<'_>,
     ) -> Result<Measurement, PropertyResolutionError>;
+
+    /// Measures `call`, a value whose subject is a source
+    /// ([`MeasuredSubject::Source`](axioval_ir::measured::MeasuredSubject::Source)),
+    /// of `source`, with what it was measured against: what every object
+    /// of the source reads, and what a template judging the source reads
+    /// where it holds no object. By default it measures none.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::measure`].
+    fn measure_source(
+        &self,
+        call: &MeasuredCall,
+        source: &SourceId,
+        context: &RuleContext<'_>,
+    ) -> Result<(Measurement, Citation), PropertyResolutionError> {
+        let _ = (source, context);
+        Err(PropertyResolutionError::MissingService(format!(
+            "no built-in code measures `{}` of a source",
+            call.name()
+        )))
+    }
+
+    /// Measures `call`, a value of the whole project
+    /// ([`MeasuredSubject::Project`](axioval_ir::measured::MeasuredSubject::Project)),
+    /// with what it was measured against: what every object reads, and
+    /// what a template reads once per rule. By default it measures none.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::measure`].
+    fn measure_project(
+        &self,
+        call: &MeasuredCall,
+        context: &RuleContext<'_>,
+    ) -> Result<(Measurement, Citation), PropertyResolutionError> {
+        let _ = context;
+        Err(PropertyResolutionError::MissingService(format!(
+            "no built-in code measures `{}` of the project",
+            call.name()
+        )))
+    }
+
+    /// The members `call`, a list whose subject is a source, lists of
+    /// `source`, with the evidence of the measurement they come from. By
+    /// default it lists none.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::measure`].
+    fn members_of_source(
+        &self,
+        call: &MeasuredCall,
+        source: &SourceId,
+        context: &RuleContext<'_>,
+    ) -> Result<(Vec<MeasuredMember>, Vec<Evidence>), PropertyResolutionError> {
+        let _ = (source, context);
+        Err(PropertyResolutionError::MissingService(format!(
+            "no built-in code measures `{}` of a source",
+            call.name()
+        )))
+    }
 
     /// Measures `call` of each of `objects`, one answer per object in
     /// order, each exactly what [`Self::measure`] answers for it: the batch
@@ -328,7 +393,32 @@ pub fn measured_members_bound(
         project: &providers.project,
         services,
     };
+    // A source's list is the list of each of its objects.
+    if call.descriptor.subject == axioval_ir::measured::MeasuredSubject::Source {
+        return provider.members_of_source(call, &object.source, &context);
+    }
     provider.members_cited(call, object, &context)
+}
+
+/// What `provider` measures of `call` for `object`: of the object itself,
+/// of its source or of the project, as the value's subject is declared,
+/// with what it was measured against.
+///
+/// # Errors
+///
+/// As [`MeasuredProvider::measure`].
+pub(crate) fn measure_subject(
+    provider: &dyn MeasuredProvider,
+    call: &MeasuredCall,
+    object: &ObjectId,
+    context: &RuleContext<'_>,
+) -> Result<(Measurement, Citation), PropertyResolutionError> {
+    use axioval_ir::measured::MeasuredSubject;
+    match call.descriptor.subject {
+        MeasuredSubject::Object => provider.measure_cited(call, object, context),
+        MeasuredSubject::Source => provider.measure_source(call, &object.source, context),
+        MeasuredSubject::Project => provider.measure_project(call, context),
+    }
 }
 
 /// One table of the run's memo: its entries by key, hashed by a fast keyed
@@ -530,6 +620,7 @@ fn hash_argument(argument: &MeasuredArgument, hasher: &mut impl std::hash::Hashe
             hasher.write_u64(value.to_bits());
         }
         MeasuredArgument::Choice(option) => option.hash(hasher),
+        MeasuredArgument::Choices(options) => options.hash(hasher),
         MeasuredArgument::Vector(components) => {
             for component in components {
                 hasher.write_u64(component.to_bits());

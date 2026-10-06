@@ -96,7 +96,7 @@ impl MeasuredProvider for CoverageSearch {
             Citation {
                 related: found.best.into_iter().collect(),
                 evidence: Vec::new(),
-                notes: Vec::new(),
+                ..Citation::default()
             },
         ))
     }

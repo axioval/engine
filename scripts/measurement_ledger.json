@@ -399,8 +399,13 @@
     },
     "external_wall_validation::evaluate::measure_envelope_membership": {
       "count": 1,
-      "searchOnly": "classification",
-      "reason": "envelope membership classifies walls as external by the envelope search"
+      "providedBy": [
+        "bounds_envelope",
+        "declared_external",
+        "envelope_size",
+        "external_declarations",
+        "on_envelope"
+      ]
     },
     "free_floor::ask::find_placement": {
       "count": 1,

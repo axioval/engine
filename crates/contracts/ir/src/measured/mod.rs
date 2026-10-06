@@ -93,6 +93,10 @@ pub struct MeasuredDescriptor {
     pub services: &'static [&'static str],
     /// How exact an answer can be.
     pub exactness: MeasuredExactness,
+    /// Whose value it is: each object's (the default, left out when
+    /// serialized), each source's, or the project's.
+    #[serde(skip_serializing_if = "MeasuredSubject::is_object")]
+    pub subject: MeasuredSubject,
     /// What leaves it not evaluated for an object, in plain words.
     pub not_evaluated: &'static [&'static str],
     /// A short name for editors.
@@ -171,7 +175,7 @@ impl Serialize for MeasuredParameter {
 pub enum ParameterReference {
     /// A `number` or `integer` of metres, or a `quantity` of length.
     Length,
-    /// A `stringList` of relationship steps.
+    /// A `stringList`: relationship steps, or the options chosen.
     StringList,
     /// A `string`.
     String,
@@ -202,6 +206,9 @@ pub enum MeasuredParameterKind {
     Length { minimum: f64 },
     /// One of `options`, matched ignoring ASCII case.
     Choice { options: &'static [&'static str] },
+    /// Several of `options`, `,`-separated, each at most once and matched
+    /// ignoring ASCII case, in the order written.
+    Choices { options: &'static [&'static str] },
     /// A direction in world coordinates, written `x,y,z`, not zero.
     Vector,
     /// A property the object states, written `set/name` or `name`.
@@ -237,7 +244,7 @@ impl MeasuredParameterKind {
     pub const fn reference(self) -> Option<ParameterReference> {
         match self {
             Self::Length { .. } => Some(ParameterReference::Length),
-            Self::Path => Some(ParameterReference::StringList),
+            Self::Path | Self::Choices { .. } => Some(ParameterReference::StringList),
             Self::Choice { .. } | Self::Text | Self::SourceKind => Some(ParameterReference::String),
             Self::Objects => Some(ParameterReference::Selector),
             Self::Property => Some(ParameterReference::Property),
@@ -266,6 +273,34 @@ pub enum MeasuredExactness {
     Measured,
 }
 
+/// Whose value a measured value is.
+///
+/// A value of a source or of the project read on an object is the value of
+/// the object's source, or of the project: measured once for it however
+/// many objects read it, and measurable where no object is in scope (a
+/// source holding no object, a rule's own check of the project). Its
+/// arguments never name the anchor, since no object is measured.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MeasuredSubject {
+    /// Each object's own value.
+    #[default]
+    Object,
+    /// The value of each source (a model of a federation), identified by
+    /// its source-qualified identity.
+    Source,
+    /// One value of the whole project.
+    Project,
+}
+
+impl MeasuredSubject {
+    /// Whether it is each object's own value.
+    #[must_use]
+    pub fn is_object(&self) -> bool {
+        *self == Self::Object
+    }
+}
+
 /// A measured name with its arguments, validated against its descriptor.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MeasuredCall {
@@ -273,6 +308,10 @@ pub struct MeasuredCall {
     /// Every parameter the descriptor declares that the name states or
     /// defaults, by key.
     pub arguments: BTreeMap<&'static str, MeasuredArgument>,
+    /// The rule parameter (or [`ANCHOR`]) each bound argument was bound
+    /// from, by key, so a measurement words a refusal as the rule names
+    /// it.
+    pub bound_from: BTreeMap<&'static str, String>,
 }
 
 impl MeasuredCall {
@@ -289,6 +328,13 @@ impl MeasuredCall {
             MeasuredArgument::Choice(option) => Some(option),
             _ => None,
         }
+    }
+
+    /// The rule parameter (or [`ANCHOR`]) the argument of `key` was bound
+    /// from, if it was bound.
+    #[must_use]
+    pub fn bound_from(&self, key: &str) -> Option<&str> {
+        self.bound_from.get(key).map(String::as_str)
     }
 
     /// The name of the value measured, as the registry spells it.
@@ -345,6 +391,10 @@ impl MeasuredCall {
                     MeasuredParameterKind::Choice { .. },
                     MeasuredArgument::Choice(_)
                 )
+                | (
+                    MeasuredParameterKind::Choices { .. },
+                    MeasuredArgument::Choices(_)
+                )
                 | (MeasuredParameterKind::Text, MeasuredArgument::Text(_))
                 | (
                     MeasuredParameterKind::SourceKind | MeasuredParameterKind::Objects,
@@ -365,6 +415,11 @@ impl MeasuredCall {
         if !fits {
             return Err(invalid("the bound value is not of the parameter's kind"));
         }
+        let from = match self.arguments.get(parameter.key) {
+            Some(MeasuredArgument::Parameter(name)) => name.clone(),
+            _ => ANCHOR.to_owned(),
+        };
+        self.bound_from.insert(parameter.key, from);
         self.arguments.insert(parameter.key, argument);
         Ok(())
     }
@@ -436,6 +491,9 @@ pub enum MeasuredArgument {
     Length(f64),
     /// The option chosen, as the registry spells it.
     Choice(&'static str),
+    /// The options chosen, as the registry spells them, in the order
+    /// written.
+    Choices(Vec<&'static str>),
     /// A direction's components, as written.
     Vector([f64; 3]),
     /// A word, as written.
@@ -602,12 +660,25 @@ fn parse_in(
             detail,
         };
         let argument = argument(parameter.kind, value).map_err(invalid)?;
+        // No object is measured for a source or the project.
+        if argument == MeasuredArgument::Anchor && !descriptor.subject.is_object() {
+            return Err(invalid(format!(
+                "`{value}` names the anchor, but `{}` is measured for each {}, never for an \
+                 object",
+                descriptor.name,
+                match descriptor.subject {
+                    MeasuredSubject::Project => "project",
+                    _ => "source",
+                }
+            )));
+        }
         arguments.insert(parameter.key, argument);
     }
     facing(descriptor, &arguments)?;
     Ok(MeasuredCall {
         descriptor,
         arguments,
+        bound_from: BTreeMap::new(),
     })
 }
 
@@ -752,6 +823,9 @@ fn argument(kind: MeasuredParameterKind, value: &str) -> Result<MeasuredArgument
                 .find(|option| option.eq_ignore_ascii_case(value))
                 .ok_or_else(|| format!("`{value}` is none of {}", options.join(", ")))?,
         ),
+        MeasuredParameterKind::Choices { options } => {
+            MeasuredArgument::Choices(choices(options, value.split(','))?)
+        }
         MeasuredParameterKind::Text => {
             if value.is_empty() {
                 return Err("it is empty".into());
@@ -813,6 +887,35 @@ fn argument(kind: MeasuredParameterKind, value: &str) -> Result<MeasuredArgument
             ));
         }
     })
+}
+
+/// The options `written` chooses among `options`, each at most once, in
+/// the order written; or why they are none.
+///
+/// # Errors
+///
+/// An option none of `options` matches ignoring ASCII case, one written
+/// twice, or none written.
+pub fn choices<'w>(
+    options: &'static [&'static str],
+    written: impl IntoIterator<Item = &'w str>,
+) -> Result<Vec<&'static str>, String> {
+    let mut chosen = Vec::new();
+    for value in written {
+        let value = value.trim();
+        let option = options
+            .iter()
+            .find(|option| option.eq_ignore_ascii_case(value))
+            .ok_or_else(|| format!("`{value}` is none of {}", options.join(", ")))?;
+        if chosen.contains(option) {
+            return Err(format!("`{value}` is chosen twice"));
+        }
+        chosen.push(*option);
+    }
+    if chosen.is_empty() {
+        return Err("it chooses nothing".into());
+    }
+    Ok(chosen)
 }
 
 /// Why `vertices` is no simple polygon (at least three finite vertices,
@@ -1219,5 +1322,77 @@ mod tests {
             parse("envelope_intrusions;bodies=IfcWall;envelope=0:0,1:0,1:1;from=0;to=1;step=0")
                 .is_err()
         );
+    }
+
+    /// A value of a source or of the project says so, an object's does
+    /// not; and it never names the anchor, since no object is measured.
+    #[test]
+    fn a_value_of_a_source_or_the_project_states_its_subject() {
+        let descriptor = |name: &str| {
+            MEASURED_VALUES
+                .iter()
+                .find(|descriptor| descriptor.name == name)
+                .unwrap()
+        };
+        assert_eq!(
+            descriptor("coordinate_shift").subject,
+            MeasuredSubject::Source
+        );
+        assert_eq!(
+            descriptor("coordinate_reference").subject,
+            MeasuredSubject::Project
+        );
+        assert_eq!(descriptor("on_envelope").subject, MeasuredSubject::Object);
+        let json = |name: &str| serde_json::to_value(descriptor(name)).unwrap();
+        assert_eq!(json("external_declarations")["subject"], "source");
+        assert!(json("on_envelope").get("subject").is_none());
+        assert_eq!(
+            member_descriptor("coordinate_differences").map(|members| members.list.subject),
+            Some(MeasuredSubject::Source)
+        );
+        let refused = parse("external_declarations;derivations=all-spaces;objects=@anchor")
+            .unwrap_err()
+            .to_string();
+        assert!(refused.contains("measured for each source"), "{refused}");
+        assert!(parse("on_envelope;derivation=all-spaces;bounding=@anchor").is_ok());
+    }
+
+    /// Choices are options, each at most once, in the order written; a
+    /// string list binds them.
+    #[test]
+    fn choices_are_options_listed_once() {
+        let call =
+            parse("external_declarations;derivations=gross-area-groups, ALL-SPACES;objects=wall")
+                .unwrap();
+        assert_eq!(
+            call.argument("derivations"),
+            Some(&MeasuredArgument::Choices(vec![
+                "gross-area-groups",
+                "all-spaces"
+            ]))
+        );
+        for (written, reason) in [
+            ("all-spaces,all-spaces", "twice"),
+            ("all-spaces,whole", "none of"),
+            ("", "none of"),
+        ] {
+            let error = parse(&format!(
+                "external_declarations;derivations={written};objects=wall"
+            ))
+            .unwrap_err()
+            .to_string();
+            assert!(error.contains(reason), "{written}: {error}");
+        }
+        let mut call =
+            parse("external_declarations;derivations=@derivations;objects=wall").unwrap();
+        assert_eq!(
+            call.parameter("derivations")
+                .and_then(|parameter| parameter.kind.reference()),
+            Some(ParameterReference::StringList)
+        );
+        call.bind("derivations", MeasuredArgument::Choices(vec!["all-spaces"]))
+            .unwrap();
+        assert_eq!(call.bound_from("derivations"), Some("derivations"));
+        assert!(call.is_bound());
     }
 }

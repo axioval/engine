@@ -8,13 +8,13 @@
 use serde::Serialize;
 
 use super::registry::{
-    ANGLE_TOLERANCE, EFFECT_SERVICES, EFFECT_UNMEASURED, EFFECTIVE, FACE, FACE_AXES, FACING,
-    MEMBER_PATH, NO_FACE, NO_GEOMETRY, OPENINGS_MINIMUM, PAIRED, SPACED_MEMBERS, WELL_MEMBERS,
-    en_de,
+    ANGLE_TOLERANCE, COORDINATE_DIFFERENCES, COORDINATES, COORDINATES_UNREAD, EFFECT_SERVICES,
+    EFFECT_UNMEASURED, EFFECTIVE, FACE, FACE_AXES, FACING, MEMBER_PATH, NO_FACE, NO_GEOMETRY,
+    OPENINGS_MINIMUM, PAIRED, SPACED_MEMBERS, WELL_MEMBERS, en_de,
 };
 use super::{
     FACE_PIECES, LocalizedText, MeasuredCall, MeasuredDescriptor, MeasuredError, MeasuredExactness,
-    MeasuredParameter, MeasuredParameterKind,
+    MeasuredParameter, MeasuredParameterKind, MeasuredSubject,
 };
 use crate::QuantityDimension;
 
@@ -191,6 +191,7 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             dimension: None,
             services: &["plan-span", "proximity", "type-hierarchy"],
             exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
             not_evaluated: &[
                 "the object has no body the service can measure",
                 "an object near it has no readable extent",
@@ -315,6 +316,7 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             dimension: None,
             services: &["plan-span", "type-hierarchy"],
             exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
             not_evaluated: &[
                 "the walls beside the footprint cannot be measured",
                 "the footprint has no long axis",
@@ -392,11 +394,72 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
     walking::CLEARANCES,
     MemberDescriptor {
         list: MeasuredDescriptor {
+            name: "coordinate_differences",
+            parameters: &COORDINATE_DIFFERENCES,
+            dimension: None,
+            services: COORDINATES,
+            exactness: MeasuredExactness::Stated,
+            subject: MeasuredSubject::Source,
+            not_evaluated: &[COORDINATES_UNREAD],
+            label: &en_de("Coordinate differences", "Koordinatenabweichungen"),
+            help: &en_de(
+                "Each statement in which the source's coordinate system departs from the \
+                 reference source's beyond the tolerances, or cannot be compared with it, \
+                 as `coordinate-consistency` compares them: the world frame, true north, \
+                 the map conversion and the site, then the georeference. The reference \
+                 itself lists only a missing map conversion the rule requires.",
+                "Jede Angabe, in der das Koordinatensystem der Quelle über die Toleranzen \
+                 hinaus von dem der Referenzquelle abweicht oder nicht mit ihm verglichen \
+                 werden kann, wie `coordinate-consistency` sie vergleicht: der Weltrahmen, \
+                 geografisch Nord, die Kartenumrechnung und das Grundstück, dann die \
+                 Georeferenz. Die Referenz selbst nennt nur eine fehlende geforderte \
+                 Kartenumrechnung.",
+            ),
+        },
+        fields: &[
+            field(
+                "found",
+                MemberFieldKind::Truth,
+                &en_de("Differs", "Weicht ab"),
+                &en_de(
+                    "True where the statement differs beyond the tolerances; undecided, \
+                     with why, where it cannot be compared.",
+                    "Wahr, wo die Angabe über die Toleranzen hinaus abweicht; \
+                     unentschieden, mit Grund, wo sie nicht verglichen werden kann.",
+                ),
+            ),
+            field(
+                "finding",
+                MemberFieldKind::Text,
+                &en_de("Difference", "Abweichung"),
+                &en_de(
+                    "The difference in words (`map offset moved by 1.0000 m`), or why the \
+                     statement cannot be compared.",
+                    "Die Abweichung in Worten (`map offset moved by 1.0000 m`) oder warum \
+                     die Angabe nicht verglichen werden kann.",
+                ),
+            ),
+            field(
+                "recorded",
+                MemberFieldKind::Truth,
+                &en_de("Recorded", "Erfasst"),
+                &en_de(
+                    "False where the statement cannot be compared because a source records \
+                     none (a map conversion), true otherwise.",
+                    "Falsch, wo die Angabe nicht verglichen werden kann, weil eine Quelle \
+                     keine erfasst (eine Kartenumrechnung), sonst wahr.",
+                ),
+            ),
+        ],
+    },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
             name: "effective_missing",
             parameters: EFFECTIVE,
             dimension: None,
             services: EFFECT_SERVICES,
             exactness: MeasuredExactness::Stated,
+            subject: MeasuredSubject::Object,
             not_evaluated: EFFECT_UNMEASURED,
             label: &en_de("Missing capacities", "Fehlende Kapazitäten"),
             help: &en_de(
@@ -467,6 +530,7 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             dimension: None,
             services: &["plan-span", "relationship-selection"],
             exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
             not_evaluated: &["the wall an end runs into is undecided"],
             label: &en_de("Corridor end walls", "Flurstirnwände"),
             help: &en_de(
@@ -541,6 +605,7 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             dimension: None,
             services: &["plan-span", "proximity", "relationship-selection"],
             exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
             not_evaluated: &["a pair's separation cannot be measured"],
             label: &en_de("Exit pairs", "Ausgangspaare"),
             help: &en_de(
@@ -565,6 +630,7 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             dimension: None,
             services: &["vertical-extent"],
             exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
             not_evaluated: &[NO_GEOMETRY, NO_FACE, "an open surface faces no direction"],
             label: &en_de("Face pieces", "Flächenteile"),
             help: &en_de(
@@ -718,6 +784,7 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             dimension: None,
             services: &["free-space", "relationship-selection"],
             exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
             not_evaluated: &["the free-space service cannot search the floor"],
             label: &en_de("Free placements", "Freie Stellflächen"),
             help: &en_de(
@@ -822,6 +889,7 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             dimension: None,
             services: &["guard", "type-hierarchy"],
             exactness: MeasuredExactness::Stated,
+            subject: MeasuredSubject::Object,
             not_evaluated: &[
                 "the guard service cannot measure the surface's exposed edges",
                 "no edge of the surface is measured",
@@ -975,6 +1043,7 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             dimension: None,
             services: FLIGHTS,
             exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
             not_evaluated: &[
                 "the walking-surface service cannot measure the flight's or ramp's handrails",
                 "the pieces along a side lie beside one another, not one after another",
@@ -1163,6 +1232,7 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             dimension: None,
             services: &["relationship-selection", "body-facts"],
             exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
             not_evaluated: &[
                 "whether a reached object is a host is undecided",
                 "the opening or its host is no straight extrusion the body set bounds",
@@ -1260,6 +1330,7 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             dimension: None,
             services: PAIRED,
             exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
             not_evaluated: &[
                 "a member's extent cannot be read",
                 "whether two members are parallel and face each other is unknown",
@@ -1313,6 +1384,7 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             dimension: None,
             services: &["plan-span"],
             exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
             not_evaluated: &[
                 "the plan-span service does not measure the recesses",
                 "a recess's depth straddles a row's bound: its row and required width are \
@@ -1397,6 +1469,7 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             dimension: None,
             services: FLIGHTS,
             exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
             not_evaluated: &["the walking-surface service cannot measure the ramp's runs"],
             label: &en_de("Ramp runs", "Rampenläufe"),
             help: &en_de(
@@ -1591,6 +1664,7 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             dimension: None,
             services: &["line-of-sight", "plan-span", "vertical-extent"],
             exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
             not_evaluated: &[
                 "a service is not registered",
                 "the component's centre or base is not known exactly",
@@ -1681,6 +1755,7 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             dimension: None,
             services: FLIGHTS,
             exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
             not_evaluated: &["the walking-surface service cannot measure the flight's treads"],
             label: &en_de("Flight steps", "Stufen eines Laufs"),
             help: &en_de(
@@ -1808,6 +1883,7 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             dimension: None,
             services: &["object-frame", "free-space", "relationship-selection"],
             exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
             not_evaluated: &[
                 "the door's leaves are unknown",
                 "the door has no hinged leaf",
@@ -1855,6 +1931,7 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             dimension: None,
             services: &["vertical-extent", "relationship-selection"],
             exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
             not_evaluated: &[
                 "the path reaches no space",
                 "a stacked space's vertical extent cannot be measured",
@@ -1925,6 +2002,7 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             dimension: None,
             services: &["vertical-extent", "plan-span", "relationship-selection"],
             exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
             not_evaluated: &[
                 "the path reaches no space",
                 "the shared plan section cannot be measured",

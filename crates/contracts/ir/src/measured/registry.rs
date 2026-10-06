@@ -3,8 +3,8 @@
 use super::{
     ANGLE_TO, BEARING, CLEAR_HEIGHT, CLEAR_WIDTH, CLEARANCE_BELOW, COUNT_WITHIN, CROSS_FALL,
     DISTANCE, EXTENT, GRADIENT_DIRECTION, HEADROOM, INCLINATION, LENGTH, LocalizedText,
-    MeasuredDescriptor, MeasuredExactness, MeasuredParameter, MeasuredParameterKind, PERIMETER,
-    SKEW, SLOPE, SLOPE_ALONG, THICKNESS,
+    MeasuredDescriptor, MeasuredExactness, MeasuredParameter, MeasuredParameterKind,
+    MeasuredSubject, PERIMETER, SKEW, SLOPE, SLOPE_ALONG, THICKNESS,
 };
 use crate::{
     MEASURED_AREA, MEASURED_BOTTOM, MEASURED_BOTTOM_ABOVE_LEVEL, MEASURED_BOUNDARY_AREA,
@@ -1346,10 +1346,124 @@ const REFERENCE_SOURCE: MeasuredParameter = MeasuredParameter {
     ),
 };
 
-const COORDINATES: &[&str] = &["coordinate-system"];
+pub(super) const COORDINATES: &[&str] = &["coordinate-system"];
 const UNCOMPARED: &str = "only one of the two sources makes the statement, or a coordinate \
      system cannot be read";
 const UNGEOREFERENCED: &str = "a source states no map conversion (not recorded)";
+
+/// The reference and tolerances two coordinate systems are compared with.
+pub(super) const COORDINATE_DIFFERENCES: [MeasuredParameter; 5] = [
+    REFERENCE_SOURCE,
+    MeasuredParameter {
+        key: "length",
+        kind: MeasuredParameterKind::Length { minimum: 0.0 },
+        required: false,
+        default: Some("0.001"),
+        help: &en_de(
+            "How far origins and offsets may lie apart, in metres.",
+            "Wie weit Ursprünge und Versätze auseinanderliegen dürfen, in Metern.",
+        ),
+    },
+    MeasuredParameter {
+        key: "angle",
+        kind: MeasuredParameterKind::Number { minimum: 0.0 },
+        required: false,
+        default: Some("0.01"),
+        help: &en_de(
+            "How far axes, true north and the map rotation may turn, in degrees.",
+            "Wie weit Achsen, geografisch Nord und die Kartendrehung abweichen dürfen, in \
+             Grad.",
+        ),
+    },
+    MeasuredParameter {
+        key: "scale",
+        kind: MeasuredParameterKind::Number { minimum: 0.0 },
+        required: false,
+        default: Some("0"),
+        help: &en_de(
+            "How far the map scales may differ.",
+            "Wie weit die Kartenmaßstäbe abweichen dürfen.",
+        ),
+    },
+    MeasuredParameter {
+        key: "require_map",
+        kind: MeasuredParameterKind::Truth,
+        required: false,
+        default: Some("false"),
+        help: &en_de(
+            "Whether every source must state a map conversion: one stating none then \
+             differs, rather than leaving the georeference unknown.",
+            "Ob jede Quelle eine Kartenumrechnung angeben muss: eine ohne weicht dann ab, \
+             statt die Georeferenz offen zu lassen.",
+        ),
+    },
+];
+
+/// What a coordinate system cannot be compared for.
+pub(super) const COORDINATES_UNREAD: &str = "a coordinate system cannot be read";
+
+const ENVELOPE: &[&str] = &["envelope-membership", "relationship-selection"];
+const NO_ENVELOPE: &str = "the derivation's objects cannot all be decided, it is derived around \
+     none, or the envelope-membership service cannot derive it";
+const UNDECLARED: &str =
+    "the model states neither external nor internal, or the body could not be measured";
+
+/// The derivation of a building envelope.
+const DERIVATION: MeasuredParameter = MeasuredParameter {
+    key: "derivation",
+    kind: MeasuredParameterKind::Choice {
+        options: &["all-spaces", "gross-area-groups"],
+    },
+    required: true,
+    default: None,
+    help: &en_de(
+        "Around the objects `bounding` picks (`all-spaces`), or around the members the \
+         groups `groups` picks reach along `group_path` (`gross-area-groups`).",
+        "Um die Objekte, die `bounding` wählt (`all-spaces`), oder um die Mitglieder, die \
+         die von `groups` gewählten Gruppen entlang `group_path` erreichen \
+         (`gross-area-groups`).",
+    ),
+};
+
+/// What a derivation of the building envelope is derived around.
+const ENVELOPE_BOUNDS: [MeasuredParameter; 3] = [
+    selected(
+        "bounding",
+        false,
+        &en_de(
+            "The objects the `all-spaces` envelope is derived around, every one decided.",
+            "Die Objekte, um die die Hülle `all-spaces` abgeleitet wird, jedes entschieden.",
+        ),
+    ),
+    selected(
+        "groups",
+        false,
+        &en_de(
+            "The groups whose members the `gross-area-groups` envelope is derived around, \
+             every one decided.",
+            "Die Gruppen, um deren Mitglieder die Hülle `gross-area-groups` abgeleitet wird, \
+             jede entschieden.",
+        ),
+    ),
+    MeasuredParameter {
+        key: "group_path",
+        kind: MeasuredParameterKind::Path,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The relationship path from a group to its members.",
+            "Der Beziehungspfad von einer Gruppe zu ihren Mitgliedern.",
+        ),
+    },
+];
+
+/// What `envelope_size` and the values read from the same derivation take.
+const ENVELOPE_DERIVED: [MeasuredParameter; 4] = [
+    DERIVATION,
+    ENVELOPE_BOUNDS[0],
+    ENVELOPE_BOUNDS[1],
+    ENVELOPE_BOUNDS[2],
+];
 
 macro_rules! plain {
     ($name:expr, $dimension:expr, $services:expr, $exactness:expr, $not:expr,
@@ -1360,6 +1474,7 @@ macro_rules! plain {
             dimension: $dimension,
             services: $services,
             exactness: $exactness,
+            subject: MeasuredSubject::Object,
             not_evaluated: $not,
             label: &$label,
             help: &$help,
@@ -1554,6 +1669,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: ALIGNMENT_SERVICES,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             ALIGNMENT_UNREAD,
             OFF_RANGE,
@@ -1574,6 +1690,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: ALIGNMENT_SERVICES,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             ALIGNMENT_UNREAD,
             OFF_RANGE,
@@ -1594,6 +1711,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: ALIGNMENT_SERVICES,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             ALIGNMENT_UNREAD,
             OFF_RANGE,
@@ -1614,6 +1732,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: ALIGNMENT_SERVICES,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             ALIGNMENT_UNREAD,
             OFF_RANGE,
@@ -1651,6 +1770,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::PlaneAngle),
         services: &["plan-span", "relationship-selection", "vertical-extent"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_GEOMETRY, NO_LONG_AXIS, STANDS_VERTICAL],
         label: &en_de("Angle to", "Winkel zu"),
         help: &en_de(
@@ -1711,6 +1831,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Area),
         services: PAIRED_PLAN_AREA,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             NO_GEOMETRY,
             "the path reaches no footprint object",
@@ -1761,6 +1882,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::PlaneAngle),
         services: &["object-frame", "plan-span", "coordinate-system"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             "the placement is not stated exactly",
             NO_LONG_AXIS,
@@ -1793,6 +1915,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: FACES_AND_FRAMES,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             NO_GEOMETRY,
             "the object's placement is not stated or not readable",
@@ -1839,6 +1962,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: FACES_AND_FRAMES,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             NO_GEOMETRY,
             "the object's placement is not stated or not readable",
@@ -1884,6 +2008,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: &["relationship-selection", "object-frame", "vertical-extent"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             NO_GEOMETRY,
             "a reached level's placement is not stated exactly",
@@ -1925,6 +2050,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Area),
         services: &["boundary-coverage", "type-hierarchy"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             "a boundary names no bounding element",
             "a bounding element's kind cannot be decided",
@@ -1942,6 +2068,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: &["boundary-coverage"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_GEOMETRY],
         label: &en_de("Covered boundary share", "Bedeckter Randanteil"),
         help: &en_de(
@@ -1979,6 +2106,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: SPACE,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[SPACE_UNMEASURED],
         label: &en_de("Uncovered boundary", "Unbedeckter Raumrand"),
         help: &en_de(
@@ -1994,6 +2122,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: &["boundary-coverage"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_GEOMETRY],
         label: &en_de(
             "Boundaries off the surface",
@@ -2012,6 +2141,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Area),
         services: &["boundary-coverage"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_GEOMETRY],
         label: &en_de(
             "Overlapping boundary area",
@@ -2028,11 +2158,28 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Area),
         services: &["boundary-coverage"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_GEOMETRY],
         label: &en_de("Uncovered boundary area", "Unbedeckte Begrenzungsfläche"),
         help: &en_de(
             "The area of a space body's surface no declared boundary covers.",
             "Die Fläche der Oberfläche eines Raumkörpers, die keine Raumbegrenzung bedeckt.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "bounds_envelope",
+        parameters: &ENVELOPE_DERIVED,
+        dimension: None,
+        services: ENVELOPE,
+        exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[NO_ENVELOPE],
+        label: &en_de("Bounds the envelope", "Begrenzt die Hülle"),
+        help: &en_de(
+            "1 where the derivation is derived around the object (a space bounding the \
+             envelope, a member of a group), 0 elsewhere.",
+            "1, wo die Ableitung um das Objekt erfolgt (ein Raum, der die Hülle begrenzt, ein \
+             Mitglied einer Gruppe), sonst 0.",
         ),
     },
     MeasuredDescriptor {
@@ -2055,6 +2202,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: SPACE,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[SPACE_UNMEASURED],
         label: &en_de("Cap coverage", "Deckenabdeckung"),
         help: &en_de(
@@ -2126,6 +2274,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: &["plan-span", "type-hierarchy"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             "the footprint has no long axis",
             "no side is surely nearer a wall than the others",
@@ -2206,6 +2355,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: WALKING,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_WALKING_SURFACE, UNDECIDED_KIND],
         label: &en_de("Clear width", "Lichte Breite"),
         help: &en_de(
@@ -2227,6 +2377,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: WALKING,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             NO_WALKING_SURFACE,
             UNDECIDED_KIND,
@@ -2246,6 +2397,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Area),
         services: &["contact", "type-hierarchy"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_GEOMETRY],
         label: &en_de("Contact area", "Kontaktfläche"),
         help: &en_de(
@@ -2259,6 +2411,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: &["contact", "type-hierarchy"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             NO_GEOMETRY,
             "the body has no direction the service can orient",
@@ -2279,11 +2432,33 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: &["contact", "type-hierarchy"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_GEOMETRY],
         label: &en_de("Contact share", "Kontaktanteil"),
         help: &en_de(
             "The share of a face in contact, from 0 to 1, as `slab-contact` judges it.",
             "Der Anteil einer Seite in Kontakt, von 0 bis 1, wie `slab-contact` ihn beurteilt.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "coordinate_reference",
+        parameters: &[REFERENCE_SOURCE],
+        dimension: None,
+        services: &["source-disciplines"],
+        exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Project,
+        not_evaluated: &[
+            "the run checks fewer than two sources",
+            "no source, or several, of the reference discipline, or sources declaring none",
+        ],
+        label: &en_de("Coordinate reference", "Koordinatenreferenz"),
+        help: &en_de(
+            "How many sources of the run are compared with the reference source (the one of \
+             the discipline `reference` names, or the first in identity order), which it \
+             cites: at least one.",
+            "Wie viele Quellen des Laufs mit der Referenzquelle verglichen werden (der der \
+             Disziplin, die `reference` nennt, oder der ersten nach Kennung), die er nennt: \
+             mindestens eine.",
         ),
     },
     MeasuredDescriptor {
@@ -2308,6 +2483,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: COORDINATES,
         exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Source,
         not_evaluated: &[
             UNCOMPARED,
             "the map unit is not stated exactly",
@@ -2315,11 +2491,11 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ],
         label: &en_de("Coordinate shift", "Koordinatenversatz"),
         help: &en_de(
-            "How far the object's source moves a statement of its coordinate system from \
+            "How far the source moves a statement of its coordinate system from \
              the reference source's, as `coordinate-consistency` compares them; none where \
              neither states a site.",
-            "Wie weit die Quelle des Objekts eine Angabe ihres Koordinatensystems gegenüber \
-             der Referenzquelle verschiebt, wie `coordinate-consistency` sie vergleicht; \
+            "Wie weit die Quelle eine Angabe ihres Koordinatensystems gegenüber der \
+             Referenzquelle verschiebt, wie `coordinate-consistency` sie vergleicht; \
              keiner, wo keine ein Grundstück angibt.",
         ),
     },
@@ -2345,14 +2521,15 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::PlaneAngle),
         services: COORDINATES,
         exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Source,
         not_evaluated: &[UNCOMPARED, UNGEOREFERENCED],
         label: &en_de("Coordinate turn", "Koordinatendrehung"),
         help: &en_de(
-            "How far the object's source turns a statement of its coordinate system from \
+            "How far the source turns a statement of its coordinate system from \
              the reference source's, as `coordinate-consistency` compares them; none where \
              neither states a site or true north.",
-            "Wie weit die Quelle des Objekts eine Angabe ihres Koordinatensystems gegenüber \
-             der Referenzquelle dreht, wie `coordinate-consistency` sie vergleicht; keine, \
+            "Wie weit die Quelle eine Angabe ihres Koordinatensystems gegenüber der \
+             Referenzquelle dreht, wie `coordinate-consistency` sie vergleicht; keine, \
              wo keine ein Grundstück oder geografisch Nord angibt.",
         ),
     },
@@ -2386,6 +2563,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: PROXIMITY,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_GEOMETRY, UNDECIDED_KIND],
         label: &en_de("Count within", "Anzahl im Umkreis"),
         help: &en_de(
@@ -2407,6 +2585,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             "type-hierarchy",
         ],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             NO_GEOMETRY,
             UNDECIDED_KIND,
@@ -2435,6 +2614,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             "type-hierarchy",
         ],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             NO_GEOMETRY,
             UNDECIDED_KIND,
@@ -2464,6 +2644,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             "type-hierarchy",
         ],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             NO_GEOMETRY,
             UNDECIDED_KIND,
@@ -2494,6 +2675,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             "type-hierarchy",
         ],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             NO_GEOMETRY,
             UNDECIDED_KIND,
@@ -2524,6 +2706,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             "type-hierarchy",
         ],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             NO_GEOMETRY,
             UNDECIDED_KIND,
@@ -2562,6 +2745,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::PlaneAngle),
         services: FACES_AND_FRAMES,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_GEOMETRY, NO_FACE, STANDS_VERTICAL, FACING_UNDECIDED],
         label: &en_de("Cross fall", "Quergefälle"),
         help: &en_de(
@@ -2569,6 +2753,22 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              over its pieces.",
             "Das Gefälle der Fläche quer zu einer Grundrissachse, ohne Vorzeichen, als \
              Winkel; die Hülle über ihre Teile.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "declared_external",
+        parameters: &ENVELOPE_DERIVED,
+        dimension: None,
+        services: ENVELOPE,
+        exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[NO_ENVELOPE, UNDECLARED],
+        label: &en_de("Declared external", "Als außen angegeben"),
+        help: &en_de(
+            "1 where the model declares the object part of the building envelope (external), \
+             0 where it declares it internal, as the derivation reads the declarations.",
+            "1, wo das Modell das Objekt als Teil der Gebäudehülle (außen) angibt, 0, wo es \
+             es als innen angibt, wie die Ableitung die Angaben liest.",
         ),
     },
     MeasuredDescriptor {
@@ -2633,6 +2833,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: PROXIMITY,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_GEOMETRY, UNDECIDED_KIND, NO_DISTANCE],
         label: &en_de("Distance", "Abstand"),
         help: &en_de(
@@ -2678,6 +2879,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: DOOR,
         exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_DOOR],
         label: &en_de("Door clear height", "Lichte Türhöhe"),
         help: &en_de(
@@ -2731,6 +2933,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: DOOR,
         exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_DOOR],
         label: &en_de("Door clear width", "Lichte Türbreite"),
         help: &en_de(
@@ -2758,6 +2961,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Area),
         services: &["plan-area", "type-hierarchy"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_GEOMETRY],
         label: &en_de("Effect-covered area", "Wirkbedeckte Fläche"),
         help: &en_de(
@@ -2771,6 +2975,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: &["plan-area", "type-hierarchy"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_GEOMETRY],
         label: &en_de("Effect-covered share", "Wirkbedeckter Anteil"),
         help: &en_de(
@@ -2784,6 +2989,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Area),
         services: EFFECT_SERVICES,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: EFFECT_UNMEASURED,
         label: &en_de("Area covered against", "Bezugsfläche der Bedeckung"),
         help: &en_de(
@@ -2799,6 +3005,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Area),
         services: EFFECT_SERVICES,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: EFFECT_UNMEASURED,
         label: &en_de("Summed capacity", "Summierte Kapazität"),
         help: &en_de(
@@ -2816,6 +3023,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Area),
         services: EFFECT_SERVICES,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: EFFECT_UNMEASURED,
         label: &en_de("Area the sources cover", "Von den Quellen bedeckte Fläche"),
         help: &en_de(
@@ -2831,6 +3039,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: EFFECT_SERVICES,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: EFFECT_UNMEASURED,
         label: &en_de("Sources reaching", "Erreichende Quellen"),
         help: &en_de(
@@ -2846,6 +3055,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: EFFECT_SERVICES,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: EFFECT_UNMEASURED,
         label: &en_de(
             "Share the sources cover",
@@ -2865,6 +3075,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: EFFECT_SERVICES,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: EFFECT_UNMEASURED,
         label: &en_de("Capacities not read", "Nicht gelesene Kapazitäten"),
         help: &en_de(
@@ -2882,6 +3093,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: FLIGHT,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_FLIGHT, "the width at that end is not measured"],
         label: &en_de("Width at an end", "Breite an einem Ende"),
         help: &en_de(
@@ -2897,6 +3109,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: &["alignment", "type-hierarchy"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             "the object is no alignment the service can read as a centreline, or a station \
              of the range is carried by no distance or by several",
@@ -2918,6 +3131,22 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              hineinragenden bis zu denen, die hineinragen können. Zwischen den Schnitten wird \
              die Umgrenzung um ihre mögliche Bewegung vergrößert, sodass ein Körper zwischen \
              zwei Schnitten nie übersehen wird; ein unentscheidbarer verbreitert die Anzahl.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "envelope_size",
+        parameters: &ENVELOPE_DERIVED,
+        dimension: None,
+        services: ENVELOPE,
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Project,
+        not_evaluated: &[NO_ENVELOPE],
+        label: &en_de("Envelope size", "Größe der Hülle"),
+        help: &en_de(
+            "How many objects the derivation places on the building envelope, whatever the \
+             model declares: the project's envelope, derived once per run.",
+            "Wie viele Objekte die Ableitung auf die Gebäudehülle legt, was immer das Modell \
+             angibt: die Hülle des Projekts, einmal je Lauf abgeleitet.",
         ),
     },
     MeasuredDescriptor {
@@ -2949,6 +3178,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: &["vertical-extent", "object-frame"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_GEOMETRY, "the placement is not stated exactly"],
         label: &en_de("Extent", "Ausdehnung"),
         help: &en_de(
@@ -2995,11 +3225,56 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         )
     ),
     MeasuredDescriptor {
+        name: "external_declarations",
+        parameters: &[
+            MeasuredParameter {
+                key: "derivations",
+                kind: MeasuredParameterKind::Choices {
+                    options: &["all-spaces", "gross-area-groups"],
+                },
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The derivations whose declarations are read, `,`-separated.",
+                    "Die Ableitungen, deren Angaben gelesen werden, durch `,` getrennt.",
+                ),
+            },
+            ENVELOPE_BOUNDS[0],
+            ENVELOPE_BOUNDS[1],
+            ENVELOPE_BOUNDS[2],
+            selected(
+                "objects",
+                true,
+                &en_de(
+                    "The objects counted: those of the source a selector parameter surely \
+                     picks.",
+                    "Die gezählten Objekte: die der Quelle, die ein Selektorparameter sicher \
+                     wählt.",
+                ),
+            ),
+        ],
+        dimension: None,
+        services: ENVELOPE,
+        exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Source,
+        not_evaluated: &[NO_ENVELOPE],
+        label: &en_de("External declarations", "Angaben als außen"),
+        help: &en_de(
+            "How many of the source's objects the model declares external in any derivation \
+             that can be derived: an interval up to those whose declaration is unknown in one \
+             (stating neither external nor internal, or unmeasured).",
+            "Wie viele der Objekte der Quelle das Modell in einer ableitbaren Ableitung als \
+             außen angibt: ein Intervall bis zu denen, deren Angabe in einer unbekannt ist \
+             (weder außen noch innen angegeben oder nicht gemessen).",
+        ),
+    },
+    MeasuredDescriptor {
         name: "facade_area",
         parameters: &[],
         dimension: Some(QuantityDimension::Area),
         services: &["facade-area"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_GEOMETRY],
         label: &en_de("Facade area", "Fassadenfläche"),
         help: &en_de(
@@ -3013,6 +3288,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Area),
         services: &["facade-area"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_GEOMETRY],
         label: &en_de("Face area", "Seitenfläche"),
         help: &en_de(
@@ -3026,6 +3302,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: FLIGHT,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_FLIGHT],
         label: &en_de("Flight rise", "Laufhöhe"),
         help: &en_de(
@@ -3040,6 +3317,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: FLIGHT,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_FLIGHT, "a tread fills no rectangle along the flight"],
         label: &en_de("Flight width", "Laufbreite"),
         help: &en_de(
@@ -3054,6 +3332,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::PlaneAngle),
         services: FACES,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             NO_GEOMETRY,
             NO_FACE,
@@ -3120,6 +3399,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: DEFECTS,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_FLIGHT, DEFECT_OPEN],
         label: &en_de("Handrail breaks", "Handlaufunterbrechungen"),
         help: &en_de(
@@ -3140,6 +3420,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: WALKING,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             NO_WALKING_SURFACE,
             UNDECIDED_KIND,
@@ -3159,6 +3440,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: ALIGNMENT_SERVICES,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[ALIGNMENT_UNREAD, OFF_RANGE, AMBIGUOUS_FOOT],
         label: &en_de("Height above gradient", "Höhe über Gradiente"),
         help: &en_de(
@@ -3172,6 +3454,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: LEVELS,
         exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[LEVEL_UNPLACED, "no level lies at or above the datum"],
         label: &en_de("Height above ground", "Höhe über Erdgeschoss"),
         help: &en_de(
@@ -3200,6 +3483,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::PlaneAngle),
         services: &["object-frame"],
         exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Object,
         not_evaluated: &["the placement is not stated exactly"],
         label: &en_de("Inclination", "Neigung"),
         help: &en_de(
@@ -3226,6 +3510,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: SPACE,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[SPACE_UNMEASURED],
         label: &en_de("Intersections", "Durchdringungen"),
         help: &en_de(
@@ -3266,6 +3551,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: FLIGHT,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             NO_FLIGHT,
             "no selected obstacle bounds a side of the landing",
@@ -3286,6 +3572,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: FLIGHT,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_FLIGHT, UNDECIDED_KIND],
         label: &en_de("Landings at an end", "Podeste an einem Ende"),
         help: &en_de(
@@ -3299,6 +3586,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: FLIGHT,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_FLIGHT, UNDECIDED_KIND, LANDING_UNMEASURED],
         label: &en_de("Landing depth", "Podesttiefe"),
         help: &en_de(
@@ -3338,6 +3626,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: DEFECTS,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_FLIGHT, DEFECT_OPEN],
         label: &en_de("Doors at landings", "Türen an Podesten"),
         help: &en_de(
@@ -3351,6 +3640,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: FLIGHT,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_FLIGHT, UNDECIDED_KIND, LANDING_UNMEASURED],
         label: &en_de("Landing width", "Podestbreite"),
         help: &en_de(
@@ -3404,6 +3694,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: &["object-frame"],
         exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Object,
         not_evaluated: &["the door states no leaves"],
         label: &en_de("Leaf width", "Flügelbreite"),
         help: &en_de(
@@ -3430,6 +3721,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: &["vertical-extent", "object-frame"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_GEOMETRY, "the placement is not stated exactly"],
         label: &en_de("Length", "Länge"),
         help: &en_de(
@@ -3444,6 +3736,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: LEVELS,
         exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             LEVEL_UNPLACED,
             "the path reaches levels at different elevations",
@@ -3476,6 +3769,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: LEVELS,
         exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[LEVEL_UNPLACED, "no level lies at or above the datum"],
         label: &en_de("Level index", "Geschossindex"),
         help: &en_de(
@@ -3500,6 +3794,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: LEVEL_SERVICES,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             LEVEL_UNORDERED,
             "the highest level's rise is undecided, or its contents cannot be measured",
@@ -3520,6 +3815,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: &["property-resolution", "relationship-selection"],
         exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[STOREYS_UNORDERED],
         label: &en_de("Storeys above", "Geschosse darüber"),
         help: &en_de(
@@ -3537,6 +3833,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: &["property-resolution", "relationship-selection"],
         exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[STOREYS_UNORDERED],
         label: &en_de("Storeys below", "Geschosse darunter"),
         help: &en_de(
@@ -3557,6 +3854,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Area),
         services: &["property-resolution", "relationship-selection"],
         exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[LIGHT_UNKNOWN, LIGHT_SIZE_UNKNOWN],
         label: &en_de("Light area", "Lichtfläche"),
         help: &en_de(
@@ -3579,6 +3877,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: &["property-resolution"],
         exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[LIGHT_SIZE_UNKNOWN],
         label: &en_de("Overall opening size", "Gesamtgröße der Öffnung"),
         help: &en_de(
@@ -3597,6 +3896,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: &["property-resolution", "relationship-selection"],
         exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[LIGHT_UNKNOWN],
         label: &en_de("Light-area step", "Schritt der Lichtfläche"),
         help: &en_de(
@@ -3617,8 +3917,8 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
                 required: false,
                 default: Some("own"),
                 help: &en_de(
-                    "The object's own source, or the reference source.",
-                    "Die eigene Quelle des Objekts oder die Referenzquelle.",
+                    "The source itself, or the reference source.",
+                    "Die Quelle selbst oder die Referenzquelle.",
                 ),
             },
             REFERENCE_SOURCE,
@@ -3626,6 +3926,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: COORDINATES,
         exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Source,
         not_evaluated: &["a coordinate system cannot be read"],
         label: &en_de("Map conversion stated", "Kartenumrechnung angegeben"),
         help: &en_de(
@@ -3640,12 +3941,13 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: COORDINATES,
         exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Source,
         not_evaluated: &["a coordinate system cannot be read", UNGEOREFERENCED],
         label: &en_de("Map scale change", "Änderung des Kartenmaßstabs"),
         help: &en_de(
-            "How far the map conversion's scale of the object's source differs from the \
+            "How far the map conversion's scale of the source differs from the \
              reference source's, a plain number.",
-            "Wie weit der Maßstab der Kartenumrechnung der Quelle des Objekts von dem der \
+            "Wie weit der Maßstab der Kartenumrechnung der Quelle von dem der \
              Referenzquelle abweicht, eine reine Zahl.",
         ),
     },
@@ -3655,12 +3957,13 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: COORDINATES,
         exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Source,
         not_evaluated: &["a coordinate system cannot be read", UNGEOREFERENCED],
         label: &en_de("Map target change", "Änderung des Zielsystems"),
         help: &en_de(
-            "1 where the map conversion of the object's source targets another system than \
+            "1 where the map conversion of the source targets another system than \
              the reference source's, 0 where both name the same.",
-            "1, wo die Kartenumrechnung der Quelle des Objekts ein anderes Zielsystem nennt \
+            "1, wo die Kartenumrechnung der Quelle ein anderes Zielsystem nennt \
              als die der Referenzquelle, 0, wo beide dasselbe nennen.",
         ),
     },
@@ -3670,6 +3973,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Area),
         services: &["body-facts"],
         exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             "the host is no straight extrusion the body set bounds",
             "its outline's edge runs along its middle plane",
@@ -3719,6 +4023,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: DEFECTS,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_FLIGHT, DEFECT_OPEN],
         label: &en_de("Missing tactile strips", "Fehlende taktile Streifen"),
         help: &en_de(
@@ -3756,6 +4061,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: DEFECTS,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_FLIGHT, DEFECT_OPEN],
         label: &en_de("Obstructed end spaces", "Verstellte Freiräume an den Enden"),
         help: &en_de(
@@ -3821,6 +4127,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             "type-hierarchy",
         ],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             NO_GEOMETRY,
             NO_LONG_AXIS,
@@ -3857,6 +4164,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: ALIGNMENT_SERVICES,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[ALIGNMENT_UNREAD, OFF_RANGE, AMBIGUOUS_FOOT],
         label: &en_de("Offset", "Achsabstand"),
         help: &en_de(
@@ -3867,11 +4175,30 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ),
     },
     MeasuredDescriptor {
+        name: "on_envelope",
+        parameters: &ENVELOPE_DERIVED,
+        dimension: None,
+        services: ENVELOPE,
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[NO_ENVELOPE],
+        label: &en_de("On the envelope", "Auf der Hülle"),
+        help: &en_de(
+            "1 where the derivation places the object on the building envelope, whatever the \
+             model declares, 0 elsewhere (an object whose body could not be measured is not \
+             on it).",
+            "1, wo die Ableitung das Objekt auf die Gebäudehülle legt, was immer das Modell \
+             angibt, sonst 0 (ein Objekt, dessen Körper nicht gemessen werden konnte, liegt \
+             nicht darauf).",
+        ),
+    },
+    MeasuredDescriptor {
         name: "opening_area",
         parameters: HOST_OPENINGS,
         dimension: Some(QuantityDimension::Area),
         services: &["relationship-selection", "body-facts"],
         exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             "an opening cannot be placed on the host's middle plane",
             "openings may overlap",
@@ -3890,6 +4217,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: &["relationship-selection", "body-facts"],
         exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             "an opening cannot be placed on the host's middle plane",
             "openings may overlap",
@@ -3945,6 +4273,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Area),
         services: &["relationship-selection", "body-facts"],
         exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             "the opening cannot be placed on its host's middle plane",
             "the opening voids several hosts",
@@ -3987,6 +4316,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Area),
         services: &["plan-area", "facade-area"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             NO_GEOMETRY,
             "the footprint is empty, so the object has no body",
@@ -4029,6 +4359,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: &["plan-area", "relationship-selection"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_GEOMETRY, "the subject has no plan footprint"],
         label: &en_de("Plan coverage", "Grundrissüberdeckung"),
         help: &en_de(
@@ -4075,6 +4406,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Area),
         services: &["plan-area", "type-hierarchy"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_GEOMETRY],
         label: &en_de("Plan overlap", "Grundrissüberlappung"),
         help: &en_de(
@@ -4133,6 +4465,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: &["vertical-extent", "relationship-selection"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             NO_GEOMETRY,
             "no space of the level has an exact elevation, or the space reaches several \
@@ -4174,6 +4507,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: LEVEL_SERVICES,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[LEVEL_UNORDERED],
         label: &en_de("Prevailing rise", "Vorherrschende Geschosshöhe"),
         help: &en_de(
@@ -4225,6 +4559,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: &["property-resolution"],
         exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[PROFILE_UNREAD],
         label: &en_de("Profile dimension", "Profilabmessung"),
         help: &en_de(
@@ -4252,6 +4587,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::PlaneAngle),
         services: &["property-resolution"],
         exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[PROFILE_UNREAD],
         label: &en_de("Profile slope", "Profilneigung"),
         help: &en_de(
@@ -4283,6 +4619,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: DEFECTS,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_FLIGHT, DEFECT_OPEN],
         label: &en_de(
             "Rails over accessible surfaces",
@@ -4334,6 +4671,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Area),
         services: &["plan-area", "facade-area", "property-resolution"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_GEOMETRY, "the property states no area"],
         label: &en_de("Area in a ratio", "Fläche in einem Verhältnis"),
         help: &en_de(
@@ -4360,6 +4698,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: &["plan-span"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             NO_GEOMETRY,
             "the footprint has several least-area rectangles, or a tessellated one",
@@ -4378,6 +4717,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: FLIGHT,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_FLIGHT],
         label: &en_de("Ramp runs", "Rampenläufe"),
         help: &en_de(
@@ -4418,6 +4758,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Volume),
         services: &["property-resolution"],
         exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[PROFILE_UNREAD, "the family defines no section modulus here"],
         label: &en_de("Section modulus", "Widerstandsmoment"),
         help: &en_de(
@@ -4433,6 +4774,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: &["linear-quantity", "relationship-selection"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             SHELVING_UNMEASURED[0],
             SHELVING_UNMEASURED[1],
@@ -4453,6 +4795,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: &["linear-quantity", "relationship-selection"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: SHELVING_UNMEASURED,
         label: &en_de("Shelf running metres", "Regalmeter"),
         help: &en_de(
@@ -4470,6 +4813,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: &["vertical-extent", "relationship-selection"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_GEOMETRY, "a floor reached cannot be measured"],
         label: &en_de("Sill height", "Brüstungshöhe"),
         help: &en_de(
@@ -4485,6 +4829,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::PlaneAngle),
         services: RECTANGLES,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_GEOMETRY, NO_LONG_AXIS],
         label: &en_de("Skew", "Schiefe"),
         help: &en_de(
@@ -4500,6 +4845,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::PlaneAngle),
         services: FACES,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_GEOMETRY, NO_FACE, STANDS_VERTICAL, FACING_UNDECIDED],
         label: &en_de("Slope", "Neigung der Fläche"),
         help: &en_de(
@@ -4531,6 +4877,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::PlaneAngle),
         services: FACES_AND_FRAMES,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_GEOMETRY, NO_FACE, STANDS_VERTICAL],
         label: &en_de("Slope along", "Längsgefälle"),
         help: &en_de(
@@ -4588,6 +4935,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: &["vertical-extent", "plan-area", "type-hierarchy"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             NO_GEOMETRY,
             "whether two slabs stack, or which is the next one up, cannot be decided",
@@ -4652,6 +5000,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: &["vertical-extent", "plan-area", "type-hierarchy"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             NO_GEOMETRY,
             "whether two slabs stack, or which is the next one up, cannot be decided",
@@ -4693,6 +5042,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: FLIGHT,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_FLIGHT, "the path reaches no flight"],
         label: &en_de("Stair rise", "Treppenhöhe"),
         help: &en_de(
@@ -4708,6 +5058,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: ALIGNMENT_SERVICES,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[ALIGNMENT_UNREAD, OFF_RANGE, AMBIGUOUS_FOOT],
         label: &en_de("Station", "Station"),
         help: &en_de(
@@ -4723,6 +5074,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Area),
         services: SECTION_SERVICES,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[SECTION_UNREAD, STATION_OFF_RANGE, SECTION_BODY],
         label: &en_de(
             "Section area at a station",
@@ -4757,6 +5109,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: SECTION_SERVICES,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[SECTION_UNREAD, STATION_OFF_RANGE, SECTION_BODY],
         label: &en_de(
             "Section thickness at a station",
@@ -4777,6 +5130,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: &["property-resolution", "relationship-selection"],
         exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[STOREYS_UNORDERED, "a storey's selection is undecided"],
         label: &en_de("On the end storey", "Auf dem Endgeschoss"),
         help: &en_de(
@@ -4806,6 +5160,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: SPACE,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[SPACE_UNMEASURED],
         label: &en_de("Supporting elements", "Tragende Bauteile"),
         help: &en_de(
@@ -4841,6 +5196,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: &["object-frame", "free-space", "relationship-selection"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             "the door has no hinged leaf",
             "a space's side cannot be decided",
@@ -4880,6 +5236,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: &["vertical-extent", "object-frame"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             NO_GEOMETRY,
             "the body is not closed, so it has no inside",
@@ -4932,6 +5289,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: &["vertical-extent", "relationship-selection", "proximity"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             NO_GEOMETRY,
             "the door states no threshold",
@@ -5043,6 +5401,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
             "relationship-selection",
         ],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             "an exit has no representative point",
             "the walk cannot be measured",
@@ -5116,6 +5475,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Area),
         services: &["plan-area", "type-hierarchy"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_GEOMETRY],
         label: &en_de("Uncovered area", "Unbedeckte Fläche"),
         help: &en_de(
@@ -5139,6 +5499,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: &["property-resolution"],
         exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Object,
         not_evaluated: &["a selector parameter it names picks objects it cannot list"],
         label: &en_de("Undecided objects", "Unentschiedene Objekte"),
         help: &en_de(
@@ -5166,6 +5527,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: None,
         services: FLIGHT,
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[NO_FLIGHT],
         label: &en_de("Turning flight", "Gewendelter Lauf"),
         help: &en_de(
@@ -5180,6 +5542,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: &["vertical-extent", "relationship-selection"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &["the path reaches no space"],
         label: &en_de("Largest gap in the well", "Größte Lücke im Schacht"),
         help: &en_de(
@@ -5194,6 +5557,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: &["vertical-extent", "relationship-selection"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &["the path reaches no space"],
         label: &en_de("Well height", "Schachthöhe"),
         help: &en_de(
@@ -5207,6 +5571,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Area),
         services: &["plan-span", "relationship-selection"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             "the path reaches no space",
             "a stacked space's vertical extent cannot be measured",
@@ -5223,6 +5588,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Length),
         services: &["plan-span", "relationship-selection"],
         exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
         not_evaluated: &[
             "the path reaches no space",
             "a stacked space's vertical extent cannot be measured",

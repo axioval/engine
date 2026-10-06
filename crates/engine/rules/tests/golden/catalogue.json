@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.1.0",
+  "schemaVersion": "1.2.0",
   "languages": [
     "en",
     "de"
@@ -53939,6 +53939,117 @@
       "available": true
     },
     {
+      "name": "bounds_envelope",
+      "parameters": [
+        {
+          "key": "derivation",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "all-spaces",
+              "gross-area-groups"
+            ]
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "Around the objects `bounding` picks (`all-spaces`), or around the members the groups `groups` picks reach along `group_path` (`gross-area-groups`)."
+            },
+            {
+              "language": "de",
+              "text": "Um die Objekte, die `bounding` wählt (`all-spaces`), oder um die Mitglieder, die die von `groups` gewählten Gruppen entlang `group_path` erreichen (`gross-area-groups`)."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "bounding",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects the `all-spaces` envelope is derived around, every one decided."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, um die die Hülle `all-spaces` abgeleitet wird, jedes entschieden."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "groups",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The groups whose members the `gross-area-groups` envelope is derived around, every one decided."
+            },
+            {
+              "language": "de",
+              "text": "Die Gruppen, um deren Mitglieder die Hülle `gross-area-groups` abgeleitet wird, jede entschieden."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "group_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship path from a group to its members."
+            },
+            {
+              "language": "de",
+              "text": "Der Beziehungspfad von einer Gruppe zu ihren Mitgliedern."
+            }
+          ],
+          "references": "stringList"
+        }
+      ],
+      "services": [
+        "envelope-membership",
+        "relationship-selection"
+      ],
+      "exactness": "stated",
+      "notEvaluated": [
+        "the derivation's objects cannot all be decided, it is derived around none, or the envelope-membership service cannot derive it"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Bounds the envelope"
+        },
+        {
+          "language": "de",
+          "text": "Begrenzt die Hülle"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "1 where the derivation is derived around the object (a space bounding the envelope, a member of a group), 0 elsewhere."
+        },
+        {
+          "language": "de",
+          "text": "1, wo die Ableitung um das Objekt erfolgt (ein Raum, der die Hülle begrenzt, ein Mitglied einer Gruppe), sonst 0."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
       "name": "cap_coverage",
       "parameters": [
         {
@@ -54772,6 +54883,60 @@
       "available": true
     },
     {
+      "name": "coordinate_reference",
+      "parameters": [
+        {
+          "key": "reference",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The discipline of the one reference source; without it, the first source in identity order."
+            },
+            {
+              "language": "de",
+              "text": "Die Disziplin der einen Referenzquelle; ohne sie die erste Quelle in der Reihenfolge der Kennungen."
+            }
+          ],
+          "references": "string"
+        }
+      ],
+      "services": [
+        "source-disciplines"
+      ],
+      "exactness": "stated",
+      "subject": "project",
+      "notEvaluated": [
+        "the run checks fewer than two sources",
+        "no source, or several, of the reference discipline, or sources declaring none"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Coordinate reference"
+        },
+        {
+          "language": "de",
+          "text": "Koordinatenreferenz"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "How many sources of the run are compared with the reference source (the one of the discipline `reference` names, or the first in identity order), which it cites: at least one."
+        },
+        {
+          "language": "de",
+          "text": "Wie viele Quellen des Laufs mit der Referenzquelle verglichen werden (der der Disziplin, die `reference` nennt, oder der ersten nach Kennung), die er nennt: mindestens eine."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
       "name": "coordinate_shift",
       "parameters": [
         {
@@ -54821,6 +54986,7 @@
         "coordinate-system"
       ],
       "exactness": "stated",
+      "subject": "source",
       "notEvaluated": [
         "only one of the two sources makes the statement, or a coordinate system cannot be read",
         "the map unit is not stated exactly",
@@ -54839,11 +55005,11 @@
       "help": [
         {
           "language": "en",
-          "text": "How far the object's source moves a statement of its coordinate system from the reference source's, as `coordinate-consistency` compares them; none where neither states a site."
+          "text": "How far the source moves a statement of its coordinate system from the reference source's, as `coordinate-consistency` compares them; none where neither states a site."
         },
         {
           "language": "de",
-          "text": "Wie weit die Quelle des Objekts eine Angabe ihres Koordinatensystems gegenüber der Referenzquelle verschiebt, wie `coordinate-consistency` sie vergleicht; keiner, wo keine ein Grundstück angibt."
+          "text": "Wie weit die Quelle eine Angabe ihres Koordinatensystems gegenüber der Referenzquelle verschiebt, wie `coordinate-consistency` sie vergleicht; keiner, wo keine ein Grundstück angibt."
         }
       ],
       "unit": "m",
@@ -54900,6 +55066,7 @@
         "coordinate-system"
       ],
       "exactness": "stated",
+      "subject": "source",
       "notEvaluated": [
         "only one of the two sources makes the statement, or a coordinate system cannot be read",
         "a source states no map conversion (not recorded)"
@@ -54917,11 +55084,11 @@
       "help": [
         {
           "language": "en",
-          "text": "How far the object's source turns a statement of its coordinate system from the reference source's, as `coordinate-consistency` compares them; none where neither states a site or true north."
+          "text": "How far the source turns a statement of its coordinate system from the reference source's, as `coordinate-consistency` compares them; none where neither states a site or true north."
         },
         {
           "language": "de",
-          "text": "Wie weit die Quelle des Objekts eine Angabe ihres Koordinatensystems gegenüber der Referenzquelle dreht, wie `coordinate-consistency` sie vergleicht; keine, wo keine ein Grundstück oder geografisch Nord angibt."
+          "text": "Wie weit die Quelle eine Angabe ihres Koordinatensystems gegenüber der Referenzquelle dreht, wie `coordinate-consistency` sie vergleicht; keine, wo keine ein Grundstück oder geografisch Nord angibt."
         }
       ],
       "unit": "rad",
@@ -56089,6 +56256,118 @@
         }
       ],
       "unit": "rad",
+      "available": true
+    },
+    {
+      "name": "declared_external",
+      "parameters": [
+        {
+          "key": "derivation",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "all-spaces",
+              "gross-area-groups"
+            ]
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "Around the objects `bounding` picks (`all-spaces`), or around the members the groups `groups` picks reach along `group_path` (`gross-area-groups`)."
+            },
+            {
+              "language": "de",
+              "text": "Um die Objekte, die `bounding` wählt (`all-spaces`), oder um die Mitglieder, die die von `groups` gewählten Gruppen entlang `group_path` erreichen (`gross-area-groups`)."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "bounding",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects the `all-spaces` envelope is derived around, every one decided."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, um die die Hülle `all-spaces` abgeleitet wird, jedes entschieden."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "groups",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The groups whose members the `gross-area-groups` envelope is derived around, every one decided."
+            },
+            {
+              "language": "de",
+              "text": "Die Gruppen, um deren Mitglieder die Hülle `gross-area-groups` abgeleitet wird, jede entschieden."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "group_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship path from a group to its members."
+            },
+            {
+              "language": "de",
+              "text": "Der Beziehungspfad von einer Gruppe zu ihren Mitgliedern."
+            }
+          ],
+          "references": "stringList"
+        }
+      ],
+      "services": [
+        "envelope-membership",
+        "relationship-selection"
+      ],
+      "exactness": "stated",
+      "notEvaluated": [
+        "the derivation's objects cannot all be decided, it is derived around none, or the envelope-membership service cannot derive it",
+        "the model states neither external nor internal, or the body could not be measured"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Declared external"
+        },
+        {
+          "language": "de",
+          "text": "Als außen angegeben"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "1 where the model declares the object part of the building envelope (external), 0 where it declares it internal, as the derivation reads the declarations."
+        },
+        {
+          "language": "de",
+          "text": "1, wo das Modell das Objekt als Teil der Gebäudehülle (außen) angibt, 0, wo es es als innen angibt, wie die Ableitung die Angaben liest."
+        }
+      ],
+      "unit": "1",
       "available": true
     },
     {
@@ -58660,6 +58939,118 @@
       "available": true
     },
     {
+      "name": "envelope_size",
+      "parameters": [
+        {
+          "key": "derivation",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "all-spaces",
+              "gross-area-groups"
+            ]
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "Around the objects `bounding` picks (`all-spaces`), or around the members the groups `groups` picks reach along `group_path` (`gross-area-groups`)."
+            },
+            {
+              "language": "de",
+              "text": "Um die Objekte, die `bounding` wählt (`all-spaces`), oder um die Mitglieder, die die von `groups` gewählten Gruppen entlang `group_path` erreichen (`gross-area-groups`)."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "bounding",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects the `all-spaces` envelope is derived around, every one decided."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, um die die Hülle `all-spaces` abgeleitet wird, jedes entschieden."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "groups",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The groups whose members the `gross-area-groups` envelope is derived around, every one decided."
+            },
+            {
+              "language": "de",
+              "text": "Die Gruppen, um deren Mitglieder die Hülle `gross-area-groups` abgeleitet wird, jede entschieden."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "group_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship path from a group to its members."
+            },
+            {
+              "language": "de",
+              "text": "Der Beziehungspfad von einer Gruppe zu ihren Mitgliedern."
+            }
+          ],
+          "references": "stringList"
+        }
+      ],
+      "services": [
+        "envelope-membership",
+        "relationship-selection"
+      ],
+      "exactness": "measured",
+      "subject": "project",
+      "notEvaluated": [
+        "the derivation's objects cannot all be decided, it is derived around none, or the envelope-membership service cannot derive it"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Envelope size"
+        },
+        {
+          "language": "de",
+          "text": "Größe der Hülle"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "How many objects the derivation places on the building envelope, whatever the model declares: the project's envelope, derived once per run."
+        },
+        {
+          "language": "de",
+          "text": "Wie viele Objekte die Ableitung auf die Gebäudehülle legt, was immer das Modell angibt: die Hülle des Projekts, einmal je Lauf abgeleitet."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
       "name": "extent",
       "parameters": [
         {
@@ -58839,6 +59230,136 @@
         }
       ],
       "unit": "m",
+      "available": true
+    },
+    {
+      "name": "external_declarations",
+      "parameters": [
+        {
+          "key": "derivations",
+          "kind": {
+            "type": "choices",
+            "options": [
+              "all-spaces",
+              "gross-area-groups"
+            ]
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The derivations whose declarations are read, `,`-separated."
+            },
+            {
+              "language": "de",
+              "text": "Die Ableitungen, deren Angaben gelesen werden, durch `,` getrennt."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "bounding",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects the `all-spaces` envelope is derived around, every one decided."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, um die die Hülle `all-spaces` abgeleitet wird, jedes entschieden."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "groups",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The groups whose members the `gross-area-groups` envelope is derived around, every one decided."
+            },
+            {
+              "language": "de",
+              "text": "Die Gruppen, um deren Mitglieder die Hülle `gross-area-groups` abgeleitet wird, jede entschieden."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "group_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship path from a group to its members."
+            },
+            {
+              "language": "de",
+              "text": "Der Beziehungspfad von einer Gruppe zu ihren Mitgliedern."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "objects",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects counted: those of the source a selector parameter surely picks."
+            },
+            {
+              "language": "de",
+              "text": "Die gezählten Objekte: die der Quelle, die ein Selektorparameter sicher wählt."
+            }
+          ],
+          "references": "selector"
+        }
+      ],
+      "services": [
+        "envelope-membership",
+        "relationship-selection"
+      ],
+      "exactness": "stated",
+      "subject": "source",
+      "notEvaluated": [
+        "the derivation's objects cannot all be decided, it is derived around none, or the envelope-membership service cannot derive it"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "External declarations"
+        },
+        {
+          "language": "de",
+          "text": "Angaben als außen"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "How many of the source's objects the model declares external in any derivation that can be derived: an interval up to those whose declaration is unknown in one (stating neither external nor internal, or unmeasured)."
+        },
+        {
+          "language": "de",
+          "text": "Wie viele der Objekte der Quelle das Modell in einer ableitbaren Ableitung als außen angibt: ein Intervall bis zu denen, deren Angabe in einer unbekannt ist (weder außen noch innen angegeben oder nicht gemessen)."
+        }
+      ],
+      "unit": "1",
       "available": true
     },
     {
@@ -61551,11 +62072,11 @@
           "help": [
             {
               "language": "en",
-              "text": "The object's own source, or the reference source."
+              "text": "The source itself, or the reference source."
             },
             {
               "language": "de",
-              "text": "Die eigene Quelle des Objekts oder die Referenzquelle."
+              "text": "Die Quelle selbst oder die Referenzquelle."
             }
           ],
           "references": "string"
@@ -61583,6 +62104,7 @@
         "coordinate-system"
       ],
       "exactness": "stated",
+      "subject": "source",
       "notEvaluated": [
         "a coordinate system cannot be read"
       ],
@@ -61635,6 +62157,7 @@
         "coordinate-system"
       ],
       "exactness": "stated",
+      "subject": "source",
       "notEvaluated": [
         "a coordinate system cannot be read",
         "a source states no map conversion (not recorded)"
@@ -61652,11 +62175,11 @@
       "help": [
         {
           "language": "en",
-          "text": "How far the map conversion's scale of the object's source differs from the reference source's, a plain number."
+          "text": "How far the map conversion's scale of the source differs from the reference source's, a plain number."
         },
         {
           "language": "de",
-          "text": "Wie weit der Maßstab der Kartenumrechnung der Quelle des Objekts von dem der Referenzquelle abweicht, eine reine Zahl."
+          "text": "Wie weit der Maßstab der Kartenumrechnung der Quelle von dem der Referenzquelle abweicht, eine reine Zahl."
         }
       ],
       "unit": "1",
@@ -61688,6 +62211,7 @@
         "coordinate-system"
       ],
       "exactness": "stated",
+      "subject": "source",
       "notEvaluated": [
         "a coordinate system cannot be read",
         "a source states no map conversion (not recorded)"
@@ -61705,11 +62229,11 @@
       "help": [
         {
           "language": "en",
-          "text": "1 where the map conversion of the object's source targets another system than the reference source's, 0 where both name the same."
+          "text": "1 where the map conversion of the source targets another system than the reference source's, 0 where both name the same."
         },
         {
           "language": "de",
-          "text": "1, wo die Kartenumrechnung der Quelle des Objekts ein anderes Zielsystem nennt als die der Referenzquelle, 0, wo beide dasselbe nennen."
+          "text": "1, wo die Kartenumrechnung der Quelle ein anderes Zielsystem nennt als die der Referenzquelle, 0, wo beide dasselbe nennen."
         }
       ],
       "unit": "1",
@@ -62320,6 +62844,117 @@
         }
       ],
       "unit": "m",
+      "available": true
+    },
+    {
+      "name": "on_envelope",
+      "parameters": [
+        {
+          "key": "derivation",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "all-spaces",
+              "gross-area-groups"
+            ]
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "Around the objects `bounding` picks (`all-spaces`), or around the members the groups `groups` picks reach along `group_path` (`gross-area-groups`)."
+            },
+            {
+              "language": "de",
+              "text": "Um die Objekte, die `bounding` wählt (`all-spaces`), oder um die Mitglieder, die die von `groups` gewählten Gruppen entlang `group_path` erreichen (`gross-area-groups`)."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "bounding",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects the `all-spaces` envelope is derived around, every one decided."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, um die die Hülle `all-spaces` abgeleitet wird, jedes entschieden."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "groups",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The groups whose members the `gross-area-groups` envelope is derived around, every one decided."
+            },
+            {
+              "language": "de",
+              "text": "Die Gruppen, um deren Mitglieder die Hülle `gross-area-groups` abgeleitet wird, jede entschieden."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "group_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship path from a group to its members."
+            },
+            {
+              "language": "de",
+              "text": "Der Beziehungspfad von einer Gruppe zu ihren Mitgliedern."
+            }
+          ],
+          "references": "stringList"
+        }
+      ],
+      "services": [
+        "envelope-membership",
+        "relationship-selection"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the derivation's objects cannot all be decided, it is derived around none, or the envelope-membership service cannot derive it"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "On the envelope"
+        },
+        {
+          "language": "de",
+          "text": "Auf der Hülle"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "1 where the derivation places the object on the building envelope, whatever the model declares, 0 elsewhere (an object whose body could not be measured is not on it)."
+        },
+        {
+          "language": "de",
+          "text": "1, wo die Ableitung das Objekt auf die Gebäudehülle legt, was immer das Modell angibt, sonst 0 (ein Objekt, dessen Körper nicht gemessen werden konnte, liegt nicht darauf)."
+        }
+      ],
+      "unit": "1",
       "available": true
     },
     {
@@ -67544,6 +68179,217 @@
             {
               "language": "de",
               "text": "`flight` oder `ramp`."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "coordinate_differences",
+      "parameters": [
+        {
+          "key": "reference",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The discipline of the one reference source; without it, the first source in identity order."
+            },
+            {
+              "language": "de",
+              "text": "Die Disziplin der einen Referenzquelle; ohne sie die erste Quelle in der Reihenfolge der Kennungen."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "length",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "default": "0.001",
+          "help": [
+            {
+              "language": "en",
+              "text": "How far origins and offsets may lie apart, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit Ursprünge und Versätze auseinanderliegen dürfen, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "angle",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "default": "0.01",
+          "help": [
+            {
+              "language": "en",
+              "text": "How far axes, true north and the map rotation may turn, in degrees."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit Achsen, geografisch Nord und die Kartendrehung abweichen dürfen, in Grad."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "scale",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "default": "0",
+          "help": [
+            {
+              "language": "en",
+              "text": "How far the map scales may differ."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit die Kartenmaßstäbe abweichen dürfen."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "require_map",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "default": "false",
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether every source must state a map conversion: one stating none then differs, rather than leaving the georeference unknown."
+            },
+            {
+              "language": "de",
+              "text": "Ob jede Quelle eine Kartenumrechnung angeben muss: eine ohne weicht dann ab, statt die Georeferenz offen zu lassen."
+            }
+          ],
+          "references": "boolean"
+        }
+      ],
+      "services": [
+        "coordinate-system"
+      ],
+      "exactness": "stated",
+      "subject": "source",
+      "notEvaluated": [
+        "a coordinate system cannot be read"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Coordinate differences"
+        },
+        {
+          "language": "de",
+          "text": "Koordinatenabweichungen"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "Each statement in which the source's coordinate system departs from the reference source's beyond the tolerances, or cannot be compared with it, as `coordinate-consistency` compares them: the world frame, true north, the map conversion and the site, then the georeference. The reference itself lists only a missing map conversion the rule requires."
+        },
+        {
+          "language": "de",
+          "text": "Jede Angabe, in der das Koordinatensystem der Quelle über die Toleranzen hinaus von dem der Referenzquelle abweicht oder nicht mit ihm verglichen werden kann, wie `coordinate-consistency` sie vergleicht: der Weltrahmen, geografisch Nord, die Kartenumrechnung und das Grundstück, dann die Georeferenz. Die Referenz selbst nennt nur eine fehlende geforderte Kartenumrechnung."
+        }
+      ],
+      "fields": [
+        {
+          "name": "found",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Differs"
+            },
+            {
+              "language": "de",
+              "text": "Weicht ab"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "True where the statement differs beyond the tolerances; undecided, with why, where it cannot be compared."
+            },
+            {
+              "language": "de",
+              "text": "Wahr, wo die Angabe über die Toleranzen hinaus abweicht; unentschieden, mit Grund, wo sie nicht verglichen werden kann."
+            }
+          ]
+        },
+        {
+          "name": "finding",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Difference"
+            },
+            {
+              "language": "de",
+              "text": "Abweichung"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The difference in words (`map offset moved by 1.0000 m`), or why the statement cannot be compared."
+            },
+            {
+              "language": "de",
+              "text": "Die Abweichung in Worten (`map offset moved by 1.0000 m`) oder warum die Angabe nicht verglichen werden kann."
+            }
+          ]
+        },
+        {
+          "name": "recorded",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Recorded"
+            },
+            {
+              "language": "de",
+              "text": "Erfasst"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "False where the statement cannot be compared because a source records none (a map conversion), true otherwise."
+            },
+            {
+              "language": "de",
+              "text": "Falsch, wo die Angabe nicht verglichen werden kann, weil eine Quelle keine erfasst (eine Kartenumrechnung), sonst wahr."
             }
           ]
         }

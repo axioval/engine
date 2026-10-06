@@ -777,8 +777,7 @@ impl Measures {
             project: &providers.project,
             services,
         };
-        provider
-            .measure_cited(call, object, &context)
+        provider::measure_subject(&**provider, call, object, &context)
             .map(|(measurement, citation)| (answer_of(measurement), citation))
     }
 
@@ -1075,6 +1074,10 @@ impl Measures {
             project: &providers.project,
             services,
         };
+        if !call.descriptor.subject.is_object() {
+            return provider::measure_subject(&**provider, call, object, &context)
+                .map(|(measurement, _)| answer_of(measurement));
+        }
         provider.measure(call, object, &context).map(answer_of)
     }
 
@@ -1102,6 +1105,17 @@ impl Measures {
             project: &providers.project,
             services,
         };
+        // A source's or the project's value is measured for each object's
+        // subject; the provider keeps what it measured.
+        if !call.descriptor.subject.is_object() {
+            return objects
+                .iter()
+                .map(|object| {
+                    provider::measure_subject(&**provider, call, object, &context)
+                        .map(|(measurement, _)| answer_of(measurement))
+                })
+                .collect();
+        }
         let mut answers: Vec<Result<Answer, PropertyResolutionError>> = provider
             .measure_batch(call, objects, &context)
             .into_iter()

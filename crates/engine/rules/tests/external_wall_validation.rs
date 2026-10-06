@@ -547,3 +547,48 @@ fn undeclared_walls_are_not_evaluated_and_unselected_objects_are_ignored() {
             .contains("all-spaces")
     );
 }
+
+/// The envelope's evidence is exact and reviewable by contract: a
+/// derivation cited approximate is refused before it reaches a value, and
+/// the values read from an exact one are exact.
+#[test]
+fn an_envelope_cited_approximate_is_refused() {
+    let mut approximate = Evidence::exact(source(), "envelope");
+    approximate.exact = false;
+    assert_eq!(
+        EnvelopeMembershipEvidence::try_new(
+            EnvelopeMembershipRequest::new(EnvelopeDerivation::AllSpaces, vec![id("s1")]),
+            Vec::new(),
+            Vec::new(),
+            1,
+            approximate,
+        )
+        .err(),
+        Some(EnvelopeMembershipError::InexactEvidence)
+    );
+    let read = |stub: Arc<Stub>, name: &str| {
+        let (project, mut services) = model().services();
+        services
+            .register(EnvelopeMembershipServiceHandle::new(stub))
+            .unwrap();
+        common::measured_cited(&services, &project, &id("w1"), name)
+    };
+    for name in [
+        "on_envelope;derivation=all-spaces;bounding=space",
+        "declared_external;derivation=all-spaces;bounding=space",
+    ] {
+        assert_eq!(
+            read(Stub::sets(&["w1"], &["w1"]), name),
+            Ok(Some(((1.0, 1.0), true))),
+            "{name}"
+        );
+        assert!(
+            read(
+                Stub::new(Err(EnvelopeMembershipError::InexactEvidence)),
+                name
+            )
+            .is_err(),
+            "{name}"
+        );
+    }
+}

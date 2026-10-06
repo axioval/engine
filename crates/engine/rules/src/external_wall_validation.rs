@@ -39,6 +39,10 @@ use crate::counts::Population;
 use crate::selection::select_objects;
 use crate::support::{Parameters, Traversal, Unavailable, invalid};
 
+mod measured;
+
+pub(crate) use measured::EnvelopeMeasures;
+
 /// The derivations the rule runs, each reported on its own.
 const DERIVATIONS: &str = "derivations";
 /// The objects the `all-spaces` envelope is derived around.

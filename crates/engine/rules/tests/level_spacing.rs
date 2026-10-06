@@ -5,7 +5,6 @@ mod common;
 
 use axioval_ir::contract::ParameterValue;
 use axioval_ir::{NotEvaluatedReason, PropertyValue, QuantityDimension};
-use axioval_rules::LevelSpacing;
 use common::{Model, boolean, findings, kind, property, rule, selector, string, unevaluated};
 
 const ID: &str = "axioval:capability.level-spacing";
@@ -36,6 +35,12 @@ fn metres(value: f64) -> ParameterValue {
     }
 }
 
+/// `level-spacing`, held to the implementation it replaced on every fixture.
+const LEVEL_SPACING: common::Held = common::Held(
+    &axioval_rules::LevelSpacing,
+    &axioval_rules::reference::LevelSpacing,
+);
+
 fn check(model: Model, extra: Vec<(&str, ParameterValue)>) -> axioval_engine::CapabilityEvaluation {
     let mut parameters = vec![
         ("member_selector", selector(kind("storey"))),
@@ -44,7 +49,11 @@ fn check(model: Model, extra: Vec<(&str, ParameterValue)>) -> axioval_engine::Ca
         ("ignore_highest", boolean(true)),
     ];
     parameters.extend(extra);
-    model.evaluate(&LevelSpacing, &rule(ID, kind("building"), parameters))
+    model.evaluate_measured(
+        &LEVEL_SPACING,
+        &rule(ID, kind("building"), parameters),
+        |_| {},
+    )
 }
 
 /// Basement at -3, then 0, 3, 7.5 (a 4.5 m storey), roof level 10.5.

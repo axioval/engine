@@ -15,13 +15,18 @@ use axioval_ir::contract::ParameterValue;
 use axioval_ir::{
     Evidence, NotEvaluatedReason, ObjectId, PropertyValue, QuantityDimension, ReportValue,
 };
-use axioval_rules::LevelSpacing;
 use common::{
     Model, boolean, findings, flagged, id, kind, property, rule, selector, source, string, strings,
     unevaluated,
 };
 
 const ID: &str = "axioval:capability.level-spacing";
+
+/// `level-spacing`, held to the implementation it replaced on every fixture.
+const LEVEL_SPACING: common::Held = common::Held(
+    &axioval_rules::LevelSpacing,
+    &axioval_rules::reference::LevelSpacing,
+);
 
 /// Bottom, top and an uncertainty added to both, per object.
 #[derive(Default)]
@@ -109,12 +114,13 @@ fn parameters(extra: Vec<(&str, ParameterValue)>) -> Vec<(&str, ParameterValue)>
 }
 
 fn run(model: Model, extents: Extents, extra: Vec<(&str, ParameterValue)>) -> CapabilityEvaluation {
-    model.evaluate_with(
-        &LevelSpacing,
+    let extents = Arc::new(extents);
+    model.evaluate_measured(
+        &LEVEL_SPACING,
         &rule(ID, kind("building"), parameters(extra)),
         |services| {
             services
-                .register(VerticalExtentServiceHandle::new(Arc::new(extents)))
+                .register(VerticalExtentServiceHandle::new(extents.clone()))
                 .unwrap();
         },
     )
@@ -184,9 +190,10 @@ fn a_highest_level_without_measurable_contents_is_not_evaluated() {
     // No geometry at all.
     let mut extra = contents();
     extra.push(("maximum", metres(4.0)));
-    let evaluation = model().evaluate(
-        &LevelSpacing,
+    let evaluation = model().evaluate_measured(
+        &LEVEL_SPACING,
         &rule(ID, kind("building"), parameters(extra)),
+        |_| {},
     );
     assert_eq!(
         unevaluated(&evaluation),
@@ -553,9 +560,10 @@ mod as_expressions {
             &[("storey", at_most_rise(CONTENTS, 4.0))],
         );
         assert_parity(ID, &found, &rewritten);
-        let found = model().evaluate(
-            &LevelSpacing,
+        let found = model().evaluate_measured(
+            &LEVEL_SPACING,
             &rule(ID, kind("building"), parameters(extra)),
+            |_| {},
         );
         let rewritten = rewrite(model, None, &[("storey", at_most_rise(CONTENTS, 4.0))]);
         assert_parity(ID, &found, &rewritten);
@@ -687,5 +695,163 @@ mod as_expressions {
             )],
         );
         assert_parity(ID, &found, &rewritten);
+    }
+}
+
+/// Members judged one by one have no expression form.
+#[test]
+fn levels_judged_one_by_one_are_not_forked() {
+    use axioval_rules::templates::{ForkError, fork};
+    let refused = fork(
+        &axioval_rules::LevelSpacing,
+        &rule(
+            ID,
+            kind("building"),
+            parameters(vec![("maximum", metres(4.0))]),
+        ),
+    );
+    assert!(
+        matches!(refused, Err(ForkError::Inexpressible(_))),
+        "{refused:?}"
+    );
+}
+
+/// Generated buildings: storeys at random elevations (some stating none
+/// or a number), walls and spaces of random extents (some inexact, some
+/// unmeasured), judged with random bounds, consistency, ignored ends,
+/// contents and spaces. The template is held to the implementation it
+/// replaced on each, its tables' values included.
+mod generated {
+    use super::*;
+    use proptest::prelude::*;
+
+    /// A storey: its elevation in decimetres (or none, or a bare number),
+    /// its wall's top above it and its space's bottom and top offsets, in
+    /// decimetres, each with slack or none.
+    type Storey = (Option<u8>, Option<u8>, Option<(u8, u8)>, bool);
+
+    fn building(storeys: &[Storey]) -> (Model, Extents) {
+        let mut model = Model::default().object("b", "building");
+        let mut extents = Extents::default();
+        for (index, (elevation, wall, space, slack)) in storeys.iter().enumerate() {
+            let storey = format!("s{index}");
+            model = model
+                .object(&storey, "storey")
+                .edge("aggregates", "b", &storey);
+            let at = elevation.map_or(0.0, |elevation| f64::from(elevation) / 10.0);
+            model = match elevation {
+                Some(200..) => {
+                    model.value(&storey, "Levels", "Elevation", PropertyValue::Decimal(at))
+                }
+                Some(_) => model.value(
+                    &storey,
+                    "Levels",
+                    "Elevation",
+                    PropertyValue::Quantity {
+                        value: at,
+                        dimension: QuantityDimension::Length,
+                    },
+                ),
+                None => model,
+            };
+            let slack = if *slack { 0.01 } else { 0.0 };
+            if let Some(wall) = wall {
+                let local = format!("w{index}");
+                model = model
+                    .object(&local, "wall")
+                    .edge("contains", &storey, &local);
+                if *wall < 90 {
+                    extents = extents.with(&local, at, at + f64::from(*wall) / 10.0, slack);
+                }
+            }
+            if let Some((bottom, top)) = space {
+                let local = format!("p{index}");
+                model = model
+                    .object(&local, "space")
+                    .edge("aggregates", &storey, &local);
+                if *bottom < 9 {
+                    let bottom = at + f64::from(*bottom) / 100.0;
+                    extents = extents.with(&local, bottom, bottom + f64::from(*top) / 10.0, slack);
+                }
+            }
+        }
+        (model, extents)
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(160))]
+
+        #[test]
+        fn generated_buildings_hold_parity(
+            storeys in proptest::collection::vec(
+                (
+                    proptest::option::of(prop_oneof![8 => 0u8..80, 1 => 200u8..201]),
+                    proptest::option::of(20u8..100),
+                    proptest::option::of((0u8..10, 20u8..45)),
+                    any::<bool>(),
+                ),
+                0..5,
+            ),
+            minimum in proptest::option::of(25u8..35),
+            maximum in proptest::option::of(30u8..45),
+            consistent in any::<bool>(),
+            ignore_lowest in any::<bool>(),
+            ignore_highest in any::<bool>(),
+            with_contents in any::<bool>(),
+            spaces in 0u8..4,
+        ) {
+            let (model, extents) = building(&storeys);
+            let mut extra = Vec::new();
+            if let Some(minimum) = minimum {
+                extra.push(("minimum", metres(f64::from(minimum) / 10.0)));
+            }
+            if let Some(maximum) = maximum {
+                extra.push(("maximum", metres(f64::from(maximum) / 10.0)));
+            }
+            if consistent {
+                extra.push(("consistent", common::boolean(true)));
+                extra.push(("tolerance", metres(0.05)));
+            }
+            if ignore_lowest {
+                extra.push(("ignore_lowest", common::boolean(true)));
+            }
+            if ignore_highest {
+                extra.push(("ignore_highest", common::boolean(true)));
+            }
+            if with_contents {
+                extra.extend(contents());
+            }
+            if spaces > 0 {
+                extra.push(("space_selector", selector(kind("space"))));
+                extra.push(("space_path", strings(&["aggregates"])));
+                extra.push(("space_tolerance", metres(0.05)));
+                match spaces {
+                    1 => {}
+                    2 => extra.push(("space_elevation", string("bottom"))),
+                    _ => {
+                        extra.push(("space_height", common::boolean(false)));
+                        extra.push(("space_elevation", string("both")));
+                    }
+                }
+            }
+            let extents = Arc::new(extents);
+            model.holding_contract(
+                &axioval_rules::LevelSpacing,
+                &axioval_rules::reference::LevelSpacing,
+                &rule(ID, kind("building"), parameters(extra)),
+                |services| {
+                    services
+                        .register(VerticalExtentServiceHandle::new(extents.clone()))
+                        .unwrap();
+                },
+                &[
+                    ("levels.elevation", 0.0),
+                    ("levels.height", 0.0),
+                    ("spaces.height", 0.0),
+                    ("spaces.level_height", 0.0),
+                ],
+                0.0,
+            );
+        }
     }
 }

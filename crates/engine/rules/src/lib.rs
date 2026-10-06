@@ -180,6 +180,7 @@ pub use wall_spacing::WallSpacing;
 #[cfg(feature = "parity-reference")]
 pub mod reference {
     pub use crate::body_extent::reference::BodyExtent;
+    pub use crate::level_spacing::reference::LevelSpacing;
     pub use crate::object_count::reference::ObjectCount;
     pub use crate::plan_area::reference::PlanAreaRange;
     pub use crate::property_predicate::reference::PropertyPredicate;

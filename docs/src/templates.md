@@ -273,6 +273,26 @@ and the tolerance, in the capability's order. Its findings read
 {tolerance:suffix}` and, for an object without a value, `{property} has
 no value`.
 
+### `level-spacing`
+
+One form, `Decision::Each` over the anchor's levels (`member_selector`,
+refused while it cannot decide an object):
+
+| Part | What it reads | Judgements |
+| --- | --- | --- |
+| members | `elevation` = the stated `{order}`, a length; `height` = the rise to the next level up, the highest's from `contents` (`ignore_lowest`, `ignore_highest` skip an end) | `height` within `minimum` and `maximum`; with `consistent`, `height` near the prevailing height within `tolerance` (1 mm by default), over at least two heights |
+| `contents` | with `content_path`: the `content_selector` objects it reaches, each its measured `top` | the highest top less the elevation is the highest level's height |
+| `space elevations` | with `space_elevation`: the `space_selector` objects `space_path` reaches, at least two, each its measured `bottom` and `top` | each `bottom` (`bottom`, `both`) and `top` (`top`, `both`) near the prevailing one among the level's spaces within `space_tolerance` |
+| `space heights` | with `space_height` (true by default): the same spaces of each level with a height | each space's `top − bottom` near its level's height within `space_tolerance`; the table `spaces` |
+
+The table `levels` holds every level's elevation and height (unknown for
+one not measured). The declaration keeps the capability's checks and
+wording, in its order. Messages are the capability's: `level height is
+{height:length}; required {bound}`, `level height {height:length} differs
+from the prevailing {reference:length}`, `space bottom elevation is …`,
+`space height is {height:length} and its level's height
+{member:height:length}; …`.
+
 ### `property-predicate`
 
 | Form | When | Values | Decision |
@@ -517,6 +537,20 @@ some doors fire-rated or unreadable, counted along the relationship or in
 the whole source, with or without a filter, shared ends and bounds; the
 `related-count` rules of the `counts` case, recorded before the switch;
 and its fork, which reaches its verdicts on every fixture it forks.
+
+`level-spacing` is held to `level_spacing/reference.rs`
+(`axioval_rules::reference::LevelSpacing`) through `common::Held` on
+every fixture of `tests/level_spacing.rs` and
+`tests/level_spacing_geometry.rs`, the template reading its measured
+values as a run does (`Model::evaluate_measured`); by generated buildings
+of storeys at random elevations (some unstated or bare numbers), walls
+and spaces of random, inexact or unmeasured extents, under random bounds,
+consistency, ignored ends, contents and space checks, tables included
+(`Model::holding_contract`); and by the `level-spacing` rules of the
+`storeys` case, recorded before the switch, tables included. It is never
+forked; its measured values (`level_rise`, `prevailing_rise`,
+`prevailing_elevation`) still measure through the capability's own
+readers in `level_spacing.rs`.
 
 `unique-value` is held to `unique_value/reference.rs`
 (`axioval_rules::reference::UniqueValue`) through `common::Held` on every

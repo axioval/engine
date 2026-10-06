@@ -306,3 +306,11 @@ ahead, and a rule selecting nothing reads nothing ahead.
 reference's run time and 1.01 to 1.15× its peak heap, the generated
 fixture the highest. Its list measures each footprint's recesses once per
 object, as the capability did, and reads the rule's rows once per call.
+
+`light-well` runs the `spans` case's three rules: 0.97 to 1.19× its
+reference's run time and 1.00 to 1.17× its peak heap. Its values and
+lists read one memoized measurement of each well (its spaces, their
+extents, their section) for the run, and the section is measured only once
+the stack is: read ahead for a chunk of wells, a section measured before
+the stack refused it ran 5 to 16× its reference on the architecture models,
+whose storeys hold a body without a mesh.

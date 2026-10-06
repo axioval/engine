@@ -41,7 +41,7 @@ a value without an upper bound
 the first of the plan-span capabilities
 ([#283](https://github.com/axioval/engine/issues/283)), judging the items
 of a measured list against a row its provider selects from the rule's
-table.
+table, and `light-well` follows.
 
 ## The outside contract
 
@@ -1022,6 +1022,33 @@ plan-span service missing leaves each object open
 it open for the service's reason (`the recesses of … cannot be
 measured: …`).
 
+### `light-well`
+
+| Form | When | Values | Checks |
+| --- | --- | --- | --- |
+| one | always | `area` = `well_section_area;members=@member_path` | `Items` over `well_gaps;members=@member_path`: each gap at most `gap_tolerance_metres` (0 by default); `Items` over `well_requirements;members=@member_path;requirements=@requirements`: the section shared, its `area` and `width` at least what the row its height selects requires |
+
+The section is read first, and measured only once the stack is, so a
+well the path reaches no space from (`… reaches no space through …`),
+whose spaces' extents or shared section cannot be measured is open once,
+for that reason, as the capability left it. `well_gaps` lists
+each pair of consecutive spaces, ordered by their bottoms, with the gap
+from the lower one's top to the upper one's bottom (none below zero),
+judged against the tolerance: `{above} starts {gap:length} above the top
+of {below}, so the well is not contiguous`, or open with `the gap between
+{below} and {above} is {gap:length}`. `well_requirements` is one item: the
+section's `area` (`null` where the spaces surely share none, a finding,
+`the {count:count} stacked spaces share no plan section, …`), its `width`
+(`null` without one), the well's `height`, the row its height selects
+(`row`, a guard: `null` judges nothing, undecided leaves the well open
+with `which row applies to a well {height:length} high is undecided`) and
+what it requires; each of area and width is its own finding (`the well's
+section area is {area:area} m²; row {row:count} requires {bound:plain} m²
+for a well {height:length} high`). Every finding relates the well's
+spaces (`related: members`). The declaration keeps the capability's checks
+and words: `member_path` and its steps, `requirements` and each row (the
+list's argument check), the tolerance not negative.
+
 ## Binding and running a rule
 
 The rules crate's `templates` module runs a template
@@ -1421,6 +1448,14 @@ spaces unmeasured or measured only approximately) under random rows; and
 by the `recess-width` rules of the `spans` case, recorded before the
 switch. It is never forked. The capability's undecided row (D3) is kept:
 a recess whose depth straddles a row's bound is open, whatever its width.
+
+`light-well` is held to `light_well/reference.rs`
+(`axioval_rules::reference::LightWell`) through `common::Held` on every
+fixture of `tests/light_well.rs`, its messages asserted literally; by
+generated wells of random stacks (exact and inexact extents, gaps and
+overlaps, some spaces unmeasured), sections (empty, inexact) and rows
+under random tolerances; and by the `light-well` rules of the `spans`
+case, recorded before the switch. It is never forked.
 
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the

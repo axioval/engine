@@ -187,6 +187,11 @@ const PAIRS: &[Pair] = &[
         case: "spans",
         reference: |registry| registry.replace(axioval::rules::reference::RecessWidth),
     },
+    Pair {
+        capability: "axioval:capability.light-well",
+        case: "spans",
+        reference: |registry| registry.replace(axioval::rules::reference::LightWell),
+    },
 ];
 
 /// Warm-up runs per side before measuring.

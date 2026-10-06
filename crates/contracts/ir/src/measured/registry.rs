@@ -170,7 +170,7 @@ const WALKING_KIND: MeasuredParameter = MeasuredParameter {
     ),
 };
 
-const WELL_MEMBERS: MeasuredParameter = MeasuredParameter {
+pub(super) const WELL_MEMBERS: MeasuredParameter = MeasuredParameter {
     key: "members",
     kind: MeasuredParameterKind::Path,
     required: true,
@@ -5207,7 +5207,10 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         dimension: Some(QuantityDimension::Area),
         services: &["plan-span", "relationship-selection"],
         exactness: MeasuredExactness::Measured,
-        not_evaluated: &["the path reaches no space"],
+        not_evaluated: &[
+            "the path reaches no space",
+            "a stacked space's vertical extent cannot be measured",
+        ],
         label: &en_de("Well section area", "Schachtquerschnitt"),
         help: &en_de(
             "The area of the plan section the stacked spaces share.",
@@ -5222,6 +5225,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         exactness: MeasuredExactness::Measured,
         not_evaluated: &[
             "the path reaches no space",
+            "a stacked space's vertical extent cannot be measured",
             "the section's rectangle is tied",
         ],
         label: &en_de("Well section width", "Schachtbreite"),

@@ -9,7 +9,7 @@ use serde::Serialize;
 
 use super::registry::{
     ANGLE_TOLERANCE, EFFECT_SERVICES, EFFECT_UNMEASURED, EFFECTIVE, FACE, FACE_AXES, FACING,
-    MEMBER_PATH, NO_FACE, NO_GEOMETRY, OPENINGS_MINIMUM, PAIRED, SPACED_MEMBERS, en_de,
+    MEMBER_PATH, NO_FACE, NO_GEOMETRY, OPENINGS_MINIMUM, PAIRED, SPACED_MEMBERS, WELL_MEMBERS, en_de,
 };
 use super::{
     FACE_PIECES, LocalizedText, MeasuredCall, MeasuredDescriptor, MeasuredError, MeasuredExactness,
@@ -1566,6 +1566,178 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
         ],
     },
     walking::TACTILE_STRIPS,
+    MemberDescriptor {
+        list: MeasuredDescriptor {
+            name: "well_gaps",
+            parameters: &[WELL_MEMBERS],
+            dimension: None,
+            services: &["vertical-extent", "relationship-selection"],
+            exactness: MeasuredExactness::Measured,
+            not_evaluated: &[
+                "the path reaches no space",
+                "a stacked space's vertical extent cannot be measured",
+            ],
+            label: &en_de("Gaps in the well", "Lücken im Schacht"),
+            help: &en_de(
+                "Each pair of consecutive stacked spaces, ordered by their bottoms, with the \
+                 vertical gap from the lower one's top to the upper one's bottom, as \
+                 `light-well` judges contiguity.",
+                "Jedes Paar aufeinanderfolgender gestapelter Räume, nach ihren Böden \
+                 geordnet, mit der senkrechten Lücke von der Oberkante des unteren zum Boden \
+                 des oberen, wie `light-well` die Durchgängigkeit prüft.",
+            ),
+        },
+        fields: &[
+            field(
+                "gap",
+                LENGTH,
+                &en_de("Gap", "Lücke"),
+                &en_de(
+                    "From the lower space's top to the upper space's bottom, none below zero.",
+                    "Von der Oberkante des unteren bis zum Boden des oberen Raums, nie unter \
+                     null.",
+                ),
+            ),
+            field(
+                "below",
+                MemberFieldKind::Objects,
+                &en_de("Space below", "Raum darunter"),
+                &en_de("The lower space of the pair.", "Der untere Raum des Paars."),
+            ),
+            field(
+                "above",
+                MemberFieldKind::Objects,
+                &en_de("Space above", "Raum darüber"),
+                &en_de("The upper space of the pair.", "Der obere Raum des Paars."),
+            ),
+            field(
+                "members",
+                MemberFieldKind::Objects,
+                &en_de("Stacked spaces", "Gestapelte Räume"),
+                &en_de("Every space of the well.", "Jeder Raum des Schachts."),
+            ),
+        ],
+    },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
+            name: "well_requirements",
+            parameters: &[
+                WELL_MEMBERS,
+                MeasuredParameter {
+                    key: "requirements",
+                    kind: MeasuredParameterKind::Table,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "Rows of an optional `maximum_height_metres` and the section's \
+                         `minimum_area_square_metres` and `minimum_width_metres`: the first \
+                         row whose maximum the well's height does not exceed is the well's \
+                         row.",
+                        "Zeilen aus einer optionalen `maximum_height_metres` und \
+                         `minimum_area_square_metres` und `minimum_width_metres` des \
+                         Querschnitts: die erste Zeile, deren Höchstwert die Höhe des \
+                         Schachts nicht übersteigt, ist die Zeile des Schachts.",
+                    ),
+                },
+            ],
+            dimension: None,
+            services: &["vertical-extent", "plan-span", "relationship-selection"],
+            exactness: MeasuredExactness::Measured,
+            not_evaluated: &[
+                "the path reaches no space",
+                "the shared plan section cannot be measured",
+                "the well's height straddles a row's maximum: its row is undecided",
+            ],
+            label: &en_de("Well section by height", "Schachtquerschnitt nach Höhe"),
+            help: &en_de(
+                "One item: the plan section the stacked spaces share, the well's height \
+                 from its lowest bottom to its highest top, and the row of `requirements` \
+                 its height selects, as `light-well` judges them.",
+                "Ein Element: der Grundrissquerschnitt, den die gestapelten Räume teilen, \
+                 die Höhe des Schachts vom tiefsten Boden bis zur höchsten Oberkante und \
+                 die Zeile von `requirements`, die seine Höhe wählt, wie `light-well` sie \
+                 prüft.",
+            ),
+        },
+        fields: &[
+            field(
+                "count",
+                RATIO,
+                &en_de("Stacked spaces", "Gestapelte Räume"),
+                &en_de(
+                    "How many spaces the well stacks.",
+                    "Wie viele Räume der Schacht stapelt.",
+                ),
+            ),
+            field(
+                "area",
+                AREA,
+                &en_de("Section area", "Querschnittsfläche"),
+                &en_de(
+                    "The shared section's area; `null` where the spaces surely share none.",
+                    "Die Fläche des geteilten Querschnitts; `null`, wo die Räume sicher \
+                     keinen teilen.",
+                ),
+            ),
+            field(
+                "width",
+                LENGTH,
+                &en_de("Section width", "Querschnittsbreite"),
+                &en_de(
+                    "The short side of the section's least-area rectangle; `null` without \
+                     one.",
+                    "Die kurze Seite des kleinsten umschließenden Rechtecks des \
+                     Querschnitts; `null` ohne eines.",
+                ),
+            ),
+            field(
+                "height",
+                LENGTH,
+                &en_de("Well height", "Schachthöhe"),
+                &en_de(
+                    "From the lowest bottom to the highest top of the stacked spaces.",
+                    "Vom tiefsten Boden bis zur höchsten Oberkante der gestapelten Räume.",
+                ),
+            ),
+            field(
+                "row",
+                RATIO,
+                &en_de("Row", "Zeile"),
+                &en_de(
+                    "The index of the row the height selects, from 0; `null` where none \
+                     does, no rows are given or the section is empty.",
+                    "Der Index der Zeile, die die Höhe wählt, ab 0; `null`, wo keine es \
+                     tut, keine Zeilen angegeben sind oder der Querschnitt leer ist.",
+                ),
+            ),
+            field(
+                "required_area",
+                AREA,
+                &en_de("Required area", "Verlangte Fläche"),
+                &en_de(
+                    "The section area the row requires; `null` where it requires none.",
+                    "Die Querschnittsfläche, die die Zeile verlangt; `null`, wo sie keine \
+                     verlangt.",
+                ),
+            ),
+            field(
+                "required_width",
+                LENGTH,
+                &en_de("Required width", "Verlangte Breite"),
+                &en_de(
+                    "The section width the row requires; `null` where it requires none.",
+                    "Die Querschnittsbreite, die die Zeile verlangt; `null`, wo sie keine \
+                     verlangt.",
+                ),
+            ),
+            field(
+                "members",
+                MemberFieldKind::Objects,
+                &en_de("Stacked spaces", "Gestapelte Räume"),
+                &en_de("Every space of the well.", "Jeder Raum des Schachts."),
+            ),
+        ],
+    },
 ];
 
 /// The member list `name` (without parameters), ignoring ASCII case.

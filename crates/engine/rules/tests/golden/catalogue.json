@@ -16046,7 +16046,494 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "light-well",
+        "defaults": [
+          {
+            "parameter": "gap_tolerance_metres",
+            "value": {
+              "type": "number",
+              "value": 0.0
+            }
+          }
+        ],
+        "declaration": [
+          {
+            "kind": "required",
+            "parameter": "member_path"
+          },
+          {
+            "kind": "path",
+            "parameter": "member_path"
+          },
+          {
+            "kind": "required",
+            "parameter": "requirements"
+          },
+          {
+            "kind": "arguments",
+            "when": [
+              "requirements"
+            ],
+            "value": "well_requirements;members=@member_path;requirements=@requirements"
+          },
+          {
+            "kind": "nonNegative",
+            "parameters": [
+              "gap_tolerance_metres"
+            ],
+            "message": "`gap_tolerance_metres` must not be negative"
+          }
+        ],
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "area",
+                "expression": {
+                  "kind": "property",
+                  "propertySet": "axioval:measured",
+                  "property": "well_section_area;members=@member_path"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "area",
+              "rounding": []
+            },
+            "fail": "",
+            "undecided": "",
+            "checks": [
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {},
+                  "list": "well_gaps;members=@member_path",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "judge": {
+                        "kind": "range",
+                        "value": "gap",
+                        "unit": "length",
+                        "atMost": [
+                          {
+                            "name": "tolerance",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "parameter",
+                                    "name": "gap_tolerance_metres"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "none"
+                        },
+                        "grade": false,
+                        "null": {
+                          "kind": "skip"
+                        }
+                      },
+                      "fail": "{above} starts {gap:length} above the top of {below}, so the well is not contiguous",
+                      "undecided": "the gap between {below} and {above} is {gap:length}",
+                      "related": "members"
+                    }
+                  ]
+                },
+                "fail": "",
+                "undecided": ""
+              },
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {},
+                  "list": "well_requirements;members=@member_path;requirements=@requirements",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "null",
+                          "field": "area"
+                        }
+                      ],
+                      "judge": {
+                        "kind": "fails"
+                      },
+                      "fail": "the {count:count} stacked spaces share no plan section, so the well is not contiguous",
+                      "undecided": "",
+                      "related": "members"
+                    },
+                    {
+                      "kind": "group",
+                      "guards": [
+                        {
+                          "field": "row",
+                          "undecided": "which row applies to a well {height:length} high is undecided",
+                          "null": {
+                            "kind": "skip"
+                          }
+                        }
+                      ],
+                      "checks": [
+                        {
+                          "kind": "test",
+                          "judge": {
+                            "kind": "range",
+                            "value": "area",
+                            "unit": "area",
+                            "atLeast": [
+                              {
+                                "name": "required_area",
+                                "options": [
+                                  {
+                                    "bound": {
+                                      "kind": "operand",
+                                      "value": {
+                                        "kind": "value",
+                                        "name": "required_area"
+                                      }
+                                    }
+                                  }
+                                ],
+                                "words": ""
+                              }
+                            ],
+                            "allowance": {
+                              "kind": "none"
+                            },
+                            "grade": false,
+                            "null": {
+                              "kind": "skip"
+                            }
+                          },
+                          "fail": "the well's section area is {area:area} m²; row {row:count} requires {bound:plain} m² for a well {height:length} high",
+                          "undecided": "the well's section area is {area:area} m²; row {row:count} requires {bound:plain} m², undecided",
+                          "related": "members"
+                        },
+                        {
+                          "kind": "test",
+                          "judge": {
+                            "kind": "range",
+                            "value": "width",
+                            "unit": "length",
+                            "atLeast": [
+                              {
+                                "name": "required_width",
+                                "options": [
+                                  {
+                                    "bound": {
+                                      "kind": "operand",
+                                      "value": {
+                                        "kind": "value",
+                                        "name": "required_width"
+                                      }
+                                    }
+                                  }
+                                ],
+                                "words": ""
+                              }
+                            ],
+                            "allowance": {
+                              "kind": "none"
+                            },
+                            "grade": false,
+                            "null": {
+                              "kind": "skip"
+                            }
+                          },
+                          "fail": "the well's width is {width:length}; row {row:count} requires {bound:plain} m for a well {height:length} high",
+                          "undecided": "the well's width is {width:length}; row {row:count} requires {bound:plain} m, undecided",
+                          "related": "members"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "fail": "",
+                "undecided": ""
+              }
+            ]
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "aggregate",
+                  "function": "none",
+                  "over": {
+                    "kind": "measured",
+                    "name": "well_gaps;members=@member_path"
+                  },
+                  "value": {
+                    "kind": "not",
+                    "operand": {
+                      "kind": "and",
+                      "operands": [
+                        {
+                          "kind": "compare",
+                          "operator": "lessThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "gap"
+                          },
+                          "right": {
+                            "kind": "parameter",
+                            "name": "gap_tolerance_metres"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "label": "no item fails"
+                },
+                {
+                  "kind": "aggregate",
+                  "function": "none",
+                  "over": {
+                    "kind": "measured",
+                    "name": "well_requirements;members=@member_path;requirements=@requirements"
+                  },
+                  "value": {
+                    "kind": "not",
+                    "operand": {
+                      "kind": "and",
+                      "operands": [
+                        {
+                          "kind": "compare",
+                          "operator": "greaterThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "area"
+                          },
+                          "right": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "required_area"
+                          }
+                        },
+                        {
+                          "kind": "compare",
+                          "operator": "greaterThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "width"
+                          },
+                          "right": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "required_width"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "label": "no item fails"
+                },
+                {
+                  "kind": "isDefined",
+                  "operand": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "well_section_area;members=@member_path"
+                  },
+                  "label": "read"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.aggregate",
+                      "label": "no item fails",
+                      "fields": {
+                        "function": "none"
+                      },
+                      "inputs": {
+                        "over": {
+                          "block": {
+                            "type": "members.well_gaps",
+                            "fields": {
+                              "members": "@member_path"
+                            }
+                          }
+                        },
+                        "value": {
+                          "block": {
+                            "type": "expression.not",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.and",
+                                  "inputs": {
+                                    "operands": {
+                                      "blocks": [
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "lessThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "gap",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.parameter",
+                                                "fields": {
+                                                  "name": "gap_tolerance_metres"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.aggregate",
+                      "label": "no item fails",
+                      "fields": {
+                        "function": "none"
+                      },
+                      "inputs": {
+                        "over": {
+                          "block": {
+                            "type": "members.well_requirements",
+                            "fields": {
+                              "members": "@member_path",
+                              "requirements": "@requirements"
+                            }
+                          }
+                        },
+                        "value": {
+                          "block": {
+                            "type": "expression.not",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.and",
+                                  "inputs": {
+                                    "operands": {
+                                      "blocks": [
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "greaterThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "area",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "required_area",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "greaterThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "width",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "required_width",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.isDefined",
+                      "label": "read",
+                      "inputs": {
+                        "operand": {
+                          "block": {
+                            "type": "measured.well_section_area",
+                            "fields": {
+                              "members": "@member_path"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.local-circulation",
@@ -33832,10 +34319,14 @@
                   "label": "no item fails"
                 },
                 {
-                  "kind": "literal",
-                  "value": {
-                    "type": "boolean",
-                    "value": true
+                  "kind": "isDefined",
+                  "operand": {
+                    "kind": "literal",
+                    "value": {
+                      "type": "integer",
+                      "value": 1
+                    },
+                    "label": "the recesses are judged"
                   },
                   "label": "read"
                 }
@@ -33908,12 +34399,20 @@
                       }
                     },
                     {
-                      "type": "expression.literal",
+                      "type": "expression.isDefined",
                       "label": "read",
-                      "fields": {
-                        "value": {
-                          "type": "boolean",
-                          "value": true
+                      "inputs": {
+                        "operand": {
+                          "block": {
+                            "type": "expression.literal",
+                            "label": "the recesses are judged",
+                            "fields": {
+                              "value": {
+                                "type": "integer",
+                                "value": 1
+                              }
+                            }
+                          }
                         }
                       }
                     }
@@ -65007,7 +65506,8 @@
       ],
       "exactness": "measured",
       "notEvaluated": [
-        "the path reaches no space"
+        "the path reaches no space",
+        "a stacked space's vertical extent cannot be measured"
       ],
       "label": [
         {
@@ -65062,6 +65562,7 @@
       "exactness": "measured",
       "notEvaluated": [
         "the path reaches no space",
+        "a stacked space's vertical extent cannot be measured",
         "the section's rectangle is tied"
       ],
       "label": [
@@ -73709,6 +74210,454 @@
             {
               "language": "de",
               "text": "Ob das Ende auf einem Podest zwischen zwei Läufen der Treppe liegt."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "well_gaps",
+      "parameters": [
+        {
+          "key": "members",
+          "kind": {
+            "type": "path"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from the well to its stacked spaces."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte vom Schacht zu seinen gestapelten Räumen."
+            }
+          ],
+          "references": "stringList"
+        }
+      ],
+      "services": [
+        "vertical-extent",
+        "relationship-selection"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the path reaches no space",
+        "a stacked space's vertical extent cannot be measured"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Gaps in the well"
+        },
+        {
+          "language": "de",
+          "text": "Lücken im Schacht"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "Each pair of consecutive stacked spaces, ordered by their bottoms, with the vertical gap from the lower one's top to the upper one's bottom, as `light-well` judges contiguity."
+        },
+        {
+          "language": "de",
+          "text": "Jedes Paar aufeinanderfolgender gestapelter Räume, nach ihren Böden geordnet, mit der senkrechten Lücke von der Oberkante des unteren zum Boden des oberen, wie `light-well` die Durchgängigkeit prüft."
+        }
+      ],
+      "fields": [
+        {
+          "name": "gap",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Gap"
+            },
+            {
+              "language": "de",
+              "text": "Lücke"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "From the lower space's top to the upper space's bottom, none below zero."
+            },
+            {
+              "language": "de",
+              "text": "Von der Oberkante des unteren bis zum Boden des oberen Raums, nie unter null."
+            }
+          ]
+        },
+        {
+          "name": "below",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Space below"
+            },
+            {
+              "language": "de",
+              "text": "Raum darunter"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The lower space of the pair."
+            },
+            {
+              "language": "de",
+              "text": "Der untere Raum des Paars."
+            }
+          ]
+        },
+        {
+          "name": "above",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Space above"
+            },
+            {
+              "language": "de",
+              "text": "Raum darüber"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The upper space of the pair."
+            },
+            {
+              "language": "de",
+              "text": "Der obere Raum des Paars."
+            }
+          ]
+        },
+        {
+          "name": "members",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Stacked spaces"
+            },
+            {
+              "language": "de",
+              "text": "Gestapelte Räume"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Every space of the well."
+            },
+            {
+              "language": "de",
+              "text": "Jeder Raum des Schachts."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "well_requirements",
+      "parameters": [
+        {
+          "key": "members",
+          "kind": {
+            "type": "path"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from the well to its stacked spaces."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte vom Schacht zu seinen gestapelten Räumen."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "requirements",
+          "kind": {
+            "type": "table"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Rows of an optional `maximum_height_metres` and the section's `minimum_area_square_metres` and `minimum_width_metres`: the first row whose maximum the well's height does not exceed is the well's row."
+            },
+            {
+              "language": "de",
+              "text": "Zeilen aus einer optionalen `maximum_height_metres` und `minimum_area_square_metres` und `minimum_width_metres` des Querschnitts: die erste Zeile, deren Höchstwert die Höhe des Schachts nicht übersteigt, ist die Zeile des Schachts."
+            }
+          ],
+          "references": "table"
+        }
+      ],
+      "services": [
+        "vertical-extent",
+        "plan-span",
+        "relationship-selection"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the path reaches no space",
+        "the shared plan section cannot be measured",
+        "the well's height straddles a row's maximum: its row is undecided"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Well section by height"
+        },
+        {
+          "language": "de",
+          "text": "Schachtquerschnitt nach Höhe"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "One item: the plan section the stacked spaces share, the well's height from its lowest bottom to its highest top, and the row of `requirements` its height selects, as `light-well` judges them."
+        },
+        {
+          "language": "de",
+          "text": "Ein Element: der Grundrissquerschnitt, den die gestapelten Räume teilen, die Höhe des Schachts vom tiefsten Boden bis zur höchsten Oberkante und die Zeile von `requirements`, die seine Höhe wählt, wie `light-well` sie prüft."
+        }
+      ],
+      "fields": [
+        {
+          "name": "count",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Stacked spaces"
+            },
+            {
+              "language": "de",
+              "text": "Gestapelte Räume"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "How many spaces the well stacks."
+            },
+            {
+              "language": "de",
+              "text": "Wie viele Räume der Schacht stapelt."
+            }
+          ]
+        },
+        {
+          "name": "area",
+          "kind": {
+            "type": "number",
+            "dimension": "area"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Section area"
+            },
+            {
+              "language": "de",
+              "text": "Querschnittsfläche"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The shared section's area; `null` where the spaces surely share none."
+            },
+            {
+              "language": "de",
+              "text": "Die Fläche des geteilten Querschnitts; `null`, wo die Räume sicher keinen teilen."
+            }
+          ]
+        },
+        {
+          "name": "width",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Section width"
+            },
+            {
+              "language": "de",
+              "text": "Querschnittsbreite"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The short side of the section's least-area rectangle; `null` without one."
+            },
+            {
+              "language": "de",
+              "text": "Die kurze Seite des kleinsten umschließenden Rechtecks des Querschnitts; `null` ohne eines."
+            }
+          ]
+        },
+        {
+          "name": "height",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Well height"
+            },
+            {
+              "language": "de",
+              "text": "Schachthöhe"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "From the lowest bottom to the highest top of the stacked spaces."
+            },
+            {
+              "language": "de",
+              "text": "Vom tiefsten Boden bis zur höchsten Oberkante der gestapelten Räume."
+            }
+          ]
+        },
+        {
+          "name": "row",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Row"
+            },
+            {
+              "language": "de",
+              "text": "Zeile"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The index of the row the height selects, from 0; `null` where none does, no rows are given or the section is empty."
+            },
+            {
+              "language": "de",
+              "text": "Der Index der Zeile, die die Höhe wählt, ab 0; `null`, wo keine es tut, keine Zeilen angegeben sind oder der Querschnitt leer ist."
+            }
+          ]
+        },
+        {
+          "name": "required_area",
+          "kind": {
+            "type": "number",
+            "dimension": "area"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Required area"
+            },
+            {
+              "language": "de",
+              "text": "Verlangte Fläche"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The section area the row requires; `null` where it requires none."
+            },
+            {
+              "language": "de",
+              "text": "Die Querschnittsfläche, die die Zeile verlangt; `null`, wo sie keine verlangt."
+            }
+          ]
+        },
+        {
+          "name": "required_width",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Required width"
+            },
+            {
+              "language": "de",
+              "text": "Verlangte Breite"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The section width the row requires; `null` where it requires none."
+            },
+            {
+              "language": "de",
+              "text": "Die Querschnittsbreite, die die Zeile verlangt; `null`, wo sie keine verlangt."
+            }
+          ]
+        },
+        {
+          "name": "members",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Stacked spaces"
+            },
+            {
+              "language": "de",
+              "text": "Gestapelte Räume"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Every space of the well."
+            },
+            {
+              "language": "de",
+              "text": "Jeder Raum des Schachts."
             }
           ]
         }

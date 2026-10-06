@@ -1847,7 +1847,7 @@ The first row holding a recess's depth applies; a recess no row holds has no req
 - the section's area against `minimum_area_square_metres`;
 - the section's width, the short side of its least-area rectangle (the rectangle `measure_rectangle` answers for a footprint), against `minimum_width_metres`. A section whose least-area orientation is tied has no known width; the service refuses it and the well is not evaluated.
 
-The well's height runs from its lowest bottom to its highest top, and selects the first row of `requirements` whose `maximum_height_metres` it does not exceed (a row without one holds any height); no row means no requirement. Every value is an interval, and one straddling a bound is not evaluated. Findings relate the well's spaces. A tessellated space leaves its well not evaluated: the short side of a minimum-area rectangle does not grow monotonically with the shape, so a chord band cannot bound it.
+The well's height runs from its lowest bottom to its highest top, and selects the first row of `requirements` whose `maximum_height_metres` it does not exceed (a row without one holds any height); no row means no requirement. Every value is an interval, and one straddling a bound is not evaluated. Findings relate the well's spaces. A tessellated space leaves its well not evaluated: the short side of a minimum-area rectangle does not grow monotonically with the shape, so a chord band cannot bound it. It runs as a template ([Capability templates](./templates.md#light-well)) over the measured well: its gaps and its section by height.
 
 ### Structural members
 

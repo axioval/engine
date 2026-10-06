@@ -192,6 +192,7 @@ pub mod reference {
     pub use crate::counterpart_coverage::reference::CounterpartCoverage;
     pub use crate::effective_coverage::reference::EffectiveCoverage;
     pub use crate::level_spacing::reference::LevelSpacing;
+    pub use crate::light_well::reference::LightWell;
     pub use crate::object_count::reference::ObjectCount;
     pub use crate::plan_area::reference::PlanAreaRange;
     pub use crate::plan_coverage::reference::PlanCoverage;

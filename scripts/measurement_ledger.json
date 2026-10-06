@@ -460,7 +460,7 @@
         "prevailing_rise"
       ]
     },
-    "light_well::judge_well::measure_section": {
+    "light_well::reference::judge_well::measure_section": {
       "count": 1,
       "providedBy": [
         "well_section_area",

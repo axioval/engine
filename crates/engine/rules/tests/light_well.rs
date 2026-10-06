@@ -131,14 +131,26 @@ fn evaluate(
         parameters.push(("gap_tolerance_metres", number(tolerance)));
     }
     let rule = rule(ID, kind("zone"), parameters);
-    model.evaluate_with(&LightWell, &rule, move |services| {
+    model.evaluate_measured(&HELD, &rule, move |services| {
         services
             .register(VerticalExtentServiceHandle::new(service.clone()))
             .unwrap();
         services
-            .register(PlanSpanServiceHandle::new(service))
+            .register(PlanSpanServiceHandle::new(service.clone()))
             .unwrap();
     })
+}
+
+/// `light-well` as it runs, held to the implementation it replaced on every
+/// evaluation.
+static HELD: common::Held = common::Held(&LightWell, &axioval_rules::reference::LightWell);
+
+fn messages(outcome: &axioval_engine::CapabilityEvaluation) -> Vec<String> {
+    outcome
+        .not_evaluated_outcomes()
+        .iter()
+        .map(|outcome| outcome.message().to_owned())
+        .collect()
 }
 
 fn point(value: f64) -> (f64, f64) {
@@ -161,18 +173,21 @@ fn the_row_follows_the_height_of_the_well() {
     assert!(findings(&low).is_empty(), "{:?}", findings(&low));
     let high = evaluate(STACK, (point(5.0), point(2.0)), None);
     let found = findings(&high);
-    assert_eq!(found.len(), 2, "{found:?}");
-    assert!(
-        found[0]
-            .1
-            .starts_with("the well's section area is 5 m²; row 1 requires at least 8 m²"),
-        "{found:?}"
-    );
-    assert!(
-        found[1]
-            .1
-            .starts_with("the well's width is 2 m; row 1 requires at least 2.5 m"),
-        "{found:?}"
+    assert_eq!(
+        found,
+        vec![
+            (
+                "well".to_owned(),
+                "the well's section area is 5 m²; row 1 requires at least 8 m² for a well 9 m \
+                 high"
+                    .to_owned()
+            ),
+            (
+                "well".to_owned(),
+                "the well's width is 2 m; row 1 requires at least 2.5 m for a well 9 m high"
+                    .to_owned()
+            ),
+        ]
     );
     assert_eq!(
         high.findings()[0].related,
@@ -184,10 +199,14 @@ fn the_row_follows_the_height_of_the_well() {
 fn a_vertical_gap_or_no_shared_section_breaks_contiguity() {
     let gap: &[(&str, f64, f64)] = &[("g", 0.0, 3.0), ("f2", 6.0, 9.0)];
     let found = findings(&evaluate(gap, (point(9.0), point(2.8)), None));
-    assert_eq!(found.len(), 1, "{found:?}");
-    assert!(
-        found[0].1.contains("starts 3 m above the top of"),
-        "{found:?}"
+    assert_eq!(
+        found,
+        vec![(
+            "well".to_owned(),
+            "test:model/f2 starts 3 m above the top of test:model/g, so the well is not \
+             contiguous"
+                .to_owned()
+        )]
     );
     // Within the tolerance a gap is contiguous.
     let slight: &[(&str, f64, f64)] = &[("g", 0.0, 3.0), ("f1", 3.02, 6.0)];
@@ -198,15 +217,68 @@ fn a_vertical_gap_or_no_shared_section_breaks_contiguity() {
     );
 
     let apart = findings(&evaluate(STACK, (point(0.0), point(0.0)), None));
-    assert_eq!(apart.len(), 1, "{apart:?}");
-    assert!(apart[0].1.contains("share no plan section"), "{apart:?}");
+    assert_eq!(
+        apart,
+        vec![(
+            "well".to_owned(),
+            "the 3 stacked spaces share no plan section, so the well is not contiguous".to_owned()
+        )]
+    );
 }
 
 #[test]
 fn straddling_values_decide_nothing() {
     let outcome = evaluate(STACK, ((7.0, 9.0), (2.4, 2.6)), None);
     assert!(findings(&outcome).is_empty());
-    assert_eq!(unevaluated(&outcome).len(), 2);
+    assert_eq!(
+        messages(&outcome),
+        vec![
+            "the well's section area is between 7 and 9 m²; row 1 requires at least 8 m², \
+             undecided",
+            "the well's width is between 2.4 m and 2.6 m; row 1 requires at least 2.5 m, \
+             undecided",
+        ]
+    );
+    // A well whose height straddles a row's maximum, and a gap straddling
+    // the tolerance.
+    let straddling: &[(&str, f64, f64)] = &[("g", 0.0, 3.0), ("f1", 3.0, 7.0)];
+    let mut model = Model::default().object("well", "zone");
+    let mut extents = BTreeMap::new();
+    for (local, bottom, top) in straddling {
+        model = model.object(local, "space").edge("groups", "well", local);
+        extents.insert(
+            id(local),
+            ((*bottom, *bottom + 0.04), (*top - 0.1, *top + 0.1)),
+        );
+    }
+    let service = Arc::new(Well {
+        extents,
+        section: (point(9.0), point(2.8)),
+    });
+    let rule = rule(
+        ID,
+        kind("zone"),
+        vec![
+            ("member_path", strings(&["groups:forward"])),
+            ("requirements", requirements()),
+            ("gap_tolerance_metres", number(0.02)),
+        ],
+    );
+    let outcome = model.evaluate_measured(&HELD, &rule, move |services| {
+        services
+            .register(VerticalExtentServiceHandle::new(service.clone()))
+            .unwrap();
+        services
+            .register(PlanSpanServiceHandle::new(service.clone()))
+            .unwrap();
+    });
+    assert_eq!(
+        messages(&outcome),
+        vec![
+            "the gap between test:model/g and test:model/f1 is between 0 m and 0.14 m",
+            "which row applies to a well between 6.86 m and 7.1 m high is undecided",
+        ]
+    );
 }
 
 #[test]
@@ -225,10 +297,14 @@ fn a_well_without_members_or_with_an_unmeasured_one_is_not_evaluated() {
         .object("other", "court")
         .object("g", "space")
         .edge("groups", "other", "g")
-        .evaluate(&LightWell, &empty);
+        .evaluate_measured(&HELD, &empty, |_| {});
     assert_eq!(
         unevaluated(&outcome),
         vec![("well".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+    );
+    assert_eq!(
+        messages(&outcome),
+        vec!["test:model/well reaches no space through groups"]
     );
     let rule = rule(
         ID,
@@ -242,10 +318,14 @@ fn a_well_without_members_or_with_an_unmeasured_one_is_not_evaluated() {
         .object("well", "zone")
         .object("g", "space")
         .edge("groups", "well", "g")
-        .evaluate(&LightWell, &rule);
+        .evaluate_measured(&HELD, &rule, |_| {});
     assert_eq!(
         unevaluated(&outcome),
         vec![("well".to_owned(), NotEvaluatedReason::MissingService)]
+    );
+    assert_eq!(
+        messages(&outcome),
+        vec!["vertical-extent service is not registered"]
     );
 }
 
@@ -311,7 +391,7 @@ fn an_empty_or_unmeasured_well_is_open_to_the_expression_too() {
         ],
     );
     for model in [empty, unmeasured] {
-        let expected = model().evaluate(&LightWell, &capability);
+        let expected = model().evaluate_measured(&HELD, &capability, |_| {});
         let outcome = model().evaluate_measured(
             &axioval_rules::ExpressionRequirement,
             &as_expression(0.0),
@@ -366,5 +446,113 @@ fn the_well_as_an_expression_over_its_values_reaches_the_verdicts() {
             .uncounted()
             .compare_evaluations((ID, &expected), ("expression", &outcome));
         assert!(parity.holds(), "case {index}:\n{}", parity.diff());
+    }
+}
+
+/// Generated wells of random stacks (exact and inexact extents, gaps and
+/// overlaps, some spaces unmeasured), sections (empty, inexact, without a
+/// width) and requirement rows, each held to the implementation the
+/// template replaced.
+mod generated {
+    use std::collections::BTreeMap;
+    use std::sync::Arc;
+
+    use axioval_engine::{PlanSpanServiceHandle, VerticalExtentServiceHandle};
+    use proptest::collection::vec;
+    use proptest::prelude::*;
+
+    use super::{
+        HELD, ID, Model, ParameterValue, Span, Well, id, kind, number, row, rule, strings,
+    };
+
+    /// A value in centimetres, exact or widened by a few.
+    fn span(range: std::ops::Range<u32>) -> impl Strategy<Value = Span> {
+        (range, 0u32..4).prop_map(|(low, slack)| {
+            let low = f64::from(low) / 100.0;
+            (low, low + f64::from(slack) / 100.0)
+        })
+    }
+
+    /// A space: its bottom and its height above it, or unmeasured.
+    fn space() -> impl Strategy<Value = Option<(Span, Span)>> {
+        prop_oneof![
+            8 => (span(0..900), span(50..400)).prop_map(|(bottom, height)| {
+                Some((bottom, (bottom.0 + height.0, bottom.1 + height.1)))
+            }),
+            1 => Just(None),
+        ]
+    }
+
+    fn requirement() -> impl Strategy<Value = Vec<(&'static str, f64)>> {
+        (
+            proptest::option::of(100u32..1200),
+            proptest::option::of(0u32..2000),
+            proptest::option::of(0u32..400),
+        )
+            .prop_filter_map(
+                "a row requires an area or a width",
+                |(up_to, area, width)| {
+                    if area.is_none() && width.is_none() {
+                        return None;
+                    }
+                    let mut cells = Vec::new();
+                    if let Some(up_to) = up_to {
+                        cells.push(("maximum_height_metres", f64::from(up_to) / 100.0));
+                    }
+                    if let Some(area) = area {
+                        cells.push(("minimum_area_square_metres", f64::from(area) / 100.0));
+                    }
+                    if let Some(width) = width {
+                        cells.push(("minimum_width_metres", f64::from(width) / 100.0));
+                    }
+                    Some(cells)
+                },
+            )
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(96))]
+
+        #[test]
+        fn generated_wells_hold_parity(
+            spaces in vec(space(), 0..4),
+            area in prop_oneof![1 => Just((0.0, 0.0)), 4 => span(0..2000)],
+            width in span(0..400),
+            rows in vec(requirement(), 1..4),
+            tolerance in proptest::option::of(0u32..20),
+        ) {
+            let mut model = Model::default().object("well", "zone");
+            let mut extents = BTreeMap::new();
+            for (index, space) in spaces.iter().enumerate() {
+                let local = format!("s{index}");
+                model = model.object(&local, "space").edge("groups", "well", &local);
+                if let Some(extent) = space {
+                    extents.insert(id(&local), *extent);
+                }
+            }
+            let service = Arc::new(Well { extents, section: (area, width) });
+            let mut parameters = vec![
+                ("member_path", strings(&["groups:forward"])),
+                (
+                    "requirements",
+                    ParameterValue::Table {
+                        value: rows.iter().map(|cells| row(cells)).collect(),
+                    },
+                ),
+            ];
+            if let Some(tolerance) = tolerance {
+                parameters.push(("gap_tolerance_metres", number(f64::from(tolerance) / 100.0)));
+            }
+            let rule = rule(ID, kind("zone"), parameters);
+            // `HELD` holds the template to the reference.
+            model.evaluate_measured(&HELD, &rule, move |services| {
+                services
+                    .register(VerticalExtentServiceHandle::new(service.clone()))
+                    .unwrap();
+                services
+                    .register(PlanSpanServiceHandle::new(service.clone()))
+                    .unwrap();
+            });
+        }
     }
 }

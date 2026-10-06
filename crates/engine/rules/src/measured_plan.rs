@@ -7,6 +7,7 @@
 //! (`corridor-end-openings`).
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 use axioval_engine::{
     CorridorEndRequest, EndWall, MeasuredMember, MeasuredProvider, Measurement, MemberValue,
@@ -177,19 +178,10 @@ impl PlanMeasures {
         object: &ObjectId,
         context: &RuleContext<'_>,
     ) -> Result<Measurement, Unavailable> {
-        let members = reached(call, "members", object, context)?;
-        if members.is_empty() {
-            return Err((
-                NotEvaluatedReason::IncompleteEvidence,
-                "the path reaches no space".into(),
-            ));
-        }
         let locator = format!("{}:{object}", call.name());
         let name = call.name();
         if name == "well_section_area" || name == "well_section_width" {
-            let section = spans(context)?
-                .measure_section(&members)
-                .map_err(|error| span_error(&error))?;
+            let section = well_section(call, object, context)?;
             if name == "well_section_area" {
                 return Ok(value(
                     (section.area_lower(), section.area_upper()),
@@ -205,17 +197,8 @@ impl PlanMeasures {
                 },
             });
         }
-        let service = crate::level_spacing::extents(context)?;
-        let mut stack = members
-            .iter()
-            .map(|member| crate::level_spacing::extent(service, member))
-            .collect::<Result<Vec<_>, _>>()?;
-        stack.sort_by(|a, b| {
-            a.bottom()
-                .lower_metres()
-                .total_cmp(&b.bottom().lower_metres())
-                .then_with(|| a.object().cmp(b.object()))
-        });
+        let well = well_stack(call, object, context)?;
+        let stack = &well.extents;
         let exact = stack.iter().all(|member| member.evidence().exact);
         if name == "well_height" {
             let top = |pick: fn(&axioval_engine::VerticalExtent) -> f64| {
@@ -248,6 +231,189 @@ impl PlanMeasures {
             gap = (gap.0.max(low.max(0.0)), gap.1.max(high.max(0.0)));
         }
         Ok(value(gap, LENGTH, exact, locator))
+    }
+
+    /// Each pair of consecutive spaces of the well, bottom to top, with the
+    /// gap from the lower one's top to the upper one's bottom, as
+    /// `light-well` subtracts them.
+    fn well_gaps(
+        call: &MeasuredCall,
+        object: &ObjectId,
+        context: &RuleContext<'_>,
+    ) -> Result<Vec<MeasuredMember>, Unavailable> {
+        let well = well_stack(call, object, context)?;
+        let members = MemberValue::Objects {
+            objects: well.sorted(),
+        };
+        Ok(well
+            .extents
+            .windows(2)
+            .enumerate()
+            .map(|(index, pair)| {
+                let (below, above) = (&pair[0], &pair[1]);
+                let low = above.bottom().lower_metres() - below.top().upper_metres();
+                let high = above.bottom().upper_metres() - below.top().lower_metres();
+                let exact = below.evidence().exact && above.evidence().exact;
+                MeasuredMember {
+                    certain: true,
+                    exact,
+                    fields: BTreeMap::from([
+                        (
+                            "gap",
+                            MemberValue::Measured(value(
+                                (low.max(0.0), high.max(0.0)),
+                                LENGTH,
+                                exact,
+                                format!("well_gaps:{object}#{}:gap", index + 1),
+                            )),
+                        ),
+                        (
+                            "below",
+                            MemberValue::Objects {
+                                objects: vec![below.object().clone()],
+                            },
+                        ),
+                        (
+                            "above",
+                            MemberValue::Objects {
+                                objects: vec![above.object().clone()],
+                            },
+                        ),
+                        ("members", members.clone()),
+                    ]),
+                }
+            })
+            .collect())
+    }
+
+    /// The well's shared section, its height from its lowest bottom to its
+    /// highest top and the first row of the `requirements` handed in that
+    /// its height does not exceed, with what that row requires: one item.
+    /// A section surely empty has no area and no row.
+    #[allow(clippy::too_many_lines)]
+    fn well_requirements(
+        call: &MeasuredCall,
+        object: &ObjectId,
+        context: &RuleContext<'_>,
+    ) -> Result<Vec<MeasuredMember>, Unavailable> {
+        use crate::support::table::{Matched, RowSelection, match_rows};
+        let rows = match call.argument("requirements") {
+            Some(MeasuredArgument::Table(rows)) => Some(crate::light_well::rows(rows)?),
+            _ => None,
+        };
+        let well = well_stack(call, object, context)?;
+        let section = well_section(call, object, context)?;
+        let stack = &well.extents;
+        let at = |field: &str| format!("well_requirements:{object}:{field}");
+        let absent = |field: &str| {
+            MemberValue::Measured(Measurement::Absent {
+                locator: format!("{}: none", at(field)),
+            })
+        };
+        let extents_exact = stack.iter().all(|member| member.evidence().exact);
+        // As `light-well` measures it, in plain arithmetic.
+        let height = (
+            (stack
+                .iter()
+                .map(|m| m.top().lower_metres())
+                .fold(f64::MIN, f64::max)
+                - stack
+                    .iter()
+                    .map(|m| m.bottom().upper_metres())
+                    .fold(f64::MAX, f64::min))
+            .max(0.0),
+            stack
+                .iter()
+                .map(|m| m.top().upper_metres())
+                .fold(f64::MIN, f64::max)
+                - stack
+                    .iter()
+                    .map(|m| m.bottom().lower_metres())
+                    .fold(f64::MAX, f64::min),
+        );
+        let empty = section.area_upper() <= 0.0;
+        let undecided = || MemberValue::Undecided {
+            why: "which row applies is undecided".into(),
+        };
+        let required = |minimum: Option<f64>, dimension, field: &str| match minimum {
+            Some(minimum) => {
+                MemberValue::Measured(value((minimum, minimum), dimension, true, at(field)))
+            }
+            None => absent(field),
+        };
+        let none = || {
+            (
+                absent("row"),
+                absent("required_area"),
+                absent("required_width"),
+            )
+        };
+        let (row, required_area, required_width) =
+            match rows.as_ref().filter(|_| !empty).map(|rows| {
+                match_rows(rows, RowSelection::First, |row| {
+                    row.holds(height.0, height.1)
+                })
+            }) {
+                Some(Matched::Rows(matched)) => match matched.first() {
+                    Some((index, row)) => {
+                        #[allow(clippy::cast_precision_loss)]
+                        let index = *index as f64;
+                        (
+                            MemberValue::Measured(value((index, index), None, true, at("row"))),
+                            required(row.area, Some(QuantityDimension::Area), "required_area"),
+                            required(row.width, LENGTH, "required_width"),
+                        )
+                    }
+                    None => none(),
+                },
+                Some(Matched::Undecided | Matched::Ambiguous(_)) => {
+                    (undecided(), undecided(), undecided())
+                }
+                None => none(),
+            };
+        let area = if empty {
+            absent("area")
+        } else {
+            MemberValue::Measured(value(
+                (section.area_lower(), section.area_upper()),
+                Some(QuantityDimension::Area),
+                section.evidence().exact,
+                at("area"),
+            ))
+        };
+        let width = match section.width() {
+            Some(width) if !empty => MemberValue::Measured(plan(width, at("width"))),
+            _ => absent("width"),
+        };
+        #[allow(clippy::cast_precision_loss)]
+        let count = well.members.len() as f64;
+        Ok(vec![MeasuredMember {
+            certain: true,
+            exact: extents_exact
+                && section.evidence().exact
+                && section.width().is_none_or(|width| width.evidence().exact),
+            fields: BTreeMap::from([
+                (
+                    "count",
+                    MemberValue::Measured(value((count, count), None, true, at("count"))),
+                ),
+                ("area", area),
+                ("width", width),
+                (
+                    "height",
+                    MemberValue::Measured(value(height, LENGTH, extents_exact, at("height"))),
+                ),
+                ("row", row),
+                ("required_area", required_area),
+                ("required_width", required_width),
+                (
+                    "members",
+                    MemberValue::Objects {
+                        objects: well.sorted(),
+                    },
+                ),
+            ]),
+        }])
     }
 
     fn measure_object(
@@ -457,6 +623,101 @@ impl PlanMeasures {
     }
 }
 
+/// A well's spaces and their vertical extents, ordered by their bottoms:
+/// what `light-well` stacks.
+struct Well {
+    members: Vec<ObjectId>,
+    extents: Vec<axioval_engine::VerticalExtent>,
+}
+
+impl Well {
+    /// The well's spaces, by identity.
+    fn sorted(&self) -> Vec<ObjectId> {
+        let mut members = self.members.clone();
+        members.sort();
+        members
+    }
+}
+
+/// The well and the path its spaces are reached along, as the run's memo
+/// keys a well's spaces, stack and section.
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct WellKey(ObjectId, Vec<String>);
+
+/// The spaces `members` reaches from the well, once per well and path for
+/// the run; none leaves the well open, as `light-well` left it.
+fn well_members(
+    call: &MeasuredCall,
+    object: &ObjectId,
+    context: &RuleContext<'_>,
+) -> Result<(WellKey, Arc<Vec<ObjectId>>), Unavailable> {
+    let Some(MeasuredArgument::Path(steps)) = call.argument("members") else {
+        return Err(crate::support::invalid("`members` is required"));
+    };
+    let key = WellKey(object.clone(), steps.clone());
+    let reached = axioval_engine::MeasuredMemo::of(context.services, key.clone(), || {
+        let traversal = Traversal::path(steps)?;
+        let everything: Vec<&Object> = context.project.objects().collect();
+        let (members, _) = traversal.related(context, object, &everything)?;
+        if members.is_empty() {
+            return Err((
+                NotEvaluatedReason::IncompleteEvidence,
+                format!(
+                    "{object} reaches no space through {}",
+                    traversal.relationship
+                ),
+            ));
+        }
+        Ok(Arc::new(members))
+    })?;
+    Ok((key, reached))
+}
+
+/// The well's spaces with their extents ordered by their bottoms, once per
+/// well and path for the run.
+fn well_stack(
+    call: &MeasuredCall,
+    object: &ObjectId,
+    context: &RuleContext<'_>,
+) -> Result<Arc<Well>, Unavailable> {
+    let (key, members) = well_members(call, object, context)?;
+    axioval_engine::MeasuredMemo::of(context.services, key, || {
+        let service = crate::level_spacing::extents(context)?;
+        let mut extents = members
+            .iter()
+            .map(|member| crate::level_spacing::extent(service, member))
+            .collect::<Result<Vec<_>, _>>()?;
+        extents.sort_by(|a, b| {
+            a.bottom()
+                .lower_metres()
+                .total_cmp(&b.bottom().lower_metres())
+                .then_with(|| a.object().cmp(b.object()))
+        });
+        Ok(Arc::new(Well {
+            members: members.as_ref().clone(),
+            extents,
+        }))
+    })
+}
+
+/// The plan section the well's spaces share, once per well and path for
+/// the run, measured only once their stack is, as `light-well` measured
+/// it: a stack that cannot be measured refuses the section too, and its
+/// footprints are never intersected.
+fn well_section(
+    call: &MeasuredCall,
+    object: &ObjectId,
+    context: &RuleContext<'_>,
+) -> Result<axioval_engine::PlanSection, Unavailable> {
+    well_stack(call, object, context)?;
+    let (key, members) = well_members(call, object, context)?;
+    axioval_engine::MeasuredMemo::of(context.services, key, || {
+        spans(context)?
+            .measure_section(&members)
+            .map_err(|error| crate::light_well::section_unavailable(&error))
+    })
+}
+
 fn refused(
     call: &MeasuredCall,
     object: &ObjectId,
@@ -481,7 +742,13 @@ impl MeasuredProvider for PlanMeasures {
     }
 
     fn member_lists(&self) -> &'static [&'static str] {
-        &["end_walls", "exit_pairs", "recesses"]
+        &[
+            "end_walls",
+            "exit_pairs",
+            "recesses",
+            "well_gaps",
+            "well_requirements",
+        ]
     }
 
     fn measure(
@@ -501,6 +768,8 @@ impl MeasuredProvider for PlanMeasures {
     ) -> Result<Vec<MeasuredMember>, PropertyResolutionError> {
         match call.name() {
             "recesses" => Self::recesses(call, object, context),
+            "well_gaps" => Self::well_gaps(call, object, context),
+            "well_requirements" => Self::well_requirements(call, object, context),
             "end_walls" => Self::end_walls(call, object, context),
             _ => Self::exit_pairs(call, object, context),
         }

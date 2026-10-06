@@ -390,7 +390,10 @@ ignoring ASCII case):
 | `effect_covered_area`, `effect_covered_share` `;sources=<kinds>[;blockers=<kinds>][;reach=grown\|travel\|visible][;range=<m>]` | the part of the footprint the sources' effect areas cover, or its share | `PlanAreaService::measure_coverage` |
 | `boundary_covered_share`, `boundary_uncovered_area`, `boundary_overlap_area` `[;plane=<m>]` | a space's declared boundaries over its body's surface | `BoundaryCoverageService` |
 | `boundary_off_surface_count[;plane=<m>]` | how many of a space's declared boundaries lie on no face of its body, a plain number | `BoundaryCoverageService` |
-| `counterpart_uncovered_share;by=<kinds>[;measure=plan\|height\|elevation][;horizontal=<m>][;vertical=<m>][;axis_tolerance=<degrees>][;frame=<kinds>][;infill_above=<share>]` | the share of the footprint, height or elevation outside every counterpart, as `counterpart-coverage` measures it | built in, over `PlanAreaService`, `ProximityService`, `VerticalExtentService`, `PlanSpanService` |
+| `counterpart_uncovered_share;by=<objects>[;measure=plan\|height\|elevation\|plan_and_height][;horizontal=<m>][;vertical=<m>][;axis_tolerance=<degrees>][;frame=<objects>][;infill_above=<share>]` | the share of the footprint, height or elevation outside every counterpart, as `counterpart-coverage` measures it (kinds, or `@` a selector parameter, whose undecided objects may cover) | built in, over `PlanAreaService`, `ProximityService`, `VerticalExtentService`, `PlanSpanService` |
+| `counterpart_uncovered`, `counterpart_whole` (the same arguments) | the part left uncovered and the whole it is a share of: an area in plan and in the elevation, a height for `height` | the same |
+| `counterpart_covering` (the same arguments) | how many counterparts cover part of the element, from those surely covering to every one that may, those that cannot be read included | the same |
+| `counterpart_infill` (the same arguments) | in the elevation, whether the frame's infill covers: 1, 0, or between where undecided; it cites the frame's members | the same |
 | `opening_area;path=<steps>[;length_axis=…;height_axis=…][;minimum=<m²>]` | the summed section areas of a host's openings on its middle plane | built in, over the body facts |
 | `opening_section_area;host_path=<steps>[;length_axis=…;height_axis=…]` | one opening's section area on its host's middle plane | built in, over the body facts |
 | `opening_count;path=<steps>[;length_axis=…;height_axis=…][;minimum=<m²>]`, `middle_face_area[;length_axis=…;height_axis=…]` | how many openings take area from a host's middle plane, and that face's area, as `empty-host` compares them | built in, over the body facts |
@@ -786,7 +789,16 @@ and the most (possible ones too) from below, a counterpart without a
 readable extent dropping the lower bound to zero, only axis-compatible
 counterparts with `axis_tolerance`, and in the elevation a frame's infill
 above `infill_above`. For `height`, `horizontal` is the growth by which a
-counterpart overlaps in plan (zero where the rule's plan check is off).
+counterpart overlaps in plan; a negative growth switches its check off,
+as the capability's tolerances do (nothing grows, and the switched-off
+check's share is refused). `plan_and_height` measures as `plan` and needs
+the vertical-extent service where `vertical` is not negative: what a
+coverage rule declaring both checks needs, read once for both. The share
+cites the counterparts that surely cover part of the element, and notes
+why it may be covered more (a counterpart whose extent cannot be read,
+one whose cover cannot be measured, axes that are not proven). Each
+element's cover is measured once per run, its counterparts' extents once
+per selection, for every value and rule reading them.
 Measured from exact evidence, it is cited exact, as the capability cites
 it. One expression rule per band, `share <= threshold` at the band's
 severity, reaches the capability's grades on its fixtures, except where a
@@ -932,7 +944,8 @@ sites that cite a value exact:
 | `contact_area`, `contact_gap`, `contact_share` | always: the contact service refuses inexact evidence | the share's division, rounded outward; the contact undecided candidates may add |
 | `undecided_count` | always: counted over the selection | nothing |
 | `stack_distance`, `stack_prevailing`, `body_extent`, `plan_area`, `triangle_count` | every extent, frame, area or count is exact (for `stack_prevailing`, the prevailing pair's) | rounding |
-| `counterpart_uncovered_share` | every evidence is exact and every counterpart that may cover was read | the undecided cover, as `counterpart-coverage` cites it (`Cited`) |
+| `counterpart_uncovered_share`, `counterpart_uncovered`, `counterpart_whole` | every evidence is exact and every counterpart that may cover was read | the undecided cover, as `counterpart-coverage` cites it (`Cited`) |
+| `counterpart_covering`, `counterpart_infill` | always: counted over what was read | the undecided cover, or whether the infill applies |
 | `coordinate_*`, `map_*` | always: coordinate systems are exact by contract | the arithmetic's rounding, widened by a bound on it |
 | `opening_area`, `opening_count`, `opening_section_area`, `middle_face_area`, `opening_placements` | the body facts read are exact (they are, unless a source cites an estimate) | a sum of areas widened by its rounding; a single area's own arithmetic is not widened, which the capability's rounding allowance covers |
 | missing-tactile and other defect counts | every finding's evidence is exact and nothing is open | the open checks |

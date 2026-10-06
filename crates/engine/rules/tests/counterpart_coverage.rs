@@ -1,4 +1,9 @@
 //! Coverage and conformity of walls by their structural counterparts.
+//!
+//! `counterpart-coverage` runs as a template (#282); every fixture runs it
+//! and the implementation it replaced
+//! (`axioval_rules::reference::CounterpartCoverage`) and holds the template
+//! to the whole outside contract (`Parity::contract()`).
 #![allow(missing_docs)]
 
 mod common;
@@ -17,6 +22,7 @@ use axioval_engine::{
 use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector};
 use axioval_ir::{Evidence, NotEvaluatedReason, ObjectId, Severity};
 use axioval_rules::CounterpartCoverage;
+use axioval_rules::reference::CounterpartCoverage as Reference;
 use common::{Model, id, kind, number, rule, selector, source, string, unevaluated};
 
 const ID: &str = "axioval:capability.counterpart-coverage";
@@ -339,22 +345,31 @@ fn model(boxes: &Boxes) -> Model {
     })
 }
 
+/// The template's evaluation, held to the replaced implementation's whole
+/// contract.
 fn run_with(model: Model, boxes: Boxes, rule: &CompiledRule) -> CapabilityEvaluation {
     let shared = Arc::new(boxes);
-    model.evaluate_with(&CounterpartCoverage, rule, |services| {
-        services
-            .register(PlanAreaServiceHandle::new(shared.clone()))
-            .unwrap();
-        services
-            .register(ProximityServiceHandle::new(shared.clone()))
-            .unwrap();
-        services
-            .register(VerticalExtentServiceHandle::new(shared.clone()))
-            .unwrap();
-        services
-            .register(PlanSpanServiceHandle::new(shared))
-            .unwrap();
-    })
+    model.holding_contract(
+        &CounterpartCoverage,
+        &Reference,
+        rule,
+        |services| {
+            services
+                .register(PlanAreaServiceHandle::new(shared.clone()))
+                .unwrap();
+            services
+                .register(ProximityServiceHandle::new(shared.clone()))
+                .unwrap();
+            services
+                .register(VerticalExtentServiceHandle::new(shared.clone()))
+                .unwrap();
+            services
+                .register(PlanSpanServiceHandle::new(shared.clone()))
+                .unwrap();
+        },
+        &[],
+        0.0,
+    )
 }
 
 fn run(boxes: Boxes, rule: &CompiledRule) -> CapabilityEvaluation {
@@ -659,9 +674,13 @@ fn invalid_declarations_refuse_the_rule() {
 
 #[test]
 fn a_missing_service_leaves_every_wall_not_evaluated() {
-    let evaluation = model(&three_walls()).evaluate(
+    let evaluation = model(&three_walls()).holding_contract(
         &CounterpartCoverage,
+        &Reference,
         &coverage_rule(vec![("tolerance", metres(0.0))]),
+        |_| {},
+        &[],
+        0.0,
     );
     assert!(evaluation.findings().is_empty());
     assert_eq!(
@@ -1312,5 +1331,296 @@ fn a_share_measured_on_a_tessellation_is_inexact() {
             "{lower}..{upper}"
         );
         assert_eq!(cited, exact, "deviation {deviation:?}");
+        // The part uncovered and the whole are cited alike.
+        for (name, area) in [("counterpart_uncovered", 0.24), ("counterpart_whole", 0.8)] {
+            let ((lower, upper), cited) = common::measured_cited(
+                &services,
+                &project,
+                &id("w1"),
+                &format!("{name};by=structure;horizontal=0"),
+            )
+            .unwrap()
+            .unwrap();
+            assert!(
+                lower <= area + 1e-9 && area - 1e-9 <= upper,
+                "{name} {lower}..{upper}"
+            );
+            assert_eq!(cited, exact, "{name}, deviation {deviation:?}");
+        }
+    }
+}
+
+/// Generated walls and counterparts, held to the replaced implementation's
+/// whole contract: random plan boxes along either axis, heights, chord
+/// deviations, counterparts without geometry or of undecided selection,
+/// tolerances (some switched off), bands, axis tolerances, elevations and
+/// frames.
+mod generated {
+    use proptest::collection::vec;
+    use proptest::prelude::*;
+
+    use super::*;
+
+    /// A box: its kind (0 wall, 1 structure, 2 beam), its start along x and
+    /// y in decimetres, its length (decimetres, along x or y), its top in
+    /// decimetres, and its chord deviation in centimetres (0 exact).
+    type Placed = (u32, (u32, u32), (u32, bool), u32, u32);
+
+    fn placed() -> impl Strategy<Value = Placed> {
+        (
+            0u32..3,
+            (0u32..30, 0u32..30),
+            (2u32..40, any::<bool>()),
+            10u32..35,
+            prop_oneof![4 => Just(0u32), 1 => 1u32..6],
+        )
+    }
+
+    fn boxes(placed: &[Placed]) -> Boxes {
+        placed.iter().enumerate().fold(
+            Boxes::default(),
+            |boxes, (index, (kind, (x, y), (length, along_x), top, deviation))| {
+                let local = match kind {
+                    0 => format!("w{index}"),
+                    1 => format!("s{index}"),
+                    _ => format!("b{index}"),
+                };
+                let (x, y) = (f64::from(*x) / 10.0, f64::from(*y) / 10.0);
+                let length = f64::from(*length) / 10.0;
+                let plan = if *along_x {
+                    [x, y, x + length, y + 0.2]
+                } else {
+                    [x, y, x + 0.2, y + length]
+                };
+                let bottom = if *kind == 2 { 2.5 } else { 0.0 };
+                let mut boxes = boxes.with(&local, plan, bottom, f64::from(*top) / 10.0 + bottom);
+                if *deviation > 0 {
+                    boxes = boxes.tessellated(&local, f64::from(*deviation) / 100.0);
+                }
+                boxes
+            },
+        )
+    }
+
+    /// A tolerance in centimetres, negative switching its check off.
+    fn tolerance() -> impl Strategy<Value = i32> {
+        prop_oneof![4 => 0i32..8, 1 => Just(-1i32)]
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(96))]
+
+        #[test]
+        fn generated_walls_hold_parity(
+            placed in vec(placed(), 1..8),
+            blind in any::<bool>(),
+            undecided in any::<bool>(),
+            tolerances in (any::<bool>(), tolerance(), tolerance()),
+            bands in (any::<bool>(), any::<bool>(), any::<bool>(), 1u32..30),
+            axis in any::<bool>(),
+            elevation in any::<bool>(),
+            infill in (any::<bool>(), proptest::option::of(2u32..9)),
+        ) {
+            let boxes_of = || {
+                let mut boxes = boxes(&placed);
+                if undecided {
+                    boxes = boxes.with("u0", [0.0, 0.0, 3.0, 0.2], 0.0, 3.0);
+                }
+                boxes
+            };
+            let mut model = model(&boxes(&placed));
+            if blind {
+                model = model.object("s99", "structure");
+            }
+            if undecided {
+                model = model.object("u0", "other").unreadable("u0");
+            }
+            let (one, horizontal, vertical) = tolerances;
+            let centimetres = |value: i32| metres(f64::from(value) / 100.0);
+            let mut parameters = vec![(
+                "counterparts",
+                selector(if undecided {
+                    structure_or_load_bearing()
+                } else {
+                    kind("structure")
+                }),
+            )];
+            if one {
+                parameters.push(("tolerance", centimetres(horizontal)));
+            } else {
+                parameters.push(("horizontal_tolerance", centimetres(horizontal)));
+                parameters.push(("vertical_tolerance", centimetres(vertical)));
+            }
+            let (info, warning, error, step) = bands;
+            let step = f64::from(step) / 100.0;
+            for (stated, name, threshold) in [
+                (info, "info_above", step / 4.0),
+                (warning, "warning_above", step),
+                (error, "error_above", (step * 3.0).min(0.95)),
+            ] {
+                if stated {
+                    parameters.push((name, number(threshold)));
+                }
+            }
+            if axis {
+                parameters.push(("axis_tolerance", degrees(5.0)));
+            }
+            if elevation {
+                parameters.push(("measure", string("elevation")));
+                let (framed, above) = infill;
+                if framed {
+                    parameters.push(("infill_counterparts", selector(kind("beam"))));
+                    if let Some(above) = above {
+                        parameters.push(("infill_above", number(f64::from(above) / 10.0)));
+                    }
+                }
+            }
+            run_with(model, boxes_of(), &rule(ID, kind("wall"), parameters));
+        }
+    }
+}
+
+/// D27: an element that is its own kind's counterpart. Two walls standing
+/// on each other's footprint, both selected and both counterparts: the
+/// capability's one broad phase over every subject reported the pair once,
+/// from the wall of lesser identity, so the other never counted it as a
+/// counterpart; the measured cover finds every counterpart near each wall.
+#[test]
+fn a_subject_counts_every_near_counterpart_of_its_own_kind() {
+    let boxes = || {
+        Boxes::default()
+            .with("w1", [0.0, 0.0, 4.0, 0.2], 0.0, 3.0)
+            .with("w2", [0.0, 0.0, 4.0, 0.2], 0.0, 3.0)
+    };
+    let declared = rule(
+        ID,
+        kind("wall"),
+        vec![
+            ("counterparts", selector(kind("wall"))),
+            ("tolerance", metres(0.0)),
+            ("info_above", number(0.01)),
+        ],
+    );
+    let register = |shared: Arc<Boxes>| {
+        move |services: &mut axioval_engine::ServiceRegistry| {
+            services
+                .register(PlanAreaServiceHandle::new(shared.clone()))
+                .unwrap();
+            services
+                .register(ProximityServiceHandle::new(shared.clone()))
+                .unwrap();
+            services
+                .register(VerticalExtentServiceHandle::new(shared.clone()))
+                .unwrap();
+            services
+                .register(PlanSpanServiceHandle::new(shared.clone()))
+                .unwrap();
+        }
+    };
+    let template = model(&boxes()).evaluate_measured(
+        &CounterpartCoverage,
+        &declared,
+        register(Arc::new(boxes())),
+    );
+    let replaced =
+        model(&boxes()).evaluate_with(&Reference, &declared, register(Arc::new(boxes())));
+    // Each wall covers the other whole.
+    assert!(template.findings().is_empty(), "{:#?}", template.findings());
+    assert!(template.not_evaluated_outcomes().is_empty());
+    // The replaced implementation left w2 uncovered in plan and height.
+    assert_eq!(
+        graded(&replaced)
+            .iter()
+            .map(|(wall, severity, _)| (wall.as_str(), severity.clone()))
+            .collect::<Vec<_>>(),
+        [("w2", Severity::Info), ("w2", Severity::Info)]
+    );
+}
+
+/// The rule forked from the template, an `expression` rule requiring each
+/// check that applies to the rule (its share at most the lowest threshold)
+/// and carrying the counterparts, growths and frame, reaches the template's
+/// verdicts on every fixture: the objects found and those left open. Its
+/// findings take the rule's severity, one per object (D1).
+#[test]
+fn the_forked_rule_reaches_the_templates_verdicts() {
+    use axioval_rules::ExpressionRequirement;
+    use axioval_rules::templates::{Fork, fork};
+    let verdicts = |evaluation: &CapabilityEvaluation| {
+        let mut found: Vec<ObjectId> = evaluation
+            .findings()
+            .iter()
+            .filter_map(|finding| match &finding.scope {
+                axioval_ir::Scope::Object(object) => Some(object.clone()),
+                _ => None,
+            })
+            .collect();
+        found.sort();
+        found.dedup();
+        let mut open: Vec<ObjectId> = evaluation
+            .not_evaluated_outcomes()
+            .iter()
+            .filter_map(|outcome| outcome.object_id().cloned())
+            .filter(|object| !found.contains(object))
+            .collect();
+        open.sort();
+        open.dedup();
+        (found, open)
+    };
+    let cases: Vec<(&dyn Fn() -> Boxes, CompiledRule)> = vec![
+        (
+            &three_walls,
+            coverage_rule(vec![("tolerance", metres(0.02))]),
+        ),
+        (
+            &three_walls,
+            coverage_rule(vec![
+                ("horizontal_tolerance", metres(-1.0)),
+                ("vertical_tolerance", metres(0.0)),
+            ]),
+        ),
+        (&crossed, coverage_rule(vec![("tolerance", metres(0.0))])),
+        (
+            &crossed,
+            coverage_rule(vec![
+                ("tolerance", metres(0.0)),
+                ("axis_tolerance", degrees(5.0)),
+            ]),
+        ),
+        (&two_heights, elevation_rule(vec![])),
+        (
+            &bay,
+            elevation_rule(vec![("infill_counterparts", selector(kind("beam")))]),
+        ),
+    ];
+    for (boxes, bound) in cases {
+        let forked = fork(&CounterpartCoverage, &bound).unwrap();
+        let mut expression_rule = bound.clone();
+        expression_rule.capability = Fork::CAPABILITY.into();
+        expression_rule.parameters = forked.parameters();
+        let register = |services: &mut axioval_engine::ServiceRegistry| {
+            let shared = Arc::new(boxes());
+            services
+                .register(PlanAreaServiceHandle::new(shared.clone()))
+                .unwrap();
+            services
+                .register(ProximityServiceHandle::new(shared.clone()))
+                .unwrap();
+            services
+                .register(VerticalExtentServiceHandle::new(shared.clone()))
+                .unwrap();
+            services
+                .register(PlanSpanServiceHandle::new(shared))
+                .unwrap();
+        };
+        let template = model(&boxes()).evaluate_measured(&CounterpartCoverage, &bound, register);
+        let forked =
+            model(&boxes()).evaluate_measured(&ExpressionRequirement, &expression_rule, register);
+        assert_eq!(
+            verdicts(&template),
+            verdicts(&forked),
+            "{:?}",
+            bound.parameters
+        );
     }
 }

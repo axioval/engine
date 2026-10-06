@@ -188,6 +188,7 @@ pub mod reference {
     pub use crate::body_extent::reference::BodyExtent;
     pub use crate::conformance::reference::SelectorConformance;
     pub use crate::consistent_value::reference::ConsistentValue;
+    pub use crate::counterpart_coverage::reference::CounterpartCoverage;
     pub use crate::level_spacing::reference::LevelSpacing;
     pub use crate::object_count::reference::ObjectCount;
     pub use crate::plan_area::reference::PlanAreaRange;

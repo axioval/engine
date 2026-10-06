@@ -34,7 +34,8 @@ requirements tables and `property-comparison` candidates against a target
 first judging the items of measured lists one by one, and
 `stair-geometry` the first judging the parts of what it selects as objects
 of their own ([#280](https://github.com/axioval/engine/issues/280)); `slab-contact` is the first to grade its findings itself and
-to leave objects unjudged
+to leave objects unjudged, and `counterpart-coverage` the first graded by
+thresholds the rule states
 ([#282](https://github.com/axioval/engine/issues/282)).
 
 ## The outside contract
@@ -896,6 +897,40 @@ order and words; the storey selector and the traversal are checked only
 while a storey is left out (`when`), and without the contact service each
 face is open (`contact service is not registered`).
 
+### `counterpart-coverage`
+
+| Form | When | Values | Checks |
+| --- | --- | --- | --- |
+| one | always | `covering` = `counterpart_covering;by=@counterparts;measure=@measure;horizontal=@horizontal;vertical=@vertical;axis_tolerance=@axis_tolerance;frame=@infill_counterparts;infill_above=@infill_above` | `plan` (`measure` not `elevation`, `horizontal` at least 0), `height` (likewise with `vertical`) and `elevation` (`measure` `elevation`): each its `share`, `uncovered` and `whole` (`counterpart_uncovered_share`, `counterpart_uncovered`, `counterpart_whole` with the same arguments and `measure` the check's), the elevation also `framed` (`counterpart_infill`); `share` at most `lowest`, no rounding, graded |
+
+`horizontal` and `vertical` are defaults taken `from` `tolerance` or the
+check's own tolerance, `lowest` from the first threshold stated
+(`info_above`, `warning_above`, `error_above`), `measure` defaults to
+`plan_and_height` and `infill_above` to 0.5. The form's one value is read
+first: the services the rule's checks need (`plan-area service is not
+registered`, …), an element whose extent cannot be read (`…; its coverage
+was not checked`) or whose footprint cannot be measured leave it open once
+for both checks, as the capability did. A finding is graded by the first
+band its share's upper end exceeds (`Exceeds`, error, warning, info) and
+deviates from `lowest`; it reads `plan: {share:area} of the footprint
+({uncovered:area} of {whole:area} m²) lies outside every counterpart grown
+by {horizontal:si} m{overlaps}{graded}`, the height's and the elevation's
+alike (the elevation naming the frame's infill, `{infill}`, where
+`counterpart_infill` says it covers or may, its members `{framed:cited}`),
+`overlaps` being `; no counterpart overlaps it` where `covering` is surely
+zero and `graded` `; graded error by its upper bound, at least warning`
+where the share's lower end reaches a milder band than its upper end. A
+share straddling `lowest` leaves the check open with `…, which straddles
+the threshold {lowest}{share:notes}`, the notes saying why it may be
+covered more. The finding relates the counterparts surely covering part of
+the element (`related: share`). The declaration keeps the capability's
+checks, words and order: the tolerances' dimension (`quantity`) and
+combination (`anyOf`, `exclusive`, `together`), the checks not both off
+(`holds`), each threshold's kind, range (`holds`) and order (`exceeds`),
+one threshold stated, `measure` (`choice`), an elevation with both
+tolerances (`holds`), `axis_tolerance` (`angleBelow`) and the infill
+(`requires`, `requiresValue`, `holds`).
+
 ### `slab-stack-spacing`
 
 | Form | When | Values | Checks |
@@ -1278,6 +1313,16 @@ by generated stacks of slabs of random plans, elevations, thickness and
 tessellation under random bounds, consistency and tolerances; and by the
 `slab-stack` rule of the `storeys` case, recorded before the switch. It is
 never forked (D26).
+
+`counterpart-coverage` is held to `counterpart_coverage/reference.rs`
+(`axioval_rules::reference::CounterpartCoverage`, which measures through
+the same `Subject`) on every fixture of `tests/counterpart_coverage.rs`,
+its messages asserted literally; by generated walls, structure and beams of
+random plans along either axis, heights and chord deviations, some
+counterparts without geometry or of undecided selection, under random
+tolerances (some switched off), bands, axis tolerances, elevations and
+frames; and by the `counterpart-coverage` rules of the `coverage` case,
+recorded before the switch (D27).
 
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the

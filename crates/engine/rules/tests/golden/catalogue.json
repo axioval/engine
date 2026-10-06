@@ -9186,7 +9186,1009 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "grades": true,
+        "name": "counterpart-coverage",
+        "defaults": [
+          {
+            "parameter": "measure",
+            "value": {
+              "type": "string",
+              "value": "plan_and_height"
+            }
+          },
+          {
+            "parameter": "infill_above",
+            "value": {
+              "type": "number",
+              "value": 0.5
+            }
+          },
+          {
+            "parameter": "horizontal",
+            "value": {
+              "type": "quantity",
+              "value": 0.0,
+              "unit": "m"
+            },
+            "from": [
+              "tolerance",
+              "horizontal_tolerance"
+            ]
+          },
+          {
+            "parameter": "vertical",
+            "value": {
+              "type": "quantity",
+              "value": 0.0,
+              "unit": "m"
+            },
+            "from": [
+              "tolerance",
+              "vertical_tolerance"
+            ]
+          },
+          {
+            "parameter": "lowest",
+            "value": {
+              "type": "number",
+              "value": 0.0
+            },
+            "from": [
+              "info_above",
+              "warning_above",
+              "error_above"
+            ]
+          }
+        ],
+        "declaration": [
+          {
+            "kind": "quantity",
+            "parameter": "tolerance",
+            "dimension": "length",
+            "message": "tolerance must be a length"
+          },
+          {
+            "kind": "quantity",
+            "parameter": "horizontal_tolerance",
+            "dimension": "length",
+            "message": "horizontal_tolerance must be a length"
+          },
+          {
+            "kind": "quantity",
+            "parameter": "vertical_tolerance",
+            "dimension": "length",
+            "message": "vertical_tolerance must be a length"
+          },
+          {
+            "kind": "anyOf",
+            "parameters": [
+              "tolerance",
+              "horizontal_tolerance",
+              "vertical_tolerance"
+            ],
+            "message": "declare `tolerance`, or `horizontal_tolerance` and `vertical_tolerance`"
+          },
+          {
+            "kind": "exclusive",
+            "one": [
+              "tolerance"
+            ],
+            "other": [
+              "horizontal_tolerance",
+              "vertical_tolerance"
+            ],
+            "message": "`tolerance` cannot be combined with `horizontal_tolerance` or `vertical_tolerance`"
+          },
+          {
+            "kind": "together",
+            "parameters": [
+              "horizontal_tolerance",
+              "vertical_tolerance"
+            ],
+            "message": "`horizontal_tolerance` and `vertical_tolerance` are declared together"
+          },
+          {
+            "kind": "holds",
+            "condition": {
+              "kind": "not",
+              "condition": {
+                "kind": "all",
+                "conditions": [
+                  {
+                    "kind": "under",
+                    "parameter": "horizontal",
+                    "than": 0.0
+                  },
+                  {
+                    "kind": "under",
+                    "parameter": "vertical",
+                    "than": 0.0
+                  }
+                ]
+              }
+            },
+            "message": "a negative tolerance switches its check off, and every check is off"
+          },
+          {
+            "kind": "kind",
+            "parameter": "info_above"
+          },
+          {
+            "kind": "holds",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "not",
+                  "condition": {
+                    "kind": "under",
+                    "parameter": "info_above",
+                    "than": 0.0
+                  }
+                },
+                {
+                  "kind": "not",
+                  "condition": {
+                    "kind": "atLeast",
+                    "parameter": "info_above",
+                    "than": 1.0
+                  }
+                }
+              ]
+            },
+            "message": "info_above must lie in [0, 1)"
+          },
+          {
+            "kind": "kind",
+            "parameter": "warning_above"
+          },
+          {
+            "kind": "holds",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "not",
+                  "condition": {
+                    "kind": "under",
+                    "parameter": "warning_above",
+                    "than": 0.0
+                  }
+                },
+                {
+                  "kind": "not",
+                  "condition": {
+                    "kind": "atLeast",
+                    "parameter": "warning_above",
+                    "than": 1.0
+                  }
+                }
+              ]
+            },
+            "message": "warning_above must lie in [0, 1)"
+          },
+          {
+            "kind": "exceeds",
+            "parameter": "warning_above",
+            "earlier": [
+              "info_above"
+            ],
+            "message": "warning_above must exceed the thresholds of less severe bands"
+          },
+          {
+            "kind": "kind",
+            "parameter": "error_above"
+          },
+          {
+            "kind": "holds",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "not",
+                  "condition": {
+                    "kind": "under",
+                    "parameter": "error_above",
+                    "than": 0.0
+                  }
+                },
+                {
+                  "kind": "not",
+                  "condition": {
+                    "kind": "atLeast",
+                    "parameter": "error_above",
+                    "than": 1.0
+                  }
+                }
+              ]
+            },
+            "message": "error_above must lie in [0, 1)"
+          },
+          {
+            "kind": "exceeds",
+            "parameter": "error_above",
+            "earlier": [
+              "info_above",
+              "warning_above"
+            ],
+            "message": "error_above must exceed the thresholds of less severe bands"
+          },
+          {
+            "kind": "anyOf",
+            "parameters": [
+              "info_above",
+              "warning_above",
+              "error_above"
+            ],
+            "message": "declare at least one of `info_above`, `warning_above` and `error_above`"
+          },
+          {
+            "kind": "choice",
+            "parameter": "measure",
+            "options": [
+              "plan_and_height",
+              "elevation"
+            ]
+          },
+          {
+            "kind": "holds",
+            "condition": {
+              "kind": "not",
+              "condition": {
+                "kind": "all",
+                "conditions": [
+                  {
+                    "kind": "equals",
+                    "parameter": "measure",
+                    "value": "elevation"
+                  },
+                  {
+                    "kind": "not",
+                    "condition": {
+                      "kind": "all",
+                      "conditions": [
+                        {
+                          "kind": "atLeast",
+                          "parameter": "horizontal",
+                          "than": 0.0
+                        },
+                        {
+                          "kind": "atLeast",
+                          "parameter": "vertical",
+                          "than": 0.0
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            "message": "the elevation is one check measured with both tolerances; neither may be negative"
+          },
+          {
+            "kind": "required",
+            "parameter": "counterparts"
+          },
+          {
+            "kind": "angleBelow",
+            "parameter": "axis_tolerance",
+            "below": 45.0,
+            "range": "axis_tolerance must lie in [0, 45) degrees",
+            "angle": "axis_tolerance must be a plane angle"
+          },
+          {
+            "kind": "kind",
+            "parameter": "infill_counterparts"
+          },
+          {
+            "kind": "kind",
+            "parameter": "infill_above"
+          },
+          {
+            "kind": "requires",
+            "parameter": "infill_above",
+            "with": [
+              "infill_counterparts"
+            ],
+            "message": "`infill_above` needs `infill_counterparts`"
+          },
+          {
+            "kind": "requiresValue",
+            "parameter": "infill_counterparts",
+            "with": "measure",
+            "value": "elevation",
+            "message": "`infill_counterparts` applies only to `measure` `elevation`"
+          },
+          {
+            "kind": "holds",
+            "condition": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "not",
+                  "condition": {
+                    "kind": "under",
+                    "parameter": "infill_above",
+                    "than": 0.0
+                  }
+                },
+                {
+                  "kind": "not",
+                  "condition": {
+                    "kind": "atLeast",
+                    "parameter": "infill_above",
+                    "than": 1.0
+                  }
+                }
+              ]
+            },
+            "message": "infill_above must lie in [0, 1)"
+          }
+        ],
+        "texts": [
+          {
+            "name": "graded",
+            "when": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "exceeds",
+                  "value": "share",
+                  "parameter": "error_above",
+                  "end": "upper"
+                },
+                {
+                  "kind": "not",
+                  "condition": {
+                    "kind": "exceeds",
+                    "value": "share",
+                    "parameter": "error_above",
+                    "end": "lower"
+                  }
+                },
+                {
+                  "kind": "exceeds",
+                  "value": "share",
+                  "parameter": "warning_above",
+                  "end": "lower"
+                }
+              ]
+            },
+            "text": "; graded error by its upper bound, at least warning"
+          },
+          {
+            "name": "graded",
+            "when": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "exceeds",
+                  "value": "share",
+                  "parameter": "error_above",
+                  "end": "upper"
+                },
+                {
+                  "kind": "not",
+                  "condition": {
+                    "kind": "exceeds",
+                    "value": "share",
+                    "parameter": "error_above",
+                    "end": "lower"
+                  }
+                },
+                {
+                  "kind": "not",
+                  "condition": {
+                    "kind": "exceeds",
+                    "value": "share",
+                    "parameter": "warning_above",
+                    "end": "lower"
+                  }
+                },
+                {
+                  "kind": "exceeds",
+                  "value": "share",
+                  "parameter": "info_above",
+                  "end": "lower"
+                }
+              ]
+            },
+            "text": "; graded error by its upper bound, at least info"
+          },
+          {
+            "name": "graded",
+            "when": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "not",
+                  "condition": {
+                    "kind": "exceeds",
+                    "value": "share",
+                    "parameter": "error_above",
+                    "end": "upper"
+                  }
+                },
+                {
+                  "kind": "exceeds",
+                  "value": "share",
+                  "parameter": "warning_above",
+                  "end": "upper"
+                },
+                {
+                  "kind": "not",
+                  "condition": {
+                    "kind": "exceeds",
+                    "value": "share",
+                    "parameter": "warning_above",
+                    "end": "lower"
+                  }
+                },
+                {
+                  "kind": "exceeds",
+                  "value": "share",
+                  "parameter": "info_above",
+                  "end": "lower"
+                }
+              ]
+            },
+            "text": "; graded warning by its upper bound, at least info"
+          },
+          {
+            "name": "overlaps",
+            "when": {
+              "kind": "below",
+              "value": "covering",
+              "than": 0.5
+            },
+            "text": "; no counterpart overlaps it"
+          },
+          {
+            "name": "infill",
+            "when": {
+              "kind": "above",
+              "value": "framed",
+              "than": 0.5
+            },
+            "text": " or the infill of the frame of {framed:cited}"
+          },
+          {
+            "name": "infill",
+            "when": {
+              "kind": "not",
+              "condition": {
+                "kind": "below",
+                "value": "framed",
+                "than": 0.5
+              }
+            },
+            "text": " or, should more than {infill_above} be uncovered (undecided), the infill of the frame of {framed:cited}"
+          }
+        ],
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "covering",
+                "expression": {
+                  "kind": "property",
+                  "propertySet": "axioval:measured",
+                  "property": "counterpart_covering;by=@counterparts;measure=@measure;horizontal=@horizontal;vertical=@vertical;axis_tolerance=@axis_tolerance;frame=@infill_counterparts;infill_above=@infill_above"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "covering",
+              "rounding": []
+            },
+            "fail": "",
+            "undecided": "",
+            "checks": [
+              {
+                "values": [
+                  {
+                    "name": "share",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "counterpart_uncovered_share;by=@counterparts;measure=plan;horizontal=@horizontal;vertical=@vertical;axis_tolerance=@axis_tolerance;frame=@infill_counterparts;infill_above=@infill_above"
+                    }
+                  },
+                  {
+                    "name": "uncovered",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "counterpart_uncovered;by=@counterparts;measure=plan;horizontal=@horizontal;vertical=@vertical;axis_tolerance=@axis_tolerance;frame=@infill_counterparts;infill_above=@infill_above"
+                    }
+                  },
+                  {
+                    "name": "whole",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "counterpart_whole;by=@counterparts;measure=plan;horizontal=@horizontal;vertical=@vertical;axis_tolerance=@axis_tolerance;frame=@infill_counterparts;infill_above=@infill_above"
+                    }
+                  }
+                ],
+                "decision": {
+                  "kind": "within",
+                  "value": "share",
+                  "maximum": [
+                    {
+                      "sign": "plus",
+                      "operand": {
+                        "kind": "parameter",
+                        "name": "lowest"
+                      }
+                    }
+                  ],
+                  "rounding": []
+                },
+                "fail": "plan: {share:area} of the footprint ({uncovered:area} of {whole:area} m²) lies outside every counterpart grown by {horizontal:si} m{overlaps}{graded}",
+                "undecided": "plan: {share:area} of the footprint ({uncovered:area} of {whole:area} m²) lies outside every counterpart grown by {horizontal:si} m, which straddles the threshold {lowest}{share:notes}",
+                "related": "share",
+                "grading": {
+                  "bands": [
+                    {
+                      "severity": "error",
+                      "when": {
+                        "kind": "exceeds",
+                        "value": "share",
+                        "parameter": "error_above",
+                        "end": "upper"
+                      }
+                    },
+                    {
+                      "severity": "warning",
+                      "when": {
+                        "kind": "exceeds",
+                        "value": "share",
+                        "parameter": "warning_above",
+                        "end": "upper"
+                      }
+                    },
+                    {
+                      "severity": "info",
+                      "when": {
+                        "kind": "exceeds",
+                        "value": "share",
+                        "parameter": "info_above",
+                        "end": "upper"
+                      }
+                    }
+                  ]
+                },
+                "applies": {
+                  "condition": {
+                    "kind": "all",
+                    "conditions": [
+                      {
+                        "kind": "not",
+                        "condition": {
+                          "kind": "equals",
+                          "parameter": "measure",
+                          "value": "elevation"
+                        }
+                      },
+                      {
+                        "kind": "atLeast",
+                        "parameter": "horizontal",
+                        "than": 0.0
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "values": [
+                  {
+                    "name": "share",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "counterpart_uncovered_share;by=@counterparts;measure=height;horizontal=@horizontal;vertical=@vertical;axis_tolerance=@axis_tolerance;frame=@infill_counterparts;infill_above=@infill_above"
+                    }
+                  },
+                  {
+                    "name": "uncovered",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "counterpart_uncovered;by=@counterparts;measure=height;horizontal=@horizontal;vertical=@vertical;axis_tolerance=@axis_tolerance;frame=@infill_counterparts;infill_above=@infill_above"
+                    }
+                  },
+                  {
+                    "name": "whole",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "counterpart_whole;by=@counterparts;measure=height;horizontal=@horizontal;vertical=@vertical;axis_tolerance=@axis_tolerance;frame=@infill_counterparts;infill_above=@infill_above"
+                    }
+                  }
+                ],
+                "decision": {
+                  "kind": "within",
+                  "value": "share",
+                  "maximum": [
+                    {
+                      "sign": "plus",
+                      "operand": {
+                        "kind": "parameter",
+                        "name": "lowest"
+                      }
+                    }
+                  ],
+                  "rounding": []
+                },
+                "fail": "height: {share:area} of the height ({uncovered:area} of {whole:area} m) lies outside every counterpart overlapping it in plan, grown by {vertical:si} m{overlaps}{graded}",
+                "undecided": "height: {share:area} of the height ({uncovered:area} of {whole:area} m) lies outside every counterpart overlapping it in plan, grown by {vertical:si} m, which straddles the threshold {lowest}{share:notes}",
+                "related": "share",
+                "grading": {
+                  "bands": [
+                    {
+                      "severity": "error",
+                      "when": {
+                        "kind": "exceeds",
+                        "value": "share",
+                        "parameter": "error_above",
+                        "end": "upper"
+                      }
+                    },
+                    {
+                      "severity": "warning",
+                      "when": {
+                        "kind": "exceeds",
+                        "value": "share",
+                        "parameter": "warning_above",
+                        "end": "upper"
+                      }
+                    },
+                    {
+                      "severity": "info",
+                      "when": {
+                        "kind": "exceeds",
+                        "value": "share",
+                        "parameter": "info_above",
+                        "end": "upper"
+                      }
+                    }
+                  ]
+                },
+                "applies": {
+                  "condition": {
+                    "kind": "all",
+                    "conditions": [
+                      {
+                        "kind": "not",
+                        "condition": {
+                          "kind": "equals",
+                          "parameter": "measure",
+                          "value": "elevation"
+                        }
+                      },
+                      {
+                        "kind": "atLeast",
+                        "parameter": "vertical",
+                        "than": 0.0
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "values": [
+                  {
+                    "name": "share",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "counterpart_uncovered_share;by=@counterparts;measure=elevation;horizontal=@horizontal;vertical=@vertical;axis_tolerance=@axis_tolerance;frame=@infill_counterparts;infill_above=@infill_above"
+                    }
+                  },
+                  {
+                    "name": "uncovered",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "counterpart_uncovered;by=@counterparts;measure=elevation;horizontal=@horizontal;vertical=@vertical;axis_tolerance=@axis_tolerance;frame=@infill_counterparts;infill_above=@infill_above"
+                    }
+                  },
+                  {
+                    "name": "whole",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "counterpart_whole;by=@counterparts;measure=elevation;horizontal=@horizontal;vertical=@vertical;axis_tolerance=@axis_tolerance;frame=@infill_counterparts;infill_above=@infill_above"
+                    }
+                  },
+                  {
+                    "name": "framed",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "counterpart_infill;by=@counterparts;measure=elevation;horizontal=@horizontal;vertical=@vertical;axis_tolerance=@axis_tolerance;frame=@infill_counterparts;infill_above=@infill_above"
+                    }
+                  }
+                ],
+                "decision": {
+                  "kind": "within",
+                  "value": "share",
+                  "maximum": [
+                    {
+                      "sign": "plus",
+                      "operand": {
+                        "kind": "parameter",
+                        "name": "lowest"
+                      }
+                    }
+                  ],
+                  "rounding": []
+                },
+                "fail": "elevation: {share:area} of the elevation ({uncovered:area} of {whole:area} m²) lies outside every counterpart{infill}, grown by {horizontal:si} m along its axis and {vertical:si} m in height{overlaps}{graded}",
+                "undecided": "elevation: {share:area} of the elevation ({uncovered:area} of {whole:area} m²) lies outside every counterpart{infill}, grown by {horizontal:si} m along its axis and {vertical:si} m in height, which straddles the threshold {lowest}{share:notes}",
+                "related": "share",
+                "grading": {
+                  "bands": [
+                    {
+                      "severity": "error",
+                      "when": {
+                        "kind": "exceeds",
+                        "value": "share",
+                        "parameter": "error_above",
+                        "end": "upper"
+                      }
+                    },
+                    {
+                      "severity": "warning",
+                      "when": {
+                        "kind": "exceeds",
+                        "value": "share",
+                        "parameter": "warning_above",
+                        "end": "upper"
+                      }
+                    },
+                    {
+                      "severity": "info",
+                      "when": {
+                        "kind": "exceeds",
+                        "value": "share",
+                        "parameter": "info_above",
+                        "end": "upper"
+                      }
+                    }
+                  ]
+                },
+                "applies": {
+                  "condition": {
+                    "kind": "equals",
+                    "parameter": "measure",
+                    "value": "elevation"
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "and",
+                  "operands": [
+                    {
+                      "kind": "compare",
+                      "operator": "lessThanOrEquals",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "counterpart_uncovered_share;by=@counterparts;measure=plan;horizontal=@horizontal;vertical=@vertical;axis_tolerance=@axis_tolerance;frame=@infill_counterparts;infill_above=@infill_above"
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "lowest"
+                      },
+                      "label": "at most the upper bound"
+                    }
+                  ]
+                },
+                {
+                  "kind": "and",
+                  "operands": [
+                    {
+                      "kind": "compare",
+                      "operator": "lessThanOrEquals",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "counterpart_uncovered_share;by=@counterparts;measure=height;horizontal=@horizontal;vertical=@vertical;axis_tolerance=@axis_tolerance;frame=@infill_counterparts;infill_above=@infill_above"
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "lowest"
+                      },
+                      "label": "at most the upper bound"
+                    }
+                  ]
+                },
+                {
+                  "kind": "and",
+                  "operands": [
+                    {
+                      "kind": "compare",
+                      "operator": "lessThanOrEquals",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "counterpart_uncovered_share;by=@counterparts;measure=elevation;horizontal=@horizontal;vertical=@vertical;axis_tolerance=@axis_tolerance;frame=@infill_counterparts;infill_above=@infill_above"
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "lowest"
+                      },
+                      "label": "at most the upper bound"
+                    }
+                  ]
+                },
+                {
+                  "kind": "literal",
+                  "value": {
+                    "type": "boolean",
+                    "value": true
+                  },
+                  "label": "read"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.and",
+                      "inputs": {
+                        "operands": {
+                          "blocks": [
+                            {
+                              "type": "expression.compare",
+                              "label": "at most the upper bound",
+                              "fields": {
+                                "operator": "lessThanOrEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "measured.counterpart_uncovered_share",
+                                    "fields": {
+                                      "axis_tolerance": "@axis_tolerance",
+                                      "by": "@counterparts",
+                                      "frame": "@infill_counterparts",
+                                      "horizontal": "@horizontal",
+                                      "infill_above": "@infill_above",
+                                      "measure": "plan",
+                                      "vertical": "@vertical"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "lowest"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.and",
+                      "inputs": {
+                        "operands": {
+                          "blocks": [
+                            {
+                              "type": "expression.compare",
+                              "label": "at most the upper bound",
+                              "fields": {
+                                "operator": "lessThanOrEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "measured.counterpart_uncovered_share",
+                                    "fields": {
+                                      "axis_tolerance": "@axis_tolerance",
+                                      "by": "@counterparts",
+                                      "frame": "@infill_counterparts",
+                                      "horizontal": "@horizontal",
+                                      "infill_above": "@infill_above",
+                                      "measure": "height",
+                                      "vertical": "@vertical"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "lowest"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.and",
+                      "inputs": {
+                        "operands": {
+                          "blocks": [
+                            {
+                              "type": "expression.compare",
+                              "label": "at most the upper bound",
+                              "fields": {
+                                "operator": "lessThanOrEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "measured.counterpart_uncovered_share",
+                                    "fields": {
+                                      "axis_tolerance": "@axis_tolerance",
+                                      "by": "@counterparts",
+                                      "frame": "@infill_counterparts",
+                                      "horizontal": "@horizontal",
+                                      "infill_above": "@infill_above",
+                                      "measure": "elevation",
+                                      "vertical": "@vertical"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "lowest"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.literal",
+                      "label": "read",
+                      "fields": {
+                        "value": {
+                          "type": "boolean",
+                          "value": true
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.distance",
@@ -51626,25 +52628,25 @@
       "available": true
     },
     {
-      "name": "counterpart_uncovered_share",
+      "name": "counterpart_covering",
       "parameters": [
         {
           "key": "by",
           "kind": {
-            "type": "sourceKind"
+            "type": "objects"
           },
           "required": true,
           "help": [
             {
               "language": "en",
-              "text": "The source kinds of the counterparts, such as structural walls and columns, `,`-separated, subtypes included."
+              "text": "The counterparts: source kinds, such as structural walls and columns, `,`-separated, subtypes included, or a selector parameter of the rule, those it cannot decide possibly covering."
             },
             {
               "language": "de",
-              "text": "Die Quellarten der Gegenstücke, etwa tragende Wände und Stützen, durch `,` getrennt, Untertypen eingeschlossen."
+              "text": "Die Gegenstücke: Quellarten, etwa tragende Wände und Stützen, durch `,` getrennt, Untertypen eingeschlossen, oder ein Selektorparameter der Regel, dessen unentschiedene Objekte möglicherweise bedecken."
             }
           ],
-          "references": "string"
+          "references": "selector"
         },
         {
           "key": "measure",
@@ -51653,7 +52655,8 @@
             "options": [
               "plan",
               "height",
-              "elevation"
+              "elevation",
+              "plan_and_height"
             ]
           },
           "required": false,
@@ -51661,11 +52664,11 @@
           "help": [
             {
               "language": "en",
-              "text": "The share of the footprint (`plan`), of the height (`height`), or of the elevation along the footprint's long axis (`elevation`)."
+              "text": "The share of the footprint (`plan`), of the height (`height`), or of the elevation along the footprint's long axis (`elevation`); `plan_and_height`, as a coverage rule names both checks, measures as `plan` and needs the vertical-extent service where `vertical` is not negative."
             },
             {
               "language": "de",
-              "text": "Der Anteil der Grundfläche (`plan`), der Höhe (`height`) oder der Ansicht entlang der Längsachse des Grundrisses (`elevation`)."
+              "text": "Der Anteil der Grundfläche (`plan`), der Höhe (`height`) oder der Ansicht entlang der Längsachse des Grundrisses (`elevation`); `plan_and_height`, wie eine Regel beide Prüfungen nennt, misst wie `plan` und braucht den Höhenausdehnungsdienst, wo `vertical` nicht negativ ist."
             }
           ],
           "references": "string"
@@ -51674,18 +52677,18 @@
           "key": "horizontal",
           "kind": {
             "type": "length",
-            "minimum": 0.0
+            "minimum": null
           },
           "required": false,
           "default": "0",
           "help": [
             {
               "language": "en",
-              "text": "How far each counterpart grows in plan, or along the axis in the elevation, in metres; for `height`, how far it grows to overlap in plan."
+              "text": "How far each counterpart grows in plan, or along the axis in the elevation, in metres; for `height`, how far it grows to overlap in plan. Negative switches the plan check off: nothing grows, and the plan share is refused."
             },
             {
               "language": "de",
-              "text": "Wie weit jedes Gegenstück im Grundriss wächst, in der Ansicht entlang der Achse, in Metern; für `height`, wie weit es wächst, um im Grundriss zu überlappen."
+              "text": "Wie weit jedes Gegenstück im Grundriss wächst, in der Ansicht entlang der Achse, in Metern; für `height`, wie weit es wächst, um im Grundriss zu überlappen. Negativ schaltet die Grundrissprüfung ab: nichts wächst, der Anteil im Grundriss wird verweigert."
             }
           ],
           "references": "length"
@@ -51694,18 +52697,18 @@
           "key": "vertical",
           "kind": {
             "type": "length",
-            "minimum": 0.0
+            "minimum": null
           },
           "required": false,
           "default": "0",
           "help": [
             {
               "language": "en",
-              "text": "How far each counterpart grows in height, in metres; unused in plan."
+              "text": "How far each counterpart grows in height, in metres; unused in plan. Negative switches the height check off, and its share is refused."
             },
             {
               "language": "de",
-              "text": "Wie weit jedes Gegenstück in der Höhe wächst, in Metern; im Grundriss ungenutzt."
+              "text": "Wie weit jedes Gegenstück in der Höhe wächst, in Metern; im Grundriss ungenutzt. Negativ schaltet die Höhenprüfung ab, ihr Anteil wird verweigert."
             }
           ],
           "references": "length"
@@ -51713,44 +52716,44 @@
         {
           "key": "axis_tolerance",
           "kind": {
-            "type": "length",
-            "minimum": 0.0
+            "type": "angle",
+            "below": 45.0
           },
           "required": false,
           "help": [
             {
               "language": "en",
-              "text": "Only counterparts whose long axis lies within this many degrees of parallel count, below 45; any angle without it."
+              "text": "Only counterparts whose long axis lies within this angle of parallel count, in degrees, below 45; any angle without it."
             },
             {
               "language": "de",
-              "text": "Nur Gegenstücke, deren Längsachse höchstens so viele Grad von parallel abweicht, zählen, unter 45; ohne Angabe jeder Winkel."
+              "text": "Nur Gegenstücke, deren Längsachse höchstens um diesen Winkel von parallel abweicht, zählen, in Grad, unter 45; ohne Angabe jeder Winkel."
             }
           ],
-          "references": "length"
+          "references": "angle"
         },
         {
           "key": "frame",
           "kind": {
-            "type": "sourceKind"
+            "type": "objects"
           },
           "required": false,
           "help": [
             {
               "language": "en",
-              "text": "The source kinds of a frame's members whose infill covers too, in the elevation only, `,`-separated."
+              "text": "A frame's members whose infill covers too, in the elevation only: source kinds, `,`-separated, or a selector parameter of the rule."
             },
             {
               "language": "de",
-              "text": "Die Quellarten der Rahmenbauteile, deren Ausfachung ebenfalls bedeckt, nur in der Ansicht, durch `,` getrennt."
+              "text": "Die Rahmenbauteile, deren Ausfachung ebenfalls bedeckt, nur in der Ansicht: Quellarten, durch `,` getrennt, oder ein Selektorparameter der Regel."
             }
           ],
-          "references": "string"
+          "references": "selector"
         },
         {
           "key": "infill_above",
           "kind": {
-            "type": "length",
+            "type": "number",
             "minimum": 0.0
           },
           "required": false,
@@ -51765,7 +52768,547 @@
               "text": "Der Anteil, unter 1, ab dem die Ausfachung des Rahmens bedeckt."
             }
           ],
+          "references": "number"
+        }
+      ],
+      "services": [
+        "plan-area",
+        "proximity",
+        "vertical-extent",
+        "plan-span",
+        "type-hierarchy"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "an object's kind cannot be decided",
+        "the element has no long axis for its elevation"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Counterparts covering"
+        },
+        {
+          "language": "de",
+          "text": "Bedeckende Gegenstücke"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "How many counterparts cover part of the element: from those surely covering to every one that may, those whose extent or cover cannot be read included; zero where nothing covers it, nor may."
+        },
+        {
+          "language": "de",
+          "text": "Wie viele Gegenstücke einen Teil des Bauteils bedecken: von den sicher bedeckenden bis zu allen möglicherweise bedeckenden, auch denen, deren Ausdehnung oder Bedeckung nicht lesbar ist; null, wo nichts sie bedeckt oder bedecken könnte."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
+      "name": "counterpart_infill",
+      "parameters": [
+        {
+          "key": "by",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The counterparts: source kinds, such as structural walls and columns, `,`-separated, subtypes included, or a selector parameter of the rule, those it cannot decide possibly covering."
+            },
+            {
+              "language": "de",
+              "text": "Die Gegenstücke: Quellarten, etwa tragende Wände und Stützen, durch `,` getrennt, Untertypen eingeschlossen, oder ein Selektorparameter der Regel, dessen unentschiedene Objekte möglicherweise bedecken."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "measure",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "plan",
+              "height",
+              "elevation",
+              "plan_and_height"
+            ]
+          },
+          "required": false,
+          "default": "plan",
+          "help": [
+            {
+              "language": "en",
+              "text": "The share of the footprint (`plan`), of the height (`height`), or of the elevation along the footprint's long axis (`elevation`); `plan_and_height`, as a coverage rule names both checks, measures as `plan` and needs the vertical-extent service where `vertical` is not negative."
+            },
+            {
+              "language": "de",
+              "text": "Der Anteil der Grundfläche (`plan`), der Höhe (`height`) oder der Ansicht entlang der Längsachse des Grundrisses (`elevation`); `plan_and_height`, wie eine Regel beide Prüfungen nennt, misst wie `plan` und braucht den Höhenausdehnungsdienst, wo `vertical` nicht negativ ist."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "horizontal",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "default": "0",
+          "help": [
+            {
+              "language": "en",
+              "text": "How far each counterpart grows in plan, or along the axis in the elevation, in metres; for `height`, how far it grows to overlap in plan. Negative switches the plan check off: nothing grows, and the plan share is refused."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit jedes Gegenstück im Grundriss wächst, in der Ansicht entlang der Achse, in Metern; für `height`, wie weit es wächst, um im Grundriss zu überlappen. Negativ schaltet die Grundrissprüfung ab: nichts wächst, der Anteil im Grundriss wird verweigert."
+            }
+          ],
           "references": "length"
+        },
+        {
+          "key": "vertical",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "default": "0",
+          "help": [
+            {
+              "language": "en",
+              "text": "How far each counterpart grows in height, in metres; unused in plan. Negative switches the height check off, and its share is refused."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit jedes Gegenstück in der Höhe wächst, in Metern; im Grundriss ungenutzt. Negativ schaltet die Höhenprüfung ab, ihr Anteil wird verweigert."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "axis_tolerance",
+          "kind": {
+            "type": "angle",
+            "below": 45.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Only counterparts whose long axis lies within this angle of parallel count, in degrees, below 45; any angle without it."
+            },
+            {
+              "language": "de",
+              "text": "Nur Gegenstücke, deren Längsachse höchstens um diesen Winkel von parallel abweicht, zählen, in Grad, unter 45; ohne Angabe jeder Winkel."
+            }
+          ],
+          "references": "angle"
+        },
+        {
+          "key": "frame",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "A frame's members whose infill covers too, in the elevation only: source kinds, `,`-separated, or a selector parameter of the rule."
+            },
+            {
+              "language": "de",
+              "text": "Die Rahmenbauteile, deren Ausfachung ebenfalls bedeckt, nur in der Ansicht: Quellarten, durch `,` getrennt, oder ein Selektorparameter der Regel."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "infill_above",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "default": "0.5",
+          "help": [
+            {
+              "language": "en",
+              "text": "The share, below 1, above which the frame's infill covers."
+            },
+            {
+              "language": "de",
+              "text": "Der Anteil, unter 1, ab dem die Ausfachung des Rahmens bedeckt."
+            }
+          ],
+          "references": "number"
+        }
+      ],
+      "services": [
+        "plan-area",
+        "proximity",
+        "vertical-extent",
+        "plan-span",
+        "type-hierarchy"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "an object's kind cannot be decided",
+        "the element has no long axis for its elevation"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Frame infill covering"
+        },
+        {
+          "language": "de",
+          "text": "Bedeckende Rahmenausfachung"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "In the elevation, whether the infill of the frame `frame` names covers: 1 where more than `infill_above` is surely uncovered without it, 0 where surely not or no frame is declared, between 0 and 1 where undecided; it cites the frame's members."
+        },
+        {
+          "language": "de",
+          "text": "In der Ansicht, ob die Ausfachung des Rahmens aus `frame` bedeckt: 1, wo ohne sie sicher mehr als `infill_above` unbedeckt ist, 0, wo sicher nicht oder kein Rahmen angegeben ist, zwischen 0 und 1, wo unentschieden; sie nennt die Rahmenbauteile."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
+      "name": "counterpart_uncovered",
+      "parameters": [
+        {
+          "key": "by",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The counterparts: source kinds, such as structural walls and columns, `,`-separated, subtypes included, or a selector parameter of the rule, those it cannot decide possibly covering."
+            },
+            {
+              "language": "de",
+              "text": "Die Gegenstücke: Quellarten, etwa tragende Wände und Stützen, durch `,` getrennt, Untertypen eingeschlossen, oder ein Selektorparameter der Regel, dessen unentschiedene Objekte möglicherweise bedecken."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "measure",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "plan",
+              "height",
+              "elevation",
+              "plan_and_height"
+            ]
+          },
+          "required": false,
+          "default": "plan",
+          "help": [
+            {
+              "language": "en",
+              "text": "The share of the footprint (`plan`), of the height (`height`), or of the elevation along the footprint's long axis (`elevation`); `plan_and_height`, as a coverage rule names both checks, measures as `plan` and needs the vertical-extent service where `vertical` is not negative."
+            },
+            {
+              "language": "de",
+              "text": "Der Anteil der Grundfläche (`plan`), der Höhe (`height`) oder der Ansicht entlang der Längsachse des Grundrisses (`elevation`); `plan_and_height`, wie eine Regel beide Prüfungen nennt, misst wie `plan` und braucht den Höhenausdehnungsdienst, wo `vertical` nicht negativ ist."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "horizontal",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "default": "0",
+          "help": [
+            {
+              "language": "en",
+              "text": "How far each counterpart grows in plan, or along the axis in the elevation, in metres; for `height`, how far it grows to overlap in plan. Negative switches the plan check off: nothing grows, and the plan share is refused."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit jedes Gegenstück im Grundriss wächst, in der Ansicht entlang der Achse, in Metern; für `height`, wie weit es wächst, um im Grundriss zu überlappen. Negativ schaltet die Grundrissprüfung ab: nichts wächst, der Anteil im Grundriss wird verweigert."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "vertical",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "default": "0",
+          "help": [
+            {
+              "language": "en",
+              "text": "How far each counterpart grows in height, in metres; unused in plan. Negative switches the height check off, and its share is refused."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit jedes Gegenstück in der Höhe wächst, in Metern; im Grundriss ungenutzt. Negativ schaltet die Höhenprüfung ab, ihr Anteil wird verweigert."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "axis_tolerance",
+          "kind": {
+            "type": "angle",
+            "below": 45.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Only counterparts whose long axis lies within this angle of parallel count, in degrees, below 45; any angle without it."
+            },
+            {
+              "language": "de",
+              "text": "Nur Gegenstücke, deren Längsachse höchstens um diesen Winkel von parallel abweicht, zählen, in Grad, unter 45; ohne Angabe jeder Winkel."
+            }
+          ],
+          "references": "angle"
+        },
+        {
+          "key": "frame",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "A frame's members whose infill covers too, in the elevation only: source kinds, `,`-separated, or a selector parameter of the rule."
+            },
+            {
+              "language": "de",
+              "text": "Die Rahmenbauteile, deren Ausfachung ebenfalls bedeckt, nur in der Ansicht: Quellarten, durch `,` getrennt, oder ein Selektorparameter der Regel."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "infill_above",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "default": "0.5",
+          "help": [
+            {
+              "language": "en",
+              "text": "The share, below 1, above which the frame's infill covers."
+            },
+            {
+              "language": "de",
+              "text": "Der Anteil, unter 1, ab dem die Ausfachung des Rahmens bedeckt."
+            }
+          ],
+          "references": "number"
+        }
+      ],
+      "services": [
+        "plan-area",
+        "proximity",
+        "vertical-extent",
+        "plan-span",
+        "type-hierarchy"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "an object's kind cannot be decided",
+        "the element has no long axis for its elevation"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Part left uncovered by counterparts"
+        },
+        {
+          "language": "de",
+          "text": "Von Gegenstücken unbedeckter Teil"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The part of the element's footprint (m²), height (m) or elevation (m²) outside every counterpart, as `counterpart_uncovered_share` measures it: from the most cover counterparts may give to the least they surely give."
+        },
+        {
+          "language": "de",
+          "text": "Der Teil der Grundfläche (m²), Höhe (m) oder Ansicht (m²) des Bauteils außerhalb aller Gegenstücke, wie `counterpart_uncovered_share` ihn misst: von der größten möglichen bis zur sicheren Bedeckung."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
+      "name": "counterpart_uncovered_share",
+      "parameters": [
+        {
+          "key": "by",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The counterparts: source kinds, such as structural walls and columns, `,`-separated, subtypes included, or a selector parameter of the rule, those it cannot decide possibly covering."
+            },
+            {
+              "language": "de",
+              "text": "Die Gegenstücke: Quellarten, etwa tragende Wände und Stützen, durch `,` getrennt, Untertypen eingeschlossen, oder ein Selektorparameter der Regel, dessen unentschiedene Objekte möglicherweise bedecken."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "measure",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "plan",
+              "height",
+              "elevation",
+              "plan_and_height"
+            ]
+          },
+          "required": false,
+          "default": "plan",
+          "help": [
+            {
+              "language": "en",
+              "text": "The share of the footprint (`plan`), of the height (`height`), or of the elevation along the footprint's long axis (`elevation`); `plan_and_height`, as a coverage rule names both checks, measures as `plan` and needs the vertical-extent service where `vertical` is not negative."
+            },
+            {
+              "language": "de",
+              "text": "Der Anteil der Grundfläche (`plan`), der Höhe (`height`) oder der Ansicht entlang der Längsachse des Grundrisses (`elevation`); `plan_and_height`, wie eine Regel beide Prüfungen nennt, misst wie `plan` und braucht den Höhenausdehnungsdienst, wo `vertical` nicht negativ ist."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "horizontal",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "default": "0",
+          "help": [
+            {
+              "language": "en",
+              "text": "How far each counterpart grows in plan, or along the axis in the elevation, in metres; for `height`, how far it grows to overlap in plan. Negative switches the plan check off: nothing grows, and the plan share is refused."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit jedes Gegenstück im Grundriss wächst, in der Ansicht entlang der Achse, in Metern; für `height`, wie weit es wächst, um im Grundriss zu überlappen. Negativ schaltet die Grundrissprüfung ab: nichts wächst, der Anteil im Grundriss wird verweigert."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "vertical",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "default": "0",
+          "help": [
+            {
+              "language": "en",
+              "text": "How far each counterpart grows in height, in metres; unused in plan. Negative switches the height check off, and its share is refused."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit jedes Gegenstück in der Höhe wächst, in Metern; im Grundriss ungenutzt. Negativ schaltet die Höhenprüfung ab, ihr Anteil wird verweigert."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "axis_tolerance",
+          "kind": {
+            "type": "angle",
+            "below": 45.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Only counterparts whose long axis lies within this angle of parallel count, in degrees, below 45; any angle without it."
+            },
+            {
+              "language": "de",
+              "text": "Nur Gegenstücke, deren Längsachse höchstens um diesen Winkel von parallel abweicht, zählen, in Grad, unter 45; ohne Angabe jeder Winkel."
+            }
+          ],
+          "references": "angle"
+        },
+        {
+          "key": "frame",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "A frame's members whose infill covers too, in the elevation only: source kinds, `,`-separated, or a selector parameter of the rule."
+            },
+            {
+              "language": "de",
+              "text": "Die Rahmenbauteile, deren Ausfachung ebenfalls bedeckt, nur in der Ansicht: Quellarten, durch `,` getrennt, oder ein Selektorparameter der Regel."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "infill_above",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "default": "0.5",
+          "help": [
+            {
+              "language": "en",
+              "text": "The share, below 1, above which the frame's infill covers."
+            },
+            {
+              "language": "de",
+              "text": "Der Anteil, unter 1, ab dem die Ausfachung des Rahmens bedeckt."
+            }
+          ],
+          "references": "number"
         }
       ],
       "services": [
@@ -51799,6 +53342,186 @@
         {
           "language": "de",
           "text": "Der Anteil der Grundfläche, Höhe oder Ansicht des Bauteils außerhalb aller Gegenstücke, von 0 bis 1, wie `counterpart-coverage` ihn misst: von der größten möglichen bis zur sicheren Bedeckung."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
+      "name": "counterpart_whole",
+      "parameters": [
+        {
+          "key": "by",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The counterparts: source kinds, such as structural walls and columns, `,`-separated, subtypes included, or a selector parameter of the rule, those it cannot decide possibly covering."
+            },
+            {
+              "language": "de",
+              "text": "Die Gegenstücke: Quellarten, etwa tragende Wände und Stützen, durch `,` getrennt, Untertypen eingeschlossen, oder ein Selektorparameter der Regel, dessen unentschiedene Objekte möglicherweise bedecken."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "measure",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "plan",
+              "height",
+              "elevation",
+              "plan_and_height"
+            ]
+          },
+          "required": false,
+          "default": "plan",
+          "help": [
+            {
+              "language": "en",
+              "text": "The share of the footprint (`plan`), of the height (`height`), or of the elevation along the footprint's long axis (`elevation`); `plan_and_height`, as a coverage rule names both checks, measures as `plan` and needs the vertical-extent service where `vertical` is not negative."
+            },
+            {
+              "language": "de",
+              "text": "Der Anteil der Grundfläche (`plan`), der Höhe (`height`) oder der Ansicht entlang der Längsachse des Grundrisses (`elevation`); `plan_and_height`, wie eine Regel beide Prüfungen nennt, misst wie `plan` und braucht den Höhenausdehnungsdienst, wo `vertical` nicht negativ ist."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "horizontal",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "default": "0",
+          "help": [
+            {
+              "language": "en",
+              "text": "How far each counterpart grows in plan, or along the axis in the elevation, in metres; for `height`, how far it grows to overlap in plan. Negative switches the plan check off: nothing grows, and the plan share is refused."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit jedes Gegenstück im Grundriss wächst, in der Ansicht entlang der Achse, in Metern; für `height`, wie weit es wächst, um im Grundriss zu überlappen. Negativ schaltet die Grundrissprüfung ab: nichts wächst, der Anteil im Grundriss wird verweigert."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "vertical",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "default": "0",
+          "help": [
+            {
+              "language": "en",
+              "text": "How far each counterpart grows in height, in metres; unused in plan. Negative switches the height check off, and its share is refused."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit jedes Gegenstück in der Höhe wächst, in Metern; im Grundriss ungenutzt. Negativ schaltet die Höhenprüfung ab, ihr Anteil wird verweigert."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "axis_tolerance",
+          "kind": {
+            "type": "angle",
+            "below": 45.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Only counterparts whose long axis lies within this angle of parallel count, in degrees, below 45; any angle without it."
+            },
+            {
+              "language": "de",
+              "text": "Nur Gegenstücke, deren Längsachse höchstens um diesen Winkel von parallel abweicht, zählen, in Grad, unter 45; ohne Angabe jeder Winkel."
+            }
+          ],
+          "references": "angle"
+        },
+        {
+          "key": "frame",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "A frame's members whose infill covers too, in the elevation only: source kinds, `,`-separated, or a selector parameter of the rule."
+            },
+            {
+              "language": "de",
+              "text": "Die Rahmenbauteile, deren Ausfachung ebenfalls bedeckt, nur in der Ansicht: Quellarten, durch `,` getrennt, oder ein Selektorparameter der Regel."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "infill_above",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "default": "0.5",
+          "help": [
+            {
+              "language": "en",
+              "text": "The share, below 1, above which the frame's infill covers."
+            },
+            {
+              "language": "de",
+              "text": "Der Anteil, unter 1, ab dem die Ausfachung des Rahmens bedeckt."
+            }
+          ],
+          "references": "number"
+        }
+      ],
+      "services": [
+        "plan-area",
+        "proximity",
+        "vertical-extent",
+        "plan-span",
+        "type-hierarchy"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "an object's kind cannot be decided",
+        "the element has no long axis for its elevation"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Whole measured for coverage"
+        },
+        {
+          "language": "de",
+          "text": "Für die Bedeckung gemessenes Ganzes"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The element's footprint (m²), height (m) or elevation (m²), the whole `counterpart_uncovered_share` is a share of."
+        },
+        {
+          "language": "de",
+          "text": "Die Grundfläche (m²), Höhe (m) oder Ansicht (m²) des Bauteils, das Ganze, dessen Anteil `counterpart_uncovered_share` ist."
         }
       ],
       "unit": "1",

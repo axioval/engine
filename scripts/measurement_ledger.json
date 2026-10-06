@@ -207,7 +207,7 @@
         "counterpart_uncovered_share"
       ]
     },
-    "counterpart_coverage::find::bounds": {
+    "counterpart_coverage::bounds::bounds": {
       "count": 1,
       "searchOnly": "candidate-filter",
       "reason": "the bounding boxes only propose the objects near enough to measure"

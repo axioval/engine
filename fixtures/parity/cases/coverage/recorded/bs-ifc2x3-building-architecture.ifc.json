@@ -1,0 +1,688 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#44",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "0728e95a-9363-58aa-8cf0-941259c0e434",
+      "message": "no contact",
+      "object_id": {
+        "local_id": "#44",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-on-walls",
+      "severity": "info"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#555",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "5941737c-ea17-5c40-b49f-e367fdf0e475",
+      "message": "contact ratio 0.0229 below required 0.3000",
+      "object_id": {
+        "local_id": "#555",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#415",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#606",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "6c510814-271f-5685-9fc4-fc9871766c78",
+      "message": "contact ratio 0.0176 below required 0.3000",
+      "object_id": {
+        "local_id": "#606",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#319",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#370",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#468",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "elevation-cover:ifc-step:bs-ifc2x3-building-architecture.ifc/#319:(-0.000000,1.000000):0.1:0.1:|",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc2x3-building-architecture.ifc/#319:(7.100000,3.900000):unique",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "f7dc86eb-4290-55e2-8343-c615fa611b07",
+      "message": "elevation: 1 of the elevation (6.5263 of 6.5263 m²) lies outside every counterpart, grown by 0.1 m along its axis and 0.1 m in height; no counterpart overlaps it",
+      "object_id": {
+        "local_id": "#319",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "walls-in-frames",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "elevation-cover:ifc-step:bs-ifc2x3-building-architecture.ifc/#370:(0.000000,1.000000):0.1:0.1:|",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc2x3-building-architecture.ifc/#370:(8.500000,6.900000):unique",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "c52c953e-b163-53ce-9961-39b92fb5a33b",
+      "message": "elevation: 1 of the elevation (9.3481 of 9.3481 m²) lies outside every counterpart, grown by 0.1 m along its axis and 0.1 m in height; no counterpart overlaps it",
+      "object_id": {
+        "local_id": "#370",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "walls-in-frames",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "elevation-cover:ifc-step:bs-ifc2x3-building-architecture.ifc/#415:(0.000000,1.000000):0.1:0.1:|",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc2x3-building-architecture.ifc/#415:(3.100000,6.000000):unique",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "5c4af4f8-cc4a-5e1b-89d8-2e6cdf635f23",
+      "message": "elevation: 1 of the elevation (21.7544 of 21.7544 m²) lies outside every counterpart, grown by 0.1 m along its axis and 0.1 m in height; no counterpart overlaps it",
+      "object_id": {
+        "local_id": "#415",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "walls-in-frames",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "elevation-cover:ifc-step:bs-ifc2x3-building-architecture.ifc/#468:(0.000000,1.000000):0.1:0.1:|",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc2x3-building-architecture.ifc/#468:(8.162000,6.900000):unique",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "830f4587-9588-5000-adb5-4aa2e6970c79",
+      "message": "elevation: 1 of the elevation (6.8998 of 6.8998 m²) lies outside every counterpart, grown by 0.1 m along its axis and 0.1 m in height; no counterpart overlaps it",
+      "object_id": {
+        "local_id": "#468",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "walls-in-frames",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc2x3-building-architecture.ifc/#319",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "uncovered-area:ifc-step:bs-ifc2x3-building-architecture.ifc/#319:0.05:ifc-step:bs-ifc2x3-building-architecture.ifc/#44",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "uncovered-area:ifc-step:bs-ifc2x3-building-architecture.ifc/#319:0.05:ifc-step:bs-ifc2x3-building-architecture.ifc/#606",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc2x3-building-architecture.ifc/#319",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc2x3-building-architecture.ifc/#44",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc2x3-building-architecture.ifc/#606",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "ca497b0d-8bcb-5244-8120-97e50e743e05",
+      "message": "height: 0.3794 of the height (1.3757 of 3.6257 m) lies outside every counterpart overlapping it in plan, grown by 0.05 m",
+      "object_id": {
+        "local_id": "#319",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#44",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#606",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "walls-over-slabs",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc2x3-building-architecture.ifc/#370",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "uncovered-area:ifc-step:bs-ifc2x3-building-architecture.ifc/#370:0.05:ifc-step:bs-ifc2x3-building-architecture.ifc/#44",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "uncovered-area:ifc-step:bs-ifc2x3-building-architecture.ifc/#370:0.05:ifc-step:bs-ifc2x3-building-architecture.ifc/#606",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc2x3-building-architecture.ifc/#370",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc2x3-building-architecture.ifc/#44",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc2x3-building-architecture.ifc/#606",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "37bf3acb-f159-5caa-b280-54fe831eb8d2",
+      "message": "height: 0.6181 of the height (1.3757 of 2.2257 m) lies outside every counterpart overlapping it in plan, grown by 0.05 m",
+      "object_id": {
+        "local_id": "#370",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#44",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#606",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "walls-over-slabs",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc2x3-building-architecture.ifc/#415",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "uncovered-area:ifc-step:bs-ifc2x3-building-architecture.ifc/#415:0.05:ifc-step:bs-ifc2x3-building-architecture.ifc/#44",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "uncovered-area:ifc-step:bs-ifc2x3-building-architecture.ifc/#415:0.05:ifc-step:bs-ifc2x3-building-architecture.ifc/#555",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc2x3-building-architecture.ifc/#415",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc2x3-building-architecture.ifc/#44",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc2x3-building-architecture.ifc/#555",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "10993602-0f57-5ec5-b4f5-2374406a224b",
+      "message": "height: 0.7656 of the height (2.7757 of 3.6257 m) lies outside every counterpart overlapping it in plan, grown by 0.05 m",
+      "object_id": {
+        "local_id": "#415",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#44",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#555",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "walls-over-slabs",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc2x3-building-architecture.ifc/#468",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "uncovered-area:ifc-step:bs-ifc2x3-building-architecture.ifc/#468:0.05:ifc-step:bs-ifc2x3-building-architecture.ifc/#44",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "uncovered-area:ifc-step:bs-ifc2x3-building-architecture.ifc/#468:0.05:ifc-step:bs-ifc2x3-building-architecture.ifc/#606",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc2x3-building-architecture.ifc/#44",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc2x3-building-architecture.ifc/#468",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc2x3-building-architecture.ifc/#606",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "c915493b-d429-5c38-b18a-a0cff7b4d805",
+      "message": "height: 0.6181 of the height (1.3757 of 2.2257 m) lies outside every counterpart overlapping it in plan, grown by 0.05 m",
+      "object_id": {
+        "local_id": "#468",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#44",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#606",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "walls-over-slabs",
+      "severity": "warning"
+    }
+  ],
+  "not_evaluated": [
+    {
+      "message": "all-spaces envelope: envelope membership is unavailable for the requested derivation",
+      "object_id": null,
+      "reason": "incomplete_evidence",
+      "rule_id": "external-walls"
+    },
+    {
+      "message": "storeys cannot be ordered: unknown property concept `Elevation`",
+      "object_id": {
+        "local_id": "#44",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_declaration",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "storeys cannot be ordered: unknown property concept `Elevation`",
+      "object_id": {
+        "local_id": "#555",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_declaration",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "storeys cannot be ordered: unknown property concept `Elevation`",
+      "object_id": {
+        "local_id": "#606",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_declaration",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "plan area unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#183 cannot be computed",
+      "object_id": {
+        "local_id": "#183",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "terminals-cover-spaces"
+    },
+    {
+      "message": "plan area unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#296 cannot be computed",
+      "object_id": {
+        "local_id": "#296",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "terminals-cover-spaces"
+    },
+    {
+      "message": "plan area unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#183 cannot be computed",
+      "object_id": {
+        "local_id": "#183",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "terminals-reach-spaces"
+    },
+    {
+      "message": "plan area unavailable: the footprint of ifc-step:bs-ifc2x3-building-architecture.ifc/#296 cannot be computed",
+      "object_id": {
+        "local_id": "#296",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "terminals-reach-spaces"
+    }
+  ],
+  "rules": [
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "external-walls",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 3,
+      "failed": 0,
+      "not_evaluated": 3,
+      "rule_id": "slab-on-anything",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 3,
+      "failed": 3,
+      "not_evaluated": 0,
+      "rule_id": "slab-on-walls",
+      "status": "failed"
+    },
+    {
+      "checked": 2,
+      "failed": 0,
+      "not_evaluated": 2,
+      "rule_id": "terminals-cover-spaces",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 2,
+      "failed": 0,
+      "not_evaluated": 2,
+      "rule_id": "terminals-reach-spaces",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 4,
+      "failed": 4,
+      "not_evaluated": 0,
+      "rule_id": "walls-in-frames",
+      "status": "failed"
+    },
+    {
+      "checked": 4,
+      "failed": 4,
+      "not_evaluated": 0,
+      "rule_id": "walls-over-slabs",
+      "status": "failed"
+    }
+  ]
+}

@@ -212,7 +212,12 @@ spaces) before it became a template (#289). The case `stairs` records
 `stair-geometry` and `ramp-geometry` rules over slabs, beams and storeys
 standing in for flights, ramps and whole stairs (#280): the public models
 hold none, so it records the walking-surface service's refusals and the
-whole-stair mode's own outcomes.
+whole-stair mode's own outcomes. The case `coverage` records
+`slab-contact` (against selected walls, columns and beams, and against
+every object leaving out the bottom storey), `counterpart-coverage` (in
+plan and height, and in the elevation with a frame's infill),
+`effective-coverage` (grown and by travel) and `external-wall-validation`
+over every public model, before they are rebuilt as templates (#282).
 
 Each pair's evidence prints as one JSON line. That line is what the
 migration ledger records as a proof item, tagged `"kind": "parity"`; the

@@ -1,0 +1,1155 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#1014",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "52acb479-16a4-542e-bd18-0acecaac3ee0",
+      "message": "no contact",
+      "object_id": {
+        "local_id": "#1014",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#108",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "96202f9d-f4d4-5d75-817a-03c2a08b4b46",
+      "message": "no contact",
+      "object_id": {
+        "local_id": "#108",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#131",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "71e75fc8-8bea-5678-b94f-56c880b04397",
+      "message": "no contact",
+      "object_id": {
+        "local_id": "#131",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#188",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "06cedef7-8b10-595d-8e0b-ab556dd9ded7",
+      "message": "no contact",
+      "object_id": {
+        "local_id": "#188",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#207",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "6022bbcc-6900-5cfc-9db8-0ad04501218e",
+      "message": "no contact",
+      "object_id": {
+        "local_id": "#207",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#276",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "2204b580-dd37-5dae-b19f-c40231036c27",
+      "message": "no contact",
+      "object_id": {
+        "local_id": "#276",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#294",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "c49e5a1f-20fd-5ae6-b274-180a673afb24",
+      "message": "no contact",
+      "object_id": {
+        "local_id": "#294",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#323",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "eadabb78-aee9-5c01-bfc1-eac4f249b21e",
+      "message": "no contact",
+      "object_id": {
+        "local_id": "#323",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#337",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "90182029-a887-51fa-8913-865058f0c6a1",
+      "message": "no contact",
+      "object_id": {
+        "local_id": "#337",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#350",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "6ecceebf-6664-5c83-9cd2-8632bba9abcf",
+      "message": "no contact",
+      "object_id": {
+        "local_id": "#350",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#363",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "069e9970-c14f-5bb2-8bea-956d98d1fa85",
+      "message": "no contact",
+      "object_id": {
+        "local_id": "#363",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#398",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "8184e633-f28d-5b40-9423-b65dfcf0fea3",
+      "message": "no contact",
+      "object_id": {
+        "local_id": "#398",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#412",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "ce1ed1ed-9d7d-5315-b894-fd08f9d9d7cf",
+      "message": "no contact",
+      "object_id": {
+        "local_id": "#412",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#460",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "f8c64c2d-99f8-5ec9-b6e6-139bb9a7a5b3",
+      "message": "no contact",
+      "object_id": {
+        "local_id": "#460",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#473",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "e0de3fa8-f10d-5bf4-a6ce-a2ebb30d938b",
+      "message": "no contact",
+      "object_id": {
+        "local_id": "#473",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#541",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "8a6d3be1-f597-59fa-a3d0-27f52e61c563",
+      "message": "no contact",
+      "object_id": {
+        "local_id": "#541",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#560",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "9847ff43-2d84-5620-a73f-dbfdbc207367",
+      "message": "no contact",
+      "object_id": {
+        "local_id": "#560",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#596",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "d0e627a5-5ce7-5c09-a60c-bee3fbc6de8a",
+      "message": "no contact",
+      "object_id": {
+        "local_id": "#596",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#61",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "23dd27ad-e917-5ba8-8c42-22480c42c949",
+      "message": "no contact",
+      "object_id": {
+        "local_id": "#61",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#645",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "3213a0cf-4bd8-55b4-a89f-3693abf28796",
+      "message": "no contact",
+      "object_id": {
+        "local_id": "#645",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#659",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "e240cf61-3598-5b70-941a-c6496ce26285",
+      "message": "no contact",
+      "object_id": {
+        "local_id": "#659",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#685",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "77b91807-9fa9-5627-8a67-09ecc7874302",
+      "message": "no contact",
+      "object_id": {
+        "local_id": "#685",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#744",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "318a3f66-4e57-509a-b31b-0012d2927edb",
+      "message": "no contact",
+      "object_id": {
+        "local_id": "#744",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#761",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "193edbb0-0c90-55ad-8aae-800eb5ffc0ae",
+      "message": "no contact",
+      "object_id": {
+        "local_id": "#761",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#823",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "965862ed-bd9c-5ecb-a13c-8edc39439419",
+      "message": "no contact",
+      "object_id": {
+        "local_id": "#823",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#839",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "05d7ff15-c207-52bd-bd82-ff4fc62f77c0",
+      "message": "no contact",
+      "object_id": {
+        "local_id": "#839",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#85",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "bfcd3025-03cf-53f4-a4f4-50c306803f00",
+      "message": "no contact",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#919",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "d7cc6a51-5def-5a0b-abad-0c0e450a6b43",
+      "message": "no contact",
+      "object_id": {
+        "local_id": "#919",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#936",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "5a089a4f-469d-5901-b547-58dafaa77b30",
+      "message": "no contact",
+      "object_id": {
+        "local_id": "#936",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:contact:#998",
+          "source": {
+            "document": "bs-ifc4-infra-road.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "7b8b3632-a921-52ec-ac6a-f8fc196548dc",
+      "message": "no contact",
+      "object_id": {
+        "local_id": "#998",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "slab-on-walls",
+      "severity": "error"
+    }
+  ],
+  "not_evaluated": [
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#1014 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#1014",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#108 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#108",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#131 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#131",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#188 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#188",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#207 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#207",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#276 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#276",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#294 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#294",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#323 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#323",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#337 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#337",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#350 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#350",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#363 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#363",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#398 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#398",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#412 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#412",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#460 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#460",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#473 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#473",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#541 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#541",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#560 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#560",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#578 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#578",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#596 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#596",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#61 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#61",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#645 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#645",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#659 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#659",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#672 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#672",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#685 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#685",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#744 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#744",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#761 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#761",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#823 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#823",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#839 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#839",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#85 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#919 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#919",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#936 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#936",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "ifc-step:bs-ifc4-infra-road.ifc/#998 reaches 0 storeys through IfcRelContainedInSpatialStructure, so whether it is on the top or bottom storey is unknown",
+      "object_id": {
+        "local_id": "#998",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-anything"
+    },
+    {
+      "message": "contact measurement is unavailable for the requested scope",
+      "object_id": {
+        "local_id": "#578",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-walls"
+    },
+    {
+      "message": "contact measurement is unavailable for the requested scope",
+      "object_id": {
+        "local_id": "#672",
+        "source": {
+          "document": "bs-ifc4-infra-road.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "slab-on-walls"
+    }
+  ],
+  "rules": [
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "external-walls",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 32,
+      "failed": 0,
+      "not_evaluated": 32,
+      "rule_id": "slab-on-anything",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 32,
+      "failed": 30,
+      "not_evaluated": 2,
+      "rule_id": "slab-on-walls",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "terminals-cover-spaces",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "terminals-reach-spaces",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "walls-in-frames",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "walls-over-slabs",
+      "status": "nothing_selected"
+    }
+  ]
+}

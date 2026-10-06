@@ -1,0 +1,55 @@
+{
+  "findings": [],
+  "not_evaluated": [],
+  "rules": [
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "external-walls",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "slab-on-anything",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "slab-on-walls",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "terminals-cover-spaces",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "terminals-reach-spaces",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "walls-in-frames",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "walls-over-slabs",
+      "status": "nothing_selected"
+    }
+  ]
+}

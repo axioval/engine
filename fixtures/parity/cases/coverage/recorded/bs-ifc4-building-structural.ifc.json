@@ -1,0 +1,373 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "elevation-cover:ifc-step:bs-ifc4-building-structural.ifc/#69:(1.000000,0.000000):0.1:0.1:|",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "elevation-cover:ifc-step:bs-ifc4-building-structural.ifc/#69:(1.000000,0.000000):0.1:0.1:|ifc-step:bs-ifc4-building-structural.ifc/#197,ifc-step:bs-ifc4-building-structural.ifc/#213,ifc-step:bs-ifc4-building-structural.ifc/#229,ifc-step:bs-ifc4-building-structural.ifc/#245,ifc-step:bs-ifc4-building-structural.ifc/#261",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-rectangle:ifc-step:bs-ifc4-building-structural.ifc/#69:(5.800000,8.900000):unique",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "64d47761-742c-55ab-9300-a14c337ad26a",
+      "message": "elevation: 0.8125 of the elevation (17.4561 of 21.4838 m²) lies outside every counterpart or the infill of the frame of ifc-step:bs-ifc4-building-structural.ifc/#197, ifc-step:bs-ifc4-building-structural.ifc/#213, ifc-step:bs-ifc4-building-structural.ifc/#229, ifc-step:bs-ifc4-building-structural.ifc/#245, ifc-step:bs-ifc4-building-structural.ifc/#261, grown by 0.1 m along its axis and 0.1 m in height; no counterpart overlaps it",
+      "object_id": {
+        "local_id": "#69",
+        "source": {
+          "document": "bs-ifc4-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#197",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#213",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#229",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#245",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#261",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "walls-in-frames",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "elevation-cover:ifc-step:bs-ifc4-building-structural.ifc/#93:(-1.000000,0.000000):0.1:0.1:|",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "elevation-cover:ifc-step:bs-ifc4-building-structural.ifc/#93:(-1.000000,0.000000):0.1:0.1:|ifc-step:bs-ifc4-building-structural.ifc/#197,ifc-step:bs-ifc4-building-structural.ifc/#245,ifc-step:bs-ifc4-building-structural.ifc/#261",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": false,
+          "locator": "plan-rectangle:ifc-step:bs-ifc4-building-structural.ifc/#93:(5.100000,3.100000):unique",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "33c3236c-ff34-549c-9c13-29edb8348601",
+      "message": "elevation: 0.896 of the elevation (13.1609 of 14.6878 m²) lies outside every counterpart or the infill of the frame of ifc-step:bs-ifc4-building-structural.ifc/#197, ifc-step:bs-ifc4-building-structural.ifc/#245, ifc-step:bs-ifc4-building-structural.ifc/#261, grown by 0.1 m along its axis and 0.1 m in height; no counterpart overlaps it",
+      "object_id": {
+        "local_id": "#93",
+        "source": {
+          "document": "bs-ifc4-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#197",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#245",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#261",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "walls-in-frames",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-building-structural.ifc/#69",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-building-structural.ifc/#69",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "f71c306c-7291-507a-a756-a3734c59d6b0",
+      "message": "height: 1 of the height (5.5257 of 5.5257 m) lies outside every counterpart overlapping it in plan, grown by 0.05 m; no counterpart overlaps it",
+      "object_id": {
+        "local_id": "#69",
+        "source": {
+          "document": "bs-ifc4-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "walls-over-slabs",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-building-structural.ifc/#69",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "uncovered-area:ifc-step:bs-ifc4-building-structural.ifc/#69:0.05:",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "4cb0c8e0-0cbf-5fad-aeb3-ee8b52575022",
+      "message": "plan: 1 of the footprint (1.04 of 1.04 m²) lies outside every counterpart grown by 0.05 m; no counterpart overlaps it",
+      "object_id": {
+        "local_id": "#69",
+        "source": {
+          "document": "bs-ifc4-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "walls-over-slabs",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-building-structural.ifc/#93",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-building-structural.ifc/#93",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "6efdbe7c-8330-5622-8701-051fd087c88a",
+      "message": "height: 1 of the height (5.5257 of 5.5257 m) lies outside every counterpart overlapping it in plan, grown by 0.05 m; no counterpart overlaps it",
+      "object_id": {
+        "local_id": "#93",
+        "source": {
+          "document": "bs-ifc4-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "walls-over-slabs",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-building-structural.ifc/#93",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "uncovered-area:ifc-step:bs-ifc4-building-structural.ifc/#93:0.05:",
+          "source": {
+            "document": "bs-ifc4-building-structural.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "7d2d1cea-4c13-5a02-9580-4b4b97ba0ed9",
+      "message": "plan: 1 of the footprint (0.76 of 0.76 m²) lies outside every counterpart grown by 0.05 m; no counterpart overlaps it",
+      "object_id": {
+        "local_id": "#93",
+        "source": {
+          "document": "bs-ifc4-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "walls-over-slabs",
+      "severity": "error"
+    }
+  ],
+  "not_evaluated": [
+    {
+      "message": "all-spaces envelope: `bounding_selector` selects no object",
+      "object_id": null,
+      "reason": "incomplete_evidence",
+      "rule_id": "external-walls"
+    },
+    {
+      "message": "plan span unavailable: the footprint of ifc-step:bs-ifc4-building-structural.ifc/#112 cannot be computed",
+      "object_id": {
+        "local_id": "#112",
+        "source": {
+          "document": "bs-ifc4-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "walls-in-frames"
+    },
+    {
+      "message": "plan span unavailable: the footprint of ifc-step:bs-ifc4-building-structural.ifc/#147 cannot be computed",
+      "object_id": {
+        "local_id": "#147",
+        "source": {
+          "document": "bs-ifc4-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "walls-in-frames"
+    },
+    {
+      "message": "plan area unavailable: the footprint of ifc-step:bs-ifc4-building-structural.ifc/#112 cannot be computed",
+      "object_id": {
+        "local_id": "#112",
+        "source": {
+          "document": "bs-ifc4-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "walls-over-slabs"
+    },
+    {
+      "message": "plan area unavailable: the footprint of ifc-step:bs-ifc4-building-structural.ifc/#147 cannot be computed",
+      "object_id": {
+        "local_id": "#147",
+        "source": {
+          "document": "bs-ifc4-building-structural.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "walls-over-slabs"
+    }
+  ],
+  "rules": [
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "external-walls",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "slab-on-anything",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "slab-on-walls",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "terminals-cover-spaces",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "terminals-reach-spaces",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 4,
+      "failed": 2,
+      "not_evaluated": 2,
+      "rule_id": "walls-in-frames",
+      "status": "failed"
+    },
+    {
+      "checked": 4,
+      "failed": 2,
+      "not_evaluated": 2,
+      "rule_id": "walls-over-slabs",
+      "status": "failed"
+    }
+  ]
+}

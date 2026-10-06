@@ -1,0 +1,43 @@
+{
+  "description": "Contact, coverage and envelope checks over every public model, meshed, recorded before their capabilities become templates (#282).",
+  "models": "*",
+  "pairs": [],
+  "recorded": [
+    {
+      "rule": "slab-on-walls",
+      "comparison": "contract",
+      "reason": "slab-contact becomes a template (#282); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "slab-on-anything",
+      "comparison": "contract",
+      "reason": "slab-contact becomes a template (#282); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "walls-over-slabs",
+      "comparison": "contract",
+      "reason": "counterpart-coverage becomes a template (#282); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "walls-in-frames",
+      "comparison": "contract",
+      "reason": "counterpart-coverage becomes a template (#282); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "terminals-cover-spaces",
+      "comparison": "contract",
+      "reason": "effective-coverage becomes a template (#282); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "terminals-reach-spaces",
+      "comparison": "contract",
+      "reason": "effective-coverage becomes a template (#282); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "external-walls",
+      "comparison": "contract",
+      "reason": "external-wall-validation becomes a template (#282); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    }
+  ],
+  "divergences": []
+}

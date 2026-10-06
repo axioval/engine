@@ -1,0 +1,156 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "elevation-cover:ifc-step:bs-ifc4-wall-with-opening-and-window.ifc/#45:(1.000000,0.000000):0.1:0.1:|",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "plan-rectangle:ifc-step:bs-ifc4-wall-with-opening-and-window.ifc/#45:(1.500000,0.150000):unique",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "1dbef9d7-2603-56a7-90c5-5097315d440b",
+      "message": "elevation: 1 of the elevation (5 of 5 m²) lies outside every counterpart, grown by 0.1 m along its axis and 0.1 m in height; no counterpart overlaps it",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "walls-in-frames",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-wall-with-opening-and-window.ifc/#45",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "vertical-extent:ifc-step:bs-ifc4-wall-with-opening-and-window.ifc/#45",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "1d73d861-5b5e-51a7-bc2a-01310146ec53",
+      "message": "height: 1 of the height (2 of 2 m) lies outside every counterpart overlapping it in plan, grown by 0.05 m; no counterpart overlaps it",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "walls-over-slabs",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "footprint:ifc-step:bs-ifc4-wall-with-opening-and-window.ifc/#45",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "uncovered-area:ifc-step:bs-ifc4-wall-with-opening-and-window.ifc/#45:0.05:",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "4c6b8159-454e-52e7-9f58-3c40fb5d6d40",
+      "message": "plan: 1 of the footprint (0.9 of 0.9 m²) lies outside every counterpart grown by 0.05 m; no counterpart overlaps it",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "walls-over-slabs",
+      "severity": "error"
+    }
+  ],
+  "not_evaluated": [
+    {
+      "message": "all-spaces envelope: `bounding_selector` selects no object",
+      "object_id": null,
+      "reason": "incomplete_evidence",
+      "rule_id": "external-walls"
+    }
+  ],
+  "rules": [
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "external-walls",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "slab-on-anything",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "slab-on-walls",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "terminals-cover-spaces",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "terminals-reach-spaces",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "walls-in-frames",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "walls-over-slabs",
+      "status": "failed"
+    }
+  ]
+}

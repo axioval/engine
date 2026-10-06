@@ -1751,32 +1751,14 @@ pub(crate) fn run(
     let decision = effective(&plan);
     let mut table = report_table(&plan, rule);
     let (selected, mut evaluation) = select_objects(context, &rule.selector);
-    let batched = batched(&plan, context, selected.first().copied());
-    let values = context.services.get::<MeasuredValues>();
+    let batched = batched(
+        plan.values().map(|(_, expression)| expression),
+        context,
+        selected.first().copied(),
+    );
     for chunk in selected.chunks(BATCH) {
-        // Each measured value of every object of the chunk, measured
-        // together; an object reads them as it would resolve them alone.
-        let ids: Vec<&ObjectId> = chunk.iter().map(|object| &object.id).collect();
-        let mut columns: Vec<_> = match values {
-            Some(values) => batched
-                .iter()
-                .map(|(_, name)| {
-                    values
-                        .read_batch(name, &ids)
-                        .into_iter()
-                        .map(|read| read.map_err(property_error))
-                })
-                .collect(),
-            None => Vec::new(),
-        };
-        for object in chunk {
-            let prefetched = batched
-                .iter()
-                .zip(columns.iter_mut())
-                .filter_map(|((set, name), column)| {
-                    column.next().map(|read| (set.clone(), name.clone(), read))
-                })
-                .collect();
+        let prefetched = prefetch(context, &batched, chunk);
+        for (object, prefetched) in chunk.iter().zip(prefetched) {
             let Judgement { outcome, row } = judge_object(
                 (&plan, &decision, scope.as_ref()),
                 context,
@@ -1823,16 +1805,16 @@ const BATCH: usize = 32;
 /// property, a value inside an arithmetic) is resolved as it is read, and
 /// so is a measured value whose request does not bind (the read refuses it
 /// as resolving it would).
-fn batched(
-    plan: &Plan<'_>,
+fn batched<'e>(
+    expressions: impl Iterator<Item = &'e Expression>,
     context: &RuleContext<'_>,
     first: Option<&Object>,
-) -> Vec<(Option<Arc<str>>, Arc<str>)> {
+) -> Batched {
     let Some(first) = first else {
         return Vec::new();
     };
-    plan.values()
-        .filter_map(|(_, expression)| match property_read(expression) {
+    expressions
+        .filter_map(|expression| match property_read(expression) {
             Some((Some(set), name))
                 if set == axioval_ir::MEASURED_SET
                     && bound_property_request(context, first, Some(set), name).is_ok() =>
@@ -1840,6 +1822,40 @@ fn batched(
                 Some((Some(Arc::from(set)), Arc::from(name)))
             }
             _ => None,
+        })
+        .collect()
+}
+
+/// The measured values read for many objects together, as `(set, name)`.
+type Batched = Vec<(Option<Arc<str>>, Arc<str>)>;
+
+/// Each of `batched` measured for every object of `chunk` together, as
+/// each object's prefetched reads, in `chunk`'s order: an object reads
+/// them as it would resolve them alone.
+fn prefetch(context: &RuleContext<'_>, batched: &Batched, chunk: &[&Object]) -> Vec<Prefetch> {
+    let ids: Vec<&ObjectId> = chunk.iter().map(|object| &object.id).collect();
+    let mut columns: Vec<_> = match context.services.get::<MeasuredValues>() {
+        Some(values) => batched
+            .iter()
+            .map(|(_, name)| {
+                values
+                    .read_batch(name, &ids)
+                    .into_iter()
+                    .map(|read| read.map_err(property_error))
+            })
+            .collect(),
+        None => Vec::new(),
+    };
+    chunk
+        .iter()
+        .map(|_| {
+            batched
+                .iter()
+                .zip(columns.iter_mut())
+                .filter_map(|((set, name), column)| {
+                    column.next().map(|read| (set.clone(), name.clone(), read))
+                })
+                .collect()
         })
         .collect()
 }

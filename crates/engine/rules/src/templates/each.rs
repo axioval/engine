@@ -3,6 +3,7 @@
 //! nested members.
 
 use std::collections::BTreeMap;
+use std::rc::Rc;
 
 use axioval_engine::expression::{Interval, Unit, Value};
 use axioval_engine::template::{
@@ -16,7 +17,8 @@ use axioval_ir::{
 };
 
 use super::{
-    Constant, Outcome, Plan, Read, Scope, effective_of, holds, read_values, render, within,
+    BATCH, Constant, Outcome, Plan, Read, Scope, batched, effective_of, holds, prefetch,
+    read_values, render, within,
 };
 use crate::counts::{Population, relation_text, tally};
 use crate::expression_leaves::ObjectLeaves;
@@ -272,17 +274,17 @@ struct Bound<'t> {
     nested: &'t Nested,
     /// Its values' expressions, bound once with the rule's plan.
     expressions: &'t [Expression],
-    population: Population,
+    population: Rc<Population>,
     path: Option<Traversal>,
 }
 
 impl<'t> Bound<'t> {
     fn of(
         plan: &'t Plan<'t>,
-        nested: &'t Nested,
-        expressions: &'t [Expression],
+        (nested, expressions): (&'t Nested, &'t [Expression]),
         context: &RuleContext<'_>,
         rule: &CompiledRule,
+        populations: &mut Vec<(Option<&'t str>, Rc<Population>)>,
     ) -> Self {
         let selector = nested
             .selector
@@ -295,12 +297,22 @@ impl<'t> Bound<'t> {
         Self {
             nested,
             expressions,
-            population: Population::of(
-                context,
-                selector
-                    .as_ref()
-                    .unwrap_or(&axioval_ir::contract::Selector::All),
-            ),
+            // Parts picking by one selector share its population.
+            population: if let Some((_, population)) = populations
+                .iter()
+                .find(|(name, _)| *name == nested.selector)
+            {
+                population.clone()
+            } else {
+                let population = Rc::new(Population::of(
+                    context,
+                    selector
+                        .as_ref()
+                        .unwrap_or(&axioval_ir::contract::Selector::All),
+                ));
+                populations.push((nested.selector, population.clone()));
+                population
+            },
             path: Parameters(rule)
                 .strings(nested.path)
                 .ok()
@@ -311,7 +323,7 @@ impl<'t> Bound<'t> {
 
     /// The nested members of `member`, read; `Err` where the member is
     /// left open, `Ok(None)` where too few judge nothing.
-    #[allow(clippy::type_complexity)]
+    #[allow(clippy::type_complexity, clippy::too_many_lines)]
     fn read<'a>(
         &self,
         plan: &Plan<'_>,
@@ -365,11 +377,19 @@ impl<'t> Bound<'t> {
             return Err(refused(services));
         }
         let mut subjects = Vec::new();
-        for id in &tallied.decided {
-            let Some(object) = object_by_id(context, id) else {
-                continue;
-            };
-            let mut leaves = ObjectLeaves::new(context, object, Some(&rule.parameters));
+        let objects: Vec<&Object> = tallied
+            .decided
+            .iter()
+            .filter_map(|id| object_by_id(context, id))
+            .collect();
+        // The nested members' plain measured values, measured together.
+        let batched = batched(self.expressions.iter(), context, objects.first().copied());
+        let mut prefetched = objects
+            .chunks(BATCH)
+            .flat_map(|chunk| prefetch(context, &batched, chunk));
+        for object in objects.iter().copied() {
+            let mut leaves = ObjectLeaves::new(context, object, Some(&rule.parameters))
+                .with_prefetched(prefetched.next().unwrap_or_default());
             let mut values = Read::default();
             if let Some(outcome) = read_values(
                 plan,
@@ -426,42 +446,7 @@ pub(super) fn run(
     context: &RuleContext<'_>,
     rule: &CompiledRule,
 ) -> CapabilityEvaluation {
-    let scope = match Scope::of(plan, context, rule) {
-        Ok(Some(scope)) => scope,
-        Ok(None) => {
-            return CapabilityEvaluation::not_evaluated(
-                NotEvaluatedReason::InvalidDeclaration,
-                format!("{}: the form judges no members", plan.template.name),
-            );
-        }
-        Err((reason, message)) => {
-            return CapabilityEvaluation::not_evaluated(
-                reason,
-                format!("{}: {message}", plan.template.name),
-            );
-        }
-    };
-    let nested: Vec<Bound<'_>> = each
-        .nested
-        .iter()
-        .zip(plan.each.iter().skip(1))
-        .filter(|(nested, _)| applies(plan, &nested.applies))
-        .map(|(nested, expressions)| Bound::of(plan, nested, expressions, context, rule))
-        .collect();
-    let checks: Vec<&Judgement> = each
-        .checks
-        .iter()
-        .filter(|judgement| applies(plan, &judgement.applies))
-        .collect();
-    // A rise is read only where something judged reads it.
-    let rise_read = checks
-        .iter()
-        .copied()
-        .chain(nested.iter().flat_map(|bound| &bound.nested.checks))
-        .any(|judgement| reads(&judgement.decision).contains(&each.rise.name))
-        || nested
-            .iter()
-            .any(|bound| bound.nested.members_with == Some(each.rise.name));
+    let (anchors, mut evaluation) = select_objects(context, &rule.selector);
     let mut table = each.table.as_ref().and_then(|table| {
         ReportTable::new(
             rule.id.clone(),
@@ -494,6 +479,53 @@ pub(super) fn run(
                 })
             })
             .collect();
+    // Without an anchor there is nothing to read: no member population is
+    // selected, as the capabilities selected none.
+    if anchors.is_empty() {
+        for table in table.into_iter().chain(nested_tables.into_iter().flatten()) {
+            evaluation.push_table(table);
+        }
+        return evaluation;
+    }
+    let scope = match Scope::of(plan, context, rule) {
+        Ok(Some(scope)) => scope,
+        Ok(None) => {
+            return CapabilityEvaluation::not_evaluated(
+                NotEvaluatedReason::InvalidDeclaration,
+                format!("{}: the form judges no members", plan.template.name),
+            );
+        }
+        Err((reason, message)) => {
+            return CapabilityEvaluation::not_evaluated(
+                reason,
+                format!("{}: {message}", plan.template.name),
+            );
+        }
+    };
+    let mut populations = Vec::new();
+    let nested: Vec<Bound<'_>> = each
+        .nested
+        .iter()
+        .zip(plan.each.iter().skip(1))
+        .filter(|(nested, _)| applies(plan, &nested.applies))
+        .map(|(nested, expressions)| {
+            Bound::of(plan, (nested, expressions), context, rule, &mut populations)
+        })
+        .collect();
+    let checks: Vec<&Judgement> = each
+        .checks
+        .iter()
+        .filter(|judgement| applies(plan, &judgement.applies))
+        .collect();
+    // A rise is read only where something judged reads it.
+    let rise_read = checks
+        .iter()
+        .copied()
+        .chain(nested.iter().flat_map(|bound| &bound.nested.checks))
+        .any(|judgement| reads(&judgement.decision).contains(&each.rise.name))
+        || nested
+            .iter()
+            .any(|bound| bound.nested.members_with == Some(each.rise.name));
     let refuse = match &scope.members.undecided {
         UndecidedMembers::Refuse { message } => {
             scope.population.first.clone().map(|(reason, why)| {
@@ -506,7 +538,6 @@ pub(super) fn run(
         }
         _ => None,
     };
-    let (anchors, mut evaluation) = select_objects(context, &rule.selector);
     for anchor in anchors {
         if let Some((reason, message)) = &refuse {
             evaluation.push_object_not_evaluated(

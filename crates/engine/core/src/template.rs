@@ -121,6 +121,12 @@ pub enum Refusals {
     /// [`Refusals::Objects`]: as capabilities that read their declaration
     /// first and asked for their services once they had selected.
     ServicesPerObject,
+    /// Once for the rule, after selecting, and only where the rule selects
+    /// an object, beside the selection's own outcomes: a refused
+    /// declaration after the name, missing services as stated. As
+    /// capabilities that selected before reading their declaration
+    /// reported it, saying nothing where nothing is selected.
+    Selected,
 }
 
 impl Refusals {
@@ -431,6 +437,33 @@ pub enum Check {
     /// negative ``, or `` `<parameter>` is not a length `` for a quantity of
     /// another dimension (a wrong type refused as the reader words it).
     FiniteLength { parameter: &'static str },
+    /// Every string a string-list parameter lists is, as stated, one of
+    /// `options` (`unknown` otherwise) and listed once (`repeated`
+    /// otherwise), judged string by string in the list's order; `{value}`
+    /// the string as listed.
+    Listed {
+        parameter: &'static str,
+        options: &'static [&'static str],
+        unknown: &'static str,
+        repeated: &'static str,
+    },
+    /// For each string a string-list parameter lists, in the list's order,
+    /// the parameters its entry of `needs` names are stated: an option of
+    /// a mode list needing its own inputs.
+    ListedNeeds {
+        parameter: &'static str,
+        needs: &'static [Needed],
+    },
+}
+
+/// What [`Check::ListedNeeds`] requires where a list states `value`: every
+/// one of `parameters` stated, `message` otherwise.
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Needed {
+    pub value: &'static str,
+    pub parameters: &'static [&'static str],
+    pub message: &'static str,
 }
 
 /// What [`Check::Rows`] requires of one column of every row.
@@ -472,6 +505,8 @@ pub enum Service {
     Contact,
     PlanArea,
     PlanSpan,
+    CoordinateSystem,
+    EnvelopeMembership,
 }
 
 impl Service {
@@ -492,6 +527,12 @@ impl Service {
             Self::Contact => services.get::<crate::ContactServiceHandle>().is_some(),
             Self::PlanArea => services.get::<crate::PlanAreaServiceHandle>().is_some(),
             Self::PlanSpan => services.get::<crate::PlanSpanServiceHandle>().is_some(),
+            Self::CoordinateSystem => services
+                .get::<crate::CoordinateSystemServiceHandle>()
+                .is_some(),
+            Self::EnvelopeMembership => services
+                .get::<crate::EnvelopeMembershipServiceHandle>()
+                .is_some(),
         }
     }
 }
@@ -563,6 +604,12 @@ pub enum Condition {
         parameter: &'static str,
         end: End,
     },
+    /// The value was read: one read once per rule ([`Once`]) was not
+    /// refused, or one of the subject was read before.
+    Measured { value: &'static str },
+    /// The source a scope judges is one the value's measured reads cite
+    /// ([`crate::Citation::sources`]): the reference source.
+    Scope { value: &'static str },
 }
 
 /// One composition of a template.
@@ -616,6 +663,31 @@ pub struct Form {
     /// How the form's finding is graded into a severity.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub grading: Option<Grading>,
+    /// Values read once per rule, before any scope or object ([`Once`]).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub once: Vec<Once>,
+}
+
+/// A value read once per rule, before any scope or object is judged, of
+/// the project: a measured value whose subject is the project
+/// ([`axioval_ir::measured::MeasuredSubject::Project`]), such as the
+/// reference source of a federation or a building's envelope derived once.
+/// It is read only where `applies` holds (its parameters).
+///
+/// A refusal leaves the whole rule open, once, with `refused` (`{why}` the
+/// refusal): where the value is `required`, nothing else is judged; where
+/// it is not, the rule is judged on, and what reads it is gated by
+/// [`Condition::Measured`]. A value read is available to every scope's and
+/// object's messages and conditions under its name, its citations too
+/// (`{reference:source}`, [`Condition::Scope`]).
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Once {
+    pub value: TemplateValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub applies: Option<Applies>,
+    pub refused: &'static str,
+    pub required: bool,
 }
 
 /// A value that, surely true, leaves an object unjudged: read before the
@@ -686,9 +758,20 @@ pub struct FormCheck {
     /// How its finding is graded into a severity.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub grading: Option<Grading>,
-    /// Where it applies; always without one.
+    /// Where it applies; always without one. Its condition may read the
+    /// form's values and those read once per rule
+    /// ([`Condition::Measured`]).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub applies: Option<Applies>,
+    /// A condition over the check's values, read: where it holds, the
+    /// check passes without deciding (a source declaring nothing, whose
+    /// own finding stands for its objects).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unless: Option<Condition>,
+    /// Whether a value that cannot be read leaves the check without an
+    /// outcome, since another check reading it reports it.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub quiet: bool,
 }
 
 /// A value derived from values already read, in plain binary arithmetic
@@ -745,8 +828,43 @@ pub struct Scopes {
     /// of the project (`undeclared_member`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub disciplines: Option<&'static str>,
+    /// Which sources are judged, and whether the selection is read.
+    #[serde(skip_serializing_if = "ScopeSources::is_selected")]
+    pub sources: ScopeSources,
+    /// Where scopes are judged at all: a condition over the values read
+    /// once per rule ([`Condition::Measured`]); always without one. Where
+    /// it does not hold, the rule's open outcomes stand for every scope.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub needs: Option<Condition>,
     /// The scope's messages.
     pub messages: ScopeMessages,
+}
+
+/// Which sources a [`Scopes`] form judges.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ScopeSources {
+    /// Every source of the session, an empty one included, over the
+    /// objects the rule selects there.
+    #[default]
+    Selected,
+    /// Every source of the session, an empty one included, without
+    /// selecting: the sources themselves are judged, by values whose
+    /// subject is a source ([`axioval_ir::measured::MeasuredSubject::Source`]).
+    Every,
+    /// Only the sources where the rule surely selects an object. The
+    /// rule's selection is made once, its outcomes reported, and the form's
+    /// checks then judge each selected object ([`Form::checks`]): one
+    /// measurement leading to outcomes at source and at object level.
+    Occupied,
+}
+
+impl ScopeSources {
+    /// Whether every source is judged over the rule's selection.
+    #[must_use]
+    pub fn is_selected(&self) -> bool {
+        *self == Self::Selected
+    }
 }
 
 /// The messages of a [`Scopes`] form. `{source}` names a source,
@@ -1054,6 +1172,40 @@ pub enum Decision {
     /// The parts of each selected object judged as objects of their own,
     /// then the object by the form's values and checks ([`Parts`]).
     Parts(Box<Parts>),
+    /// The items of a measured member list of the subject (a scope's
+    /// source), each a difference found, absent or undecided, judged in one
+    /// outcome whose message joins their words ([`Joined`]).
+    Joined(Joined),
+}
+
+/// One outcome over the items of a measured member list, read for the
+/// subject: a source a [`Scopes`] form judges (a list whose subject is a
+/// source, [`axioval_ir::measured::MeasuredSubject::Source`]), or an
+/// object.
+///
+/// Each item states whether it was found (`found`, a truth field: a
+/// difference present), and its words (`words`, a text field). Where any
+/// item is found, the subject is a finding whose message (the form's
+/// `fail`) reads `{found}`, the found items' words joined by `separator`;
+/// otherwise, where any item is undecided, the subject is open (the form's
+/// `undecided`) reading `{open}`, the undecided items' words joined, each
+/// once, as not recorded where every undecided item states its `recorded`
+/// field false, and as incomplete evidence otherwise; otherwise it passes.
+/// A list that cannot be measured leaves the subject open with `refused`
+/// (`{why}`). The finding cites the list's evidence. Its expression form is
+/// a `none` aggregate over the list of an item found; a rule is never
+/// forked from a form judging a scope.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Joined {
+    /// The list, written as a measured value is, `@` references bound.
+    pub list: &'static str,
+    pub found: &'static str,
+    pub words: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recorded: Option<&'static str>,
+    pub separator: &'static str,
+    pub refused: &'static str,
 }
 
 /// Members read and judged one by one: what [`Decision::Each`] decides.
@@ -2056,6 +2208,20 @@ impl Decision {
                 }
             }
             Self::Items(items) => items.expression(),
+            Self::Joined(joined) => Expression::Aggregate {
+                function: axioval_ir::contract::AggregateFunction::None,
+                over: axioval_ir::contract::AggregateSource::Measured {
+                    name: joined.list.to_owned(),
+                },
+                filter: None,
+                value: Some(boxed(Expression::Property {
+                    property_set: Some(axioval_ir::MEMBER_SET.to_owned()),
+                    property: joined.found.to_owned(),
+                    of: None,
+                    label: None,
+                })),
+                label: Some("no item differs".into()),
+            },
             // Each part is judged by its checks, which the form's
             // requirement does not inline: what the anchor's checks require.
             Self::Parts(_) => Expression::Literal {
@@ -2427,9 +2593,12 @@ mod tests {
                 undecided: "",
                 related: None,
                 grading: None,
+                unless: None,
+                quiet: false,
             }],
             unless: Vec::new(),
             grading: None,
+            once: Vec::new(),
         };
         let Expression::And { operands, .. } = form.requirement() else {
             panic!("an `and` of the checks and the form's decision");

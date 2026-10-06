@@ -93,6 +93,9 @@ pub(crate) struct ObjectLeaves<'a> {
     /// What the measured values bound from the rule noted, as their
     /// providers cite it, in reading order.
     notes: RefCell<Vec<String>>,
+    /// The sources they were measured against (a reference source), as
+    /// their providers cite them, in reading order.
+    sources: RefCell<Vec<axioval_ir::SourceId>>,
     /// Members the caller states for one aggregate source in place of
     /// reaching them: a template's members of an anchor, or the objects
     /// selected in a scope.
@@ -130,6 +133,7 @@ impl<'a> ObjectLeaves<'a> {
             arguments: None,
             related: RefCell::new(Vec::new()),
             notes: RefCell::new(Vec::new()),
+            sources: RefCell::new(Vec::new()),
             lists: RefCell::new(Vec::new()),
         }
     }
@@ -161,6 +165,7 @@ impl<'a> ObjectLeaves<'a> {
             arguments: self.arguments,
             related: RefCell::new(Vec::new()),
             notes: RefCell::new(Vec::new()),
+            sources: RefCell::new(Vec::new()),
             lists: RefCell::new(Vec::new()),
         }
     }
@@ -184,6 +189,7 @@ impl<'a> ObjectLeaves<'a> {
             arguments: self.arguments,
             related: RefCell::new(Vec::new()),
             notes: RefCell::new(Vec::new()),
+            sources: RefCell::new(Vec::new()),
             lists: RefCell::new(Vec::new()),
         }
     }
@@ -257,10 +263,14 @@ impl<'a> ObjectLeaves<'a> {
                 let message = message
                     .strip_prefix(&format!("`{}` value ", axioval_ir::MEASURED_SET))
                     .unwrap_or(message);
-                (
-                    reason,
-                    message.strip_prefix(&prefix).unwrap_or(message).to_owned(),
-                )
+                // A list of a source names the source, not the object.
+                let message = message.strip_prefix(&prefix).unwrap_or_else(|| {
+                    message
+                        .strip_prefix(&format!("`{}` of ", call.name()))
+                        .and_then(|rest| rest.split_once(": "))
+                        .map_or(message, |(_, why)| why)
+                });
+                (reason, message.to_owned())
             })
     }
 
@@ -291,6 +301,28 @@ impl<'a> ObjectLeaves<'a> {
     /// providers cite it.
     pub(crate) fn take_notes(&self) -> Vec<String> {
         std::mem::take(&mut *self.notes.borrow_mut())
+    }
+
+    /// The measured value `name` (written as a rule writes it, any `@`
+    /// reference bound) read with what it was measured against, which
+    /// [`Self::take_related`] and [`Self::take_sources`] then give: as a
+    /// template reads a value once per rule, whatever it names.
+    pub(crate) fn measured_cited(&mut self, name: &str) -> Leaf {
+        match axioval_ir::measured::parse(name) {
+            Ok(call) => self.bound_measured(name, call),
+            Err(error) => {
+                self.reasons
+                    .borrow_mut()
+                    .push(NotEvaluatedReason::InvalidDeclaration);
+                Leaf::unreadable(error.to_string())
+            }
+        }
+    }
+
+    /// The sources the measured values read since the last call were
+    /// measured against, as their providers cite them.
+    pub(crate) fn take_sources(&self) -> Vec<axioval_ir::SourceId> {
+        std::mem::take(&mut *self.sources.borrow_mut())
     }
 
     /// The measured value `name` as `call` names it, its references bound
@@ -439,6 +471,7 @@ impl<'a> ObjectLeaves<'a> {
         evidence.extend(citation.evidence);
         self.related.borrow_mut().extend(citation.related);
         self.notes.borrow_mut().extend(citation.notes);
+        self.sources.borrow_mut().extend(citation.sources);
         let value = match &stated {
             // A stated absence is `null`, never a value not read.
             None => Ok(Value::Null),

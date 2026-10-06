@@ -59,6 +59,7 @@ pub(crate) fn template() -> Template {
             derived: Vec::new(),
             related: None,
             checks: Vec::new(),
+            once: Vec::new(),
         }],
     }
 }

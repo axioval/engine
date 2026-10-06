@@ -324,6 +324,7 @@ pub(crate) fn template() -> Template {
             // What the face rests on.
             related: Some("share"),
             checks: Vec::new(),
+            once: Vec::new(),
         }],
     }
 }

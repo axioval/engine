@@ -90,6 +90,7 @@ fn template() -> Template {
             }],
             related: None,
             checks: Vec::new(),
+            once: Vec::new(),
         }],
     }
 }
@@ -641,6 +642,7 @@ mod graded {
                 derived: Vec::new(),
                 related: None,
                 checks: Vec::new(),
+                once: Vec::new(),
             }],
         }
     }
@@ -892,7 +894,10 @@ mod near {
                             value: "height",
                         }),
                     }),
+                    unless: None,
+                    quiet: false,
                 }],
+                once: Vec::new(),
             }],
         }
     }
@@ -1147,7 +1152,10 @@ mod thresholds {
                             than: 0.0,
                         }),
                     }),
+                    unless: None,
+                    quiet: false,
                 }],
+                once: Vec::new(),
             }],
         }
     }
@@ -1469,9 +1477,12 @@ mod open_sums {
                         any: &[],
                         condition: None,
                     }),
+                    unless: None,
+                    quiet: false,
                 }],
                 unless: Vec::new(),
                 grading: None,
+                once: Vec::new(),
             }],
         }
     }

@@ -106,6 +106,7 @@ fn members_form() -> Form {
         derived: Vec::new(),
         related: None,
         checks: Vec::new(),
+        once: Vec::new(),
     }
 }
 
@@ -125,6 +126,7 @@ fn own_form() -> Form {
         derived: Vec::new(),
         related: None,
         checks: Vec::new(),
+        once: Vec::new(),
     }
 }
 

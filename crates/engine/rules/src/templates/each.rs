@@ -61,6 +61,12 @@ fn difference(minuend: Span, subtrahend: Span) -> Span {
 /// Whether `applies` holds for the rule: every `when` parameter stated (a
 /// boolean, or its default, true), one of `any`, and its condition.
 pub(super) fn applies(plan: &Plan<'_>, applies: &Applies) -> bool {
+    applies_reading(plan, applies, &Read::default())
+}
+
+/// [`applies`], its condition held over `read`: a form's values and those
+/// read once per rule ([`Condition::Measured`](axioval_engine::template::Condition::Measured)).
+pub(super) fn applies_reading(plan: &Plan<'_>, applies: &Applies, read: &Read) -> bool {
     let declared = |name: &&str| {
         !matches!(
             plan.constants.get(*name),
@@ -69,7 +75,7 @@ pub(super) fn applies(plan: &Plan<'_>, applies: &Applies) -> bool {
     };
     applies.when.iter().all(declared)
         && (applies.any.is_empty() || applies.any.iter().any(declared))
-        && holds(plan, &Read::default(), applies.condition)
+        && holds(plan, read, applies.condition)
 }
 
 /// A boolean parameter (or its default) that holds.

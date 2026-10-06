@@ -69,11 +69,11 @@ rules crate (`body_extent/template.rs`):
 | `id`, `parameters` | The capability's id and descriptor, unchanged. |
 | `grades` | Whether findings are graded (the descriptor's `grades_deviation`): each states how far its value misses the bound it fails, measured from the declared bound, never the widened one, for the runtime's severity bands. |
 | `name` | How rule-scoped messages name the capability (`body-extent: …`). |
-| `refusals` | Where a refused declaration and missing services are reported: `rule` (the default, once, before anything is selected, after the name), `objects` (for each selected object, worded as the check states it, as capabilities that judged their declaration per object reported it) or `prefixed` (for each selected object, a refused declaration after a prefix: `slab-contact declaration is invalid: …`; missing services as stated) or `servicesPerObject` (a refused declaration once for the rule, after the name, missing services for each selected object). |
+| `refusals` | Where a refused declaration and missing services are reported: `rule` (the default, once, before anything is selected, after the name), `objects` (for each selected object, worded as the check states it, as capabilities that judged their declaration per object reported it) or `prefixed` (for each selected object, a refused declaration after a prefix: `slab-contact declaration is invalid: …`; missing services as stated) or `servicesPerObject` (a refused declaration once for the rule, after the name, missing services for each selected object) or `selected` (once for the rule after selecting, and only where the rule selects an object, beside the selection's own outcomes: a refused declaration after the name, missing services as stated, as capabilities that selected before reading their declaration reported it). |
 | `defaults` | Values optional parameters take when unstated (`tolerance` 0 m). A default taking its value `from` other parameters takes the first of them the rule states, its literal where none is: one value a rule may state under either of two names (`horizontal` from `tolerance` or `horizontal_tolerance`), or the least severe of the thresholds stated. Such a name may be no parameter of the descriptor; messages, conditions and measured values (`@horizontal`) read it as any parameter. |
-| `declaration` | `Check`s over the rule's parameters, in order: `excludes` (where a mode is stated, no string parameter of a list states an option it does not combine with), `arguments` (where a mode is stated, the rule parameters a measured value or member list names, checked as stated by the value's own argument check: a declaration, such as a table of rows, only the measurement knows how to read), `choice` (a string among options), `length` (a non-negative length), `count` (an integer of at least zero, stated where the descriptor requires it), `kind` (a parameter of its descriptor's kind, placed where the capability read it so refusals keep their order), `nonNegative` (numbers of at least zero), `traversal` (a valid `relationship` or `path`, declared only with one of the named parameters, or anywhere where it names none), `exclusive`, `anyOf`, `requires`, `ordered` (numbers, integers or quantities, as the descriptor types them), `disciplines` (a non-empty list of valid disciplines), `path` (a valid relationship path), `tolerance` (the rule's tolerance parameters valid together), `required` (a parameter stated, of its kind), `finite` (each parameter stated as a finite `number`, above or at least a bound where given), `increasing` (both numbers, the first below the second), `atMost` (each number stated at most a value: a share no greater than the whole), `when` (a check that applies only where one of some boolean parameters is stated true: a declaration a mode needs only while it is on), `amongEach` (every string a list states, trimmed, among options, `{value}` the one that is not), `declaresListed` (`declares`, a string list only where it lists one), `holds` (a `Condition` holds over the parameters, their defaults applied: a declaration stated as conditions, such as two switches not both off, or a share in `[0, 1)`), `exceeds` (where stated, a number above each earlier one stated: thresholds strictly increasing), `quantity` (where stated, a quantity of one dimension, of any sign) and `angleBelow` (where stated, a plane angle of at least zero and below a number of degrees, compared in degrees as the capability converted it), `finiteLength` (a finite length of at least zero, `` `x` must be a finite length, not negative `` or `` `x` is not a length ``). The first failing check leaves the rule not evaluated as an invalid declaration, worded as the capability worded it. |
-| `services` | The host services the values need (`Service`: `object-frame`, `vertical-extent`, `triangle-count`, `walking-surface`, `contact`, `plan-area`, `plan-span`), and the message leaving the whole rule open without them, before anything is selected. |
-| `texts` | Named message parts, optionally conditional: `Condition::Positive` (a parameter above zero), `Condition::Inexact` (a value read from evidence that is not exact, such as a count of a tessellation), `Condition::Equals` (a string parameter or its default is a value), `Condition::Zero` (a value's lower end is zero: nothing surely counted), `Condition::All` (every one of several), `Condition::Not`, `Condition::Cites` (a value's measured reads cite an object: a search found a candidate), `Condition::Absent` (a value is `null`: a measurement found nothing near), `Condition::Below` and `Condition::Above` (a value surely below or above a number: its upper or lower end is), `Condition::Lists` (a string-list parameter lists a word), `Condition::AtLeast` and `Condition::Under` (a parameter, or its default, a number at least or below a number: a tolerance not negative), `Condition::Exceeds` (a value's lower or upper end above the number a parameter states, never where it states none: a share surely or possibly above a threshold), `Condition::Stated` (the rule states a parameter, or a default gives it). Several texts may share a name, each under its own condition: the first that holds is rendered (`plan area` or `facade area` by `measure`). |
+| `declaration` | `Check`s over the rule's parameters, in order: `excludes` (where a mode is stated, no string parameter of a list states an option it does not combine with), `arguments` (where a mode is stated, the rule parameters a measured value or member list names, checked as stated by the value's own argument check: a declaration, such as a table of rows, only the measurement knows how to read), `choice` (a string among options), `length` (a non-negative length), `count` (an integer of at least zero, stated where the descriptor requires it), `kind` (a parameter of its descriptor's kind, placed where the capability read it so refusals keep their order), `nonNegative` (numbers of at least zero), `traversal` (a valid `relationship` or `path`, declared only with one of the named parameters, or anywhere where it names none), `exclusive`, `anyOf`, `requires`, `ordered` (numbers, integers or quantities, as the descriptor types them), `disciplines` (a non-empty list of valid disciplines), `path` (a valid relationship path), `tolerance` (the rule's tolerance parameters valid together), `required` (a parameter stated, of its kind), `finite` (each parameter stated as a finite `number`, above or at least a bound where given), `increasing` (both numbers, the first below the second), `atMost` (each number stated at most a value: a share no greater than the whole), `when` (a check that applies only where one of some boolean parameters is stated true: a declaration a mode needs only while it is on), `amongEach` (every string a list states, trimmed, among options, `{value}` the one that is not), `declaresListed` (`declares`, a string list only where it lists one), `holds` (a `Condition` holds over the parameters, their defaults applied: a declaration stated as conditions, such as two switches not both off, or a share in `[0, 1)`), `exceeds` (where stated, a number above each earlier one stated: thresholds strictly increasing), `quantity` (where stated, a quantity of one dimension, of any sign), `angleBelow` (where stated, a plane angle of at least zero and below a number of degrees, compared in degrees as the capability converted it), `finiteLength` (a finite length of at least zero, `` `x` must be a finite length, not negative `` or `` `x` is not a length ``), `listed` (every string a list states is, as stated and untrimmed, one of some options and listed once, judged string by string in the list's order: `unknown` or `repeated`, `{value}` the string) and `listedNeeds` (for each string a list states, in its order, the parameters that option `Needed` are stated: a mode list whose options each need their own inputs). The first failing check leaves the rule not evaluated as an invalid declaration, worded as the capability worded it. |
+| `services` | The host services the values need (`Service`: `object-frame`, `vertical-extent`, `triangle-count`, `walking-surface`, `contact`, `plan-area`, `plan-span`, `coordinate-system`, `envelope-membership`), and the message leaving the whole rule open without them, before anything is selected (after selecting, with `selected` refusals). |
+| `texts` | Named message parts, optionally conditional: `Condition::Positive` (a parameter above zero), `Condition::Inexact` (a value read from evidence that is not exact, such as a count of a tessellation), `Condition::Equals` (a string parameter or its default is a value), `Condition::Zero` (a value's lower end is zero: nothing surely counted), `Condition::All` (every one of several), `Condition::Not`, `Condition::Cites` (a value's measured reads cite an object: a search found a candidate), `Condition::Absent` (a value is `null`: a measurement found nothing near), `Condition::Below` and `Condition::Above` (a value surely below or above a number: its upper or lower end is), `Condition::Lists` (a string-list parameter lists a word), `Condition::AtLeast` and `Condition::Under` (a parameter, or its default, a number at least or below a number: a tolerance not negative), `Condition::Exceeds` (a value's lower or upper end above the number a parameter states, never where it states none: a share surely or possibly above a threshold), `Condition::Stated` (the rule states a parameter, or a default gives it), `Condition::Measured` (a value was read: one read once per rule was not refused) and `Condition::Scope` (the source a scope judges is one a value's measured reads cite: the reference source). Several texts may share a name, each under its own condition: the first that holds is rendered (`plan area` or `facade area` by `measure`). |
 | `forms` | The compositions. The first form whose `when` parameters are all stated applies. |
 
 A `Form` holds:
@@ -116,7 +116,14 @@ A `Form` holds:
   another value within a tolerance, as a member's judgement does. A check
   that does not apply is never read, nor read ahead, nor forked. A check's
   `derived` values follow its own and the form's values, before its
-  decision: what only it reads (a capacity less an area);
+  decision: what only it reads (a capacity less an area). A check's
+  condition reads the form's values and those read once per rule
+  (`Condition::Measured`), so a check of a measurement the rule could not
+  make is never read. Where its `unless` condition holds over its values,
+  read, the check passes without deciding (a source declaring nothing
+  external, whose own finding stands for its objects); a `quiet` check
+  whose value cannot be read reports nothing, since another check reading
+  it reports the refusal once;
 - `unless`: values that leave an object unjudged (`Unless`), read before
   anything else, each only where it `applies` (a boolean parameter stated
   true): one surely true (`true`, or a number surely other than zero)
@@ -133,7 +140,10 @@ A `Form` holds:
   rule's own where none does. The finding's message may read the values
   (`no contact` where the contact area is zero). Grading never changes
   which findings exist; a template grading a deviation (`grades`) is graded
-  by the runtime's severity bands instead.
+  by the runtime's severity bands instead. A scope's finding takes the
+  severity of the first band holding over its values;
+- `once`: values read once per rule (`Once`), before any scope or object
+  is judged (see below).
 
 **Rule parameters as arguments.** A value's measured name may hand the
 measurement the rule's own parameters and the anchor, `@name` and
@@ -170,6 +180,54 @@ resource objects cannot be listed (`{why}`) and the discipline outcomes
 (`{disciplines}`: `` `mep` or `hvac` ``). A form's `when` picks bounds
 as for any form; an existence check is a form whose minimum is a value
 `one`, a literal 1.
+
+`Scopes::sources` says which sources are judged. `selected` (the
+default) is every source over the rule's selection, as above. `every` is
+every source of the session, an empty one included, without selecting: the
+sources themselves are judged, by measured values whose subject is a
+source ([Subjects](./derived.md#subjects)), read through a stand-in of the
+source, so a source holding no object is measured all the same.
+`occupied` is only the sources where the rule surely selects an object:
+the rule's selection is made once and its outcomes reported, each such
+source is judged (its values may name `@selection`, the rule's own
+selection), and then every selected object is judged by the form's
+`checks`, each its own outcome: one measurement leading to outcomes at
+source and at object level. A finding on a source relates the value
+`related` names, if any. `Scopes::needs` judges the scopes only where a
+condition holds over the values read once per rule (`Condition::Measured`):
+where it does not, the rule's open outcomes stand for every scope.
+`{source}` names the source a scope judges.
+
+**Values read once per rule.** A form's `once` values (`Once`: a value,
+where it `applies` over the rule's parameters, a `refused` message and
+whether it is `required`) are read before any scope or object, of the
+project: measured values whose subject is the project
+([Subjects](./derived.md#subjects)), each read with what it cites (the
+reference source of a federation, a building's envelope derived once).
+Values applying where a list parameter lists a word (`Condition::Lists`)
+are read in the order the rule lists the words. A refusal leaves the whole
+rule open, once, worded by `refused` (`{why}` the refusal, for its reason):
+a `required` value's refusal leaves nothing else judged, any other's lets
+the rule be judged on, and a check or scope reading it is gated by
+`Condition::Measured`. A value read is available to every scope's and
+object's messages and conditions under its name, its citations too
+(`{reference:source}`, `Condition::Scope`). A `refusals: selected`
+template reads them after selecting.
+
+**Joined judgements.** `Decision::Joined` judges a subject by the items
+of a measured member list (`Joined`: the list, written as a measured value
+is, its `@` references bound; a truth field `found`, a text field
+`words`, an optional truth field `recorded`, a `separator` and a `refused`
+message), read for the subject: a scope's source (a list whose subject is
+a source) or an object. Where any item is found, the subject is a finding
+whose message (`fail`) reads `{found}`, the found items' words joined;
+otherwise, where an item is undecided (or may be no item), the subject is
+open (`undecided`) reading `{open}`, the undecided items' words joined,
+each once: as not recorded where every one states `recorded` false, as
+incomplete evidence otherwise. A list that cannot be measured leaves the
+subject open with `refused` (`{why}`). The finding cites the list's
+evidence. A source's coordinate differences, each in
+`compare_coordinate_systems`' words, are such a list.
 
 **Members.** A value reads an anchor's members as an aggregate over
 `Members::source(selector)`, the objects the selector parameter picks: in
@@ -1149,7 +1207,9 @@ end to two decimals (`{numerator:least2}`: `0.66`), a share's upper
 end, at most 1, to four decimals (`{share:share}`: `0.4`), and a number
 with a fixed number of decimals: a value known as one point or a
 constant (`{minimum:fixed4}`: `0.5000`), or a value's lower or upper end
-(`{share:lower4}`, `{length:upper3}`), and the objects a value's measured
+(`{share:lower4}`, `{length:upper3}`, `{declared:upper0}`), the sources a
+value's measured reads cite (`{reference:source}`: the reference source),
+a `Joined` form's `{found}` and `{open}`, a scope's `{source}`, and the objects a value's measured
 reads were measured against (`{distance:cited}`: the next slab up, or
 nothing where they cite none), what they noted, each after `; `
 (`{share:notes}`: `; 1 counterpart(s) have no readable extent, so they may
@@ -1213,7 +1273,12 @@ out every check that does not apply to the rule.
 A form with a `scope` expands into its decision over the aggregate of the
 rule's `selection`, as the catalogue shows it, but is never forked
 (`ForkError::Inexpressible`): an `expression` rule judges objects, never
-a source or the project as a whole.
+a source or the project as a whole. Neither is a form reading values once
+per rule (an expression rule reads its values per object, and none whose
+refusal leaves the rule open), one judging by a `Joined` list (its
+expression form, for the catalogue, is a `none` aggregate over the list of
+an item found) or one whose checks pass where a condition holds
+(`unless`).
 
 A `Compare` form expands into an `if` over the operator words, each
 branch the test its word names with the target read as a `parameter`. A
@@ -1558,7 +1623,13 @@ addition data the runner interprets, never code per capability:
   built, `Form::scope`). An anchor judged through the members a selector
   parameter picks, read as an aggregate over them, findings relating the
   decided members; a source or the project judged over the objects the
-  rule selects there.
+  rule selects there; every source judged by values of its own, or the
+  sources holding a selected object and then each object
+  (`ScopeSources`, #291).
+- **Values of a source or the project, read once per rule** (built,
+  #291): a measured value whose subject is a source or the project
+  (`MeasuredSubject`), `Form::once`, `Condition::Measured`, and
+  `Decision::Joined`, one outcome joining the words of a list's items.
 - **Several findings per object** (built: `Judgement`s of
   `Decision::Each` for members, `Form::checks` for an object-level form,
   each its own outcome; divergence D1; and `Decision::Items`, each item of

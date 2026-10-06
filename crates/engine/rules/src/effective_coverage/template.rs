@@ -333,6 +333,8 @@ fn coverage() -> FormCheck {
         related: Some("share"),
         grading: None,
         applies: None,
+        unless: None,
+        quiet: false,
     }
 }
 
@@ -381,6 +383,8 @@ fn capacity() -> FormCheck {
         related: Some("summed"),
         grading: None,
         applies: Some(CAPACITY),
+        unless: None,
+        quiet: false,
     }
 }
 
@@ -417,6 +421,8 @@ fn missing() -> FormCheck {
         related: None,
         grading: None,
         applies: Some(CAPACITY),
+        unless: None,
+        quiet: false,
     }
 }
 
@@ -455,6 +461,7 @@ pub(crate) fn template() -> Template {
             checks: vec![coverage(), capacity(), missing()],
             unless: Vec::new(),
             grading: None,
+            once: Vec::new(),
         }],
     }
 }

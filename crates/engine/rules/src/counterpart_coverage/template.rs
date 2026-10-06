@@ -422,6 +422,8 @@ fn check(
             any: &[],
             condition: Some(applies),
         }),
+        unless: None,
+        quiet: false,
     }
 }
 
@@ -505,6 +507,7 @@ pub(crate) fn template() -> Template {
             checks: checks(),
             unless: Vec::new(),
             grading: None,
+            once: Vec::new(),
         }],
     }
 }

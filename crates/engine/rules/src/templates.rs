@@ -17,6 +17,7 @@ mod each;
 pub(crate) mod facets;
 mod groups;
 mod items;
+mod joined;
 mod members;
 mod parts;
 mod proportion;
@@ -179,6 +180,8 @@ struct Bound {
     /// The form's grading values' expressions, then each check's, bound
     /// likewise.
     grading: Vec<Vec<Expression>>,
+    /// The expressions of the values read once per rule, bound likewise.
+    once: Vec<Expression>,
 }
 
 impl std::ops::Deref for Plan<'_> {
@@ -633,6 +636,34 @@ fn check(check: &Check, rule: &CompiledRule, template: &Template) -> Result<(), 
             } else {
                 Ok(())
             }
+        }
+        Check::Listed {
+            parameter,
+            options,
+            unknown,
+            repeated,
+        } => {
+            let mut seen: Vec<&str> = Vec::new();
+            for listed in Parameters(rule).strings(parameter)?.unwrap_or_default() {
+                if !options.contains(&listed.as_str()) {
+                    return Err(invalid(unknown.replace("{value}", listed)));
+                }
+                if seen.contains(&listed.as_str()) {
+                    return Err(invalid(repeated.replace("{value}", listed)));
+                }
+                seen.push(listed);
+            }
+            Ok(())
+        }
+        Check::ListedNeeds { parameter, needs } => {
+            for listed in Parameters(rule).strings(parameter)?.unwrap_or_default() {
+                for needed in needs.iter().filter(|needed| needed.value == listed) {
+                    if !needed.parameters.iter().all(|name| stated(rule, name)) {
+                        return Err(invalid(needed.message));
+                    }
+                }
+            }
+            Ok(())
         }
         Check::AmongEach {
             parameter,
@@ -1292,6 +1323,11 @@ fn bind(template: &Template, rule: &CompiledRule) -> Result<Bound, Unavailable> 
                 .collect()
         })
         .collect();
+    let once = form
+        .once
+        .iter()
+        .map(|once| bound(&once.value.expression, &constants))
+        .collect();
     Ok(Bound {
         form: index,
         parameters,
@@ -1304,6 +1340,7 @@ fn bind(template: &Template, rule: &CompiledRule) -> Result<Bound, Unavailable> 
         member_checks,
         unless,
         grading,
+        once,
     })
 }
 
@@ -1372,6 +1409,9 @@ struct Read {
     related: Vec<(&'static str, Vec<ObjectId>)>,
     /// What each value's measured reads noted, as their providers cite it.
     notes: Vec<(&'static str, Vec<String>)>,
+    /// The sources each value's measured reads were measured against (a
+    /// reference source), as their providers cite them.
+    sources: Vec<(&'static str, Vec<axioval_ir::SourceId>)>,
 }
 
 /// The few values of one object a form names, in reading order: a list
@@ -1745,6 +1785,18 @@ fn placeholder(plan: &Plan<'_>, read: &Read, key: &str) -> Option<String> {
             .get(name)
             .and_then(Constant::number)
             .map(|value| value.to_string()),
+        // The sources the value's measured reads were measured against (the
+        // reference source).
+        "source" => {
+            let sources = sources(read, name);
+            (!sources.is_empty()).then(|| {
+                sources
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+        }
         "share" => match read.values.get(name) {
             Some(Value::Number { value, .. }) => {
                 Some(((value.upper.min(1.0) * 1e4).round() / 1e4).to_string())
@@ -1865,7 +1917,21 @@ fn holds_over(
             }
             _ => false,
         },
+        Some(Condition::Measured { value }) => read.values.get(value).is_some(),
+        Some(Condition::Scope { value }) => read.named.get("source").is_some_and(|scope| {
+            sources(read, value)
+                .iter()
+                .any(|source| source.to_string() == *scope)
+        }),
     }
+}
+
+/// The sources `name`'s measured reads cite.
+fn sources<'r>(read: &'r Read, name: &str) -> &'r [axioval_ir::SourceId] {
+    read.sources
+        .iter()
+        .find(|(cited, _)| *cited == name)
+        .map_or(&[], |(_, sources)| sources.as_slice())
 }
 
 fn evidence_of(evaluation: &Evaluation) -> impl Iterator<Item = Evidence> + '_ {
@@ -2271,7 +2337,7 @@ fn judge_checks_in(
     for (position, (check, bound)) in checks.iter().zip(values).enumerate() {
         let index = graded_checks.then_some(position + 1);
         if let Some(applies) = &check.applies
-            && !each::applies(plan, applies)
+            && !each::applies_reading(plan, applies, read)
         {
             continue;
         }
@@ -2285,7 +2351,15 @@ fn judge_checks_in(
             leaves,
             &mut checked,
         ) {
-            outcomes.push(outcome);
+            // Another check reading the value reports its refusal.
+            if !(check.quiet && matches!(outcome, Outcome::Open(..))) {
+                outcomes.push(outcome);
+            }
+            continue;
+        }
+        // Where its condition holds over the values, the check passes
+        // without deciding.
+        if check.unless.is_some() && holds(plan, &checked, check.unless) {
             continue;
         }
         if let Some(outcome) = derive_of(plan, &check.derived, &mut checked) {
@@ -2419,6 +2493,10 @@ fn read_values<'v>(
         let noted = leaves.take_notes();
         if !noted.is_empty() {
             read.notes.push((step.name, noted));
+        }
+        let sources = leaves.take_sources();
+        if !sources.is_empty() {
+            read.sources.push((step.name, sources));
         }
         let before = read.evidence.len();
         if evidence.iter().any(|evidence| !evidence.exact) {
@@ -2604,7 +2682,7 @@ fn judge_object(
     (plan, decision, scope): (&Plan<'_>, &Decision, Option<&Scope<'_>>),
     (context, arguments): (&RuleContext<'_>, &Arguments),
     rule: &CompiledRule,
-    object: &Object,
+    (object, once): (&Object, &Read),
     ahead: Ahead,
 ) -> Judgement {
     let mut leaves = ObjectLeaves::new(context, object, Some(&plan.bound.parameters))
@@ -2614,7 +2692,8 @@ fn judge_object(
     if let Some(outcome) = unless(plan, context, object, &mut leaves) {
         return outcome.into();
     }
-    let mut read = Read::default();
+    // What was read once per rule, every object's messages read too.
+    let mut read = once.clone();
     let mut members = None;
     // Each population's members surely picked, the first population's first.
     let mut populations: Vec<(&str, Vec<ObjectId>)> = Vec::new();
@@ -2793,6 +2872,14 @@ fn judge_object(
             checks,
         };
     }
+    // The object judged by the words of its own list's items.
+    if let Decision::Joined(joined) = decision {
+        return Judgement {
+            outcome: joined::judge(plan, joined, &mut read, &leaves),
+            row,
+            checks,
+        };
+    }
     if let (Decision::Compare { value, .. }, Some(comparison)) = (decision, &plan.comparison) {
         let stated = read.stated.get(value).cloned().flatten();
         let outcome = match comparison.holds(stated.as_ref()) {
@@ -2946,7 +3033,9 @@ fn refused(
     message: String,
 ) -> CapabilityEvaluation {
     match template.refusals {
-        Refusals::Rule | Refusals::Worded => CapabilityEvaluation::not_evaluated(reason, message),
+        Refusals::Rule | Refusals::Worded | Refusals::Selected => {
+            CapabilityEvaluation::not_evaluated(reason, message)
+        }
         Refusals::Objects | Refusals::Prefixed { .. } | Refusals::ServicesPerObject => {
             let (selected, mut evaluation) = select_shared(context, &rule.selector);
             for object in selected {
@@ -2996,12 +3085,164 @@ fn push(
     }
 }
 
+/// What a run read before judging scopes and objects: the values read once
+/// per rule, the rule's open outcomes their refusals left, and the
+/// selection a template reporting its refusals after selecting made first.
+struct Ran<'a> {
+    once: Read,
+    opened: Vec<(NotEvaluatedReason, String)>,
+    selected: Option<(Vec<&'a Object>, CapabilityEvaluation)>,
+}
+
+impl<'a> Ran<'a> {
+    /// The rule's selection, made now unless it was made first, with the
+    /// rule's open outcomes the values read once per rule left.
+    fn selection(
+        &mut self,
+        context: &RuleContext<'a>,
+        rule: &CompiledRule,
+    ) -> (Vec<&'a Object>, CapabilityEvaluation) {
+        let (selected, mut evaluation) = self
+            .selected
+            .take()
+            .unwrap_or_else(|| select_shared(context, &rule.selector));
+        for (reason, message) in self.opened.drain(..) {
+            evaluation.push_not_evaluated(reason, message);
+        }
+        (selected, evaluation)
+    }
+}
+
+/// What the values read once per rule come to: the values and their
+/// citations, and the rule's open outcomes their refusals leave.
+type ReadOnce = (Read, Vec<(NotEvaluatedReason, String)>);
+
+/// The values the form reads once per rule ([`Form::once`]), of the
+/// project, and the rule's open outcomes their refusals leave; a required
+/// value's refusal instead, which leaves nothing else judged.
+fn read_once(
+    plan: &Plan<'_>,
+    context: &RuleContext<'_>,
+    rule: &CompiledRule,
+) -> Result<ReadOnce, (NotEvaluatedReason, String)> {
+    let mut read = Read::default();
+    let mut opened = Vec::new();
+    if plan.form.once.is_empty() {
+        return Ok((read, opened));
+    }
+    // The project is no object of the model: a value of the project reads
+    // none.
+    let project = Object::new(
+        ObjectId::new(
+            axioval_ir::SourceId::new("axioval", "project").expect("a valid source id"),
+            axioval_engine::template::SELECTION,
+        )
+        .expect("a valid object id"),
+        axioval_engine::template::SELECTION,
+    );
+    let arguments = Arguments::of_rule(rule);
+    // A value read where a list parameter lists a word is read in the
+    // order the rule lists the words (each derivation as the rule lists
+    // it); any other in the template's order.
+    let mut ordered: Vec<(&axioval_engine::template::Once, &Expression)> =
+        plan.form.once.iter().zip(&plan.bound.once).collect();
+    ordered.sort_by_key(|(once, _)| {
+        match once.applies.as_ref().and_then(|applies| applies.condition) {
+            Some(Condition::Lists { parameter, value }) => match plan.constants.get(parameter) {
+                Some(Constant::Other(ParameterValue::StringList { value: listed })) => listed
+                    .iter()
+                    .position(|listed| listed.trim() == value)
+                    .unwrap_or(usize::MAX),
+                _ => usize::MAX,
+            },
+            _ => usize::MAX,
+        }
+    });
+    for (once, expression) in ordered {
+        if let Some(applies) = &once.applies
+            && !each::applies(plan, applies)
+        {
+            continue;
+        }
+        // Leaves of their own, so a refusal is worded by its own reason.
+        let mut leaves = ObjectLeaves::new(context, &project, Some(&plan.bound.parameters))
+            .with_arguments(&arguments);
+        // A measured value is read with what it cites, whatever it names.
+        if let Some((Some(axioval_ir::MEASURED_SET), name)) = property_read(expression) {
+            let leaf = leaves.measured_cited(name);
+            let related = leaves.take_related();
+            let sources = leaves.take_sources();
+            match leaf.value {
+                Ok(value) => {
+                    read.values.insert(once.value.name, value);
+                    if !related.is_empty() {
+                        read.related.push((once.value.name, related));
+                    }
+                    if !sources.is_empty() {
+                        read.sources.push((once.value.name, sources));
+                    }
+                }
+                Err(why) => {
+                    let reason = leaves
+                        .first_reason()
+                        .unwrap_or(NotEvaluatedReason::IncompleteEvidence);
+                    let step = Read {
+                        why: Some(refusal(&why, expression, &project)),
+                        ..Read::default()
+                    };
+                    let message = render(plan, &step, once.refused);
+                    if once.required {
+                        return Err((reason, message));
+                    }
+                    opened.push((reason, message));
+                }
+            }
+            continue;
+        }
+        let mut step = Read::default();
+        if let Some(Outcome::Open(reason, why)) = read_values(
+            plan,
+            std::iter::once((&once.value, expression)),
+            &|_| false,
+            context,
+            &project,
+            &mut leaves,
+            &mut step,
+        ) {
+            step.why = Some(why);
+            let message = render(plan, &step, once.refused);
+            if once.required {
+                return Err((reason, message));
+            }
+            opened.push((reason, message));
+            continue;
+        }
+        for (name, value) in step.values.iter() {
+            read.values.insert(name, value.clone());
+        }
+        read.related.extend(step.related);
+        read.sources.extend(step.sources);
+    }
+    Ok((read, opened))
+}
+
 /// Runs `template` for `rule`.
+#[allow(clippy::too_many_lines)]
 pub(crate) fn run(
     (template, plans): (&Template, &Plans),
     context: &RuleContext<'_>,
     rule: &CompiledRule,
 ) -> CapabilityEvaluation {
+    // A template reporting its refusals after selecting selects first, and
+    // says nothing more where nothing is selected.
+    let mut selected = None;
+    if template.refusals == Refusals::Selected {
+        let (objects, evaluation) = select_shared(context, &rule.selector);
+        if objects.is_empty() {
+            return evaluation;
+        }
+        selected = Some((objects, evaluation));
+    }
     let plan = match plan(template, plans, rule) {
         Ok(plan) => plan,
         Err((reason, message)) => {
@@ -3009,6 +3250,11 @@ pub(crate) fn run(
             // object is worded as the check states it.
             let message = match template.refusals {
                 Refusals::Rule => format!("{}: {message}", template.name),
+                Refusals::Selected => {
+                    let (_, mut evaluation) = selected.unwrap_or_default();
+                    evaluation.push_not_evaluated(reason, format!("{}: {message}", template.name));
+                    return evaluation;
+                }
                 Refusals::ServicesPerObject => {
                     return CapabilityEvaluation::not_evaluated(
                         reason,
@@ -3027,6 +3273,13 @@ pub(crate) fn run(
             .iter()
             .all(|service| service.registered(context.services))
     {
+        if let Some((_, mut evaluation)) = selected {
+            evaluation.push_not_evaluated(
+                NotEvaluatedReason::MissingService,
+                services.message.to_owned(),
+            );
+            return evaluation;
+        }
         return refused(
             template,
             context,
@@ -3035,7 +3288,22 @@ pub(crate) fn run(
             services.message.to_owned(),
         );
     }
-    if let Some(evaluation) = run_apart(&plan, context, rule) {
+    let mut ran = match read_once(&plan, context, rule) {
+        Ok((once, opened)) => Ran {
+            once,
+            opened,
+            selected,
+        },
+        Err((reason, message)) => {
+            let (_, mut evaluation) = selected.unwrap_or_default();
+            evaluation.push_not_evaluated(reason, message);
+            return evaluation;
+        }
+    };
+    if let Some(mut evaluation) = run_apart(&plan, context, rule, &mut ran) {
+        for (reason, message) in ran.opened {
+            evaluation.push_not_evaluated(reason, message);
+        }
         return evaluation;
     }
     let scope = match Scope::of(&plan, context, rule) {
@@ -3049,7 +3317,7 @@ pub(crate) fn run(
     };
     let decision = effective(&plan);
     let mut table = report_table(&plan, rule);
-    let (selected, mut evaluation) = select_shared(context, &rule.selector);
+    let (selected, mut evaluation) = ran.selection(context, rule);
     // `@selection` is the selection just made.
     let arguments = Arguments::of_rule(rule).selected(&selected, &evaluation);
     let (batched, bound) = read_ahead(&plan, context, &arguments, selected.first().copied());
@@ -3065,7 +3333,7 @@ pub(crate) fn run(
                 (&plan, &decision, scope.as_ref()),
                 (context, &arguments),
                 rule,
-                object,
+                (object, &ran.once),
                 Ahead { prefetched, bound },
             );
             if let (Some(table), Some(row)) = (&mut table, row) {
@@ -3093,10 +3361,11 @@ pub(crate) fn run(
 /// The evaluation of a form deciding otherwise than object by object over
 /// its values (members one by one, groups, facets, a requirements table,
 /// scopes); `None` for a form judged per selected object.
-fn run_apart(
+fn run_apart<'a>(
     plan: &Plan<'_>,
-    context: &RuleContext<'_>,
+    context: &RuleContext<'a>,
     rule: &CompiledRule,
+    ran: &mut Ran<'a>,
 ) -> Option<CapabilityEvaluation> {
     Some(match &plan.form.decision {
         Decision::Each(each) => each::run(plan, each, context, rule),
@@ -3117,7 +3386,7 @@ fn run_apart(
         }
         _ => {
             let scopes = plan.form.scope.as_ref()?;
-            scopes::run(plan, &effective(plan), scopes, context, rule)
+            scopes::run(plan, &effective(plan), scopes, context, rule, ran)
         }
     })
 }
@@ -3576,6 +3845,19 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
     if plan.form.scope.is_some() {
         return Err(ForkError::Inexpressible(
             "an expression rule judges objects, not a source or the project as a whole".to_owned(),
+        ));
+    }
+    if plan.form.checks.iter().any(|check| check.unless.is_some()) {
+        return Err(ForkError::Inexpressible(
+            "a check passing where a condition holds over its values has no expression form"
+                .to_owned(),
+        ));
+    }
+    if !plan.form.once.is_empty() || matches!(plan.form.decision, Decision::Joined(_)) {
+        return Err(ForkError::Inexpressible(
+            "an expression rule reads its values per object: none read once for the rule, \
+             whose refusal leaves the rule open, and no message joining the words of a list"
+                .to_owned(),
         ));
     }
     if let (Decision::Compare { value: subject, .. }, Some(comparison)) =

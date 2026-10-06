@@ -115,6 +115,8 @@ fn check(items: Items) -> FormCheck {
         fail: "",
         undecided: "",
         related: None,
+        unless: None,
+        quiet: false,
     }
 }
 
@@ -1299,6 +1301,7 @@ pub(crate) fn ramp(parameters: Vec<ParameterDescriptor>) -> Template {
             derived: Vec::new(),
             related: None,
             checks,
+            once: Vec::new(),
         }],
     }
 }
@@ -2083,6 +2086,7 @@ pub(crate) fn stair(parameters: Vec<ParameterDescriptor>) -> Template {
         derived: Vec::new(),
         related: None,
         checks,
+        once: Vec::new(),
     };
     Template {
         id: STAIR,

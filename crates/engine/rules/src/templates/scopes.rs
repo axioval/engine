@@ -3,15 +3,19 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use axioval_engine::template::{Decision, Scopes};
+use axioval_engine::template::{Decision, ScopeSources, Scopes};
 use axioval_engine::{CapabilityEvaluation, CompiledRule, RuleContext, SourceDisciplines};
 use axioval_ir::contract::{ParameterValue, ScalarValue};
 use axioval_ir::{
     Discipline, Evidence, Finding, NotEvaluatedReason, Object, ObjectId, Scope, SourceId,
 };
 
-use super::{Constant, Outcome, Plan, Read, candidates, ranged, read_values, render, within};
+use super::{
+    Constant, Outcome, Plan, Ran, Read, candidates, cited, holds, judge_checks, push, ranged,
+    read_values, render, within,
+};
 use crate::expression_leaves::ObjectLeaves;
+use crate::measured_arguments::Arguments;
 use crate::selection::{Selection, population, selector_matches};
 use crate::support::sources;
 
@@ -64,13 +68,17 @@ fn listed(disciplines: &BTreeSet<Discipline>) -> String {
 
 /// Runs a form deciding per scope.
 #[allow(clippy::too_many_lines)]
-pub(super) fn run(
+pub(super) fn run<'a>(
     plan: &Plan<'_>,
     decision: &Decision,
     scopes: &Scopes,
-    context: &RuleContext<'_>,
+    context: &RuleContext<'a>,
     rule: &CompiledRule,
+    ran: &mut Ran<'a>,
 ) -> CapabilityEvaluation {
+    if scopes.sources == ScopeSources::Occupied {
+        return occupied(plan, decision, scopes, context, rule, ran);
+    }
     let across = matches!(
         plan.constants.get(scopes.across),
         Some(Constant::Scalar(ScalarValue::Boolean { value: true }))
@@ -108,6 +116,9 @@ pub(super) fn run(
         }
     }
     let mut evaluation = CapabilityEvaluation::default();
+    if !holds(plan, &ran.once, scopes.needs) {
+        return evaluation;
+    }
     // Every scope is judged, including one where nothing is selected:
     // that is the case a scope form exists to report.
     let mut tallies: BTreeMap<Scope, Tally> = BTreeMap::new();
@@ -129,51 +140,54 @@ pub(super) fn run(
             tallies.insert(Scope::Source(source), Tally::default());
         }
     }
-    let (selection, unreadable) = population(context, &rule.selector);
-    for (source, why) in unreadable {
-        let message = worded(
-            plan,
-            scopes.messages.unlisted,
-            Some(&source),
-            &[("why", why)],
-        );
-        evaluation.push_source_not_evaluated(
-            source,
-            NotEvaluatedReason::IncompleteEvidence,
-            message,
-        );
-    }
-    for object in selection {
-        let source = &object.id.source;
-        let unknown = membership.unknown.contains(source);
-        if membership.left_out.contains(source) || (!across && unknown) {
-            continue;
+    // A judgement of the sources themselves selects nothing.
+    if scopes.sources == ScopeSources::Selected {
+        let (selection, unreadable) = population(context, &rule.selector);
+        for (source, why) in unreadable {
+            let message = worded(
+                plan,
+                scopes.messages.unlisted,
+                Some(&source),
+                &[("why", why)],
+            );
+            evaluation.push_source_not_evaluated(
+                source,
+                NotEvaluatedReason::IncompleteEvidence,
+                message,
+            );
         }
-        let scope = if across {
-            Scope::Project
-        } else {
-            Scope::Source(source.clone())
-        };
-        let tally = tallies.entry(scope).or_default();
-        let mut evidence = Vec::new();
-        match (
-            selector_matches(context, &rule.selector, object, &mut evidence),
-            unknown,
-        ) {
-            (Selection::NoMatch, _) => {}
-            (Selection::Match, false) => {
-                tally.sure.push(object.id.clone());
-                tally.evidence.extend(evidence);
+        for object in selection {
+            let source = &object.id.source;
+            let unknown = membership.unknown.contains(source);
+            if membership.left_out.contains(source) || (!across && unknown) {
+                continue;
             }
-            // Across sources, a selected object of a source declaring no
-            // discipline may count or not.
-            (Selection::Match, true) => tally.possible.push((
-                object.id.clone(),
-                NotEvaluatedReason::NotRecorded,
-                worded(plan, scopes.messages.undeclared_member, Some(source), &[]),
-            )),
-            (Selection::NotEvaluated(reason, message), _) => {
-                tally.possible.push((object.id.clone(), reason, message));
+            let scope = if across {
+                Scope::Project
+            } else {
+                Scope::Source(source.clone())
+            };
+            let tally = tallies.entry(scope).or_default();
+            let mut evidence = Vec::new();
+            match (
+                selector_matches(context, &rule.selector, object, &mut evidence),
+                unknown,
+            ) {
+                (Selection::NoMatch, _) => {}
+                (Selection::Match, false) => {
+                    tally.sure.push(object.id.clone());
+                    tally.evidence.extend(evidence);
+                }
+                // Across sources, a selected object of a source declaring no
+                // discipline may count or not.
+                (Selection::Match, true) => tally.possible.push((
+                    object.id.clone(),
+                    NotEvaluatedReason::NotRecorded,
+                    worded(plan, scopes.messages.undeclared_member, Some(source), &[]),
+                )),
+                (Selection::NotEvaluated(reason, message), _) => {
+                    tally.possible.push((object.id.clone(), reason, message));
+                }
             }
         }
     }
@@ -191,31 +205,72 @@ pub(super) fn run(
         };
         evaluation.push_not_evaluated(NotEvaluatedReason::IncompleteEvidence, message);
     }
+    let arguments = Arguments::of_rule(rule);
     for (scope, tally) in tallies {
         judge(
             plan,
-            decision,
-            scopes,
-            context,
+            (decision, scopes),
+            (context, &arguments, &ran.once),
             rule,
-            scope,
-            tally,
+            (scope, tally),
             &mut evaluation,
         );
     }
     evaluation
 }
 
-/// Reads the plan's values over one scope's objects and decides.
-#[allow(clippy::too_many_arguments)]
-fn judge(
+/// Runs a form judging the sources where the rule surely selects an
+/// object, then each selected object by the form's checks: one
+/// measurement leading to outcomes at source and at object level.
+fn occupied<'a>(
     plan: &Plan<'_>,
     decision: &Decision,
     scopes: &Scopes,
-    context: &RuleContext<'_>,
+    context: &RuleContext<'a>,
     rule: &CompiledRule,
-    scope: Scope,
-    tally: Tally,
+    ran: &mut Ran<'a>,
+) -> CapabilityEvaluation {
+    let (selected, mut evaluation) = ran.selection(context, rule);
+    // `@selection` is the selection just made.
+    let arguments = Arguments::of_rule(rule).selected(&selected, &evaluation);
+    if holds(plan, &ran.once, scopes.needs) {
+        let mut tallies: BTreeMap<Scope, Tally> = BTreeMap::new();
+        for object in &selected {
+            tallies
+                .entry(Scope::Source(object.id.source.clone()))
+                .or_default()
+                .sure
+                .push(object.id.clone());
+        }
+        for (scope, tally) in tallies {
+            judge(
+                plan,
+                (decision, scopes),
+                (context, &arguments, &ran.once),
+                rule,
+                (scope, tally),
+                &mut evaluation,
+            );
+        }
+    }
+    for object in selected {
+        let mut leaves = ObjectLeaves::new(context, object, Some(&plan.bound.parameters))
+            .with_arguments(&arguments);
+        for outcome in judge_checks(plan, &ran.once, context, object, &mut leaves) {
+            push(&mut evaluation, rule, object, outcome);
+        }
+    }
+    evaluation
+}
+
+/// Reads the plan's values over one scope's objects and decides.
+#[allow(clippy::too_many_lines)]
+fn judge(
+    plan: &Plan<'_>,
+    (decision, scopes): (&Decision, &Scopes),
+    (context, arguments, once): (&RuleContext<'_>, &Arguments, &Read),
+    rule: &CompiledRule,
+    (scope, tally): (Scope, Tally),
     evaluation: &mut CapabilityEvaluation,
 ) {
     let source = match &scope {
@@ -223,7 +278,7 @@ fn judge(
         Scope::Project | Scope::Object(_) => None,
     };
     // The scope itself is no object of the model: the values read only
-    // its objects, which the leaves supply.
+    // its objects, which the leaves supply, or the source itself.
     let stand_in = Object::new(
         ObjectId::new(
             source
@@ -235,11 +290,17 @@ fn judge(
         axioval_engine::template::SELECTION,
     );
     let possible: Vec<ObjectId> = tally.possible.iter().map(|(id, _, _)| id.clone()).collect();
-    let mut leaves = ObjectLeaves::new(context, &stand_in, Some(&rule.parameters)).supplying(
-        Scopes::source(),
-        candidates(context, &tally.sure, &possible),
-    );
-    let mut read = Read::default();
+    let mut leaves = ObjectLeaves::new(context, &stand_in, Some(&plan.bound.parameters))
+        .with_arguments(arguments)
+        .supplying(
+            Scopes::source(),
+            candidates(context, &tally.sure, &possible),
+        );
+    // What was read once per rule, the scope's messages read too.
+    let mut read = once.clone();
+    if let Some(source) = &source {
+        read.named.insert("source", source.to_string());
+    }
     read.named.insert(
         "place",
         match &source {
@@ -261,20 +322,34 @@ fn judge(
         &mut read,
     ) {
         Some(outcome) => outcome,
-        None => match within(plan, &read, decision) {
-            Some(judged) => {
-                read.bounds = Some((judged.minimum, judged.maximum));
-                read.evidence = tally.evidence;
-                straddled = matches!(judged.verdict, crate::plan_area::Verdict::Undecided(_));
-                ranged(plan, &mut read, &judged, tally.sure)
-            }
-            None => Outcome::Open(
-                NotEvaluatedReason::InvalidEvidence,
-                format!(
-                    "{}: a value the decision reads is no number",
-                    plan.template.name
+        None => match decision {
+            Decision::Joined(joined) => super::joined::judge(plan, joined, &mut read, &leaves),
+            _ => match within(plan, &read, decision) {
+                Some(judged) => {
+                    read.bounds = Some((judged.minimum, judged.maximum));
+                    // What selected the objects; beside what the values
+                    // were measured from where the sources are judged
+                    // themselves.
+                    if scopes.sources == ScopeSources::Selected {
+                        read.evidence = tally.evidence;
+                    } else {
+                        read.evidence.extend(tally.evidence);
+                    }
+                    straddled = matches!(judged.verdict, crate::plan_area::Verdict::Undecided(_));
+                    let related = match plan.form.related {
+                        Some(value) => cited(&read, value),
+                        None => tally.sure,
+                    };
+                    ranged(plan, &mut read, &judged, related)
+                }
+                None => Outcome::Open(
+                    NotEvaluatedReason::InvalidEvidence,
+                    format!(
+                        "{}: a value the decision reads is no number",
+                        plan.template.name
+                    ),
                 ),
-            ),
+            },
         },
     };
     match outcome {
@@ -286,10 +361,21 @@ fn judge(
             deviation,
             severity,
         } => {
+            // A scope's finding takes the severity of the first band of
+            // the form's grading that holds over its values.
+            let banded = plan.form.grading.as_ref().and_then(|grading| {
+                grading
+                    .bands
+                    .iter()
+                    .find(|band| holds(plan, &read, band.when))
+                    .map(|band| band.severity.clone())
+            });
             let mut finding = Finding::new(
                 rule.id.clone(),
                 scope,
-                severity.unwrap_or_else(|| crate::pairs::severity(rule)),
+                severity
+                    .or(banded)
+                    .unwrap_or_else(|| crate::pairs::severity(rule)),
                 message,
             )
             .with_evidence(evidence)
@@ -382,12 +468,15 @@ mod tests {
                         unlisted: "unlisted: {why}",
                         no_disciplines: "no disciplines",
                     },
+                    sources: axioval_engine::template::ScopeSources::Selected,
+                    needs: None,
                 }),
                 unless: Vec::new(),
                 grading: None,
                 derived: Vec::new(),
                 related: None,
                 checks: Vec::new(),
+                once: Vec::new(),
             }],
         }
     }

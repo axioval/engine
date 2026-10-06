@@ -123,6 +123,7 @@ pub(crate) fn template() -> Template {
             derived: Vec::new(),
             related: Some("share"),
             checks: Vec::new(),
+            once: Vec::new(),
         }],
     }
 }

@@ -101,6 +101,8 @@ fn items(list: &'static str, checks: Vec<ItemCheck>) -> FormCheck {
         related: None,
         grading: None,
         applies: None,
+        unless: None,
+        quiet: false,
     }
 }
 
@@ -236,6 +238,7 @@ pub(crate) fn template() -> Template {
             derived: Vec::new(),
             related: None,
             checks: vec![gaps(), section()],
+            once: Vec::new(),
         }],
     }
 }

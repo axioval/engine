@@ -96,6 +96,8 @@ fn recesses() -> FormCheck {
         related: None,
         grading: None,
         applies: None,
+        unless: None,
+        quiet: false,
     }
 }
 
@@ -152,6 +154,7 @@ pub(crate) fn template() -> Template {
             derived: Vec::new(),
             related: None,
             checks: vec![recesses()],
+            once: Vec::new(),
         }],
     }
 }

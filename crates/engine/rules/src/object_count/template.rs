@@ -65,6 +65,8 @@ fn scopes() -> Scopes {
             no_disciplines: "object-count: source disciplines are not available outside an \
                              evidence session",
         },
+        sources: axioval_engine::template::ScopeSources::Selected,
+        needs: None,
     }
 }
 
@@ -98,6 +100,7 @@ fn form(when: &'static [&'static str], existence: bool) -> Form {
         derived: Vec::new(),
         related: None,
         checks: Vec::new(),
+        once: Vec::new(),
     }
 }
 

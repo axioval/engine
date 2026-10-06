@@ -185,6 +185,7 @@ pub mod reference {
     pub use crate::property_predicate::reference::PropertyPredicate;
     pub use crate::related_count::reference::RelatedCount;
     pub use crate::triangle_count::reference::TriangleCountLimit;
+    pub use crate::unique_value::reference::UniqueValue;
 }
 /// XML Schema patterns (as IDS and `property-value` write them) in `regex`
 /// syntax, for a property selector's `matches` operator.

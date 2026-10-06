@@ -6,7 +6,7 @@ mod common;
 use axioval_engine::CapabilityEvaluation;
 use axioval_ir::contract::ParameterValue;
 use axioval_ir::{NotEvaluatedReason, PropertyValue, QuantityDimension};
-use axioval_rules::{PropertyComparison, UniqueValue};
+use axioval_rules::PropertyComparison;
 use common::{
     Model, findings, flagged, integer, kind, number, property, rule, selector, string, unevaluated,
 };
@@ -33,7 +33,10 @@ fn unique(model: Model, extra: Vec<(&str, ParameterValue)>) -> CapabilityEvaluat
     let mut parameters = vec![("property", property(Some("Pset"), "Elevation"))];
     parameters.extend(extra);
     model.evaluate(
-        &UniqueValue,
+        &common::Held(
+            &axioval_rules::UniqueValue,
+            &axioval_rules::reference::UniqueValue,
+        ),
         &rule(
             "axioval:capability.unique-value",
             kind("storey"),

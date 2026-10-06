@@ -652,7 +652,10 @@ fn one_instant_in_two_offsets_is_one_value() {
         .value("y", SET, "Inspected", date_time("2026-09-27T08:00:00Z"))
         .value("z", SET, "Inspected", date("2026-09-27"))
         .evaluate(
-            &axioval_rules::UniqueValue,
+            &common::Held(
+                &axioval_rules::UniqueValue,
+                &axioval_rules::reference::UniqueValue,
+            ),
             &rule(
                 "axioval:capability.unique-value",
                 Selector::All,
@@ -763,7 +766,10 @@ fn zoned_dates_compare_as_xml_schema_orders_them_in_every_capability() {
 
     // Two zones stating one day are one value; the unzoned day is another.
     let unique = zoned_model().evaluate(
-        &axioval_rules::UniqueValue,
+        &common::Held(
+            &axioval_rules::UniqueValue,
+            &axioval_rules::reference::UniqueValue,
+        ),
         &rule(
             "axioval:capability.unique-value",
             Selector::All,

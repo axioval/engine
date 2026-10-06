@@ -28409,7 +28409,232 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "unique-value",
+        "defaults": [
+          {
+            "parameter": "trim",
+            "value": {
+              "type": "boolean",
+              "value": true
+            }
+          },
+          {
+            "parameter": "case_sensitive",
+            "value": {
+              "type": "boolean",
+              "value": false
+            }
+          },
+          {
+            "parameter": "require_value",
+            "value": {
+              "type": "boolean",
+              "value": true
+            }
+          }
+        ],
+        "declaration": [
+          {
+            "kind": "required",
+            "parameter": "property"
+          },
+          {
+            "kind": "kind",
+            "parameter": "trim"
+          },
+          {
+            "kind": "kind",
+            "parameter": "case_sensitive"
+          },
+          {
+            "kind": "kind",
+            "parameter": "require_value"
+          },
+          {
+            "kind": "kind",
+            "parameter": "across_sources"
+          },
+          {
+            "kind": "traversal",
+            "with": [],
+            "message": ""
+          },
+          {
+            "kind": "tolerance"
+          }
+        ],
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "value",
+                "expression": {
+                  "kind": "property",
+                  "propertySet": "{property.set}",
+                  "property": "{property.name}"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "unique",
+              "value": "value",
+              "unique": {
+                "across": "across_sources",
+                "trim": "trim",
+                "caseSensitive": "case_sensitive",
+                "require": "require_value",
+                "missing": "{property} has no value"
+              }
+            },
+            "fail": "{property} {value:stated} is also used by {others} other object(s){tolerance:suffix}",
+            "undecided": ""
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "compare",
+              "operator": "lessThanOrEquals",
+              "left": {
+                "kind": "aggregate",
+                "function": "count",
+                "over": {
+                  "kind": "selector",
+                  "selector": {
+                    "kind": "expression",
+                    "expression": {
+                      "kind": "parameter",
+                      "name": "selection",
+                      "label": "the objects the rule selects in the scope"
+                    }
+                  }
+                },
+                "where": {
+                  "kind": "expression",
+                  "expression": {
+                    "kind": "compare",
+                    "operator": "equals",
+                    "left": {
+                      "kind": "property",
+                      "propertySet": "{property.set}",
+                      "property": "{property.name}"
+                    },
+                    "right": {
+                      "kind": "property",
+                      "propertySet": "{property.set}",
+                      "property": "{property.name}",
+                      "of": "subject"
+                    },
+                    "caseSensitive": false
+                  }
+                },
+                "label": "objects stating the same value"
+              },
+              "right": {
+                "kind": "literal",
+                "value": {
+                  "type": "integer",
+                  "value": 1
+                }
+              }
+            },
+            "blocks": {
+              "type": "expression.compare",
+              "fields": {
+                "operator": "lessThanOrEquals"
+              },
+              "inputs": {
+                "left": {
+                  "block": {
+                    "type": "expression.aggregate",
+                    "label": "objects stating the same value",
+                    "fields": {
+                      "function": "count"
+                    },
+                    "inputs": {
+                      "over": {
+                        "block": {
+                          "type": "source.selector",
+                          "inputs": {
+                            "selector": {
+                              "block": {
+                                "type": "selector.expression",
+                                "inputs": {
+                                  "expression": {
+                                    "block": {
+                                      "type": "expression.parameter",
+                                      "label": "the objects the rule selects in the scope",
+                                      "fields": {
+                                        "name": "selection"
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "where": {
+                        "block": {
+                          "type": "selector.expression",
+                          "inputs": {
+                            "expression": {
+                              "block": {
+                                "type": "expression.compare",
+                                "fields": {
+                                  "caseSensitive": false,
+                                  "operator": "equals"
+                                },
+                                "inputs": {
+                                  "left": {
+                                    "block": {
+                                      "type": "expression.property",
+                                      "fields": {
+                                        "property": "{property.name}",
+                                        "propertySet": "{property.set}"
+                                      }
+                                    }
+                                  },
+                                  "right": {
+                                    "block": {
+                                      "type": "expression.property",
+                                      "fields": {
+                                        "of": "subject",
+                                        "property": "{property.name}",
+                                        "propertySet": "{property.set}"
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "right": {
+                  "block": {
+                    "type": "expression.literal",
+                    "fields": {
+                      "value": {
+                        "type": "integer",
+                        "value": 1
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.wall-spacing",

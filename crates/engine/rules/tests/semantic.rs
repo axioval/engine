@@ -15,7 +15,7 @@ use axioval_ir::contract::{ComparisonOperator, ParameterValue, Selector};
 use axioval_ir::{Evidence, ObjectId, PropertyValue};
 use axioval_rules::{
     ConsistentValue, ManualIssue, NameSequence, NumberingConsistency, RelativeCount,
-    SelectorConformance, UniqueValue, register_builtins,
+    SelectorConformance, register_builtins,
 };
 use common::{
     Model, assert_deviation, boolean, deviation_of, findings, flagged, integer, kind, number,
@@ -199,7 +199,13 @@ mod unique {
     fn check(extra: Vec<(&str, ParameterValue)>) -> axioval_engine::CapabilityEvaluation {
         let mut parameters = vec![("property", property(Some(ATTR), "Name"))];
         parameters.extend(extra);
-        spaces().evaluate(&UniqueValue, &rule(ID, kind("space"), parameters))
+        spaces().evaluate(
+            &common::Held(
+                &axioval_rules::UniqueValue,
+                &axioval_rules::reference::UniqueValue,
+            ),
+            &rule(ID, kind("space"), parameters),
+        )
     }
 
     #[test]
@@ -236,6 +242,119 @@ mod unique {
         ]);
         // 101 repeats on st1, A1/a1 on st2; s6's 101 is on another storey.
         assert_eq!(flagged(&evaluation), ["s1", "s2", "s3", "s4", "s5"]);
+    }
+
+    /// A group decision compares objects with each other: an `expression`
+    /// rule judges each on its own, so the rule is not forked.
+    #[test]
+    fn a_group_decision_is_not_forked() {
+        use axioval_rules::templates::{ForkError, fork};
+        let bound = rule(
+            ID,
+            kind("space"),
+            vec![("property", property(Some(ATTR), "Name"))],
+        );
+        assert!(matches!(
+            fork(&axioval_rules::UniqueValue, &bound),
+            Err(ForkError::Inexpressible(_))
+        ));
+    }
+
+    /// Generated spaces on two storeys in two sources, stating text,
+    /// numbers, quantities, nothing, `null` or something unreadable,
+    /// compared with every combination of the declared strictness, scope
+    /// and tolerance. The template is held to the implementation it
+    /// replaced on each.
+    mod generated {
+        use super::*;
+        use axioval_ir::{ObjectId, QuantityDimension, SourceId};
+        use proptest::prelude::*;
+
+        fn value(kind: u8) -> Option<PropertyValue> {
+            Some(match kind {
+                0 => PropertyValue::String("101".into()),
+                1 => PropertyValue::String(" 101".into()),
+                2 => PropertyValue::String("A1".into()),
+                3 => PropertyValue::String("a1".into()),
+                4 => PropertyValue::String("  ".into()),
+                5 => PropertyValue::Decimal(1.0),
+                6 => PropertyValue::Decimal(1.04),
+                7 => PropertyValue::Integer(1),
+                8 => PropertyValue::Quantity {
+                    value: 1.0,
+                    dimension: QuantityDimension::Length,
+                },
+                9 => PropertyValue::Null,
+                _ => return None,
+            })
+        }
+
+        proptest! {
+            #![proptest_config(ProptestConfig::with_cases(192))]
+
+            #[test]
+            fn generated_groups_hold_parity(
+                spaces in proptest::collection::vec((0u8..12, any::<bool>(), any::<bool>()), 0..7),
+                trim in proptest::option::of(any::<bool>()),
+                case_sensitive in proptest::option::of(any::<bool>()),
+                require in proptest::option::of(any::<bool>()),
+                across in proptest::option::of(any::<bool>()),
+                along in any::<bool>(),
+                tolerance in 0u8..4,
+            ) {
+                let mut model = Model::default()
+                    .object("st1", "storey")
+                    .object("st2", "storey");
+                for (index, (kind, upper, other)) in spaces.iter().enumerate() {
+                    let local = format!("s{index}");
+                    model = if *other {
+                        model.object_in("other", &local, "space")
+                    } else {
+                        model
+                            .object(&local, "space")
+                            .edge("aggregates", if *upper { "st2" } else { "st1" }, &local)
+                    };
+                    let id = if *other {
+                        ObjectId::new(SourceId::new("test", "other").unwrap(), &local).unwrap()
+                    } else {
+                        common::id(&local)
+                    };
+                    model = match (value(*kind), *other) {
+                        (Some(value), false) => model.value(&local, ATTR, "Name", value),
+                        (None, _) if *kind == 11 => model.unreadable_object(id),
+                        _ => model,
+                    };
+                }
+                let mut parameters = vec![("property", property(Some(ATTR), "Name"))];
+                for (name, flag) in [
+                    ("trim", trim),
+                    ("case_sensitive", case_sensitive),
+                    ("require_value", require),
+                    ("across_sources", across),
+                ] {
+                    if let Some(flag) = flag {
+                        parameters.push((name, boolean(flag)));
+                    }
+                }
+                if along {
+                    parameters.push(("relationship", string("aggregates")));
+                    parameters.push(("direction", string("backward")));
+                }
+                match tolerance {
+                    1 => parameters.push(("tolerance", common::number(0.05))),
+                    2 => parameters.push(("relative_tolerance", common::number(0.1))),
+                    3 => parameters.push(("decimals", integer(1))),
+                    _ => {}
+                }
+                model.evaluate(
+                    &common::Held(
+                        &axioval_rules::UniqueValue,
+                        &axioval_rules::reference::UniqueValue,
+                    ),
+                    &rule(ID, kind("space"), parameters),
+                );
+            }
+        }
     }
 }
 

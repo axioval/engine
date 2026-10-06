@@ -213,6 +213,18 @@ with the same ends via bounds:backward`); a straddled bound leaves the
 anchor open with `{count:least} related object(s) {relation} and
 {undecided} more that may count; required {required}`.
 
+### `unique-value`
+
+| Form | When | Values | Decision |
+| --- | --- | --- | --- |
+| one | always | `value` = the stated `{property}` | `Unique`: groups per source or across sources (`across_sources`), narrowed by the traversal; `trim` (default true), `case_sensitive` (default false), `require_value` (default true) and the tolerance parameters as declared |
+
+The declaration checks `property`, the four flags' kinds, the traversal
+and the tolerance, in the capability's order. Its findings read
+`{property} {value:stated} is also used by {others} other object(s)
+{tolerance:suffix}` and, for an object without a value, `{property} has
+no value`.
+
 ### `property-predicate`
 
 | Form | When | Values | Decision |
@@ -457,6 +469,15 @@ some doors fire-rated or unreadable, counted along the relationship or in
 the whole source, with or without a filter, shared ends and bounds; the
 `related-count` rules of the `counts` case, recorded before the switch;
 and its fork, which reaches its verdicts on every fixture it forks.
+
+`unique-value` is held to `unique_value/reference.rs`
+(`axioval_rules::reference::UniqueValue`) through `common::Held` on every
+fixture of `tests/semantic.rs`, `tests/dates.rs` and `tests/tolerance.rs`
+that runs it; by generated spaces on two storeys in two sources stating
+text, numbers, quantities, nothing, `null` or something unreadable,
+under every combination of strictness, scope and tolerance; and by the
+`unique-value` rules of the `counts` case, recorded before the switch.
+It is never forked.
 
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the

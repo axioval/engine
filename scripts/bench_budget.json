@@ -1,0 +1,6 @@
+{
+  "comment": "Budget of a capability rebuilt as a template against the implementation it replaced (#279): its median run time and its median peak heap over the reference's, per input. Inputs whose reference runs faster than floor_ns are judged together, by the sum of their medians, since a run of a few microseconds is mostly timer noise.",
+  "time": 1.25,
+  "memory": 1.5,
+  "floor_ns": 100000
+}

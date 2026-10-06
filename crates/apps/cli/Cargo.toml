@@ -63,6 +63,14 @@ ifc-xml.workspace = true
 openbim-bcf.workspace = true
 sha2.workspace = true
 zip = { workspace = true, features = ["deflate"] }
+# `benches/templates.rs`: each capability rebuilt as a template against the
+# implementation it replaced, its peak heap counted by a global allocator.
+axioval-rules = { workspace = true, features = ["parity-reference"] }
+peak_alloc.workspace = true
+
+[[bench]]
+name = "templates"
+harness = false
 
 [features]
 default = []

@@ -115,6 +115,43 @@ jobs:
           AXIOVAL_PARITY_MODELS="$HOME/.cache/axioval/parity-models" \
             cargo test -p axioval-cli --test parity -- --ignored --nocapture
 
+  # Each capability rebuilt as a template timed and weighed against the
+  # implementation it replaced, on a generated fixture and the public models
+  # (scripts/bench.py). A report, never a gate: a shared runner's timings are
+  # too noisy to fail a commit on, so `check` does not need this job and a
+  # failing step does not fail the run. Rebuild PRs run the gate locally.
+  bench:
+    name: Template benchmark (report)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master 2026-08-31
+        with:
+          toolchain: 1.88.0
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: bench
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Restore the public models
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/axioval/parity-models
+          key: parity-models-${{ hashFiles('fixtures/parity/models.json') }}
+      - name: Fetch and verify the public models
+        run: python3 scripts/parity_models.py fetch "$HOME/.cache/axioval/parity-models"
+      - name: Benchmark templates against their references
+        run: |
+          AXIOVAL_PARITY_MODELS="$HOME/.cache/axioval/parity-models" \
+            python3 scripts/bench.py report --out target/bench/templates.jsonl
+      - name: Keep the measurements
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: template-benchmark
+          path: target/bench/templates.jsonl
+          if-no-files-found: ignore
+
   # The one check that means "the whole gate passed", under the name the
   # single-job gate had. The Pages workflow requires this workflow's run on
   # the commit it publishes to have succeeded.

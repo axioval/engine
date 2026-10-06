@@ -40,6 +40,7 @@ check_lint() {
   python3 scripts/test_publish_workspace.py
   python3 scripts/test_not_evaluated_inventory.py
   python3 scripts/test_parity_models.py
+  python3 scripts/test_bench.py
   cargo fmt --all -- --check
   cargo clippy --workspace --all-targets --all-features -- -D warnings
 }

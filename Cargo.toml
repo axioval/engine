@@ -63,6 +63,9 @@ jsonschema = { version = "0.58.5", default-features = false }
 # Test-only: generated inputs for the parity harness. `std` only: no fork,
 # timeout or failure-persistence files.
 proptest = { version = "1.11.0", default-features = false, features = ["std"] }
+# Bench-only: a counting global allocator, for the template benchmark's peak
+# heap. No dependencies of its own.
+peak_alloc = "0.3.0"
 tracing = "0.1.41"
 clap = { version = "4.5.46", features = ["derive"] }
 axiolid-brep = "0.3.3"

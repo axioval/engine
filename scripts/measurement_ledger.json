@@ -894,7 +894,7 @@
         "missing_tactile_strips"
       ]
     },
-    "stair_geometry::tactile::read::measure_rectangle": {
+    "stair_geometry::tactile::read_selected::measure_rectangle": {
       "count": 1,
       "searchOnly": "obstruction-search",
       "reason": "reads the selected strips' rectangles to search a flight's end zone for them"

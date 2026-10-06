@@ -15,9 +15,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, Deviation, ElevationInterval, LandingRequest,
-    ParameterDescriptor, ParameterType, ProximityServiceHandle, RailSide, RuleContext, TreadFlight,
-    WalkingEnd, WalkingStretch,
+    CapabilityEvaluation, CompiledRule, Deviation, ElevationInterval, FreeSpaceServiceHandle,
+    LandingRequest, ParameterDescriptor, ParameterType, ProximityServiceHandle, RailSide,
+    RuleContext, TreadFlight, WalkingEnd, WalkingStretch, WalkingSurfaceServiceHandle,
 };
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId};
@@ -314,18 +314,53 @@ impl Whole<'_, '_, '_> {
     /// The handrail along each side across every landing between
     /// consecutive flights.
     fn continuity(&self, check: &HandrailCheck<'_>) -> Checks {
-        if !self.missing.is_empty() {
+        Across {
+            context: self.context,
+            stairs: self.flights.stairs,
+            free: self.flights.free,
+            rails: self.flights.selections.rails.as_ref(),
+            landings: self.flights.selections.landings.as_ref(),
+            doors: self.doors,
+            break_height: self.mode.break_doors.map(|(_, height)| height),
+        }
+        .continuity(check, self.ok, self.missing)
+    }
+}
+
+/// What the handrail across a stair's landings is judged with: the
+/// services, the selections of rails, landings and break doors, and the
+/// height of the column a break door must reach into.
+pub(super) struct Across<'a> {
+    pub(super) context: &'a RuleContext<'a>,
+    pub(super) stairs: &'a WalkingSurfaceServiceHandle,
+    pub(super) free: Option<&'a FreeSpaceServiceHandle>,
+    pub(super) rails: Option<&'a Selected>,
+    pub(super) landings: Option<&'a Selected>,
+    pub(super) doors: Option<&'a Selected>,
+    pub(super) break_height: Option<f64>,
+}
+
+impl Across<'_> {
+    /// The handrail along each side across every landing between
+    /// consecutive flights.
+    pub(super) fn continuity(
+        &self,
+        check: &HandrailCheck<'_>,
+        flights: &[&TreadFlight],
+        missing: &[String],
+    ) -> Checks {
+        if !missing.is_empty() {
             return vec![(
                 Check::Undecided(format!(
                     "whether the handrails continue across the stair's landings is not judged: {}",
-                    self.missing.join("; ")
+                    missing.join("; ")
                 )),
                 vec![],
                 vec![],
             )];
         }
         let mut checks = Vec::new();
-        for pair in ordered(self.ok).windows(2) {
+        for pair in ordered(flights).windows(2) {
             let (lower, upper) = (pair[0], pair[1]);
             checks.extend(self.across(check, lower, upper));
         }
@@ -353,8 +388,8 @@ impl Whole<'_, '_, '_> {
                 related,
             )];
         }
-        let Some(Ok((rails, undecided))) = &self.flights.selections.rails else {
-            let message = match &self.flights.selections.rails {
+        let Some(Ok((rails, undecided))) = &self.rails else {
+            let message = match &self.rails {
                 Some(Err((_, message))) => message.clone(),
                 _ => "no handrail is selected".into(),
             };
@@ -362,7 +397,7 @@ impl Whole<'_, '_, '_> {
         };
         let measure = |flight: &TreadFlight| {
             handrails::measure(
-                self.flights.stairs,
+                self.stairs,
                 check,
                 rails,
                 &handrails::Along {
@@ -434,10 +469,10 @@ impl Whole<'_, '_, '_> {
         check: &HandrailCheck<'_>,
         named: &str,
     ) -> (Tri, String, Vec<Evidence>) {
-        let (Some((_, height)), Some(doors)) = (self.mode.break_doors, self.doors) else {
+        let (Some(height), Some(doors)) = (self.break_height, self.doors) else {
             return (Tri::No, String::new(), vec![]);
         };
-        let Some(Ok((candidates, _))) = &self.flights.selections.landings else {
+        let Some(Ok((candidates, _))) = &self.landings else {
             return (
                 Tri::Maybe,
                 "the landing selection is undecided, so a door there is not looked for".into(),
@@ -449,7 +484,7 @@ impl Whole<'_, '_, '_> {
             WalkingEnd::FlightTop,
             candidates.iter().cloned(),
         );
-        let measured = match self.flights.stairs.measure_landing(&request) {
+        let measured = match self.stairs.measure_landing(&request) {
             Ok(measured) => measured,
             Err(error) => {
                 return (
@@ -479,7 +514,7 @@ impl Whole<'_, '_, '_> {
         };
         let what = format!("the column over {named}");
         let (found, mut evidence, _) = ramp_ends::reaches_into(
-            self.flights.free,
+            self.free,
             &placed,
             lower.object(),
             doors,
@@ -500,7 +535,7 @@ impl Whole<'_, '_, '_> {
 }
 
 /// A stair's flights in the order of their bases.
-fn ordered<'f>(flights: &[&'f TreadFlight]) -> Vec<&'f TreadFlight> {
+pub(super) fn ordered<'f>(flights: &[&'f TreadFlight]) -> Vec<&'f TreadFlight> {
     let mut order = flights.to_vec();
     order.sort_by(|a, b| {
         middle(a.base())
@@ -512,7 +547,7 @@ fn ordered<'f>(flights: &[&'f TreadFlight]) -> Vec<&'f TreadFlight> {
 
 /// Whether `upper` starts where `lower` arrives, from a surely higher base:
 /// the landing between them is an intermediate one.
-fn meets(lower: &TreadFlight, upper: &TreadFlight) -> bool {
+pub(super) fn meets(lower: &TreadFlight, upper: &TreadFlight) -> bool {
     let (arrives, starts) = (lower.top(), upper.base());
     arrives.lower_metres() - MEETING <= starts.upper_metres()
         && starts.lower_metres() - MEETING <= arrives.upper_metres()

@@ -257,7 +257,7 @@ pub(super) const CLEAR_WIDTHS: MemberDescriptor = MemberDescriptor {
             MeasuredParameter {
                 key: "ends",
                 kind: MeasuredParameterKind::Choice {
-                    options: &["both", "bottom", "top", "none"],
+                    options: &["both", "bottom", "top", "none", "intermediate"],
                 },
                 required: false,
                 default: Some("both"),
@@ -278,6 +278,9 @@ pub(super) const CLEAR_WIDTHS: MemberDescriptor = MemberDescriptor {
                     "Ob der Lauf selbst aufgeführt wird.",
                 ),
             },
+            STAIR_PARAMETERS[0],
+            STAIR_PARAMETERS[1],
+            STAIR_PARAMETERS[2],
         ],
         FLIGHTS,
         &[
@@ -1029,4 +1032,380 @@ pub(super) const RAIL_OBSTRUCTIONS: MemberDescriptor = MemberDescriptor {
         ),
     ),
     fields: SEARCH,
+};
+
+const STAIR_PARAMETERS: [MeasuredParameter; 3] = [
+    objects(
+        "stair",
+        false,
+        &en_de(
+            "The whole stair the flight belongs to, `@anchor` in a whole-stair rule: its \
+             landings between two flights are intermediate.",
+            "Die ganze Treppe, zu der der Lauf gehört, `@anchor` in einer Regel über ganze \
+             Treppen: ihre Podeste zwischen zwei Läufen sind Zwischenpodeste.",
+        ),
+    ),
+    MeasuredParameter {
+        key: "path",
+        kind: MeasuredParameterKind::Path,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The relationship steps from the stair to its parts.",
+            "Die Beziehungsschritte von der Treppe zu ihren Teilen.",
+        ),
+    },
+    objects(
+        "flights",
+        false,
+        &en_de(
+            "The stair's flights among its parts: their source kinds, `,`-separated, or `@` a \
+             selector parameter of the rule.",
+            "Die Läufe der Treppe unter ihren Teilen: ihre Quellarten, durch `,` getrennt, oder \
+             mit `@` ein Selektorparameter der Regel.",
+        ),
+    ),
+];
+
+const STAIR_UNMEASURED: &[&str] = &[
+    "the path from the stair cannot be read",
+    "a selector parameter it names picks objects it cannot list",
+];
+
+/// `flights`.
+pub(super) const FLIGHTS_ITEM: MemberDescriptor = MemberDescriptor {
+    list: list(
+        "flights",
+        &[WALKING_LINE_OFFSET],
+        FLIGHTS,
+        &["the walking-surface service cannot measure the flight's treads"],
+        &en_de("The flight", "Der Lauf"),
+        &en_de(
+            "A stair flight as one item: its rise and width, as `stair-geometry` judges them.",
+            "Ein Treppenlauf als ein Element: seine Höhe und Breite, wie `stair-geometry` sie \
+             prüft.",
+        ),
+    ),
+    fields: &[
+        field(
+            "rise",
+            LENGTH,
+            &en_de("Rise", "Höhe"),
+            &en_de("How far the flight rises.", "Wie hoch der Lauf steigt."),
+        ),
+        field(
+            "width",
+            LENGTH,
+            &en_de("Width", "Breite"),
+            &en_de(
+                "Its narrowest tread's width; `null` where a tread fills no rectangle.",
+                "Die Breite seiner schmalsten Stufe; `null`, wo eine Stufe kein Rechteck füllt.",
+            ),
+        ),
+        SCALE,
+        field(
+            "turning",
+            TRUTH,
+            &en_de("Turning", "Gewendelt"),
+            &en_de(
+                "Whether its walking line turns.",
+                "Ob seine Lauflinie sich wendet.",
+            ),
+        ),
+    ],
+};
+
+/// `tactile_strips`.
+pub(super) const TACTILE_STRIPS: MemberDescriptor = MemberDescriptor {
+    list: list(
+        "tactile_strips",
+        &[
+            WALKING_LINE_OFFSET,
+            objects(
+                "tactiles",
+                true,
+                &en_de(
+                    "The objects that may be tactile surfaces.",
+                    "Die Objekte, die taktile Flächen sein können.",
+                ),
+            ),
+            length(
+                "offset",
+                true,
+                &en_de(
+                    "How far before the first and beyond the last riser the strip lies.",
+                    "Wie weit vor der ersten und hinter der letzten Steigung der Streifen liegt.",
+                ),
+            ),
+            length(
+                "depth",
+                true,
+                &en_de("The strip's depth.", "Die Tiefe des Streifens."),
+            ),
+            STAIR_PARAMETERS[0],
+            STAIR_PARAMETERS[1],
+            STAIR_PARAMETERS[2],
+        ],
+        &["walking-surface", "plan-span", "vertical-extent"],
+        RAIL_UNMEASURED,
+        &en_de("Tactile strips", "Taktile Streifen"),
+        &en_de(
+            "Whether the tactile objects cover a strip before a flight's first and beyond its \
+             last riser: one search per end, with whether the end lies on a landing between \
+             two of the stair's flights.",
+            "Ob die taktilen Objekte einen Streifen vor der ersten und hinter der letzten \
+             Steigung eines Laufs decken: eine Suche je Ende, mit der Angabe, ob das Ende auf \
+             einem Podest zwischen zwei Läufen der Treppe liegt.",
+        ),
+    ),
+    fields: &[
+        FOUND,
+        FINDING,
+        FOUND_OBJECTS,
+        LABEL,
+        field(
+            "intermediate",
+            TRUTH,
+            &en_de("Intermediate", "Zwischenpodest"),
+            &en_de(
+                "Whether the end lies on a landing between two of the stair's flights.",
+                "Ob das Ende auf einem Podest zwischen zwei Läufen der Treppe liegt.",
+            ),
+        ),
+    ],
+};
+
+/// `stairs`.
+pub(super) const STAIRS: MemberDescriptor = MemberDescriptor {
+    list: list(
+        "stairs",
+        &[
+            WALKING_LINE_OFFSET,
+            STAIR_PARAMETERS[1],
+            STAIR_PARAMETERS[2],
+        ],
+        FLIGHTS,
+        STAIR_UNMEASURED,
+        &en_de("The whole stair", "Die ganze Treppe"),
+        &en_de(
+            "A whole stair as one item: its rise from its lowest flight's base to its highest \
+             flight's top, and why flights may be missing.",
+            "Eine ganze Treppe als ein Element: ihre Höhe vom Fuß ihres untersten bis zum Kopf \
+             ihres obersten Laufs, und warum Läufe fehlen können.",
+        ),
+    ),
+    fields: &[
+        field(
+            "rise",
+            LENGTH,
+            &en_de("Rise", "Höhe"),
+            &en_de(
+                "The stair's rise; undecided where no flight is measured.",
+                "Die Höhe der Treppe; unentschieden, wo kein Lauf gemessen ist.",
+            ),
+        ),
+        SCALE,
+        field(
+            "missing",
+            TEXT,
+            &en_de("Missing", "Fehlend"),
+            &en_de(
+                "Why flights may be missing, `;`-separated; empty where none may.",
+                "Warum Läufe fehlen können, durch `;` getrennt; leer, wo keiner fehlen kann.",
+            ),
+        ),
+        field(
+            "complete",
+            TRUTH,
+            &en_de("Complete", "Vollständig"),
+            &en_de(
+                "Whether every flight is measured and none may be missing.",
+                "Ob jeder Lauf gemessen ist und keiner fehlen kann.",
+            ),
+        ),
+    ],
+};
+
+/// `stair_continuity`.
+pub(super) const STAIR_CONTINUITY: MemberDescriptor = MemberDescriptor {
+    list: list(
+        "stair_continuity",
+        &[
+            WALKING_LINE_OFFSET,
+            STAIR_PARAMETERS[1],
+            STAIR_PARAMETERS[2],
+            objects(
+                "rails",
+                true,
+                &en_de(
+                    "The objects that may be handrails or join them.",
+                    "Die Objekte, die Handläufe sein oder sie verbinden können.",
+                ),
+            ),
+            length(
+                "reach_across",
+                true,
+                &en_de(
+                    "How far outside a flight's sides a rail may run.",
+                    "Wie weit außerhalb der Seiten eines Laufs ein Handlauf liegen darf.",
+                ),
+            ),
+            length(
+                "reach_above",
+                true,
+                &en_de(
+                    "How far above the pitch line a rail may run.",
+                    "Wie weit über der Steigungslinie ein Handlauf liegen darf.",
+                ),
+            ),
+            length(
+                "level_over",
+                false,
+                &en_de(
+                    "The extension over which a rail's rise is measured; without it, none.",
+                    "Die Verlängerung, über die der Anstieg eines Handlaufs gemessen wird; ohne \
+                     Angabe keine.",
+                ),
+            ),
+            length(
+                "gap",
+                false,
+                &en_de(
+                    "The largest gap between consecutive rails; without it, none.",
+                    "Die größte Lücke zwischen aufeinanderfolgenden Handläufen; ohne Angabe \
+                     keine.",
+                ),
+            ),
+            objects(
+                "landing",
+                false,
+                &en_de(
+                    "The objects that may carry a landing, where break doors are looked for.",
+                    "Die Objekte, die ein Podest tragen können, wo Unterbrechungstüren gesucht \
+                     werden.",
+                ),
+            ),
+            objects(
+                "doors",
+                false,
+                &en_de(
+                    "The doors that break the handrail where they stand.",
+                    "Die Türen, die den Handlauf unterbrechen, wo sie stehen.",
+                ),
+            ),
+            length(
+                "height",
+                false,
+                &en_de(
+                    "The height of the column over a landing a break door must reach into.",
+                    "Die Höhe der Säule über einem Podest, in die eine Unterbrechungstür reichen \
+                     muss.",
+                ),
+            ),
+        ],
+        &["walking-surface", "proximity", "free-space"],
+        STAIR_UNMEASURED,
+        &en_de(
+            "Handrail breaks across a stair's landings",
+            "Handlaufunterbrechungen über die Podeste einer Treppe",
+        ),
+        &en_de(
+            "Whether the handrail along each side of a whole stair stops at a landing between \
+             consecutive flights, unless a break door stands there: one search per side found \
+             broken or undecided.",
+            "Ob der Handlauf an einer Seite einer ganzen Treppe an einem Podest zwischen \
+             aufeinanderfolgenden Läufen endet, sofern dort keine Unterbrechungstür steht: eine \
+             Suche je unterbrochen oder unentschieden gefundener Seite.",
+        ),
+    ),
+    fields: SEARCH,
+};
+
+/// `stair_clear_widths`.
+pub(super) const STAIR_CLEAR_WIDTHS: MemberDescriptor = MemberDescriptor {
+    list: list(
+        "stair_clear_widths",
+        &[
+            WALKING_LINE_OFFSET,
+            STAIR_PARAMETERS[1],
+            STAIR_PARAMETERS[2],
+            objects(
+                "obstacles",
+                true,
+                &en_de(
+                    "The objects that may narrow the walking width.",
+                    "Die Objekte, die die Laufbreite einengen können.",
+                ),
+            ),
+            length(
+                "band_from",
+                true,
+                &en_de(
+                    "The bottom of the band the width is measured in.",
+                    "Die Unterkante des Bandes, in dem die Breite gemessen wird.",
+                ),
+            ),
+            length(
+                "band_to",
+                true,
+                &en_de("The top of that band.", "Die Oberkante dieses Bandes."),
+            ),
+            objects(
+                "landing",
+                false,
+                &en_de(
+                    "The objects that may carry the landings between flights.",
+                    "Die Objekte, die die Podeste zwischen Läufen tragen können.",
+                ),
+            ),
+        ],
+        FLIGHTS,
+        STAIR_UNMEASURED,
+        &en_de("A stair's clear widths", "Lichte Breiten einer Treppe"),
+        &en_de(
+            "The clear width of each of a whole stair's flights and of each landing between two \
+             of them, after why flights may be missing (undecided items), each naming its \
+             flight.",
+            "Die lichte Breite jedes Laufs einer ganzen Treppe und jedes Podests zwischen zwei \
+             Läufen, nach den Gründen, aus denen Läufe fehlen können (unentschiedene \
+             Elemente), jede mit ihrem Lauf.",
+        ),
+    ),
+    fields: &[
+        field(
+            "width",
+            LENGTH,
+            &en_de("Clear width", "Lichte Breite"),
+            &en_de(
+                "The narrowest free width; undecided, with why, where it is not measured or a \
+                 flight may be missing.",
+                "Die engste freie Breite; unentschieden mit Grund, wo sie nicht gemessen ist \
+                 oder ein Lauf fehlen kann.",
+            ),
+        ),
+        field(
+            "owned",
+            TEXT,
+            &en_de("Label", "Bezeichnung"),
+            &en_de(
+                "The flight or landing, named by its flight: `flight F1`.",
+                "Der Lauf oder das Podest, nach dem Lauf benannt: `flight F1`.",
+            ),
+        ),
+        field(
+            "governing",
+            OBJECTS,
+            &en_de("Bounded by", "Begrenzt durch"),
+            &en_de(
+                "The obstacles bounding its narrowest place.",
+                "Die Hindernisse an seiner engsten Stelle.",
+            ),
+        ),
+        field(
+            "owner",
+            OBJECTS,
+            &en_de("Flight", "Lauf"),
+            &en_de("The flight it belongs to.", "Der Lauf, zu dem es gehört."),
+        ),
+    ],
 };

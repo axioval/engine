@@ -417,6 +417,7 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             ),
         ],
     },
+    walking::FLIGHTS_ITEM,
     MemberDescriptor {
         list: MeasuredDescriptor {
             name: "free_placements",
@@ -1288,6 +1289,9 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             },
         ],
     },
+    walking::STAIR_CLEAR_WIDTHS,
+    walking::STAIR_CONTINUITY,
+    walking::STAIRS,
     MemberDescriptor {
         list: MeasuredDescriptor {
             name: "steps",
@@ -1358,6 +1362,15 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
                     "Der Grundrisswinkel zwischen der Vorderkante darunter und der eigenen, \
                      null für eine gerade Stufe; `null`, wo der Auftritt es ist oder eine \
                      Vorderkante nicht gemessen ist.",
+                ),
+            },
+            MemberField {
+                name: "turning",
+                kind: MemberFieldKind::Truth,
+                label: &en_de("Turning", "Gewendelt"),
+                help: &en_de(
+                    "Whether the flight's walking line turns.",
+                    "Ob die Lauflinie des Laufs sich wendet.",
                 ),
             },
             MemberField {
@@ -1452,6 +1465,7 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             ),
         ],
     },
+    walking::TACTILE_STRIPS,
 ];
 
 /// The member list `name` (without parameters), ignoring ASCII case.

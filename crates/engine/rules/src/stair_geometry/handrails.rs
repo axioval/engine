@@ -84,6 +84,12 @@ impl<'a> HandrailCheck<'a> {
 }
 
 impl HandrailCheck<'_> {
+    /// The same check allowing `gap` between pieces of one handrail.
+    pub(super) fn with_gap(mut self, gap: Option<f64>) -> Self {
+        self.gap = gap;
+        self
+    }
+
     /// How far outside the walking surface's sides a rail may run.
     pub(super) fn reach(&self) -> f64 {
         self.reach

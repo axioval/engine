@@ -50714,7 +50714,8 @@
               "both",
               "bottom",
               "top",
-              "none"
+              "none",
+              "intermediate"
             ]
           },
           "required": false,
@@ -50753,6 +50754,60 @@
             }
           ],
           "references": "string"
+        },
+        {
+          "key": "stair",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The whole stair the flight belongs to, `@anchor` in a whole-stair rule: its landings between two flights are intermediate."
+            },
+            {
+              "language": "de",
+              "text": "Die ganze Treppe, zu der der Lauf gehört, `@anchor` in einer Regel über ganze Treppen: ihre Podeste zwischen zwei Läufen sind Zwischenpodeste."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from the stair to its parts."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte von der Treppe zu ihren Teilen."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "flights",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The stair's flights among its parts: their source kinds, `,`-separated, or `@` a selector parameter of the rule."
+            },
+            {
+              "language": "de",
+              "text": "Die Läufe der Treppe unter ihren Teilen: ihre Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel."
+            }
+          ],
+          "references": "selector"
         }
       ],
       "services": [
@@ -51776,6 +51831,166 @@
             {
               "language": "de",
               "text": "Die Grundrissrichtung des steilsten Gefälles des Teils, im Uhrzeigersinn von Plannord; `null` für ein waagerechtes Teil, unentschieden, wo es waagerecht sein oder senkrecht stehen kann."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "flights",
+      "parameters": [
+        {
+          "key": "walking_line_offset",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Where a turning flight is walked: this far from the side it turns towards; without it, midway across its treads."
+            },
+            {
+              "language": "de",
+              "text": "Wo ein gewendelter Lauf begangen wird: so weit von der Seite, zu der er sich wendet; ohne Angabe mittig über die Stufen."
+            }
+          ],
+          "references": "length"
+        }
+      ],
+      "services": [
+        "walking-surface"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the walking-surface service cannot measure the flight's treads"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "The flight"
+        },
+        {
+          "language": "de",
+          "text": "Der Lauf"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "A stair flight as one item: its rise and width, as `stair-geometry` judges them."
+        },
+        {
+          "language": "de",
+          "text": "Ein Treppenlauf als ein Element: seine Höhe und Breite, wie `stair-geometry` sie prüft."
+        }
+      ],
+      "fields": [
+        {
+          "name": "rise",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Rise"
+            },
+            {
+              "language": "de",
+              "text": "Höhe"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "How far the flight rises."
+            },
+            {
+              "language": "de",
+              "text": "Wie hoch der Lauf steigt."
+            }
+          ]
+        },
+        {
+          "name": "width",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Width"
+            },
+            {
+              "language": "de",
+              "text": "Breite"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Its narrowest tread's width; `null` where a tread fills no rectangle."
+            },
+            {
+              "language": "de",
+              "text": "Die Breite seiner schmalsten Stufe; `null`, wo eine Stufe kein Rechteck füllt."
+            }
+          ]
+        },
+        {
+          "name": "scale",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Scale"
+            },
+            {
+              "language": "de",
+              "text": "Größenordnung"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The largest magnitude among the positions measured, in metres: the binary rounding of decimal coordinates grows with it."
+            },
+            {
+              "language": "de",
+              "text": "Der größte Betrag unter den gemessenen Lagen, in Metern: die binäre Rundung dezimaler Koordinaten wächst mit ihm."
+            }
+          ]
+        },
+        {
+          "name": "turning",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Turning"
+            },
+            {
+              "language": "de",
+              "text": "Gewendelt"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether its walking line turns."
+            },
+            {
+              "language": "de",
+              "text": "Ob seine Lauflinie sich wendet."
             }
           ]
         }
@@ -56803,6 +57018,818 @@
       "available": true
     },
     {
+      "name": "stair_clear_widths",
+      "parameters": [
+        {
+          "key": "walking_line_offset",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Where a turning flight is walked: this far from the side it turns towards; without it, midway across its treads."
+            },
+            {
+              "language": "de",
+              "text": "Wo ein gewendelter Lauf begangen wird: so weit von der Seite, zu der er sich wendet; ohne Angabe mittig über die Stufen."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from the stair to its parts."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte von der Treppe zu ihren Teilen."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "flights",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The stair's flights among its parts: their source kinds, `,`-separated, or `@` a selector parameter of the rule."
+            },
+            {
+              "language": "de",
+              "text": "Die Läufe der Treppe unter ihren Teilen: ihre Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "obstacles",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects that may narrow the walking width."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, die die Laufbreite einengen können."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "band_from",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The bottom of the band the width is measured in."
+            },
+            {
+              "language": "de",
+              "text": "Die Unterkante des Bandes, in dem die Breite gemessen wird."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "band_to",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The top of that band."
+            },
+            {
+              "language": "de",
+              "text": "Die Oberkante dieses Bandes."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "landing",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects that may carry the landings between flights."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, die die Podeste zwischen Läufen tragen können."
+            }
+          ],
+          "references": "selector"
+        }
+      ],
+      "services": [
+        "walking-surface"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the path from the stair cannot be read",
+        "a selector parameter it names picks objects it cannot list"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "A stair's clear widths"
+        },
+        {
+          "language": "de",
+          "text": "Lichte Breiten einer Treppe"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The clear width of each of a whole stair's flights and of each landing between two of them, after why flights may be missing (undecided items), each naming its flight."
+        },
+        {
+          "language": "de",
+          "text": "Die lichte Breite jedes Laufs einer ganzen Treppe und jedes Podests zwischen zwei Läufen, nach den Gründen, aus denen Läufe fehlen können (unentschiedene Elemente), jede mit ihrem Lauf."
+        }
+      ],
+      "fields": [
+        {
+          "name": "width",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Clear width"
+            },
+            {
+              "language": "de",
+              "text": "Lichte Breite"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The narrowest free width; undecided, with why, where it is not measured or a flight may be missing."
+            },
+            {
+              "language": "de",
+              "text": "Die engste freie Breite; unentschieden mit Grund, wo sie nicht gemessen ist oder ein Lauf fehlen kann."
+            }
+          ]
+        },
+        {
+          "name": "owned",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Label"
+            },
+            {
+              "language": "de",
+              "text": "Bezeichnung"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The flight or landing, named by its flight: `flight F1`."
+            },
+            {
+              "language": "de",
+              "text": "Der Lauf oder das Podest, nach dem Lauf benannt: `flight F1`."
+            }
+          ]
+        },
+        {
+          "name": "governing",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Bounded by"
+            },
+            {
+              "language": "de",
+              "text": "Begrenzt durch"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The obstacles bounding its narrowest place."
+            },
+            {
+              "language": "de",
+              "text": "Die Hindernisse an seiner engsten Stelle."
+            }
+          ]
+        },
+        {
+          "name": "owner",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Flight"
+            },
+            {
+              "language": "de",
+              "text": "Lauf"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The flight it belongs to."
+            },
+            {
+              "language": "de",
+              "text": "Der Lauf, zu dem es gehört."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "stair_continuity",
+      "parameters": [
+        {
+          "key": "walking_line_offset",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Where a turning flight is walked: this far from the side it turns towards; without it, midway across its treads."
+            },
+            {
+              "language": "de",
+              "text": "Wo ein gewendelter Lauf begangen wird: so weit von der Seite, zu der er sich wendet; ohne Angabe mittig über die Stufen."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from the stair to its parts."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte von der Treppe zu ihren Teilen."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "flights",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The stair's flights among its parts: their source kinds, `,`-separated, or `@` a selector parameter of the rule."
+            },
+            {
+              "language": "de",
+              "text": "Die Läufe der Treppe unter ihren Teilen: ihre Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "rails",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects that may be handrails or join them."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, die Handläufe sein oder sie verbinden können."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "reach_across",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "How far outside a flight's sides a rail may run."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit außerhalb der Seiten eines Laufs ein Handlauf liegen darf."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "reach_above",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "How far above the pitch line a rail may run."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit über der Steigungslinie ein Handlauf liegen darf."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "level_over",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The extension over which a rail's rise is measured; without it, none."
+            },
+            {
+              "language": "de",
+              "text": "Die Verlängerung, über die der Anstieg eines Handlaufs gemessen wird; ohne Angabe keine."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "gap",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The largest gap between consecutive rails; without it, none."
+            },
+            {
+              "language": "de",
+              "text": "Die größte Lücke zwischen aufeinanderfolgenden Handläufen; ohne Angabe keine."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "landing",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects that may carry a landing, where break doors are looked for."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, die ein Podest tragen können, wo Unterbrechungstüren gesucht werden."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "doors",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The doors that break the handrail where they stand."
+            },
+            {
+              "language": "de",
+              "text": "Die Türen, die den Handlauf unterbrechen, wo sie stehen."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "height",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The height of the column over a landing a break door must reach into."
+            },
+            {
+              "language": "de",
+              "text": "Die Höhe der Säule über einem Podest, in die eine Unterbrechungstür reichen muss."
+            }
+          ],
+          "references": "length"
+        }
+      ],
+      "services": [
+        "walking-surface",
+        "proximity",
+        "free-space"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the path from the stair cannot be read",
+        "a selector parameter it names picks objects it cannot list"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Handrail breaks across a stair's landings"
+        },
+        {
+          "language": "de",
+          "text": "Handlaufunterbrechungen über die Podeste einer Treppe"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "Whether the handrail along each side of a whole stair stops at a landing between consecutive flights, unless a break door stands there: one search per side found broken or undecided."
+        },
+        {
+          "language": "de",
+          "text": "Ob der Handlauf an einer Seite einer ganzen Treppe an einem Podest zwischen aufeinanderfolgenden Läufen endet, sofern dort keine Unterbrechungstür steht: eine Suche je unterbrochen oder unentschieden gefundener Seite."
+        }
+      ],
+      "fields": [
+        {
+          "name": "found",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Found"
+            },
+            {
+              "language": "de",
+              "text": "Gefunden"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the search found what it looks for; undecided, with why, where it cannot tell, including where an object the selection could not decide may be it."
+            },
+            {
+              "language": "de",
+              "text": "Ob die Suche fand, wonach sie sucht; unentschieden mit Grund, wo sie es nicht entscheiden kann, auch wo ein Objekt unentschiedener Auswahl es sein kann."
+            }
+          ]
+        },
+        {
+          "name": "finding",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Finding"
+            },
+            {
+              "language": "de",
+              "text": "Befund"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "What the search found, in words; empty where it found nothing."
+            },
+            {
+              "language": "de",
+              "text": "Was die Suche fand, in Worten; leer, wo sie nichts fand."
+            }
+          ]
+        },
+        {
+          "name": "objects",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Objects"
+            },
+            {
+              "language": "de",
+              "text": "Objekte"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects involved in what the search found."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, die an dem Gefundenen beteiligt sind."
+            }
+          ]
+        },
+        {
+          "name": "label",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Label"
+            },
+            {
+              "language": "de",
+              "text": "Bezeichnung"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "How messages name the item: `the bottom of run 1 of 2`, `run 2 of 3`."
+            },
+            {
+              "language": "de",
+              "text": "Wie Meldungen das Element nennen: `the bottom of run 1 of 2`, `run 2 of 3`."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "stairs",
+      "parameters": [
+        {
+          "key": "walking_line_offset",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Where a turning flight is walked: this far from the side it turns towards; without it, midway across its treads."
+            },
+            {
+              "language": "de",
+              "text": "Wo ein gewendelter Lauf begangen wird: so weit von der Seite, zu der er sich wendet; ohne Angabe mittig über die Stufen."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from the stair to its parts."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte von der Treppe zu ihren Teilen."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "flights",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The stair's flights among its parts: their source kinds, `,`-separated, or `@` a selector parameter of the rule."
+            },
+            {
+              "language": "de",
+              "text": "Die Läufe der Treppe unter ihren Teilen: ihre Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel."
+            }
+          ],
+          "references": "selector"
+        }
+      ],
+      "services": [
+        "walking-surface"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the path from the stair cannot be read",
+        "a selector parameter it names picks objects it cannot list"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "The whole stair"
+        },
+        {
+          "language": "de",
+          "text": "Die ganze Treppe"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "A whole stair as one item: its rise from its lowest flight's base to its highest flight's top, and why flights may be missing."
+        },
+        {
+          "language": "de",
+          "text": "Eine ganze Treppe als ein Element: ihre Höhe vom Fuß ihres untersten bis zum Kopf ihres obersten Laufs, und warum Läufe fehlen können."
+        }
+      ],
+      "fields": [
+        {
+          "name": "rise",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Rise"
+            },
+            {
+              "language": "de",
+              "text": "Höhe"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The stair's rise; undecided where no flight is measured."
+            },
+            {
+              "language": "de",
+              "text": "Die Höhe der Treppe; unentschieden, wo kein Lauf gemessen ist."
+            }
+          ]
+        },
+        {
+          "name": "scale",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Scale"
+            },
+            {
+              "language": "de",
+              "text": "Größenordnung"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The largest magnitude among the positions measured, in metres: the binary rounding of decimal coordinates grows with it."
+            },
+            {
+              "language": "de",
+              "text": "Der größte Betrag unter den gemessenen Lagen, in Metern: die binäre Rundung dezimaler Koordinaten wächst mit ihm."
+            }
+          ]
+        },
+        {
+          "name": "missing",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Missing"
+            },
+            {
+              "language": "de",
+              "text": "Fehlend"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Why flights may be missing, `;`-separated; empty where none may."
+            },
+            {
+              "language": "de",
+              "text": "Warum Läufe fehlen können, durch `;` getrennt; leer, wo keiner fehlen kann."
+            }
+          ]
+        },
+        {
+          "name": "complete",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Complete"
+            },
+            {
+              "language": "de",
+              "text": "Vollständig"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether every flight is measured and none may be missing."
+            },
+            {
+              "language": "de",
+              "text": "Ob jeder Lauf gemessen ist und keiner fehlen kann."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
       "name": "steps",
       "parameters": [
         {
@@ -56989,6 +58016,32 @@
           ]
         },
         {
+          "name": "turning",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Turning"
+            },
+            {
+              "language": "de",
+              "text": "Gewendelt"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the flight's walking line turns."
+            },
+            {
+              "language": "de",
+              "text": "Ob die Lauflinie des Laufs sich wendet."
+            }
+          ]
+        },
+        {
           "name": "open_riser",
           "kind": {
             "type": "truth"
@@ -57164,6 +58217,303 @@
             {
               "language": "de",
               "text": "Ob der Raum sicher hinter der Tür und nicht auf ihrer Aufschlagseite liegt; unentschieden, wo keine Probe in ihm liegt."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "tactile_strips",
+      "parameters": [
+        {
+          "key": "walking_line_offset",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Where a turning flight is walked: this far from the side it turns towards; without it, midway across its treads."
+            },
+            {
+              "language": "de",
+              "text": "Wo ein gewendelter Lauf begangen wird: so weit von der Seite, zu der er sich wendet; ohne Angabe mittig über die Stufen."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "tactiles",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects that may be tactile surfaces."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, die taktile Flächen sein können."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "offset",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "How far before the first and beyond the last riser the strip lies."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit vor der ersten und hinter der letzten Steigung der Streifen liegt."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "depth",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The strip's depth."
+            },
+            {
+              "language": "de",
+              "text": "Die Tiefe des Streifens."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "stair",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The whole stair the flight belongs to, `@anchor` in a whole-stair rule: its landings between two flights are intermediate."
+            },
+            {
+              "language": "de",
+              "text": "Die ganze Treppe, zu der der Lauf gehört, `@anchor` in einer Regel über ganze Treppen: ihre Podeste zwischen zwei Läufen sind Zwischenpodeste."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from the stair to its parts."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte von der Treppe zu ihren Teilen."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "flights",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The stair's flights among its parts: their source kinds, `,`-separated, or `@` a selector parameter of the rule."
+            },
+            {
+              "language": "de",
+              "text": "Die Läufe der Treppe unter ihren Teilen: ihre Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel."
+            }
+          ],
+          "references": "selector"
+        }
+      ],
+      "services": [
+        "walking-surface",
+        "plan-span",
+        "vertical-extent"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the walking-surface service cannot measure the flight or the ramp's runs",
+        "a selector parameter it names picks objects it cannot list"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Tactile strips"
+        },
+        {
+          "language": "de",
+          "text": "Taktile Streifen"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "Whether the tactile objects cover a strip before a flight's first and beyond its last riser: one search per end, with whether the end lies on a landing between two of the stair's flights."
+        },
+        {
+          "language": "de",
+          "text": "Ob die taktilen Objekte einen Streifen vor der ersten und hinter der letzten Steigung eines Laufs decken: eine Suche je Ende, mit der Angabe, ob das Ende auf einem Podest zwischen zwei Läufen der Treppe liegt."
+        }
+      ],
+      "fields": [
+        {
+          "name": "found",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Found"
+            },
+            {
+              "language": "de",
+              "text": "Gefunden"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the search found what it looks for; undecided, with why, where it cannot tell, including where an object the selection could not decide may be it."
+            },
+            {
+              "language": "de",
+              "text": "Ob die Suche fand, wonach sie sucht; unentschieden mit Grund, wo sie es nicht entscheiden kann, auch wo ein Objekt unentschiedener Auswahl es sein kann."
+            }
+          ]
+        },
+        {
+          "name": "finding",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Finding"
+            },
+            {
+              "language": "de",
+              "text": "Befund"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "What the search found, in words; empty where it found nothing."
+            },
+            {
+              "language": "de",
+              "text": "Was die Suche fand, in Worten; leer, wo sie nichts fand."
+            }
+          ]
+        },
+        {
+          "name": "objects",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Objects"
+            },
+            {
+              "language": "de",
+              "text": "Objekte"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects involved in what the search found."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, die an dem Gefundenen beteiligt sind."
+            }
+          ]
+        },
+        {
+          "name": "label",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Label"
+            },
+            {
+              "language": "de",
+              "text": "Bezeichnung"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "How messages name the item: `the bottom of run 1 of 2`, `run 2 of 3`."
+            },
+            {
+              "language": "de",
+              "text": "Wie Meldungen das Element nennen: `the bottom of run 1 of 2`, `run 2 of 3`."
+            }
+          ]
+        },
+        {
+          "name": "intermediate",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Intermediate"
+            },
+            {
+              "language": "de",
+              "text": "Zwischenpodest"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the end lies on a landing between two of the stair's flights."
+            },
+            {
+              "language": "de",
+              "text": "Ob das Ende auf einem Podest zwischen zwei Läufen der Treppe liegt."
             }
           ]
         }

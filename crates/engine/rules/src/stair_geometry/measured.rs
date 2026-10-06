@@ -93,17 +93,19 @@ fn refused(
 fn flight(
     call: &MeasuredCall,
     object: &ObjectId,
-    stairs: &WalkingSurfaceServiceHandle,
+    context: &RuleContext<'_>,
 ) -> Result<TreadFlight, PropertyResolutionError> {
-    let request = match call.argument("walking_line_offset") {
-        Some(MeasuredArgument::Length(offset)) => {
-            TreadFlightRequest::from_inner_side(object.clone(), *offset)
-        }
-        _ => Ok(TreadFlightRequest::new(object.clone())),
+    let offset = match call.argument("walking_line_offset") {
+        Some(MeasuredArgument::Length(offset)) => Some(*offset),
+        _ => None,
     };
-    request
-        .and_then(|request| stairs.measure_tread_flight(&request))
-        .map_err(|error| refused(call.name(), object, &error))
+    // Measured once per run, however many values read it.
+    super::items::flight(context, object, offset).map_err(|(reason, why)| {
+        crate::measured_kinds::resolution_error((
+            reason,
+            format!("`{}` of {object}: {why}", call.name()),
+        ))
+    })
 }
 
 /// One member per riser: step `j` climbs riser `j` onto tread `j`, whose
@@ -122,6 +124,13 @@ fn steps(flight: &TreadFlight, object: &ObjectId) -> Vec<MeasuredMember> {
             let before = index.checked_sub(1);
             let going = before.and_then(|before| goings.get(before).copied());
             let mut fields = BTreeMap::new();
+            fields.insert(
+                "turning",
+                MemberValue::Truth {
+                    value: flight.walking_line().is_turning(),
+                    locator: at("turning"),
+                },
+            );
             fields.insert("riser", number(Some(risers[index]), LENGTH, at("riser")));
             fields.insert("going", number(going, LENGTH, at("going")));
             fields.insert(
@@ -364,7 +373,7 @@ fn handrails(
             (0..runs.runs().len()).map(WalkingStretch::Run).collect();
         (stretches, None)
     } else {
-        let flight = flight(call, object, stairs)?;
+        let flight = flight(call, object, context)?;
         let risers = (call.choice("from") == Some("riser")).then(|| RiserOffsets::of(&flight));
         (vec![WalkingStretch::Flight], risers)
     };
@@ -537,7 +546,7 @@ impl StairMeasures {
         } else {
             // A landing is placed at the end of a flight measured first, as
             // `stair-geometry` measures it.
-            flight(call, object, &stairs)?;
+            flight(call, object, context)?;
             if top {
                 WalkingEnd::FlightTop
             } else {
@@ -628,7 +637,7 @@ impl MeasuredProvider for StairMeasures {
             return Self::landing(call, object, context);
         }
 
-        let flight = flight(call, object, &walking(context)?)?;
+        let flight = flight(call, object, context)?;
         let locator = format!("{name}:{object}");
         if name == "end_width" {
             // A turning flight's winders have no width: a landing at its end
@@ -683,7 +692,7 @@ impl MeasuredProvider for StairMeasures {
             return handrails(call, object, context, &stairs);
         }
         if call.name() == "steps" {
-            let flight = flight(call, object, &stairs)?;
+            let flight = flight(call, object, context)?;
             return Ok((steps(&flight, object), vec![flight.evidence().clone()]));
         }
         let measured = stairs

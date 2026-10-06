@@ -160,6 +160,11 @@ impl Width {
         self.above
     }
 
+    /// How a stair's total names it: by its flight.
+    pub(super) fn owned(&self) -> String {
+        self.named(true)
+    }
+
     /// Whether it is a landing's.
     pub(super) fn is_landing(&self) -> bool {
         matches!(self.place, Place::Landing(_))

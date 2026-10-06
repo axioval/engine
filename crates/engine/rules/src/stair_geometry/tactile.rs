@@ -41,6 +41,19 @@ pub(super) struct TactileCheck<'a> {
     pub(super) intermediate: bool,
 }
 
+impl<'a> TactileCheck<'a> {
+    /// A check measuring a strip `depth` deep `offset` beyond the end,
+    /// covered by the objects `objects` names.
+    pub(super) fn measuring(objects: &'a Selector, (offset, depth): (f64, f64)) -> Self {
+        Self {
+            objects,
+            offset,
+            depth,
+            intermediate: false,
+        }
+    }
+}
+
 pub(super) fn descriptors() -> Vec<ParameterDescriptor> {
     vec![
         ParameterDescriptor::optional("tactile_objects", ParameterType::Selector),
@@ -80,7 +93,14 @@ enum Tri {
     Sure,
 }
 
+/// The objects a tactile selection picks: surely, and possibly.
+struct Selected<'s> {
+    matched: &'s [ObjectId],
+    undecided: &'s [ObjectId],
+}
+
 /// One object that may be a tactile surface, read once per rule.
+#[derive(Clone)]
 pub(super) struct Tactile {
     id: ObjectId,
     selected: Tri,
@@ -93,6 +113,18 @@ pub(super) struct Tactile {
 /// The objects `check` selects or may select, each measured once.
 pub(super) fn read(context: &RuleContext<'_>, check: &TactileCheck<'_>) -> Vec<Tactile> {
     let population = Population::of(context, check.objects);
+    let matched: Vec<ObjectId> = population.matched.iter().cloned().collect();
+    let undecided: Vec<ObjectId> = population.undecided.iter().cloned().collect();
+    read_selected(context, (&matched, &undecided))
+}
+
+/// The objects surely selected and those the selection could not decide,
+/// each measured once.
+pub(super) fn read_selected(
+    context: &RuleContext<'_>,
+    (matched, undecided): (&[ObjectId], &[ObjectId]),
+) -> Vec<Tactile> {
+    let population = Selected { matched, undecided };
     let spans = context.services.get::<PlanSpanServiceHandle>();
     let heights = extents(context);
     population

@@ -898,6 +898,7 @@ fn walking_declaration(ramp: bool) -> Vec<Check> {
 }
 
 /// The handrail declaration checks.
+#[allow(clippy::too_many_lines)]
 fn handrail_declaration(ramp: bool) -> Vec<Check> {
     let mut checks = vec![
         Check::Kind {

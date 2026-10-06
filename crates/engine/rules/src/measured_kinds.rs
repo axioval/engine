@@ -109,42 +109,6 @@ pub(crate) fn selection(
     })
 }
 
-/// [`objects_of_kinds`], `object` included when it is of the kinds too.
-pub(crate) fn objects_of_kinds_including(
-    context: &RuleContext<'_>,
-    call: &MeasuredCall,
-    key: &str,
-    object: &ObjectId,
-) -> Result<BTreeSet<ObjectId>, PropertyResolutionError> {
-    let mut found = objects_of_kinds(context, call, key, object)?;
-    let Some(MeasuredArgument::SourceKind(kinds)) = call.argument(key) else {
-        return Err(PropertyResolutionError::InvalidRequest);
-    };
-    let Some(own) = context.project.object(object) else {
-        return Ok(found);
-    };
-    let held = own.kind();
-    let hierarchy = context.services.get::<TypeHierarchyServiceHandle>();
-    for kind in kinds.split(',').map(str::trim) {
-        let matched = held.eq_ignore_ascii_case(kind)
-            || match hierarchy {
-                Some(hierarchy) => hierarchy
-                    .is_a(&object.source, held, kind)
-                    .map_err(|error| {
-                        PropertyResolutionError::Unavailable(format!(
-                            "whether {object} is a {kind} is unknown: {error}"
-                        ))
-                    })?,
-                None => false,
-            };
-        if matched {
-            found.insert(object.clone());
-            break;
-        }
-    }
-    Ok(found)
-}
-
 /// A capability's refusal as a property-resolution error that maps back to
 /// the same reason, so a measured value is left open for the reason the
 /// capability would give.

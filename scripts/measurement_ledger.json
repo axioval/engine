@@ -796,7 +796,7 @@
         "unallocated_share"
       ]
     },
-    "stair_geometry::below::measure_clearance_below": {
+    "stair_geometry::reference::below::measure_clearance_below": {
       "count": 1,
       "providedBy": [
         "clearance_below"
@@ -831,20 +831,20 @@
         "handrails"
       ]
     },
-    "stair_geometry::headroom::measure_headroom": {
+    "stair_geometry::reference::headroom::measure_headroom": {
       "count": 1,
       "providedBy": [
         "headroom"
       ]
     },
-    "stair_geometry::landing::measure_landing": {
+    "stair_geometry::reference::landing::measure_landing": {
       "count": 1,
       "providedBy": [
         "landing_depth",
         "landing_width"
       ]
     },
-    "stair_geometry::measure::measure_tread_flight": {
+    "stair_geometry::reference::measure::measure_tread_flight": {
       "count": 1,
       "providedBy": [
         "steps",
@@ -858,7 +858,7 @@
         "rails_over_surfaces"
       ]
     },
-    "stair_geometry::ramp::measure_sloped_runs": {
+    "stair_geometry::reference::ramp::measure_sloped_runs": {
       "count": 1,
       "providedBy": [
         "runs"

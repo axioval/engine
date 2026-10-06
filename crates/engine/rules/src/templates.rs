@@ -800,6 +800,13 @@ fn constant(
                 value: value.to_vec(),
             })
         }),
+        // A table is read as the capabilities read it, refused when it is
+        // no table.
+        ParameterType::Table(_) => parameters.table(name)?.map(|rows| {
+            Constant::Other(ParameterValue::Table {
+                value: rows.iter().map(|row| row.0.clone()).collect(),
+            })
+        }),
         // Any other parameter: a scalar as stated, or a value only the
         // runner reads (a table, an expression).
         _ => rule.parameters.get(name).cloned().map(|value| {

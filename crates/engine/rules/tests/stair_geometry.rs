@@ -567,7 +567,8 @@ fn check_stairs(
     stairs: Stairs,
     parameters: Vec<(&str, ParameterValue)>,
 ) -> CapabilityEvaluation {
-    model.evaluate_with(
+    held(
+        model,
         &StairGeometryCheck,
         &rule(STAIR, kind("flight"), parameters),
         |services| {
@@ -611,9 +612,13 @@ fn an_irregular_riser_is_found_from_the_flight_geometry() {
             ),
         ]
     );
-    assert_eq!(
-        evaluation.findings()[0].evidence[0].locator,
-        "tread-flight:irregular"
+    // The finding cites the flight as the measured `flight_rise` read it.
+    assert!(
+        evaluation.findings()[0].evidence[0]
+            .locator
+            .ends_with("tread-flight:irregular"),
+        "{:?}",
+        evaluation.findings()[0].evidence
     );
     // The flight in pieces cannot be measured and says so.
     assert_eq!(
@@ -803,11 +808,15 @@ fn held(
     model: Model,
     capability: &'static (dyn axioval_engine::RuleCapability + Sync),
     rule: &axioval_engine::CompiledRule,
-    register: impl Fn(&mut axioval_engine::ServiceRegistry),
+    register: impl FnOnce(&mut axioval_engine::ServiceRegistry),
 ) -> CapabilityEvaluation {
-    let reference: &'static (dyn axioval_engine::RuleCapability + Sync) =
-        &axioval_rules::reference::RampGeometry;
-    model.evaluate_measured(&common::Held(capability, reference), rule, register)
+    let reference: &'static (dyn axioval_engine::RuleCapability + Sync) = if capability.id() == RAMP
+    {
+        &axioval_rules::reference::RampGeometry
+    } else {
+        &axioval_rules::reference::StairGeometry
+    };
+    model.evaluate_measured_once(&common::Held(capability, reference), rule, register)
 }
 
 fn check_ramps(parameters: Vec<(&str, ParameterValue)>) -> CapabilityEvaluation {
@@ -934,11 +943,14 @@ fn a_narrow_flight_and_a_shallow_landing_are_found() {
     );
     let landing = &evaluation.findings()[1];
     assert_eq!(landing.related, [id("slab")]);
+    // It cites the landing measured at that end.
     assert!(
         landing
             .evidence
             .iter()
-            .any(|evidence| evidence.locator == "landing:regular")
+            .any(|evidence| evidence.locator.starts_with("landings;")),
+        "{:?}",
+        landing.evidence
     );
     // The flight in pieces is not measured; no landing at the bottom of `irregular`
     // is nothing to check.
@@ -1214,7 +1226,8 @@ fn a_service_without_landings_leaves_them_not_evaluated() {
             stairs().measure_headroom(request)
         }
     }
-    let evaluation = model().evaluate_with(
+    let evaluation = held(
+        model(),
         &StairGeometryCheck,
         &rule(
             STAIR,
@@ -1331,7 +1344,7 @@ fn handrails_too_low_too_short_sloping_or_on_one_side_are_found() {
         too_low
             .evidence
             .iter()
-            .any(|evidence| evidence.locator == "handrails:regular")
+            .any(|evidence| evidence.locator.starts_with("rail_heights;"))
     );
     // The flight in pieces is not measured.
     assert_eq!(
@@ -1610,7 +1623,8 @@ fn a_service_without_handrails_leaves_them_not_evaluated() {
             stairs().measure_headroom(request)
         }
     }
-    let evaluation = model().evaluate_with(
+    let evaluation = held(
+        model(),
         &StairGeometryCheck,
         &rule(
             STAIR,
@@ -2196,7 +2210,8 @@ fn a_door_on_or_swinging_over_a_stair_landing_is_found() {
         if swing {
             parameters.push(("landing_door_swing", boolean(true)));
         }
-        model().evaluate_with(
+        held(
+            model(),
             &StairGeometryCheck,
             &rule(STAIR, kind("flight"), parameters),
             |services| {
@@ -2254,7 +2269,8 @@ fn check_stairs_with(
     floor: Option<Floor>,
     parameters: Vec<(&str, ParameterValue)>,
 ) -> CapabilityEvaluation {
-    model().evaluate_with(
+    held(
+        model(),
         &StairGeometryCheck,
         &rule(STAIR, kind("flight"), parameters),
         |services| {
@@ -2656,7 +2672,8 @@ fn check_whole(
     rails: Rails,
     parameters: Vec<(&str, ParameterValue)>,
 ) -> CapabilityEvaluation {
-    two_flights().evaluate_with(
+    held(
+        two_flights(),
         &StairGeometryCheck,
         &rule(STAIR, kind("stair"), parameters),
         |services| {
@@ -2868,7 +2885,8 @@ fn check_tactile(
     strips: Strips,
     parameters: Vec<(&str, ParameterValue)>,
 ) -> CapabilityEvaluation {
-    model.evaluate_with(
+    held(
+        model,
         &StairGeometryCheck,
         &rule(STAIR, kind(selected), parameters),
         |services| {
@@ -3147,7 +3165,13 @@ fn check_clear(
             register,
         );
     }
-    model.evaluate_with(capability, &rule(id, kind(selected), parameters), register)
+    let _ = capability;
+    held(
+        model,
+        &StairGeometryCheck,
+        &rule(id, kind(selected), parameters),
+        register,
+    )
 }
 
 fn clear_parameters(minimum: f64) -> Vec<(&'static str, ParameterValue)> {
@@ -3370,7 +3394,8 @@ fn a_stairs_least_clear_width_includes_its_intermediate_landing() {
     ]);
     parameters.push(("landing_objects", slabs()));
     parameters.dedup_by(|a, b| a.0 == b.0);
-    let evaluation = two_flights().evaluate_with(
+    let evaluation = held(
+        two_flights(),
         &StairGeometryCheck,
         &rule(STAIR, kind("stair"), parameters),
         |services| {
@@ -5161,7 +5186,8 @@ mod as_expressions {
             let per_flight = format!(
                 "{list};intermediate={yes};stair=parts;flights=flight;within=parts:backward"
             );
-            let capability = two_flights().evaluate_with(
+            let capability = held(
+                two_flights(),
                 &StairGeometryCheck,
                 &rule(
                     STAIR,

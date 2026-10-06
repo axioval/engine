@@ -200,6 +200,7 @@ pub mod reference {
     pub use crate::relative_count::reference::RelativeCount;
     pub use crate::shelf_capacity::reference::ShelfCapacity;
     pub use crate::stair_geometry::RampGeometryReference as RampGeometry;
+    pub use crate::stair_geometry::StairGeometryReference as StairGeometry;
     pub use crate::triangle_count::reference::TriangleCountLimit;
     pub use crate::unique_value::reference::UniqueValue;
 }

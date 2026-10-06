@@ -2598,7 +2598,7 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
     },
     MeasuredDescriptor {
         name: "flight_rise",
-        parameters: &[],
+        parameters: &[super::members::WALKING_LINE_OFFSET],
         dimension: Some(QuantityDimension::Length),
         services: FLIGHT,
         exactness: MeasuredExactness::Measured,

@@ -140,9 +140,9 @@ fn undecided(why: impl Into<String>) -> MemberValue {
 }
 
 fn objects(objects: &[ObjectId]) -> MemberValue {
-    let mut objects = objects.to_vec();
-    objects.dedup();
-    MemberValue::Objects { objects }
+    MemberValue::Objects {
+        objects: objects.to_vec(),
+    }
 }
 
 fn member(exact: bool, fields: BTreeMap<&'static str, MemberValue>) -> MeasuredMember {
@@ -438,7 +438,7 @@ pub(super) fn members(
         "stairs" => return Ok((stairs_item(call, object, context)?, Vec::new())),
         "stair_continuity" => {
             return Ok((
-                stair_continuity(call, object, context, &stairs)?,
+                stair_continuity(call, object, context, (&stairs, ("path", "doors")))?,
                 Vec::new(),
             ));
         }
@@ -453,7 +453,10 @@ pub(super) fn members(
     let walked = walked(call, object, context)?;
     let members = match call.name() {
         "flights" => flights(object, &walked)?,
-        "tactile_strips" => tactile_strips(call, object, context, (&stairs, &walked))?,
+        "tactile_strips" => {
+            let ends = intermediate(call, object, context)?;
+            tactile_strips(call, object, context, (&stairs, &walked), ends)?
+        }
         "clearances" => clearances(call, object, context, &stairs)?,
         "landings" => landings(call, object, context, (&stairs, &walked))?,
         "landing_doors" => doors(call, object, context, (&stairs, &walked), false)?,
@@ -1206,21 +1209,21 @@ fn flights(
 /// A whole stair's flights as `stair-geometry`'s whole-stair mode reaches
 /// them: those measured, why others may be missing, and the evidence of the
 /// path.
-struct Stair {
+pub(super) struct Stair {
     flights: Vec<TreadFlight>,
     missing: Vec<String>,
     cited: Vec<Evidence>,
 }
 
-/// The stair `stair` (the call's `stair` anchor, or the object itself)
-/// reaches along `path` among the `flights` selection.
-fn stair_of(
+/// The stair `stair` reaches along the call's path (its argument `key`)
+/// among the `flights` selection.
+pub(super) fn stair_of(
     call: &MeasuredCall,
-    stair: &ObjectId,
+    (stair, key): (&ObjectId, &str),
     context: &RuleContext<'_>,
 ) -> Result<Stair, PropertyResolutionError> {
     let name = call.name();
-    let Some(MeasuredArgument::Path(steps)) = call.argument("path") else {
+    let Some(MeasuredArgument::Path(steps)) = call.argument(key) else {
         return Err(PropertyResolutionError::InvalidRequest);
     };
     let selection = crate::measured_kinds::selection(context, call, "flights", None)?
@@ -1272,7 +1275,15 @@ fn intermediate(
     else {
         return Ok((false, false));
     };
-    let stair = stair_of(call, &stair, context)?;
+    Ok(intermediate_in(
+        &stair_of(call, (&stair, "path"), context)?,
+        flight,
+    ))
+}
+
+/// Whether the bottom and top of `flight` lie on landings between two of
+/// `stair`'s flights.
+pub(super) fn intermediate_in(stair: &Stair, flight: &ObjectId) -> (bool, bool) {
     let measured: Vec<&TreadFlight> = stair.flights.iter().collect();
     let (mut bottom, mut top) = (false, false);
     for pair in super::whole::ordered(&measured).windows(2) {
@@ -1281,17 +1292,18 @@ fn intermediate(
             bottom |= pair[1].object() == flight;
         }
     }
-    Ok((bottom, top))
+    (bottom, top)
 }
 
 /// Whether the tactile objects cover a strip at each end of the flight,
 /// `intermediate` true at an end on a landing between two of the stair's
 /// flights.
-fn tactile_strips(
+pub(super) fn tactile_strips(
     call: &MeasuredCall,
     object: &ObjectId,
     context: &RuleContext<'_>,
     (stairs, walked): (&WalkingSurfaceServiceHandle, &Walked),
+    (bottom, top): (bool, bool),
 ) -> Result<Vec<MeasuredMember>, PropertyResolutionError> {
     let Walked::Flight(flight) = walked else {
         return Err(PropertyResolutionError::InvalidRequest);
@@ -1311,7 +1323,6 @@ fn tactile_strips(
     );
     let selector = naming(&[]);
     let check = super::tactile::TactileCheck::measuring(&selector, size);
-    let (bottom, top) = intermediate(call, object, context)?;
     let mut members = Vec::new();
     for (end, at_top, between) in [
         (WalkingEnd::FlightBottom, false, bottom),
@@ -1346,7 +1357,7 @@ fn stairs_item(
     object: &ObjectId,
     context: &RuleContext<'_>,
 ) -> Result<Vec<MeasuredMember>, PropertyResolutionError> {
-    let stair = stair_of(call, object, context)?;
+    let stair = stair_of(call, (object, "path"), context)?;
     let missing = stair.missing.join("; ");
     let locator = |field: &str| format!("stairs:{object}:{field}");
     let exact = stair.cited.iter().all(|evidence| evidence.exact)
@@ -1386,16 +1397,16 @@ fn stairs_item(
 /// Whether the handrail along each side continues across every landing
 /// between consecutive flights of the stair, except where a break door
 /// stands: one search per side found broken or undecided.
-fn stair_continuity(
+pub(super) fn stair_continuity(
     call: &MeasuredCall,
     object: &ObjectId,
     context: &RuleContext<'_>,
-    stairs: &WalkingSurfaceServiceHandle,
+    (stairs, (path, doors_key)): (&WalkingSurfaceServiceHandle, (&str, &str)),
 ) -> Result<Vec<MeasuredMember>, PropertyResolutionError> {
-    let stair = stair_of(call, object, context)?;
+    let stair = stair_of(call, (object, path), context)?;
     let rails: Selected = Ok(selected(context, call, "rails")?);
     let landings: Option<Selected> = selection(context, call, "landing")?.map(Ok);
-    let doors: Option<Selected> = selection(context, call, "doors")?.map(Ok);
+    let doors: Option<Selected> = selection(context, call, doors_key)?.map(Ok);
     let reach = (
         length(call, "reach_across").ok_or(PropertyResolutionError::InvalidRequest)?,
         length(call, "reach_above").ok_or(PropertyResolutionError::InvalidRequest)?,
@@ -1436,7 +1447,7 @@ fn stair_clear_widths(
     context: &RuleContext<'_>,
     stairs: &WalkingSurfaceServiceHandle,
 ) -> Result<Vec<MeasuredMember>, PropertyResolutionError> {
-    let stair = stair_of(call, object, context)?;
+    let stair = stair_of(call, (object, "path"), context)?;
     let (candidates, _) = selected(context, call, "obstacles")?;
     let landings: Selected = Ok(selection(context, call, "landing")?.unwrap_or_default());
     let band = (

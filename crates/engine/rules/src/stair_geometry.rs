@@ -126,6 +126,39 @@ use crate::support::{Parameters, Unavailable, finding, invalid, si_quantity};
 /// measured as a straight flight's.
 pub struct StairGeometryCheck;
 
+/// The implementation `stair-geometry` ran before it became a template,
+/// kept as the reference the template is held to.
+pub struct StairGeometryReference;
+
+static STAIR: std::sync::LazyLock<axioval_engine::template::Template> =
+    std::sync::LazyLock::new(|| template::stair(StairGeometryReference.parameters()));
+static STAIR_PLANS: crate::templates::Plans = crate::templates::Plans::new();
+
+impl RuleCapability for StairGeometryCheck {
+    fn id(&self) -> &'static str {
+        template::STAIR
+    }
+
+    fn grades_deviation(&self) -> bool {
+        true
+    }
+
+    fn parameters(&self) -> Vec<ParameterDescriptor> {
+        STAIR.parameters.clone()
+    }
+
+    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
+        if crate::object_parameters::has_object_parameters(rule) {
+            return crate::object_parameters::per_object(self, context, rule);
+        }
+        crate::templates::run((&STAIR, &STAIR_PLANS), context, rule)
+    }
+
+    fn template(&self) -> Option<&axioval_engine::template::Template> {
+        Some(&STAIR)
+    }
+}
+
 /// Requires each selected ramp's sloped runs, measured from its body, to fit
 /// a slope limit, and its runs to share one slope.
 ///
@@ -1259,7 +1292,7 @@ impl<'a> StairConfig<'a> {
     }
 }
 
-impl RuleCapability for StairGeometryCheck {
+impl RuleCapability for StairGeometryReference {
     fn id(&self) -> &'static str {
         "axioval:capability.stair-geometry"
     }

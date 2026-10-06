@@ -72,7 +72,7 @@ pub enum MemberFieldKind {
 
 const FLIGHTS: &[&str] = &["walking-surface"];
 
-const WALKING_LINE_OFFSET: MeasuredParameter = MeasuredParameter {
+pub(super) const WALKING_LINE_OFFSET: MeasuredParameter = MeasuredParameter {
     key: "walking_line_offset",
     kind: MeasuredParameterKind::Length { minimum: 0.0 },
     required: false,

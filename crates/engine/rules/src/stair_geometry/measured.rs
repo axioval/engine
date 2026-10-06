@@ -669,7 +669,12 @@ impl MeasuredProvider for StairMeasures {
             ));
         }
         if name == "flight_rise" {
-            return Ok(measured(flight.rise(), flight.evidence().exact, locator));
+            // Cited as the service measured the flight.
+            return Ok(measured(
+                flight.rise(),
+                flight.evidence().exact,
+                flight.evidence().locator.clone(),
+            ));
         }
         let width = flight.width().ok_or_else(|| {
             PropertyResolutionError::Incomplete(format!(

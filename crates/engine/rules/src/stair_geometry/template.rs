@@ -10,10 +10,10 @@
 
 use axioval_engine::ParameterDescriptor;
 use axioval_engine::template::{
-    Allowance, Applies, Bound, Check, Choice, Decision, Effect, End, Every, Form, FormCheck, Group,
-    Groups, Guard, ItemCheck, ItemTest, ItemText, ItemUnit, Items, Judge, Magnitude, On, OnNull,
-    OpenItems, Operand, Passing, Range, Requirement, RowCheck, RowColumn, Rows, Service, Services,
-    Spread, Template, TemplateValue, Together, TogetherJudge, When,
+    Allowance, Applies, Bound, Check, Choice, Count, Decision, Effect, End, Every, Form, FormCheck,
+    Group, Groups, Guard, ItemCheck, ItemTest, ItemText, ItemUnit, Items, Judge, Least, Magnitude,
+    On, OnNull, OpenItems, Operand, Passing, Range, Requirement, RowCheck, RowColumn, Rows,
+    Service, Services, Spread, Template, TemplateValue, Together, TogetherJudge, When,
 };
 use axioval_ir::contract::Expression;
 
@@ -607,6 +607,7 @@ fn handrail_checks(
     );
     level.applies = applies(&["handrail_extension_minimum"], &[]);
     level.effects = downgrades(On::Fail);
+    level.related = Some("rails");
     let mut extension = test(
         Judge::Range(Box::new(Range {
             at_least: vec![parameter("handrail_extension_minimum")],
@@ -662,7 +663,7 @@ fn handrail_checks(
             gaps,
         )
     });
-    vec![stretch_check, heights_check, extensions_check, gaps_check]
+    vec![heights_check, extensions_check, gaps_check, stretch_check]
 }
 
 /// The clear width of each item of `list` against the minimum, an
@@ -765,8 +766,11 @@ fn walking_declaration(ramp: bool) -> Vec<Check> {
         Check::Kind {
             parameter: "landing_door_swing",
         },
-        Check::Together {
+        // A stair's break doors take the height alone.
+        Check::TogetherExcept {
             parameters: &["landing_doors", "landing_door_height"],
+            stated: &["landing_door_height", "handrail_break_doors"],
+            unstated: &["landing_doors", "landing_door_swing"],
             message: "`landing_doors` and `landing_door_height` are declared together",
         },
         Check::Requires {
@@ -928,6 +932,23 @@ fn handrail_declaration(ramp: bool) -> Vec<Check> {
             message: "`handrail_extension_minimum` exceeds `handrail_extension_maximum`",
         },
     ];
+    if !ramp {
+        checks.extend([
+            Check::Among {
+                parameter: "handrail_extension_from",
+                options: &["nosing", "riser"],
+                message: "`handrail_extension_from` `{value}` is unsupported; use `nosing` or \
+                          `riser`",
+            },
+            Check::ValueRequires {
+                parameter: "handrail_extension_from",
+                value: "riser",
+                with: &["handrail_extension_minimum", "handrail_extension_maximum"],
+                message: "`handrail_extension_from` needs `handrail_extension_minimum` or \
+                          `handrail_extension_maximum`",
+            },
+        ]);
+    }
     checks.extend([
         Check::Length {
             parameter: "handrail_gap_maximum",
@@ -1273,5 +1294,825 @@ pub(crate) fn ramp(parameters: Vec<ParameterDescriptor>) -> Template {
             related: None,
             checks,
         }],
+    }
+}
+
+/// The stair capability's id.
+pub(crate) const STAIR: &str = "axioval:capability.stair-geometry";
+
+/// Where a flight is walked, in every flight list.
+macro_rules! walked {
+    ($list:literal) => {
+        concat!($list, ";walking_line_offset=@walking_line_offset")
+    };
+}
+
+/// A whole stair's flights, in a whole-stair rule's lists.
+macro_rules! in_stair {
+    ($list:expr) => {
+        concat!(
+            $list,
+            ";stair=@anchor;path=@stair_path;flights=@stair_flights"
+        )
+    };
+}
+
+/// Every step's number within its range, in one outcome.
+fn every_step(
+    applies: Applies,
+    (value, present, name): (&'static str, Option<&'static str>, &'static str),
+    (minimum, maximum): (&'static str, &'static str),
+    times: f64,
+) -> FormCheck {
+    check(Items {
+        together: Some(Together {
+            present,
+            when: Vec::new(),
+            name,
+            judge: TogetherJudge::Every(Box::new(Every {
+                range: Range {
+                    at_least: vec![parameter(minimum)],
+                    at_most: vec![parameter(maximum)],
+                    allowance: slack(times, "scale"),
+                    null: OnNull::Judge,
+                    ..range(value, ItemUnit::Length)
+                },
+                zero: None,
+                item: every_item(value),
+                fail: "{failing}; {bound} required",
+                open: OpenItems::Grouped {
+                    straddling: "{items}, which straddles {bound}",
+                    unmeasured: "{items} not measured",
+                },
+                unmeasured_any: None,
+            })),
+        }),
+        refused: None,
+        ..items(applies, walked!("steps"))
+    })
+}
+
+fn every_item(value: &'static str) -> &'static str {
+    match value {
+        "riser" => "{name} is {riser:length}",
+        "going" => "{name} is {going:length}",
+        "nosing" => "{name} is {nosing:length}",
+        _ => "{name} is {step_length:length}",
+    }
+}
+
+/// The spread of the steps' risers or goings against a tolerance.
+fn step_spread(
+    tolerance: &'static [&'static str],
+    value: &'static str,
+    present: Option<&'static str>,
+    (fail, undecided): (&'static str, &'static str),
+) -> FormCheck {
+    check(Items {
+        together: Some(Together {
+            present,
+            when: Vec::new(),
+            name: "",
+            judge: TogetherJudge::Spread(Box::new(Spread {
+                value,
+                unit: ItemUnit::Length,
+                tolerance: Operand::Parameter(tolerance[0]),
+                allowance: slack(2.0, "scale"),
+                fail,
+                undecided,
+            })),
+        }),
+        refused: None,
+        ..items(applies(tolerance, &[]), walked!("steps"))
+    })
+}
+
+/// Every winder's angle against the rule's bounds.
+fn winders() -> Vec<FormCheck> {
+    let maximum = check(Items {
+        together: Some(Together {
+            present: Some("winder_angle"),
+            when: Vec::new(),
+            name: "winder angle {index} of {count}",
+            judge: TogetherJudge::Every(Box::new(Every {
+                range: Range {
+                    at_most: vec![parameter("winder_angle_maximum")],
+                    allowance: Allowance::Fixed { value: 1e-9 },
+                    null: OnNull::Judge,
+                    ..range("winder_angle", ItemUnit::Degrees)
+                },
+                zero: None,
+                item: "{name} is {winder_angle:degrees}",
+                fail: "{failing}; {bound} required",
+                open: OpenItems::Grouped {
+                    straddling: "{items}, which straddles {bound}",
+                    unmeasured: "{items} not measured",
+                },
+                unmeasured_any: None,
+            })),
+        }),
+        refused: None,
+        ..items(applies(&["winder_angle_maximum"], &[]), walked!("steps"))
+    });
+    // A straight flight has no winder to judge; a straight tread is none.
+    let minimum = check(Items {
+        together: Some(Together {
+            present: Some("winder_angle"),
+            when: vec![When::Field {
+                field: "turning",
+                value: true,
+            }],
+            name: "winder angle {index} of {count}",
+            judge: TogetherJudge::Every(Box::new(Every {
+                range: Range {
+                    at_least: vec![parameter("winder_angle_minimum")],
+                    allowance: Allowance::Fixed { value: 1e-9 },
+                    null: OnNull::Judge,
+                    ..range("winder_angle", ItemUnit::Degrees)
+                },
+                zero: Some(1e-9),
+                item: "{name} is {winder_angle:degrees}",
+                fail: "{failing}; at least {winder_angle_minimum:degrees} required for a winder",
+                open: OpenItems::Each {
+                    straddling: "{item}, which may be a straight tread or straddles at least \
+                                 {winder_angle_minimum:degrees}",
+                    unmeasured: "{name} not measured",
+                },
+                unmeasured_any: None,
+            })),
+        }),
+        refused: None,
+        ..items(applies(&["winder_angle_minimum"], &[]), walked!("steps"))
+    });
+    vec![maximum, minimum]
+}
+
+/// The checks of one flight; `whole` when it is judged as a part of a
+/// whole stair, whose intermediate landings its tactile strips and clear
+/// widths know.
+#[allow(clippy::too_many_lines)]
+fn flight_checks(whole: bool) -> Vec<FormCheck> {
+    let mut checks = vec![
+        every_step(
+            applies(&[], &["riser_minimum", "riser_maximum"]),
+            ("riser", None, "riser {index} of {count}"),
+            ("riser_minimum", "riser_maximum"),
+            1.0,
+        ),
+        every_step(
+            applies(&[], &["going_minimum", "going_maximum"]),
+            ("going", Some("going"), "going {index} of {count}"),
+            ("going_minimum", "going_maximum"),
+            1.0,
+        ),
+        every_step(
+            applies(&[], &["nosing_minimum", "nosing_maximum"]),
+            ("nosing", Some("nosing"), "nosing {index} of {count}"),
+            ("nosing_minimum", "nosing_maximum"),
+            1.0,
+        ),
+        every_step(
+            applies(&[], &["step_length_minimum", "step_length_maximum"]),
+            (
+                "step_length",
+                Some("step_length"),
+                "step length (2r + g) {index} of {count}",
+            ),
+            ("step_length_minimum", "step_length_maximum"),
+            3.0,
+        ),
+        check(Items {
+            together: Some(Together {
+                present: None,
+                when: Vec::new(),
+                name: "",
+                judge: TogetherJudge::Count(Box::new(Count {
+                    at_least: vec![parameter("minimum_risers")],
+                    at_most: vec![parameter("maximum_risers")],
+                    fail: "the flight has {count} risers; {bound} allowed",
+                })),
+            }),
+            refused: None,
+            ..items(
+                applies(&[], &["minimum_risers", "maximum_risers"]),
+                walked!("steps"),
+            )
+        }),
+    ];
+    let mut rise = test(
+        Judge::Range(Box::new(Range {
+            at_most: vec![parameter("maximum_rise")],
+            allowance: slack(1.0, "scale"),
+            ..range("rise", ItemUnit::Length)
+        })),
+        "the flight rises {rise:length}; at most {maximum_rise:length} allowed",
+        "the flight rises {rise:length}, which straddles at most {maximum_rise:length}",
+    );
+    rise.applies = applies(&["maximum_rise"], &[]);
+    checks.push(check(Items {
+        checks: vec![ItemCheck::Test(Box::new(rise))],
+        refused: None,
+        ..items(applies(&["maximum_rise"], &[]), walked!("flights"))
+    }));
+    checks.extend([
+        step_spread(
+            &["riser_tolerance"],
+            "riser",
+            None,
+            (
+                "risers differ by {spread} ({values}); at most {tolerance} allowed",
+                "risers differ by {spread} ({values}), which straddles the tolerance {tolerance}",
+            ),
+        ),
+        step_spread(
+            &["going_tolerance"],
+            "going",
+            Some("going"),
+            (
+                "goings differ by {spread} ({values}); at most {tolerance} allowed",
+                "goings differ by {spread} ({values}), which straddles the tolerance {tolerance}",
+            ),
+        ),
+    ]);
+    checks.extend(winders());
+    checks.push(check(Items {
+        together: Some(Together {
+            present: None,
+            when: Vec::new(),
+            name: "riser {index} of {count}",
+            judge: TogetherJudge::Truths(Box::new(axioval_engine::template::Truths {
+                value: "open_riser",
+                finding: true,
+                item: "{name} is open",
+                fail: "{failing}; closed risers required",
+                undecided: "whether {items} is closed is not measured",
+                joiner: " or ",
+            })),
+        }),
+        refused: None,
+        ..items(applies(&["forbid_open_risers"], &[]), walked!("steps"))
+    }));
+    checks.push(clearance(
+        (&["minimum_headroom"], "headroom_obstacles"),
+        "clearances;of=flight;side=above;obstacles=@headroom_obstacles",
+        (
+            "headroom above the walking surface is {clearance:length} under {governing}; at \
+             least {minimum_headroom:length} required",
+            "headroom above the walking surface is {clearance:length} under {governing}, which \
+             straddles at least {minimum_headroom:length} required",
+            "nothing selected stands above the walking surface; an obstacle the selection could \
+             not decide may lower it",
+            "headroom above the walking surface is {clearance:length} under {governing}; an \
+             obstacle the selection could not decide may lower it",
+        ),
+    ));
+    let width = test(
+        Judge::Range(Box::new(Range {
+            at_least: vec![parameter("width_minimum")],
+            at_most: vec![parameter("width_maximum")],
+            allowance: slack(1.0, "scale"),
+            null: OnNull::Open(
+                "the flight's width is not measured: a tread fills no rectangle along the \
+                 direction it climbs, as a winder never does",
+            ),
+            ..range("width", ItemUnit::Length)
+        })),
+        "the flight is {width:length} wide; {bound} required",
+        "the flight is {width:length} wide, which straddles {bound}",
+    );
+    checks.push(check(Items {
+        checks: vec![ItemCheck::Test(Box::new(width))],
+        refused: None,
+        ..items(
+            applies(&[], &["width_minimum", "width_maximum"]),
+            walked!("flights"),
+        )
+    }));
+    checks.extend([
+        landings(
+            walked!("landings;of=flight;landing=@landing_objects"),
+            &[
+                "landing_depth_minimum",
+                "landing_width_minimum",
+                "landing_at_least_walking_width",
+            ],
+            &[
+                "landing_depth_minimum",
+                "landing_width_minimum",
+                "landing_at_least_walking_width",
+                "landings_required",
+                "landing_doors",
+                "handrail_break_doors",
+            ],
+        ),
+        searched(
+            applies(&["landing_objects", "landing_doors"], &[]),
+            walked!(
+                "landing_doors;of=flight;landing=@landing_objects;doors=@landing_doors;\
+                 height=@landing_door_height"
+            ),
+        ),
+        searched(
+            applies(
+                &["landing_objects", "landing_doors", "landing_door_swing"],
+                &[],
+            ),
+            walked!(
+                "landing_swings;of=flight;landing=@landing_objects;doors=@landing_doors;\
+                 height=@landing_door_height"
+            ),
+        ),
+        searched(
+            applies(&["end_space_depth"], &[]),
+            walked!(
+                "end_spaces;of=flight;obstacles=@end_space_obstacles;depth=@end_space_depth;\
+                 width=@end_space_width;height=@end_space_height"
+            ),
+        ),
+    ]);
+    // The tactile strips: an end on a landing between two of a stair's
+    // flights only where the rule asks for those.
+    let strip = |when: Vec<When>| {
+        let mut found = test(
+            Judge::Truth {
+                value: "found",
+                finding: true,
+            },
+            "{finding}",
+            "{why}",
+        );
+        found.when = when;
+        found.related = Some("objects");
+        ItemCheck::Test(Box::new(found))
+    };
+    checks.push(check(Items {
+        checks: vec![
+            strip(vec![When::Field {
+                field: "intermediate",
+                value: false,
+            }]),
+            strip(vec![
+                When::Field {
+                    field: "intermediate",
+                    value: true,
+                },
+                When::Declared {
+                    parameter: "tactile_on_intermediate_landings",
+                },
+            ]),
+        ],
+        ..items(
+            applies(&["tactile_objects"], &[]),
+            if whole {
+                in_stair!(walked!(
+                    "tactile_strips;tactiles=@tactile_objects;offset=@tactile_offset;\
+                     depth=@tactile_depth"
+                ))
+            } else {
+                walked!(
+                    "tactile_strips;tactiles=@tactile_objects;offset=@tactile_offset;\
+                     depth=@tactile_depth"
+                )
+            },
+        )
+    }));
+    checks.push(clearance(
+        (&["minimum_headroom_below"], "headroom_below_spaces"),
+        "clearances;of=flight;side=below;obstacles=@headroom_below_spaces",
+        (
+            "headroom below the {noun} is {clearance:length} over the floor of {governing}; at \
+             least {minimum_headroom_below:length} required",
+            "headroom below the {noun} is {clearance:length} over the floor of {governing}, \
+             which straddles at least {minimum_headroom_below:length} required",
+            "the {noun} stands above no selected space's floor; a space the selection could not \
+             decide may lower it",
+            "headroom below the {noun} is {clearance:length} over the floor of {governing}; a \
+             space the selection could not decide may lower it",
+        ),
+    ));
+    checks.push(clear_widths(
+        &["clear_width_minimum"],
+        walked!(
+            "clear_widths;of=flight;obstacles=@clear_width_obstacles;\
+             band_from=@clear_width_band_from;band_to=@clear_width_band_to;ends=none"
+        ),
+    ));
+    checks.push(clear_widths(
+        &["landing_clear_width_minimum"],
+        if whole {
+            in_stair!(walked!(
+                "clear_widths;of=flight;obstacles=@clear_width_obstacles;\
+                 band_from=@clear_width_band_from;band_to=@clear_width_band_to;stretch=no;\
+                 landing=@landing_objects;ends=intermediate"
+            ))
+        } else {
+            walked!(
+                "clear_widths;of=flight;obstacles=@clear_width_obstacles;\
+                 band_from=@clear_width_band_from;band_to=@clear_width_band_to;stretch=no;\
+                 landing=@landing_objects"
+            )
+        },
+    ));
+    if !whole {
+        checks.push(least_width(
+            walked!(
+                "clear_widths;of=flight;obstacles=@clear_width_obstacles;\
+                 band_from=@clear_width_band_from;band_to=@clear_width_band_to;\
+                 landing=@landing_objects"
+            ),
+            "the flight and its landings",
+            ("{label}", &["governing"]),
+        ));
+    }
+    checks.extend(handrail_checks(
+        concat!(
+            rails!("handrail_stretches", "flight"),
+            ";walking_line_offset=@walking_line_offset;from=@handrail_extension_from"
+        ),
+        concat!(
+            rails!("rail_heights", "flight"),
+            ";walking_line_offset=@walking_line_offset;from=@handrail_extension_from"
+        ),
+        concat!(
+            rails!("rail_extensions", "flight"),
+            ";walking_line_offset=@walking_line_offset;from=@handrail_extension_from"
+        ),
+        concat!(
+            rails!("rail_gaps", "flight"),
+            ";walking_line_offset=@walking_line_offset;from=@handrail_extension_from"
+        ),
+    ));
+    checks
+}
+
+/// The least clear width of `what` at least the total minimum.
+fn least_width(
+    list: &'static str,
+    what: &'static str,
+    (at, related): (&'static str, &'static [&'static str]),
+) -> FormCheck {
+    let (fail, undecided, pending_message, partial, unmeasured) = match what {
+        "the flight and its landings" => (
+            "the least clear width of the flight and its landings is {least}, at {at}; at least \
+             {total_clear_width_minimum:length} required",
+            "the least clear width of the flight and its landings is {least}, at {at}, which \
+             straddles at least {total_clear_width_minimum:length} required",
+            "the least clear width of the flight and its landings is {least}, at {at}; an \
+             obstacle the selection could not decide may narrow it",
+            "the least clear width of the flight and its landings is {least}, at {at}, but \
+             {some} may be narrower: {unknown}",
+            "the least clear width of the flight and its landings is not measured: {unknown}",
+        ),
+        _ => (
+            "the least clear width of the stair's flights and the landings between them is \
+             {least}, at {at}; at least {total_clear_width_minimum:length} required",
+            "the least clear width of the stair's flights and the landings between them is \
+             {least}, at {at}, which straddles at least {total_clear_width_minimum:length} \
+             required",
+            "the least clear width of the stair's flights and the landings between them is \
+             {least}, at {at}; an obstacle the selection could not decide may narrow it",
+            "the least clear width of the stair's flights and the landings between them is \
+             {least}, at {at}, but {some} may be narrower: {unknown}",
+            "the least clear width of the stair's flights and the landings between them is not \
+             measured: {unknown}",
+        ),
+    };
+    check(Items {
+        together: Some(Together {
+            present: None,
+            when: Vec::new(),
+            name: "",
+            judge: TogetherJudge::Least(Box::new(Least {
+                value: "width",
+                unit: ItemUnit::Length,
+                at_least: parameter("total_clear_width_minimum"),
+                times: 1.0,
+                at,
+                related: related.to_vec(),
+                fail,
+                undecided,
+                pending: pending(
+                    vec![undecided_selection("clear_width_obstacles")],
+                    On::Pass,
+                    pending_message,
+                ),
+                partial,
+                unmeasured,
+                missing: None,
+            })),
+        }),
+        ..items(applies(&["total_clear_width_minimum"], &[]), list)
+    })
+}
+
+fn undecided_selection(selector: &'static str) -> When {
+    undecided(selector)
+}
+
+/// The declaration checks of `stair-geometry`, in the order the
+/// capability read them.
+#[allow(clippy::too_many_lines)]
+fn stair_declaration() -> Vec<Check> {
+    let range = |name: &'static [&'static str; 2], message: &'static str| {
+        [
+            Check::Length { parameter: name[0] },
+            Check::Length { parameter: name[1] },
+            Check::Ordered {
+                low: name[0],
+                high: name[1],
+                message,
+            },
+        ]
+    };
+    let mut checks = vec![
+        Check::Length {
+            parameter: "walking_line_offset",
+        },
+        Check::Positive {
+            parameter: "walking_line_offset",
+            message: Some("`walking_line_offset` is zero"),
+        },
+        Check::Angle {
+            parameter: "winder_angle_maximum",
+        },
+        Check::Angle {
+            parameter: "winder_angle_minimum",
+        },
+        Check::Kind {
+            parameter: "forbid_open_risers",
+        },
+    ];
+    checks.extend(range(
+        &["riser_minimum", "riser_maximum"],
+        "`riser_minimum` exceeds `riser_maximum`",
+    ));
+    checks.extend(range(
+        &["going_minimum", "going_maximum"],
+        "`going_minimum` exceeds `going_maximum`",
+    ));
+    checks.extend(range(
+        &["step_length_minimum", "step_length_maximum"],
+        "`step_length_minimum` exceeds `step_length_maximum`",
+    ));
+    checks.extend(range(
+        &["nosing_minimum", "nosing_maximum"],
+        "`nosing_minimum` exceeds `nosing_maximum`",
+    ));
+    checks.extend([
+        Check::Count {
+            parameter: "minimum_risers",
+        },
+        Check::Count {
+            parameter: "maximum_risers",
+        },
+        Check::Length {
+            parameter: "maximum_rise",
+        },
+        Check::Length {
+            parameter: "riser_tolerance",
+        },
+        Check::Length {
+            parameter: "going_tolerance",
+        },
+        Check::Length {
+            parameter: "minimum_headroom",
+        },
+        Check::Kind {
+            parameter: "headroom_obstacles",
+        },
+        Check::Together {
+            parameters: &["minimum_headroom", "headroom_obstacles"],
+            message: "`minimum_headroom` and `headroom_obstacles` are declared together",
+        },
+    ]);
+    checks.extend(walking_declaration(false));
+    let tactile = "`tactile_objects`, `tactile_offset` and a positive `tactile_depth` are \
+                   declared together, and `tactile_on_intermediate_landings` only with them";
+    checks.extend([
+        Check::Kind {
+            parameter: "tactile_objects",
+        },
+        Check::Length {
+            parameter: "tactile_offset",
+        },
+        Check::Length {
+            parameter: "tactile_depth",
+        },
+        Check::Kind {
+            parameter: "tactile_on_intermediate_landings",
+        },
+        Check::Together {
+            parameters: &["tactile_objects", "tactile_offset", "tactile_depth"],
+            message: tactile,
+        },
+        Check::Positive {
+            parameter: "tactile_depth",
+            message: Some(tactile),
+        },
+        Check::Requires {
+            parameter: "tactile_on_intermediate_landings",
+            with: &["tactile_objects"],
+            message: tactile,
+        },
+        // The whole-stair mode.
+        Check::Kind {
+            parameter: "stair_path",
+        },
+        Check::Kind {
+            parameter: "stair_flights",
+        },
+        Check::Length {
+            parameter: "maximum_total_rise",
+        },
+        Check::AnyRequires {
+            any: &[
+                "stair_flights",
+                "maximum_total_rise",
+                "handrail_continuous_across_landings",
+                "handrail_break_doors",
+            ],
+            with: "stair_path",
+            message: "`stair_flights`, `maximum_total_rise`, \
+                      `handrail_continuous_across_landings` and `handrail_break_doors` need \
+                      `stair_path`",
+        },
+        Check::Requires {
+            parameter: "stair_path",
+            with: &["stair_flights"],
+            message: "`stair_path` needs `stair_flights`",
+        },
+        Check::RequiresDeclared {
+            parameter: "handrail_break_doors",
+            with: &["handrail_continuous_across_landings"],
+            message: "`handrail_break_doors` needs `handrail_continuous_across_landings`",
+        },
+        Check::Requires {
+            parameter: "handrail_break_doors",
+            with: &["landing_objects"],
+            message: "`handrail_break_doors` needs `landing_objects`",
+        },
+        Check::Requires {
+            parameter: "handrail_break_doors",
+            with: &["landing_door_height"],
+            message: "`handrail_break_doors` needs a positive `landing_door_height`",
+        },
+        Check::Path {
+            parameter: "stair_path",
+        },
+        Check::Ordered {
+            low: "minimum_risers",
+            high: "maximum_risers",
+            message: "`minimum_risers` exceeds `maximum_risers`",
+        },
+        Check::Ordered {
+            low: "winder_angle_minimum",
+            high: "winder_angle_maximum",
+            message: "`winder_angle_minimum` exceeds `winder_angle_maximum`",
+        },
+        Check::Declares {
+            parameters: &[
+                "riser_minimum",
+                "riser_maximum",
+                "going_minimum",
+                "going_maximum",
+                "step_length_minimum",
+                "step_length_maximum",
+                "nosing_minimum",
+                "nosing_maximum",
+                "minimum_risers",
+                "maximum_risers",
+                "maximum_rise",
+                "riser_tolerance",
+                "going_tolerance",
+                "winder_angle_maximum",
+                "winder_angle_minimum",
+                "forbid_open_risers",
+                "minimum_headroom",
+                "width_minimum",
+                "width_maximum",
+                "landing_objects",
+                "minimum_headroom_below",
+                "handrail_objects",
+                "end_space_depth",
+                "clear_width_minimum",
+                "landing_clear_width_minimum",
+                "total_clear_width_minimum",
+                "maximum_total_rise",
+                "tactile_objects",
+            ],
+            message: "declare at least one stair check",
+        },
+    ]);
+    checks
+}
+
+/// `stair-geometry`, rebuilt as a composition with its outside contract
+/// kept: a whole-stair form (with `stair_path`) judging each stair's
+/// flights as parts and the stair itself, and a form judging each flight.
+#[allow(clippy::too_many_lines)]
+pub(crate) fn stair(parameters: Vec<ParameterDescriptor>) -> Template {
+    let flight = || vec![measured("flight", walked!("flight_rise"))];
+    let mut rise = test(
+        Judge::Range(Box::new(Range {
+            at_most: vec![parameter("maximum_total_rise")],
+            allowance: slack(1.0, "scale"),
+            ..range("rise", ItemUnit::Length)
+        })),
+        "the stair rises {rise:length} from its lowest flight's base to its highest flight's \
+         top; at most {maximum_total_rise:length} allowed",
+        "the stair rises {rise:length} from its lowest flight's base to its highest flight's \
+         top, which straddles at most {maximum_total_rise:length} allowed",
+    );
+    rise.effects = vec![pending(
+        vec![When::Field {
+            field: "complete",
+            value: false,
+        }],
+        On::Pass,
+        "the stair rises {rise:length} from its lowest flight's base to its highest flight's \
+         top, but {missing}",
+    )];
+    let stair_checks = vec![
+        check(Items {
+            checks: vec![ItemCheck::Test(Box::new(rise))],
+            ..items(
+                applies(&["maximum_total_rise"], &[]),
+                walked!("stairs;path=@stair_path;flights=@stair_flights"),
+            )
+        }),
+        searched(
+            applies(
+                &["handrail_objects", "handrail_continuous_across_landings"],
+                &[],
+            ),
+            walked!(
+                "stair_continuity;path=@stair_path;flights=@stair_flights;\
+                 rails=@handrail_objects;reach_across=@handrail_reach_across;\
+                 reach_above=@handrail_reach_above;level_over=@handrail_extension_minimum;\
+                 gap=@handrail_gap_maximum;landing=@landing_objects;\
+                 doors=@handrail_break_doors;height=@landing_door_height"
+            ),
+        ),
+        least_width(
+            walked!(
+                "stair_clear_widths;path=@stair_path;flights=@stair_flights;\
+                 obstacles=@clear_width_obstacles;band_from=@clear_width_band_from;\
+                 band_to=@clear_width_band_to;landing=@landing_objects"
+            ),
+            "the stair's flights and the landings between them",
+            ("{owned}", &["governing", "owner"]),
+        ),
+    ];
+    let form = |when: &'static [&'static str], values, decision, checks| Form {
+        when,
+        values,
+        decision,
+        fail: "",
+        undecided: "",
+        members: None,
+        table: None,
+        scope: None,
+        derived: Vec::new(),
+        related: None,
+        checks,
+    };
+    Template {
+        id: STAIR,
+        parameters,
+        grades: true,
+        name: "stair-geometry",
+        refusals: axioval_engine::template::Refusals::Rule,
+        defaults: Vec::new(),
+        declaration: stair_declaration(),
+        services: Some(Services {
+            needs: vec![Service::WalkingSurface],
+            message: "walking-surface service is not registered",
+        }),
+        texts: Vec::new(),
+        forms: vec![
+            form(
+                &["stair_path"],
+                Vec::new(),
+                Decision::Parts(Box::new(axioval_engine::template::Parts {
+                    selector: "stair_flights",
+                    path: "stair_path",
+                    values: flight(),
+                    checks: flight_checks(true),
+                })),
+                stair_checks,
+            ),
+            form(
+                &[],
+                flight(),
+                // The flight is measured: its checks judge it.
+                Decision::Within {
+                    value: "flight",
+                    minimum: None,
+                    maximum: None,
+                    rounding: Vec::new(),
+                },
+                flight_checks(false),
+            ),
+        ],
     }
 }

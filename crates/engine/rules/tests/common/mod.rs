@@ -282,6 +282,51 @@ impl Model {
     /// Evaluates as [`Self::evaluate_with`] does, the measured set answered
     /// through the registered measured values as a run answers it.
     #[allow(dead_code)]
+    /// [`Self::evaluate_measured`] with the services `extra` registers once,
+    /// shared by what the measured values and the capability read.
+    pub fn evaluate_measured_once(
+        self,
+        capability: &dyn RuleCapability,
+        rule: &CompiledRule,
+        extra: impl FnOnce(&mut ServiceRegistry),
+    ) -> CapabilityEvaluation {
+        let mut registered = ServiceRegistry::new();
+        extra(&mut registered);
+        let project = Project::new(self.objects.clone()).unwrap();
+        let shared = Arc::new(self);
+        let registry =
+            axioval_rules::register_builtins(axioval_engine::CapabilityRegistry::new()).unwrap();
+        let mut inner = registered.clone();
+        inner
+            .register(PropertyResolutionServiceHandle::new(shared.clone()))
+            .unwrap();
+        inner
+            .register(RelationshipSelectionServiceHandle::new(shared.clone()))
+            .unwrap();
+        registry.install_measured(&mut inner, &project);
+        let values = axioval_engine::MeasuredValues::of(&inner, &project);
+        let mut services = registered;
+        services
+            .register(PropertyResolutionServiceHandle::new(Arc::new(Measuring {
+                model: shared.clone(),
+                services: inner,
+                project: project.clone(),
+            })))
+            .unwrap();
+        services
+            .register(RelationshipSelectionServiceHandle::new(shared))
+            .unwrap();
+        registry.install_measured(&mut services, &project);
+        services.register(values).unwrap();
+        capability.evaluate(
+            &RuleContext {
+                project: &project,
+                services: &services,
+            },
+            rule,
+        )
+    }
+
     pub fn evaluate_measured(
         self,
         capability: &dyn RuleCapability,

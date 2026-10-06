@@ -572,11 +572,33 @@ pub fn evaluate(
     root: &str,
     context: &mut dyn ExpressionContext,
 ) -> Evaluation {
+    evaluate_with(expression, root, context, true)
+}
+
+/// [`evaluate`] without the explanation: the same value and reads, an
+/// empty [`Evaluation::trace`]. For a caller that never explains a verdict
+/// from the trace, such as a template reading its values, so no step is
+/// rendered as text.
+pub fn evaluate_untraced(
+    expression: &Expression,
+    root: &str,
+    context: &mut dyn ExpressionContext,
+) -> Evaluation {
+    evaluate_with(expression, root, context, false)
+}
+
+fn evaluate_with(
+    expression: &Expression,
+    root: &str,
+    context: &mut dyn ExpressionContext,
+    traced: bool,
+) -> Evaluation {
     let mut evaluator = Evaluator {
         context,
         reads: Vec::new(),
         labelled: BTreeMap::new(),
         trace: Vec::new(),
+        traced,
     };
     let outcome = evaluator.eval(expression, root);
     Evaluation {
@@ -594,6 +616,8 @@ struct Evaluator<'c> {
     reads: Vec<Read>,
     labelled: BTreeMap<String, Value>,
     trace: Vec<ExplanationEntry>,
+    /// Whether each step is recorded in `trace`.
+    traced: bool,
 }
 
 fn fail(expression: &Expression, path: &str, reason: Reason) -> NotEvaluated {
@@ -627,6 +651,9 @@ impl Evaluator<'_> {
             self.labelled
                 .entry(label.to_owned())
                 .or_insert_with(|| value.clone());
+        }
+        if !self.traced {
+            return outcome;
         }
         let (value, not_evaluated) = match (&outcome, expression) {
             // A value restated in a unit is shown in it.

@@ -16,8 +16,8 @@
 //! `boundary_area;kind=<kind>[;plane=<metres>]`. `level_height` is stated by
 //! the source, not measured, and is answered by the host's resolver.
 
-use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::sync::{Arc, LazyLock, Mutex};
 
 use axioval_ir::{
     Evidence, MEASURED_AREA, MEASURED_BOTTOM, MEASURED_BOTTOM_ABOVE_LEVEL, MEASURED_BOUNDARY_AREA,
@@ -257,6 +257,88 @@ pub(crate) fn bounds(
         .map_err(|_| PropertyResolutionError::InvalidValue)
 }
 
+/// One measured value of one object as the run's resolver answers a
+/// request for it, without the request binding a property resolution
+/// carries: the same value and evidence ([`MeasuredValues`]).
+#[derive(Clone, Debug, PartialEq)]
+pub enum MeasuredRead {
+    /// The value, and the evidence it cites.
+    Value(PropertyValue, Option<Evidence>),
+    /// No value, known exactly, and the evidence of its absence.
+    Absent(Evidence),
+}
+
+/// The run's measured values, read directly: what the run's resolver
+/// answers for a request in the measured set (`axioval:measured`), the very
+/// same measurement, value and evidence, for many objects at once, without
+/// building a request and a resolution per object.
+///
+/// Every run installs one beside its resolver, sharing its measurements
+/// (and the run's [`MeasuredMemo`](provider::MeasuredMemo)). A template
+/// reads a value that is one measured read through it; anything else goes
+/// through property resolution.
+#[derive(Clone)]
+pub struct MeasuredValues(Measures);
+
+impl MeasuredValues {
+    /// The measured values of `project`'s objects as `services` measure
+    /// them, `level_height` stated by the resolver `services` hold: what
+    /// [`measured_value`] reads, for a host or a test reading values outside
+    /// a run as a run reads them. A run installs its own.
+    #[must_use]
+    pub fn of(services: &ServiceRegistry, project: &Project) -> Self {
+        let host = services.get::<PropertyResolutionServiceHandle>();
+        Self(Measures::of(services, host, project))
+    }
+
+    /// The values `measures` answer: the run's resolver's own.
+    pub(crate) fn sharing(measures: &Measures) -> Self {
+        Self(measures.clone())
+    }
+
+    /// The measured value `name` (with its parameters, as a request in
+    /// the measured set names it) of each of `objects`, one answer per
+    /// object in order: each exactly the value and evidence the run's
+    /// resolver answers for that request, or its refusal. A provider
+    /// measures every object through its batch entry point.
+    #[must_use]
+    pub fn read_batch(
+        &self,
+        name: &str,
+        objects: &[&ObjectId],
+    ) -> Vec<Result<MeasuredRead, PropertyResolutionError>> {
+        self.0.read_batch(name, objects)
+    }
+}
+
+/// The answer a provider's measurement is. The provider states
+/// exactness by the variant it answers; a `Value` states none, so it is
+/// never exact, a point included.
+fn answer_of(measurement: provider::Measurement) -> Answer {
+    match measurement {
+        provider::Measurement::Value {
+            lower,
+            upper,
+            dimension,
+            locator,
+        } => Answer::Value(lower, upper, dimension, locator, false),
+        provider::Measurement::Rounded {
+            lower,
+            upper,
+            dimension,
+            locator,
+        } => Answer::Value(lower, upper, dimension, locator, true),
+        provider::Measurement::Cited {
+            lower,
+            upper,
+            dimension,
+            locator,
+            exact,
+        } => Answer::Value(lower, upper, dimension, locator, exact),
+        provider::Measurement::Absent { locator } => Answer::Absent(locator),
+    }
+}
+
 /// A measured answer before it becomes a property.
 enum Answer {
     /// A value sure to lie in `[lower, upper]`, of a dimension (`None` for a
@@ -266,6 +348,16 @@ enum Answer {
     Value(f64, f64, Option<QuantityDimension>, String, bool),
     Absent(String),
 }
+
+/// Every measured name parsed in this process, as requested. Parsing is a
+/// pure function of the name (the registry's tables and the path grammar),
+/// so a run reading one name of many objects, and every later run, parses
+/// it once; a name that does not parse is not kept. Cleared when it holds
+/// [`PARSED_LIMIT`] names, so a long-lived host never grows it unbounded.
+static PARSED: LazyLock<Mutex<HashMap<String, Arc<MeasuredName>>>> = LazyLock::new(Mutex::default);
+
+/// How many parsed names [`PARSED`] keeps at most.
+const PARSED_LIMIT: usize = 4096;
 
 /// The geometry services a run measures with, as the host registered them,
 /// and the project's objects a path may reach.
@@ -332,40 +424,95 @@ impl Measures {
         }
     }
 
+    /// `name` parsed, once per process ([`PARSED`]).
+    fn parsed(name: &str) -> Result<Arc<MeasuredName>, PropertyResolutionError> {
+        if let Ok(parsed) = PARSED.lock()
+            && let Some(known) = parsed.get(name)
+        {
+            return Ok(known.clone());
+        }
+        let known = Arc::new(parse(name).map_err(|_| PropertyResolutionError::InvalidRequest)?);
+        if let Ok(mut parsed) = PARSED.lock() {
+            if parsed.len() >= PARSED_LIMIT {
+                parsed.clear();
+            }
+            parsed.insert(name.to_owned(), known.clone());
+        }
+        Ok(known)
+    }
+
     /// Answers one request in the measured set.
     pub(crate) fn resolve(
         &self,
         request: &PropertyRequest,
     ) -> Result<PropertyResolution, PropertyResolutionError> {
-        let name =
-            parse(request.property()).map_err(|_| PropertyResolutionError::InvalidRequest)?;
-        if name == MeasuredName::Plain(MEASURED_LEVEL_HEIGHT) {
-            // Stated by the source, not measured.
-            return match &self.host {
-                Some(host) => host.resolve(request),
-                None => Err(PropertyResolutionError::MissingService(
-                    "no property-resolution service states `level_height`".into(),
-                )),
-            };
+        let name = Self::parsed(request.property())?;
+        if *name == MeasuredName::Plain(MEASURED_LEVEL_HEIGHT) {
+            return self.level_height(request);
         }
-        let object = request.object_id();
+        Self::resolution(request, self.measure(&name, request.object_id()))
+    }
+
+    /// `level_height`, stated by the source, not measured.
+    fn level_height(
+        &self,
+        request: &PropertyRequest,
+    ) -> Result<PropertyResolution, PropertyResolutionError> {
+        match &self.host {
+            Some(host) => host.resolve(request),
+            None => Err(PropertyResolutionError::MissingService(
+                "no property-resolution service states `level_height`".into(),
+            )),
+        }
+    }
+
+    /// The answer to `request` as a property, or its stated absence.
+    fn resolution(
+        request: &PropertyRequest,
+        answer: Result<Answer, PropertyResolutionError>,
+    ) -> Result<PropertyResolution, PropertyResolutionError> {
+        match Self::read(request.object_id(), request.property(), answer)? {
+            MeasuredRead::Absent(evidence) => Ok(PropertyResolution::Absent(
+                CompletePropertyAbsenceEvidence::try_new(request.clone(), evidence)?,
+            )),
+            MeasuredRead::Value(value, evidence) => {
+                let mut property = Property::new(MEASURED_SET, request.property(), value)
+                    .map_err(|_| PropertyResolutionError::InvalidRequest)?;
+                property.evidence = evidence;
+                Ok(PropertyResolution::Present(ResolvedProperty::try_new(
+                    request.clone(),
+                    property,
+                )?))
+            }
+        }
+    }
+
+    /// The answer about `object` to a request for the measured value
+    /// `name`: its value and evidence, or its stated absence.
+    fn read(
+        object: &ObjectId,
+        name: &str,
+        answer: Result<Answer, PropertyResolutionError>,
+    ) -> Result<MeasuredRead, PropertyResolutionError> {
         let locate = |locator: String| {
-            format!(
-                "{MEASURED_SET}/{}: {locator}",
-                request.property().to_ascii_lowercase()
-            )
+            let mut located =
+                String::with_capacity(MEASURED_SET.len() + name.len() + locator.len() + 3);
+            located.push_str(MEASURED_SET);
+            located.push('/');
+            located.extend(name.chars().map(|letter| letter.to_ascii_lowercase()));
+            located.push_str(": ");
+            located.push_str(&locator);
+            located
         };
-        let (lower, upper, dimension, locator, exact) = match self.measure(&name, object)? {
+        let (lower, upper, dimension, locator, exact) = match answer? {
             Answer::Value(lower, upper, dimension, locator, exact) => {
                 (lower, upper, dimension, locator, exact)
             }
             Answer::Absent(locator) => {
-                return Ok(PropertyResolution::Absent(
-                    CompletePropertyAbsenceEvidence::try_new(
-                        request.clone(),
-                        Evidence::exact(object.source.clone(), locate(locator)),
-                    )?,
-                ));
+                return Ok(MeasuredRead::Absent(Evidence::exact(
+                    object.source.clone(),
+                    locate(locator),
+                )));
             }
         };
         if !(lower.is_finite() && upper.is_finite() && lower <= upper) {
@@ -393,13 +540,59 @@ impl Measures {
         };
         let mut evidence = Evidence::exact(object.source.clone(), locate(locator));
         evidence.exact = exact;
-        let property = Property::new(MEASURED_SET, request.property(), value)
-            .map_err(|_| PropertyResolutionError::InvalidRequest)?
-            .with_evidence(evidence);
-        Ok(PropertyResolution::Present(ResolvedProperty::try_new(
-            request.clone(),
-            property,
-        )?))
+        Ok(MeasuredRead::Value(value, Some(evidence)))
+    }
+
+    /// The measured value `name` of each of `objects`, read directly
+    /// ([`MeasuredValues::read_batch`]).
+    fn read_batch(
+        &self,
+        name: &str,
+        objects: &[&ObjectId],
+    ) -> Vec<Result<MeasuredRead, PropertyResolutionError>> {
+        let refused =
+            |error: PropertyResolutionError| objects.iter().map(|_| Err(error.clone())).collect();
+        let parsed = match Self::parsed(name) {
+            Ok(parsed) => parsed,
+            Err(error) => return refused(error),
+        };
+        // A name no property can carry is refused as a resolution refuses it.
+        if Property::new(MEASURED_SET, name, PropertyValue::Null).is_err() {
+            return refused(PropertyResolutionError::InvalidRequest);
+        }
+        if *parsed == MeasuredName::Plain(MEASURED_LEVEL_HEIGHT) {
+            return objects
+                .iter()
+                .map(|object| {
+                    let request = PropertyRequest::try_new(
+                        (*object).clone(),
+                        Some(MEASURED_SET.to_owned()),
+                        name,
+                    )?;
+                    Ok(match self.level_height(&request)? {
+                        PropertyResolution::Present(resolved) => {
+                            let property = resolved.into_property();
+                            MeasuredRead::Value(property.value, property.evidence)
+                        }
+                        PropertyResolution::Absent(proof) => {
+                            MeasuredRead::Absent(proof.evidence().clone())
+                        }
+                    })
+                })
+                .collect();
+        }
+        let answers = match &*parsed {
+            MeasuredName::Provided(call) => self.provided_batch(call, objects),
+            parsed => objects
+                .iter()
+                .map(|object| self.measure(parsed, object))
+                .collect(),
+        };
+        objects
+            .iter()
+            .zip(answers)
+            .map(|(object, answer)| Self::read(object, name, answer))
+            .collect()
     }
 
     fn missing(name: &str, service: &str) -> PropertyResolutionError {
@@ -695,30 +888,46 @@ impl Measures {
             project: &providers.project,
             services,
         };
-        // The provider states exactness by the variant it answers; a
-        // `Value` states none, so it is never exact, a point included.
-        Ok(match provider.measure(call, object, &context)? {
-            provider::Measurement::Value {
-                lower,
-                upper,
-                dimension,
-                locator,
-            } => Answer::Value(lower, upper, dimension, locator, false),
-            provider::Measurement::Rounded {
-                lower,
-                upper,
-                dimension,
-                locator,
-            } => Answer::Value(lower, upper, dimension, locator, true),
-            provider::Measurement::Cited {
-                lower,
-                upper,
-                dimension,
-                locator,
-                exact,
-            } => Answer::Value(lower, upper, dimension, locator, exact),
-            provider::Measurement::Absent { locator } => Answer::Absent(locator),
-        })
+        provider.measure(call, object, &context).map(answer_of)
+    }
+
+    /// What the provider registered for `call`'s name measures of each of
+    /// `objects`, through its batch entry point.
+    fn provided_batch(
+        &self,
+        call: &MeasuredCall,
+        objects: &[&ObjectId],
+    ) -> Vec<Result<Answer, PropertyResolutionError>> {
+        let name = call.name();
+        let Some((providers, services)) = &self.providers else {
+            return objects
+                .iter()
+                .map(|_| Err(Self::missing(name, "built-in measurement")))
+                .collect();
+        };
+        let Some(provider) = providers.of(name) else {
+            return objects
+                .iter()
+                .map(|_| Err(Self::missing(name, "built-in measurement")))
+                .collect();
+        };
+        let context = crate::RuleContext {
+            project: &providers.project,
+            services,
+        };
+        let mut answers: Vec<Result<Answer, PropertyResolutionError>> = provider
+            .measure_batch(call, objects, &context)
+            .into_iter()
+            .map(|measured| measured.map(answer_of))
+            .collect();
+        // A provider answering for other objects than asked answers none.
+        if answers.len() != objects.len() {
+            answers = objects
+                .iter()
+                .map(|_| Err(PropertyResolutionError::ResponseRequestMismatch))
+                .collect();
+        }
+        answers
     }
 
     /// The least-area rectangle of `object`'s footprint.

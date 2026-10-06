@@ -8,8 +8,10 @@
 //! Each name it measures must be in the registry of measured values
 //! ([`axioval_ir::measured`]) and measured by nothing else.
 
-use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::any::{Any, TypeId};
+use std::collections::{BTreeMap, HashMap};
+use std::hash::Hash;
+use std::sync::{Arc, Mutex};
 
 use axioval_ir::measured::MeasuredCall;
 use axioval_ir::{Evidence, ObjectId, Project, QuantityDimension};
@@ -173,6 +175,24 @@ pub trait MeasuredProvider: Send + Sync + 'static {
         object: &ObjectId,
         context: &RuleContext<'_>,
     ) -> Result<Measurement, PropertyResolutionError>;
+
+    /// Measures `call` of each of `objects`, one answer per object in
+    /// order, each exactly what [`Self::measure`] answers for it: the batch
+    /// entry point a run's resolver calls when a template reads one value of
+    /// many objects. The default measures one object at a time; a provider
+    /// overrides it to read its services and the call's parameters once, or
+    /// to ask a service about every object together.
+    fn measure_batch(
+        &self,
+        call: &MeasuredCall,
+        objects: &[&ObjectId],
+        context: &RuleContext<'_>,
+    ) -> Vec<Result<Measurement, PropertyResolutionError>> {
+        objects
+            .iter()
+            .map(|object| self.measure(call, object, context))
+            .collect()
+    }
 }
 
 /// The providers of a run, by name, with the run's project and services.
@@ -242,7 +262,113 @@ pub fn measured_members_cited(
     provider.members_cited(&call, object, &context)
 }
 
-/// Installs `providers` for a run over `project`, if there are any.
+/// What providers measured in one run, shared by every rule and template
+/// of it.
+///
+/// A provider answering several values from one measurement (a body's
+/// directional extent, read as its length and as the positions of its two
+/// ends) memoizes that measurement here, keyed by everything it depends on
+/// (the object and the call's parameters, never a rule's), so the run takes
+/// it once per object and parameter set however many rules and values read
+/// it. Each run installs an empty one ([`crate::Runtime`] replaces any host
+/// copy), so nothing measured in one run answers another; outside a run
+/// there is none and a provider measures every time.
+///
+/// Entries are kept by key and value type: two providers using distinct
+/// key types never share entries.
+#[derive(Clone, Default)]
+pub struct MeasuredMemo(Arc<Mutex<HashMap<TypeId, Box<dyn Any + Send>>>>);
+
+impl MeasuredMemo {
+    /// The value memoized for `key`, or `measure`'s, memoized.
+    ///
+    /// `measure` runs without the memo locked, so it may read the memo
+    /// itself; a measurement made twice meanwhile keeps the first.
+    pub fn get_or_measure<K, V>(&self, key: K, measure: impl FnOnce() -> V) -> V
+    where
+        K: Hash + Eq + Send + 'static,
+        V: Clone + Send + 'static,
+    {
+        let table = TypeId::of::<HashMap<K, V>>();
+        if let Ok(entries) = self.0.lock()
+            && let Some(value) = entries
+                .get(&table)
+                .and_then(|entries| entries.downcast_ref::<HashMap<K, V>>())
+                .and_then(|entries| entries.get(&key))
+        {
+            return value.clone();
+        }
+        let value = measure();
+        if let Ok(mut entries) = self.0.lock()
+            && let Some(entries) = entries
+                .entry(table)
+                .or_insert_with(|| Box::new(HashMap::<K, V>::new()))
+                .downcast_mut::<HashMap<K, V>>()
+        {
+            entries.entry(key).or_insert_with(|| value.clone());
+        }
+        value
+    }
+
+    /// The value memoized for `key`, if any.
+    pub fn get<K, V>(&self, key: &K) -> Option<V>
+    where
+        K: Hash + Eq + Send + 'static,
+        V: Clone + Send + 'static,
+    {
+        self.get_with(key, V::clone)
+    }
+
+    /// What `read` reads of the value memoized for `key`, if any, without
+    /// copying the whole value. `read` runs with the memo locked, so it
+    /// must not read the memo itself.
+    pub fn get_with<K, V, R>(&self, key: &K, read: impl FnOnce(&V) -> R) -> Option<R>
+    where
+        K: Hash + Eq + Send + 'static,
+        V: Send + 'static,
+    {
+        let entries = self.0.lock().ok()?;
+        entries
+            .get(&TypeId::of::<HashMap<K, V>>())?
+            .downcast_ref::<HashMap<K, V>>()?
+            .get(key)
+            .map(read)
+    }
+
+    /// Memoizes `value` for `key`, replacing what was memoized: for a
+    /// provider adding to what it measured of a key, such as one more axis
+    /// of a body whose frame it measured already.
+    pub fn insert<K, V>(&self, key: K, value: V)
+    where
+        K: Hash + Eq + Send + 'static,
+        V: Clone + Send + 'static,
+    {
+        if let Ok(mut entries) = self.0.lock()
+            && let Some(entries) = entries
+                .entry(TypeId::of::<HashMap<K, V>>())
+                .or_insert_with(|| Box::new(HashMap::<K, V>::new()))
+                .downcast_mut::<HashMap<K, V>>()
+        {
+            entries.insert(key, value);
+        }
+    }
+
+    /// `measure` of `key` memoized in `services`' memo when a run installed
+    /// one, else measured.
+    pub fn of<K, V>(services: &ServiceRegistry, key: K, measure: impl FnOnce() -> V) -> V
+    where
+        K: Hash + Eq + Send + 'static,
+        V: Clone + Send + 'static,
+    {
+        match services.get::<Self>() {
+            Some(memo) => memo.get_or_measure(key, measure),
+            None => measure(),
+        }
+    }
+}
+
+/// Installs `providers` for a run over `project`, if there are any, with an
+/// empty [`MeasuredMemo`].
 pub(crate) fn install(
     services: &mut ServiceRegistry,
     providers: &[Arc<dyn MeasuredProvider>],
@@ -251,6 +377,7 @@ pub(crate) fn install(
     if providers.is_empty() {
         return;
     }
+    services.replace(MeasuredMemo::default());
     services.replace(Providers {
         providers: Arc::new(providers.to_vec()),
         project: Arc::new(project.clone()),

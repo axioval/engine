@@ -227,6 +227,11 @@ impl ResolvedProperty {
     pub fn property(&self) -> &Property {
         &self.property
     }
+    /// The property, taken out of its binding once it has been checked.
+    #[must_use]
+    pub fn into_property(self) -> Property {
+        self.property
+    }
 }
 
 /// Conclusive property result from a trusted source adapter.

@@ -478,10 +478,12 @@ pub(crate) fn install(
             .get::<Arc<crate::expression::DeclaredTypes>>()
             .cloned(),
     ));
+    let measures = Measures::of(services, host, project);
+    services.replace(crate::MeasuredValues::sharing(&measures));
     services.replace(PropertyResolutionServiceHandle::new(Arc::new(
         DerivedProperties {
             inner: host.cloned(),
-            measures: Measures::of(services, host, project),
+            measures,
             sources: SourceFacts::of(services),
             classifications: classifications.clone(),
             groups,

@@ -673,6 +673,26 @@ impl CapabilityRegistry {
         }
         Ok(self)
     }
+    /// Replaces the capability registered under `capability`'s ID with
+    /// `capability`: a host running a rebuilt capability's replaced
+    /// implementation in its place, as the template benchmark does, with
+    /// everything else registered unchanged.
+    ///
+    /// # Errors
+    ///
+    /// [`EngineError::UnknownCapability`] when nothing is registered under
+    /// the ID: a replacement never registers a capability of its own.
+    pub fn replace<C: RuleCapability + 'static>(
+        mut self,
+        capability: C,
+    ) -> Result<Self, EngineError> {
+        let id = capability.id().to_owned();
+        match self.capabilities.get_mut(&id) {
+            Some(registered) => *registered = Arc::new(capability),
+            None => return Err(EngineError::UnknownCapability(id)),
+        }
+        Ok(self)
+    }
     /// Registers trusted code measuring registered values
     /// ([`MeasuredProvider`]). Each name must be in the registry of measured
     /// values and measured by neither the engine nor another provider.
@@ -1023,11 +1043,11 @@ pub use linear_quantity::{
     LinearQuantityRequest, LinearQuantityService, LinearQuantityServiceHandle, ShelfGeometry,
 };
 pub use measured::faces::FacePieceMeasures;
-pub use measured::measured_value;
 pub use measured::provider::{
-    MeasuredMember, MeasuredProvider, Measurement, MemberValue, measured_members,
+    MeasuredMember, MeasuredMemo, MeasuredProvider, Measurement, MemberValue, measured_members,
     measured_members_cited,
 };
+pub use measured::{MeasuredRead, MeasuredValues, measured_value};
 pub use metric_routing::{
     BlockedMetricRouteEvidence, ClimbLength, CompleteMetricEvidence, ConnectorRouting,
     FarthestPointEvidence, FarthestPointOutcome, FarthestPointRequest, ForcedWalkEvidence,

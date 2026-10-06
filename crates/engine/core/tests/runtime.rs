@@ -50,6 +50,47 @@ fn canonical_packages_compile() {
         1
     );
 }
+/// The stub's id, implemented another way.
+struct Replacement;
+impl RuleCapability for Replacement {
+    fn id(&self) -> &'static str {
+        Stub.id()
+    }
+    fn parameters(&self) -> Vec<ParameterDescriptor> {
+        Stub.parameters()
+    }
+    fn evaluate(&self, _: &RuleContext<'_>, _: &CompiledRule) -> CapabilityEvaluation {
+        CapabilityEvaluation::not_evaluated(NotEvaluatedReason::MissingService, "replaced")
+    }
+}
+#[test]
+fn a_host_replaces_a_registered_capability_only() {
+    let registry = CapabilityRegistry::new()
+        .register(Stub)
+        .unwrap()
+        .replace(Replacement)
+        .unwrap();
+    let rule = CompiledRule {
+        id: RuleId::new("replaced").unwrap(),
+        capability: Stub.id().to_owned(),
+        severity: axioval_ir::contract::Severity::Error,
+        selector: axioval_ir::contract::Selector::All,
+        parameters: std::collections::BTreeMap::new(),
+    };
+    let project = Project::new(vec![]).unwrap();
+    let services = ServiceRegistry::new();
+    let context = RuleContext {
+        project: &project,
+        services: &services,
+    };
+    let evaluation = registry.get(Stub.id()).unwrap().evaluate(&context, &rule);
+    assert_eq!(evaluation.not_evaluated_outcomes().len(), 1);
+    assert_eq!(registry.ids().count(), 1);
+    assert!(matches!(
+        CapabilityRegistry::new().replace(Replacement),
+        Err(EngineError::UnknownCapability(id)) if id == Stub.id()
+    ));
+}
 #[test]
 fn compiler_fails_closed_for_missing_required_parameter() {
     let (definitions, mut rules) = packages();

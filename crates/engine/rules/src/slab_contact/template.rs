@@ -240,6 +240,7 @@ fn unless(flag: &'static [&'static str], name: &'static str, end: &'static str) 
             condition: None,
         },
         value: measured(name, end),
+        guard: false,
     }
 }
 

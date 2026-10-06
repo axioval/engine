@@ -2354,6 +2354,10 @@ fn unless(
         ) {
             return Some(outcome);
         }
+        // A guard read is all it asks.
+        if unless.guard {
+            continue;
+        }
         match read.values.get(unless.value.name) {
             Some(Value::Boolean(true)) => return Some(Outcome::Passed),
             Some(Value::Number { value, .. }) if value.lower > 0.0 || value.upper < 0.0 => {

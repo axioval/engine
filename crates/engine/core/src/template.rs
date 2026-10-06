@@ -747,6 +747,13 @@ pub struct Once {
 pub struct Unless {
     pub applies: Applies,
     pub value: TemplateValue,
+    /// A guard: only read, first, its value judging nothing. One that
+    /// cannot be read leaves the object open, worded as it was refused,
+    /// before any other value is read, a list bound or a message worded:
+    /// the precondition a capability checked first (a door's hinged
+    /// leaves), cheap where it refuses most objects.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub guard: bool,
 }
 
 /// How a finding is graded: `values`, read once its decision fails (a
@@ -1993,7 +2000,18 @@ impl Form {
                 .decision
                 .expression(&|name| inline(&own, &derived, name)),
         };
-        let decided = if self.unless.is_empty() {
+        // A guard is read first: the requirement holds only where it can
+        // be read.
+        let guards: Vec<Expression> = self
+            .unless
+            .iter()
+            .filter(|unless| unless.guard)
+            .map(|unless| Expression::IsDefined {
+                operand: boxed(value(unless.value.name, &unless.value.expression)),
+                label: Some(format!("guard {}", unless.value.name)),
+            })
+            .collect();
+        let decided = if self.unless.iter().all(|unless| unless.guard) {
             decided
         } else {
             // An object a value leaves unjudged passes: each value surely
@@ -2001,6 +2019,7 @@ impl Form {
             let mut operands: Vec<Expression> = self
                 .unless
                 .iter()
+                .filter(|unless| !unless.guard)
                 .map(|unless| {
                     let mut terms: Vec<Expression> = unless
                         .applies
@@ -2029,6 +2048,16 @@ impl Form {
                 .collect();
             operands.push(decided);
             Expression::Or {
+                operands,
+                label: None,
+            }
+        };
+        let decided = if guards.is_empty() {
+            decided
+        } else {
+            let mut operands = guards;
+            operands.push(decided);
+            Expression::And {
                 operands,
                 label: None,
             }

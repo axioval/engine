@@ -618,6 +618,7 @@ mod graded {
                         condition: None,
                     },
                     value: stated("exempt", "Exempt"),
+                    guard: false,
                 }],
                 grading: Some(Grading {
                     values: vec![stated("gap", "Gap")],

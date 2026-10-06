@@ -139,7 +139,13 @@ A `Form` holds:
   form's `undecided` message. A storey the rule leaves out is such a value.
   Nothing is read ahead for a form with `unless` values, so an object left
   unjudged is never measured. A rule forked from it passes the object where
-  a value that applies to the rule is other than zero (an `or`);
+  a value that applies to the rule is other than zero (an `or`). A guard
+  (`guard: true`) is only read, its value judging nothing: one that cannot
+  be read leaves the object open, worded as refused (its `refused`
+  message), before any other value is read, a list bound or a message
+  worded, as a capability checked a precondition first; read ahead in
+  batches like any `unless` value, it makes refusing an object that lacks
+  the precondition cheap. A fork requires each guard defined (an `and`);
 - `grading`: the severity of the form's finding (`Grading`, also on a
   check): `values` read once the decision fails (a `null` kept as one, a
   value that cannot be read leaving the object open as refused), then the

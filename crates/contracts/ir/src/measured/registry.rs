@@ -394,12 +394,16 @@ const PLANE: MeasuredParameter = metres(
 );
 
 const CONTACT: [MeasuredParameter; 5] = [
-    objects(
+    selected(
         "with",
-        true,
+        false,
         &en_de(
-            "The source kinds of the objects it may touch, `,`-separated.",
-            "Die Quellarten der Objekte, die es berühren können, durch `,` getrennt.",
+            "The objects it may touch: their source kinds, `,`-separated, or `@` a selector \
+             parameter of the rule, whose undecided objects may add contact; without it, \
+             every other object.",
+            "Die Objekte, die es berühren können: ihre Quellarten, durch `,` getrennt, oder \
+             mit `@` ein Selektorparameter der Regel, dessen unentschiedene Objekte Kontakt \
+             hinzufügen können; ohne sie jedes andere Objekt.",
         ),
     ),
     MeasuredParameter {
@@ -1039,6 +1043,38 @@ const STOREYS: [MeasuredParameter; 2] = [
 
 const STOREYS_UNORDERED: &str = "a storey states no length `Elevation`, or the object reaches no \
      storey or several";
+
+/// The storeys `slab-contact` leaves out the top or bottom of, and the
+/// traversal to the object's one storey, as the rule declares them.
+const STOREY_END: [MeasuredParameter; 7] = [
+    MeasuredParameter {
+        key: "end",
+        kind: MeasuredParameterKind::Choice {
+            options: &["top", "bottom"],
+        },
+        required: true,
+        default: None,
+        help: &en_de(
+            "Which storey: the highest (`top`) or the lowest (`bottom`) of the source.",
+            "Welches Geschoss: das höchste (`top`) oder das niedrigste (`bottom`) der Quelle.",
+        ),
+    },
+    selected(
+        "storeys",
+        true,
+        &en_de(
+            "The storeys: their source kinds, `,`-separated, or `@` a selector parameter of \
+             the rule.",
+            "Die Geschosse: ihre Quellarten, durch `,` getrennt, oder mit `@` ein \
+             Selektorparameter der Regel.",
+        ),
+    ),
+    TRAVERSAL[0],
+    TRAVERSAL[1],
+    TRAVERSAL[2],
+    TRAVERSAL[3],
+    TRAVERSAL[4],
+];
 
 /// The source a coordinate system is compared with.
 const REFERENCE_SOURCE: MeasuredParameter = MeasuredParameter {
@@ -4274,6 +4310,24 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ),
     },
     MeasuredDescriptor {
+        name: "storey_end",
+        parameters: &STOREY_END,
+        dimension: None,
+        services: &["property-resolution", "relationship-selection"],
+        exactness: MeasuredExactness::Stated,
+        not_evaluated: &[STOREYS_UNORDERED, "a storey's selection is undecided"],
+        label: &en_de("On the end storey", "Auf dem Endgeschoss"),
+        help: &en_de(
+            "1 where the one storey the traversal reaches from the object is the highest \
+             (`top`) or lowest (`bottom`) of its source by the storeys' `Elevation` \
+             attribute, 0 where it is not: the storey `slab-contact` leaves out.",
+            "1, wo das eine Geschoss, das die Traversierung vom Objekt aus erreicht, nach dem \
+             Attribut `Elevation` der Geschosse das höchste (`top`) oder niedrigste \
+             (`bottom`) seiner Quelle ist, 0, wo nicht: das Geschoss, das `slab-contact` \
+             auslässt.",
+        ),
+    },
+    MeasuredDescriptor {
         name: "support_count",
         parameters: &[MeasuredParameter {
             key: "of",
@@ -4605,6 +4659,31 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         help: &en_de(
             "The part of the footprint the objects of the kinds named, grown, leave uncovered in plan.",
             "Der Teil des Grundrisses, den die Objekte der genannten Arten, vergrößert, im Grundriss unbedeckt lassen.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "undecided_count",
+        parameters: &[selected(
+            "objects",
+            false,
+            &en_de(
+                "The objects counted: their source kinds, `,`-separated (none undecided), \
+                     or `@` a selector parameter of the rule; without it, none.",
+                "Die gezählten Objekte: ihre Quellarten, durch `,` getrennt (keines \
+                     unentschieden), oder mit `@` ein Selektorparameter der Regel; ohne sie \
+                     keines.",
+            ),
+        )],
+        dimension: None,
+        services: &["property-resolution"],
+        exactness: MeasuredExactness::Stated,
+        not_evaluated: &["a selector parameter it names picks objects it cannot list"],
+        label: &en_de("Undecided objects", "Unentschiedene Objekte"),
+        help: &en_de(
+            "How many objects other than this one a selection cannot decide: a whole number, \
+             none where it decides every other object.",
+            "Wie viele Objekte außer diesem eine Auswahl nicht entscheiden kann: eine ganze \
+             Zahl, keines, wo sie jedes andere Objekt entscheidet.",
         ),
     },
     plain!(

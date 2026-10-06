@@ -36061,7 +36061,562 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "slab-contact",
+        "refusals": {
+          "prefixed": {
+            "prefix": "slab-contact declaration is invalid"
+          }
+        },
+        "declaration": [
+          {
+            "kind": "required",
+            "parameter": "minimum_contact_ratio"
+          },
+          {
+            "kind": "finite",
+            "parameters": [
+              "minimum_contact_ratio"
+            ],
+            "above": 0.0,
+            "message": "minimum_contact_ratio must lie in (0, 1]"
+          },
+          {
+            "kind": "atMost",
+            "parameters": [
+              "minimum_contact_ratio"
+            ],
+            "value": 1.0,
+            "message": "minimum_contact_ratio must lie in (0, 1]"
+          },
+          {
+            "kind": "required",
+            "parameter": "contact_side"
+          },
+          {
+            "kind": "among",
+            "parameter": "contact_side",
+            "options": [
+              "above",
+              "below"
+            ],
+            "message": "contact_side `{value}` is unsupported"
+          },
+          {
+            "kind": "required",
+            "parameter": "maximum_gap_metres"
+          },
+          {
+            "kind": "required",
+            "parameter": "maximum_intersection_metres"
+          },
+          {
+            "kind": "required",
+            "parameter": "minimum_polygon_area_square_metres"
+          },
+          {
+            "kind": "finite",
+            "parameters": [
+              "maximum_gap_metres",
+              "maximum_intersection_metres",
+              "minimum_polygon_area_square_metres"
+            ],
+            "at_least": 0.0,
+            "message": "contact areas must be finite, non-negative and contained"
+          },
+          {
+            "kind": "kind",
+            "parameter": "skip_top_storey"
+          },
+          {
+            "kind": "kind",
+            "parameter": "skip_bottom_storey"
+          },
+          {
+            "kind": "when",
+            "flags": [
+              "skip_top_storey",
+              "skip_bottom_storey"
+            ],
+            "check": {
+              "kind": "kind",
+              "parameter": "storey_selector"
+            }
+          },
+          {
+            "kind": "when",
+            "flags": [
+              "skip_top_storey",
+              "skip_bottom_storey"
+            ],
+            "check": {
+              "kind": "anyOf",
+              "parameters": [
+                "storey_selector"
+              ],
+              "message": "skipping a storey needs `storey_selector` to say what a storey is"
+            }
+          },
+          {
+            "kind": "when",
+            "flags": [
+              "skip_top_storey",
+              "skip_bottom_storey"
+            ],
+            "check": {
+              "kind": "traversal",
+              "with": [],
+              "message": ""
+            }
+          },
+          {
+            "kind": "when",
+            "flags": [
+              "skip_top_storey",
+              "skip_bottom_storey"
+            ],
+            "check": {
+              "kind": "anyOf",
+              "parameters": [
+                "relationship",
+                "path"
+              ],
+              "message": "skipping a storey needs a `relationship` or `path` to each subject's storey"
+            }
+          },
+          {
+            "kind": "kind",
+            "parameter": "counterparts"
+          }
+        ],
+        "services": {
+          "needs": [
+            "contact"
+          ],
+          "message": "contact service is not registered"
+        },
+        "texts": [
+          {
+            "name": "shortfall",
+            "when": {
+              "kind": "zero",
+              "value": "share"
+            },
+            "text": "no contact"
+          },
+          {
+            "name": "shortfall",
+            "text": "contact ratio {share:lower4} below required {minimum_contact_ratio:fixed4}"
+          }
+        ],
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "share",
+                "expression": {
+                  "kind": "property",
+                  "propertySet": "axioval:measured",
+                  "property": "contact_share;with=@counterparts;side=@contact_side;gap=@maximum_gap_metres;intersection=@maximum_intersection_metres;polygon=@minimum_polygon_area_square_metres"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "share",
+              "minimum": [
+                {
+                  "sign": "plus",
+                  "operand": {
+                    "kind": "parameter",
+                    "name": "minimum_contact_ratio"
+                  }
+                }
+              ],
+              "rounding": []
+            },
+            "fail": "{shortfall}",
+            "undecided": "contact ratio {share:lower4} is below required {minimum_contact_ratio:fixed4}, but the counterpart selection is undecided for {undecided:least} object(s) that could support the face",
+            "related": "share",
+            "unless": [
+              {
+                "applies": {
+                  "when": [
+                    "skip_top_storey"
+                  ]
+                },
+                "value": {
+                  "name": "top",
+                  "expression": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "storey_end;end=top;storeys=@storey_selector;relationship=@relationship;direction=@direction;path=@path;follow_chain=@follow_chain;skip_absent_relationship_ends=@skip_absent_relationship_ends"
+                  }
+                }
+              },
+              {
+                "applies": {
+                  "when": [
+                    "skip_bottom_storey"
+                  ]
+                },
+                "value": {
+                  "name": "bottom",
+                  "expression": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "storey_end;end=bottom;storeys=@storey_selector;relationship=@relationship;direction=@direction;path=@path;follow_chain=@follow_chain;skip_absent_relationship_ends=@skip_absent_relationship_ends"
+                  }
+                }
+              }
+            ],
+            "grading": {
+              "values": [
+                {
+                  "name": "gap",
+                  "expression": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "contact_gap;with=@counterparts;side=@contact_side;gap=@maximum_gap_metres;intersection=@maximum_intersection_metres;polygon=@minimum_polygon_area_square_metres"
+                  }
+                },
+                {
+                  "name": "minimum",
+                  "expression": {
+                    "kind": "parameter",
+                    "name": "minimum_contact_ratio"
+                  }
+                }
+              ],
+              "derived": [
+                {
+                  "kind": "ratio",
+                  "name": "relative",
+                  "numerator": "share",
+                  "denominator": "minimum",
+                  "zero": ""
+                }
+              ],
+              "bands": [
+                {
+                  "severity": "error",
+                  "when": {
+                    "kind": "all",
+                    "conditions": [
+                      {
+                        "kind": "zero",
+                        "value": "share"
+                      },
+                      {
+                        "kind": "absent",
+                        "value": "gap"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "severity": "info",
+                  "when": {
+                    "kind": "all",
+                    "conditions": [
+                      {
+                        "kind": "zero",
+                        "value": "share"
+                      },
+                      {
+                        "kind": "below",
+                        "value": "gap",
+                        "than": 0.1
+                      }
+                    ]
+                  }
+                },
+                {
+                  "severity": "error",
+                  "when": {
+                    "kind": "all",
+                    "conditions": [
+                      {
+                        "kind": "zero",
+                        "value": "share"
+                      },
+                      {
+                        "kind": "above",
+                        "value": "gap",
+                        "than": 0.5
+                      }
+                    ]
+                  }
+                },
+                {
+                  "severity": "warning",
+                  "when": {
+                    "kind": "zero",
+                    "value": "share"
+                  }
+                },
+                {
+                  "severity": "info",
+                  "when": {
+                    "kind": "above",
+                    "value": "relative",
+                    "than": 0.9
+                  }
+                },
+                {
+                  "severity": "error",
+                  "when": {
+                    "kind": "below",
+                    "value": "relative",
+                    "than": 0.3
+                  }
+                },
+                {
+                  "severity": "warning"
+                }
+              ],
+              "undecided": [
+                {
+                  "name": "undecided",
+                  "expression": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "undecided_count;objects=@counterparts"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "or",
+              "operands": [
+                {
+                  "kind": "and",
+                  "operands": [
+                    {
+                      "kind": "parameter",
+                      "name": "skip_top_storey"
+                    },
+                    {
+                      "kind": "compare",
+                      "operator": "notEquals",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "storey_end;end=top;storeys=@storey_selector;relationship=@relationship;direction=@direction;path=@path;follow_chain=@follow_chain;skip_absent_relationship_ends=@skip_absent_relationship_ends"
+                      },
+                      "right": {
+                        "kind": "literal",
+                        "value": {
+                          "type": "integer",
+                          "value": 0
+                        }
+                      },
+                      "label": "unless top"
+                    }
+                  ]
+                },
+                {
+                  "kind": "and",
+                  "operands": [
+                    {
+                      "kind": "parameter",
+                      "name": "skip_bottom_storey"
+                    },
+                    {
+                      "kind": "compare",
+                      "operator": "notEquals",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "storey_end;end=bottom;storeys=@storey_selector;relationship=@relationship;direction=@direction;path=@path;follow_chain=@follow_chain;skip_absent_relationship_ends=@skip_absent_relationship_ends"
+                      },
+                      "right": {
+                        "kind": "literal",
+                        "value": {
+                          "type": "integer",
+                          "value": 0
+                        }
+                      },
+                      "label": "unless bottom"
+                    }
+                  ]
+                },
+                {
+                  "kind": "and",
+                  "operands": [
+                    {
+                      "kind": "compare",
+                      "operator": "greaterThanOrEquals",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "contact_share;with=@counterparts;side=@contact_side;gap=@maximum_gap_metres;intersection=@maximum_intersection_metres;polygon=@minimum_polygon_area_square_metres"
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "minimum_contact_ratio"
+                      },
+                      "label": "at least the lower bound"
+                    }
+                  ]
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.or",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.and",
+                      "inputs": {
+                        "operands": {
+                          "blocks": [
+                            {
+                              "type": "expression.parameter",
+                              "fields": {
+                                "name": "skip_top_storey"
+                              }
+                            },
+                            {
+                              "type": "expression.compare",
+                              "label": "unless top",
+                              "fields": {
+                                "operator": "notEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "measured.storey_end",
+                                    "fields": {
+                                      "direction": "@direction",
+                                      "end": "top",
+                                      "follow_chain": "@follow_chain",
+                                      "path": "@path",
+                                      "relationship": "@relationship",
+                                      "skip_absent_relationship_ends": "@skip_absent_relationship_ends",
+                                      "storeys": "@storey_selector"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.literal",
+                                    "fields": {
+                                      "value": {
+                                        "type": "integer",
+                                        "value": 0
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.and",
+                      "inputs": {
+                        "operands": {
+                          "blocks": [
+                            {
+                              "type": "expression.parameter",
+                              "fields": {
+                                "name": "skip_bottom_storey"
+                              }
+                            },
+                            {
+                              "type": "expression.compare",
+                              "label": "unless bottom",
+                              "fields": {
+                                "operator": "notEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "measured.storey_end",
+                                    "fields": {
+                                      "direction": "@direction",
+                                      "end": "bottom",
+                                      "follow_chain": "@follow_chain",
+                                      "path": "@path",
+                                      "relationship": "@relationship",
+                                      "skip_absent_relationship_ends": "@skip_absent_relationship_ends",
+                                      "storeys": "@storey_selector"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.literal",
+                                    "fields": {
+                                      "value": {
+                                        "type": "integer",
+                                        "value": 0
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.and",
+                      "inputs": {
+                        "operands": {
+                          "blocks": [
+                            {
+                              "type": "expression.compare",
+                              "label": "at least the lower bound",
+                              "fields": {
+                                "operator": "greaterThanOrEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "measured.contact_share",
+                                    "fields": {
+                                      "gap": "@maximum_gap_metres",
+                                      "intersection": "@maximum_intersection_metres",
+                                      "polygon": "@minimum_polygon_area_square_metres",
+                                      "side": "@contact_side",
+                                      "with": "@counterparts"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "minimum_contact_ratio"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.slab-stack-spacing",
@@ -49407,20 +49962,20 @@
         {
           "key": "with",
           "kind": {
-            "type": "sourceKind"
+            "type": "objects"
           },
-          "required": true,
+          "required": false,
           "help": [
             {
               "language": "en",
-              "text": "The source kinds of the objects it may touch, `,`-separated."
+              "text": "The objects it may touch: their source kinds, `,`-separated, or `@` a selector parameter of the rule, whose undecided objects may add contact; without it, every other object."
             },
             {
               "language": "de",
-              "text": "Die Quellarten der Objekte, die es berühren können, durch `,` getrennt."
+              "text": "Die Objekte, die es berühren können: ihre Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel, dessen unentschiedene Objekte Kontakt hinzufügen können; ohne sie jedes andere Objekt."
             }
           ],
-          "references": "string"
+          "references": "selector"
         },
         {
           "key": "side",
@@ -49544,20 +50099,20 @@
         {
           "key": "with",
           "kind": {
-            "type": "sourceKind"
+            "type": "objects"
           },
-          "required": true,
+          "required": false,
           "help": [
             {
               "language": "en",
-              "text": "The source kinds of the objects it may touch, `,`-separated."
+              "text": "The objects it may touch: their source kinds, `,`-separated, or `@` a selector parameter of the rule, whose undecided objects may add contact; without it, every other object."
             },
             {
               "language": "de",
-              "text": "Die Quellarten der Objekte, die es berühren können, durch `,` getrennt."
+              "text": "Die Objekte, die es berühren können: ihre Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel, dessen unentschiedene Objekte Kontakt hinzufügen können; ohne sie jedes andere Objekt."
             }
           ],
-          "references": "string"
+          "references": "selector"
         },
         {
           "key": "side",
@@ -49682,20 +50237,20 @@
         {
           "key": "with",
           "kind": {
-            "type": "sourceKind"
+            "type": "objects"
           },
-          "required": true,
+          "required": false,
           "help": [
             {
               "language": "en",
-              "text": "The source kinds of the objects it may touch, `,`-separated."
+              "text": "The objects it may touch: their source kinds, `,`-separated, or `@` a selector parameter of the rule, whose undecided objects may add contact; without it, every other object."
             },
             {
               "language": "de",
-              "text": "Die Quellarten der Objekte, die es berühren können, durch `,` getrennt."
+              "text": "Die Objekte, die es berühren können: ihre Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel, dessen unentschiedene Objekte Kontakt hinzufügen können; ohne sie jedes andere Objekt."
             }
           ],
-          "references": "string"
+          "references": "selector"
         },
         {
           "key": "side",
@@ -57758,6 +58313,172 @@
       "available": true
     },
     {
+      "name": "storey_end",
+      "parameters": [
+        {
+          "key": "end",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "top",
+              "bottom"
+            ]
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "Which storey: the highest (`top`) or the lowest (`bottom`) of the source."
+            },
+            {
+              "language": "de",
+              "text": "Welches Geschoss: das höchste (`top`) oder das niedrigste (`bottom`) der Quelle."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "storeys",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The storeys: their source kinds, `,`-separated, or `@` a selector parameter of the rule."
+            },
+            {
+              "language": "de",
+              "text": "Die Geschosse: ihre Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "relationship",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship walked from the object."
+            },
+            {
+              "language": "de",
+              "text": "Die vom Objekt aus begangene Beziehung."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "direction",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship's direction: `forward` (the default), `backward` or `either`."
+            },
+            {
+              "language": "de",
+              "text": "Die Richtung der Beziehung: `forward` (Vorgabe), `backward` oder `either`."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Relationship steps walked instead of one relationship."
+            },
+            {
+              "language": "de",
+              "text": "Beziehungsschritte statt einer Beziehung."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "follow_chain",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether chains of the relationship are followed."
+            },
+            {
+              "language": "de",
+              "text": "Ob Ketten der Beziehung verfolgt werden."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "skip_absent_relationship_ends",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether a relationship end the source does not state is skipped."
+            },
+            {
+              "language": "de",
+              "text": "Ob ein von der Quelle nicht angegebenes Beziehungsende übersprungen wird."
+            }
+          ],
+          "references": "boolean"
+        }
+      ],
+      "services": [
+        "property-resolution",
+        "relationship-selection"
+      ],
+      "exactness": "stated",
+      "notEvaluated": [
+        "a storey states no length `Elevation`, or the object reaches no storey or several",
+        "a storey's selection is undecided"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "On the end storey"
+        },
+        {
+          "language": "de",
+          "text": "Auf dem Endgeschoss"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "1 where the one storey the traversal reaches from the object is the highest (`top`) or lowest (`bottom`) of its source by the storeys' `Elevation` attribute, 0 where it is not: the storey `slab-contact` leaves out."
+        },
+        {
+          "language": "de",
+          "text": "1, wo das eine Geschoss, das die Traversierung vom Objekt aus erreicht, nach dem Attribut `Elevation` der Geschosse das höchste (`top`) oder niedrigste (`bottom`) seiner Quelle ist, 0, wo nicht: das Geschoss, das `slab-contact` auslässt."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
       "name": "support_count",
       "parameters": [
         {
@@ -58472,6 +59193,58 @@
         }
       ],
       "unit": "m2",
+      "available": true
+    },
+    {
+      "name": "undecided_count",
+      "parameters": [
+        {
+          "key": "objects",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects counted: their source kinds, `,`-separated (none undecided), or `@` a selector parameter of the rule; without it, none."
+            },
+            {
+              "language": "de",
+              "text": "Die gezählten Objekte: ihre Quellarten, durch `,` getrennt (keines unentschieden), oder mit `@` ein Selektorparameter der Regel; ohne sie keines."
+            }
+          ],
+          "references": "selector"
+        }
+      ],
+      "services": [
+        "property-resolution"
+      ],
+      "exactness": "stated",
+      "notEvaluated": [
+        "a selector parameter it names picks objects it cannot list"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Undecided objects"
+        },
+        {
+          "language": "de",
+          "text": "Unentschiedene Objekte"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "How many objects other than this one a selection cannot decide: a whole number, none where it decides every other object."
+        },
+        {
+          "language": "de",
+          "text": "Wie viele Objekte außer diesem eine Auswahl nicht entscheiden kann: eine ganze Zahl, keines, wo sie jedes andere Objekt entscheidet."
+        }
+      ],
+      "unit": "1",
       "available": true
     },
     {

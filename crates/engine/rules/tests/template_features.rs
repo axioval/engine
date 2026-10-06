@@ -565,6 +565,8 @@ mod graded {
                 }],
                 grading: Some(Grading {
                     values: vec![stated("gap", "Gap")],
+                    derived: Vec::new(),
+                    undecided: Vec::new(),
                     bands: vec![
                         Band {
                             severity: Severity::Error,

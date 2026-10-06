@@ -2,55 +2,22 @@
 //! it, as a value: `plan-coverage`'s search ([`super::search`]), over the
 //! candidates a rule's selector picks along the rule's traversal.
 
-use std::collections::BTreeMap;
-
 use axioval_engine::{
-    Citation, CompiledRule, MeasuredProvider, Measurement, NotEvaluatedReason,
-    PropertyResolutionError, RuleContext,
+    Citation, MeasuredProvider, Measurement, NotEvaluatedReason, PropertyResolutionError,
+    RuleContext,
 };
-use axioval_ir::contract::{ParameterValue, Selector, Severity};
+use axioval_ir::ObjectId;
 use axioval_ir::measured::{MeasuredArgument, MeasuredCall};
-use axioval_ir::{ObjectId, RuleId};
 
 use super::{Search, search};
 use crate::counts::Population;
-use crate::measured_kinds::{interval, refused, selection};
-use crate::support::{Parameters, Unavailable, invalid};
+use crate::measured_kinds::{interval, refused, selection, traversal};
+use crate::support::{Unavailable, invalid};
 
 /// Measures `plan_coverage`.
 pub(crate) struct CoverageSearch;
 
 const PLAN_COVERAGE: &str = "plan_coverage";
-
-/// The traversal the call's arguments state, read as a rule states it:
-/// each traversal parameter under its own name.
-fn traversal(call: &MeasuredCall) -> Result<Option<crate::support::Traversal>, Unavailable> {
-    let parameters: BTreeMap<String, ParameterValue> = call
-        .arguments
-        .iter()
-        .filter_map(|(key, argument)| {
-            let value = match argument {
-                MeasuredArgument::Text(text) => ParameterValue::String {
-                    value: text.clone(),
-                },
-                MeasuredArgument::Path(steps) => ParameterValue::StringList {
-                    value: steps.clone(),
-                },
-                MeasuredArgument::Truth(value) => ParameterValue::Boolean { value: *value },
-                _ => return None,
-            };
-            Some(((*key).to_owned(), value))
-        })
-        .collect();
-    let rule = CompiledRule {
-        id: RuleId::new("axioval-measured-plan-coverage").expect("a valid rule id"),
-        capability: "axioval:capability.plan-coverage".into(),
-        severity: Severity::Info,
-        selector: Selector::All,
-        parameters,
-    };
-    Parameters(&rule).traversal()
-}
 
 /// The search for `object` the call states.
 fn searched(

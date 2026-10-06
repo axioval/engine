@@ -294,6 +294,40 @@ impl<'a> ObjectLeaves<'a> {
                 format!("`{}` of {}: {why}", call.name(), self.object.id),
             ));
         }
+        self.measure_bound(name, call)
+    }
+
+    /// The prepared read measured for the object.
+    fn measure_prepared(
+        &self,
+        prepared: &axioval_engine::PreparedRead,
+    ) -> Result<axioval_engine::BoundRead, (NotEvaluatedReason, String)> {
+        let measure = |values: &axioval_engine::MeasuredValues| {
+            values
+                .read_prepared(prepared, &[&self.object.id])
+                .pop()
+                .unwrap_or(Err(axioval_engine::PropertyResolutionError::InvalidRequest))
+        };
+        let read = match self
+            .context
+            .services
+            .get::<axioval_engine::MeasuredValues>()
+        {
+            Some(values) => measure(values),
+            None => measure(&axioval_engine::MeasuredValues::of(
+                self.context.services,
+                self.context.project,
+            )),
+        };
+        read.map_err(crate::selection::property_error)
+    }
+
+    /// The bound `call` of `name` measured for the object.
+    fn measure_bound(
+        &self,
+        name: &str,
+        call: &axioval_ir::measured::MeasuredCall,
+    ) -> Result<axioval_engine::BoundRead, (NotEvaluatedReason, String)> {
         let measure = |values: &axioval_engine::MeasuredValues| {
             values
                 .read_bound_batch(name, call, &[&self.object.id])
@@ -323,6 +357,39 @@ impl<'a> ObjectLeaves<'a> {
             Some(index) => self.bound.swap_remove(index).1,
             None => self.read_bound(name, &mut call),
         };
+        self.bound_leaf(name, read)
+    }
+
+    /// [`Self::bound_measured`] of a call the rule bound already, or its
+    /// refusal to bind.
+    fn bound_measured_with(
+        &mut self,
+        name: &str,
+        bound: Result<axioval_engine::PreparedRead, (NotEvaluatedReason, String)>,
+    ) -> Leaf {
+        let read = match self.bound.iter().position(|(read, _)| &**read == name) {
+            Some(index) => self.bound.swap_remove(index).1,
+            None => match bound {
+                Ok(prepared) => self.measure_prepared(&prepared),
+                Err((reason, why)) => Err((
+                    reason,
+                    format!(
+                        "`{}` of {}: {why}",
+                        name.split(';').next().unwrap_or(name),
+                        self.object.id
+                    ),
+                )),
+            },
+        };
+        self.bound_leaf(name, read)
+    }
+
+    /// The leaf of a measured value read with bound arguments.
+    fn bound_leaf(
+        &mut self,
+        name: &str,
+        read: Result<axioval_engine::BoundRead, (NotEvaluatedReason, String)>,
+    ) -> Leaf {
         let ((read, citation), name) = match read {
             Ok(read) => (read, name),
             Err((reason, message)) => {
@@ -648,13 +715,20 @@ impl ExpressionContext for ObjectLeaves<'_> {
             return self.derived(name);
         }
         // Only a name naming a reference (`@`) is bound; every other is
-        // read as it is, unparsed here.
-        if set == Some(axioval_ir::MEASURED_SET)
-            && name.contains('@')
-            && let Ok(call) = axioval_ir::measured::parse(name)
-            && !call.is_bound()
-        {
-            return self.bound_measured(name, call);
+        // read as it is, unparsed here. One naming no anchor is bound once
+        // for the rule.
+        if set == Some(axioval_ir::MEASURED_SET) && name.contains('@') {
+            if let Some(bound) = self
+                .arguments
+                .and_then(|arguments| arguments.call(self.context, self.parameters, name))
+            {
+                return self.bound_measured_with(name, bound);
+            }
+            if let Ok(call) = axioval_ir::measured::parse(name)
+                && !call.is_bound()
+            {
+                return self.bound_measured(name, call);
+            }
         }
         // The value as the source states it (`None`: stated absent) and
         // the evidence cited, read ahead in a batch or resolved now.

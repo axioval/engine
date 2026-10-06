@@ -380,6 +380,9 @@ pub struct MeasuredSelection {
     pub matched: BTreeSet<crate::ObjectId>,
     /// The objects that may or may not be picked.
     pub undecided: BTreeSet<crate::ObjectId>,
+    /// Why the selection could not decide the first undecided object, in
+    /// the project's order: its reason and message.
+    pub first_undecided: Option<(crate::NotEvaluatedReason, String)>,
 }
 
 impl MeasuredSelection {
@@ -390,7 +393,28 @@ impl MeasuredSelection {
             parameter: ANCHOR.to_owned(),
             matched: BTreeSet::from([anchor]),
             undecided: BTreeSet::new(),
+            first_undecided: None,
         }
+    }
+}
+
+/// A bound selection as a memo's key: the one shared selection, never an
+/// equal one, compared and hashed by identity. A memo holding it keeps the
+/// selection alive, so no other selection can take its place.
+#[derive(Clone, Debug)]
+pub struct SelectionIdentity(pub std::sync::Arc<MeasuredSelection>);
+
+impl PartialEq for SelectionIdentity {
+    fn eq(&self, other: &Self) -> bool {
+        std::sync::Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for SelectionIdentity {}
+
+impl std::hash::Hash for SelectionIdentity {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        std::sync::Arc::as_ptr(&self.0).hash(state);
     }
 }
 
@@ -422,8 +446,9 @@ pub enum MeasuredArgument {
     Parameter(String),
     /// The anchor, `@anchor`, not yet bound.
     Anchor,
-    /// The objects a reference picked, bound.
-    Objects(MeasuredSelection),
+    /// The objects a reference picked, bound: shared, since a rule binds
+    /// one selection into every value naming it.
+    Objects(std::sync::Arc<MeasuredSelection>),
     /// The rows of a table a reference named, bound.
     Table(Vec<crate::contract::TableRow>),
     /// A plain number.
@@ -976,7 +1001,9 @@ mod tests {
         for key in ["doors", "openings"] {
             call.bind(
                 key,
-                MeasuredArgument::Objects(MeasuredSelection::anchor(door.clone())),
+                MeasuredArgument::Objects(std::sync::Arc::new(MeasuredSelection::anchor(
+                    door.clone(),
+                ))),
             )
             .unwrap();
         }

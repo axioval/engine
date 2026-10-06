@@ -163,6 +163,19 @@ const COVERED: &[(&str, &str, &str)] = &[
         "tests/measured_exactness.rs",
         "a_stated_value_cited_approximate_is_refused",
     ),
+    // A contact service's evidence must be exact and reviewable: one
+    // cited approximate is refused before it reaches a value.
+    (
+        "contact_share",
+        "tests/slab_contact.rs",
+        "a_contact_cited_approximate_is_refused",
+    ),
+    // Counted over a selection, which nothing measures.
+    (
+        "undecided_count",
+        "tests/measured_exactness.rs",
+        "an_undecided_count_is_counted_exactly",
+    ),
 ];
 
 /// Every registered provider is named, by one of its names or lists, and
@@ -246,4 +259,21 @@ fn a_stated_value_cited_approximate_is_refused() {
         handle.resolve(&request).err(),
         Some(PropertyResolutionError::InexactEvidence)
     );
+}
+
+/// A count of the objects a selection cannot decide is counted, never
+/// measured: exact, nothing named counting none.
+#[test]
+fn an_undecided_count_is_counted_exactly() {
+    let project =
+        axioval_ir::Project::new(vec![axioval_ir::Object::new(common::id("wall"), "wall")])
+            .unwrap();
+    let services = axioval_engine::ServiceRegistry::new();
+    for name in ["undecided_count;objects=wall", "undecided_count"] {
+        assert_eq!(
+            common::measured_cited(&services, &project, &common::id("wall"), name),
+            Ok(Some(((0.0, 0.0), true))),
+            "{name}"
+        );
+    }
 }

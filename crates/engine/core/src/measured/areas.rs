@@ -10,7 +10,6 @@ use axioval_ir::{ObjectId, QuantityDimension};
 
 use super::{Answer, Measures};
 use crate::boundary_coverage::BoundaryCoverageRequest;
-use crate::contact::{ContactError, ContactRequest, ContactSide, ContactTolerance};
 use crate::coverage::{CoverageRequest, EffectReach, Participant};
 use crate::properties::PropertyResolutionError;
 
@@ -20,9 +19,6 @@ pub(super) const NAMES: &[&str] = &[
     "boundary_off_surface_count",
     "boundary_overlap_area",
     "boundary_uncovered_area",
-    "contact_area",
-    "contact_gap",
-    "contact_share",
     "effect_covered_area",
     "effect_covered_share",
     "facade_area",
@@ -107,7 +103,6 @@ impl Measures {
                 ))
             }
             "plan_overlap" | "uncovered_area" => self.plan_measure(call, object),
-            "contact_area" | "contact_gap" | "contact_share" => self.contact(call, object),
             "effect_covered_area" | "effect_covered_share" => self.effect(call, object),
             _ => {
                 let request =
@@ -209,59 +204,6 @@ impl Measures {
         ))
     }
 
-    /// The contact area on a side, its share of the whole face, or the
-    /// distance to the nearest candidate.
-    fn contact(
-        &self,
-        call: &MeasuredCall,
-        object: &ObjectId,
-    ) -> Result<Answer, PropertyResolutionError> {
-        let name = call.name();
-        let unavailable = |error: String| Self::unavailable(name, object, &error);
-        let candidates = self.of_kinds(call, "with", object)?;
-        let side = if call.choice("side") == Some("above") {
-            ContactSide::Above
-        } else {
-            ContactSide::Below
-        };
-        let tolerance = ContactTolerance::try_new(
-            length(call, "gap"),
-            length(call, "intersection"),
-            match call.argument("polygon") {
-                Some(MeasuredArgument::Length(area)) => *area,
-                _ => 0.0,
-            },
-        )
-        .map_err(|error| unavailable(error.to_string()))?;
-        let contact = self
-            .contacts
-            .as_ref()
-            .ok_or_else(|| Self::missing(name, "contact"))?
-            .measure_contact(&ContactRequest::new(
-                object.clone(),
-                candidates,
-                side,
-                tolerance,
-            ))
-            .map_err(|error| refused_contact(name, object, error))?;
-        let locator = contact.evidence().locator.clone();
-        let exact = contact.evidence().exact;
-        let area = contact.contact_area_square_metres();
-        if name == "contact_area" {
-            return Ok(Answer::Value(area, area, AREA, locator, exact));
-        }
-        if name == "contact_gap" {
-            return Ok(match contact.nearest_distance_metres() {
-                Some(gap) => {
-                    Answer::Value(gap, gap, Some(QuantityDimension::Length), locator, exact)
-                }
-                None => Answer::Absent(format!("{locator}: no candidate is reported near")),
-            });
-        }
-        let whole = contact.whole_area_square_metres();
-        share_answer((area, area), (whole, whole), locator, exact).map_err(unavailable)
-    }
-
     /// The part of the footprint the sources' effects cover, or its share.
     fn effect(
         &self,
@@ -323,23 +265,5 @@ impl Measures {
             covered_exact && footprint.evidence().exact,
         )
         .map_err(unavailable)
-    }
-}
-
-/// A contact measurement's refusal, for the reason `slab-contact` gives: a
-/// body the service could not measure or orient is missing evidence, never
-/// a clean face, and an answer it cannot stand behind is invalid evidence.
-fn refused_contact(name: &str, object: &ObjectId, error: ContactError) -> PropertyResolutionError {
-    let message = format!(
-        "`{}` value `{name}` of {object}: {error}",
-        axioval_ir::MEASURED_SET
-    );
-    match error {
-        ContactError::Unavailable | ContactError::UncheckableOrientation => {
-            PropertyResolutionError::Incomplete(message)
-        }
-        ContactError::InexactEvidence
-        | ContactError::InvalidAreas
-        | ContactError::UnrequestedCandidate => PropertyResolutionError::Conflicting(message),
     }
 }

@@ -550,14 +550,21 @@ pub struct Unless {
 
 /// How a finding is graded: `values`, read once its decision fails (a
 /// `null` kept as one, a value that cannot be read leaving the object open
-/// as refused), then the severity of the first band whose condition holds,
-/// the rule's own where none does. Its messages may read the values.
+/// as refused), and `derived` from them, then the severity of the first
+/// band whose condition holds, the rule's own where none does. Its messages
+/// may read the values. `undecided` values are read only where the decision
+/// is undecided, before its message is worded (how many objects a
+/// selection left undecided), each refused as any value.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Grading {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub values: Vec<TemplateValue>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub derived: Vec<Derived>,
     pub bands: Vec<Band>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub undecided: Vec<TemplateValue>,
 }
 
 /// The severity a graded finding takes where `when` holds (always,

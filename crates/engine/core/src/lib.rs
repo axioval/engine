@@ -1047,7 +1047,7 @@ pub use measured::provider::{
     Citation, MeasuredMember, MeasuredMemo, MeasuredProvider, Measurement, MemberValue,
     measured_members, measured_members_bound, measured_members_cited,
 };
-pub use measured::{BoundRead, MeasuredRead, MeasuredValues, measured_value};
+pub use measured::{BoundRead, MeasuredRead, MeasuredValues, PreparedRead, measured_value};
 pub use metric_routing::{
     BlockedMetricRouteEvidence, ClimbLength, CompleteMetricEvidence, ConnectorRouting,
     FarthestPointEvidence, FarthestPointOutcome, FarthestPointRequest, ForcedWalkEvidence,

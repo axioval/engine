@@ -199,6 +199,7 @@ pub mod reference {
     pub use crate::related_count::reference::RelatedCount;
     pub use crate::relative_count::reference::RelativeCount;
     pub use crate::shelf_capacity::reference::ShelfCapacity;
+    pub use crate::slab_contact::reference::SlabContact;
     pub use crate::stair_geometry::reference::RampGeometryReference as RampGeometry;
     pub use crate::stair_geometry::reference::StairGeometryReference as StairGeometry;
     pub use crate::triangle_count::reference::TriangleCountLimit;
@@ -313,6 +314,8 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(slab_stack::StackMeasures))
         .and_then(|registry| registry.register_measured(shelf_capacity::ShelfMeasures))
         .and_then(|registry| registry.register_measured(slab_contact::StoreyMeasures))
+        .and_then(|registry| registry.register_measured(slab_contact::ContactMeasures))
+        .and_then(|registry| registry.register_measured(measured_kinds::SelectionMeasures))
         .and_then(|registry| registry.register_measured(coordinate_consistency::CoordinateMeasures))
         .map(|registry| registry.with_refiner(Refiner))
 }

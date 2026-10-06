@@ -234,6 +234,14 @@ pub trait MeasuredProvider: Send + Sync + 'static {
             .map(|object| self.measure(call, object, context))
             .collect()
     }
+
+    /// Whether the provider keeps what it measured for the run itself
+    /// ([`MeasuredMemo`]), each value of it a cheap reading of that: a
+    /// value read with bound arguments is then not kept a second time. By
+    /// default it is kept.
+    fn memoizes(&self) -> bool {
+        false
+    }
 }
 
 /// The providers of a run, by name, with the run's project and services.

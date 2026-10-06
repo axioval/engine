@@ -162,6 +162,11 @@ const PAIRS: &[Pair] = &[
         case: "stairs",
         reference: |registry| registry.replace(axioval::rules::reference::StairGeometry),
     },
+    Pair {
+        capability: "axioval:capability.slab-contact",
+        case: "coverage",
+        reference: |registry| registry.replace(axioval::rules::reference::SlabContact),
+    },
 ];
 
 /// Warm-up runs per side before measuring.

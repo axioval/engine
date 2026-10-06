@@ -341,8 +341,97 @@ impl MeasuredValues {
         call: &MeasuredCall,
         objects: &[&ObjectId],
     ) -> Vec<Result<BoundRead, PropertyResolutionError>> {
-        self.0.read_bound_batch(written, call, objects)
+        self.0
+            .read_prepared(&PreparedRead::of(written, call), objects)
     }
+
+    /// [`Self::read_bound_batch`] of a call prepared once
+    /// ([`PreparedRead::of`]): what a rule reading one bound value of
+    /// object after object prepares once, answering exactly what
+    /// [`Self::read_bound_batch`] answers.
+    #[must_use]
+    pub fn read_prepared(
+        &self,
+        prepared: &PreparedRead,
+        objects: &[&ObjectId],
+    ) -> Vec<Result<BoundRead, PropertyResolutionError>> {
+        self.0.read_prepared(prepared, objects)
+    }
+}
+
+/// A measured value's call with every reference bound, prepared to be read
+/// for many objects: parsed into what measures it once, and keyed once for
+/// the run's memo (each selection by its identity), so each object's read
+/// builds no key of its own.
+#[derive(Clone)]
+pub struct PreparedRead(Arc<Prepared>);
+
+struct Prepared {
+    written: String,
+    name: Result<MeasuredName, PropertyResolutionError>,
+    key: BoundKey,
+}
+
+/// The memo key of a prepared read beside the object: the name as written,
+/// the bound arguments and their selections' identities, hashed once.
+#[derive(Clone, PartialEq, Eq)]
+struct BoundKey {
+    hash: u64,
+    parts: Arc<(String, String, Vec<axioval_ir::measured::SelectionIdentity>)>,
+}
+
+impl std::hash::Hash for BoundKey {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.hash.hash(state);
+    }
+}
+
+impl PreparedRead {
+    /// `call`, written `written`, prepared: a reference left unbound or a
+    /// call that does not parse is refused by every read.
+    #[must_use]
+    pub fn of(written: &str, call: &MeasuredCall) -> Self {
+        use std::hash::{BuildHasher, BuildHasherDefault, DefaultHasher};
+        let name = if let Some((key, argument)) = call.references().next() {
+            Err(PropertyResolutionError::InvalidArgument(format!(
+                "`{}` parameter `{key}`: `{}` is not bound",
+                call.name(),
+                argument.written().unwrap_or_default()
+            )))
+        } else {
+            of_call(call.clone()).map_err(PropertyResolutionError::InvalidArgument)
+        };
+        let (arguments, selections) = arguments_key(call);
+        let parts = Arc::new((written.to_owned(), arguments, selections));
+        let hash = BuildHasherDefault::<DefaultHasher>::default().hash_one(&*parts);
+        Self(Arc::new(Prepared {
+            written: written.to_owned(),
+            name,
+            key: BoundKey { hash, parts },
+        }))
+    }
+}
+
+/// The bound arguments of `call` in a form a memo keys by: every argument's
+/// key and value, in key order, and each selection of objects by its
+/// identity (the rule binds one shared selection into every value naming
+/// it), so a key stays small however many objects a selector picks.
+fn arguments_key(call: &MeasuredCall) -> (String, Vec<axioval_ir::measured::SelectionIdentity>) {
+    use std::fmt::Write as _;
+    let mut key = String::new();
+    let mut selections = Vec::new();
+    for (name, argument) in &call.arguments {
+        match argument {
+            MeasuredArgument::Objects(selection) => {
+                let _ = write!(key, "{name}=@{};", selection.parameter);
+                selections.push(axioval_ir::measured::SelectionIdentity(selection.clone()));
+            }
+            other => {
+                let _ = write!(key, "{name}={other:?};");
+            }
+        }
+    }
+    (key, selections)
 }
 
 /// A measured value read with arguments bound from a rule: the value and
@@ -411,7 +500,6 @@ pub(crate) struct Measures {
     rectangles: Option<PlanSpanServiceHandle>,
     walking: Option<WalkingSurfaceServiceHandle>,
     facades: Option<crate::facade_area::FacadeAreaServiceHandle>,
-    contacts: Option<crate::contact::ContactServiceHandle>,
     spaces: Option<SpaceServiceHandle>,
     coordinates: Option<CoordinateSystemServiceHandle>,
     alignments: Option<crate::alignment::AlignmentServiceHandle>,
@@ -440,9 +528,6 @@ impl Measures {
             walking: services.get::<WalkingSurfaceServiceHandle>().cloned(),
             facades: services
                 .get::<crate::facade_area::FacadeAreaServiceHandle>()
-                .cloned(),
-            contacts: services
-                .get::<crate::contact::ContactServiceHandle>()
                 .cloned(),
             spaces: services.get::<SpaceServiceHandle>().cloned(),
             coordinates: services.get::<CoordinateSystemServiceHandle>().cloned(),
@@ -633,48 +718,41 @@ impl Measures {
             .collect()
     }
 
-    /// The measured value `call`, bound, of each of `objects`
-    /// ([`MeasuredValues::read_bound_batch`]).
-    fn read_bound_batch(
+    /// The measured value `prepared` reads of each of `objects`
+    /// ([`MeasuredValues::read_prepared`]).
+    fn read_prepared(
         &self,
-        written: &str,
-        call: &MeasuredCall,
+        prepared: &PreparedRead,
         objects: &[&ObjectId],
     ) -> Vec<Result<BoundRead, PropertyResolutionError>> {
-        if let Some((key, argument)) = call.references().next() {
-            let error = PropertyResolutionError::InvalidArgument(format!(
-                "`{}` parameter `{key}`: `{}` is not bound",
-                call.name(),
-                argument.written().unwrap_or_default()
-            ));
-            return objects.iter().map(|_| Err(error.clone())).collect();
-        }
-        let name = match of_call(call.clone()) {
+        let Prepared { written, name, key } = &*prepared.0;
+        let name = match name {
             Ok(name) => name,
-            Err(error) => {
-                let error = PropertyResolutionError::InvalidArgument(error);
-                return objects.iter().map(|_| Err(error.clone())).collect();
-            }
+            Err(error) => return objects.iter().map(|_| Err(error.clone())).collect(),
         };
-        // The bound arguments, in a form a memo keys by: every argument's
-        // key and value, in key order, selections sorted.
-        let arguments = format!("{:?}", call.arguments);
         let measure = |object: &ObjectId| -> Result<BoundRead, PropertyResolutionError> {
-            let (answer, citation) = match &name {
+            let (answer, citation) = match name {
                 MeasuredName::Provided(call) => self.provided_cited(call, object)?,
                 name => (self.measure(name, object)?, provider::Citation::default()),
             };
             Ok((Self::read(object, written, Ok(answer))?, citation))
         };
+        // A provider keeping its own measurements needs no second memo.
+        let memoizes = match (name, &self.providers) {
+            (MeasuredName::Provided(call), Some((providers, _))) => providers
+                .of(call.name())
+                .is_some_and(|provider| provider.memoizes()),
+            _ => false,
+        };
         objects
             .iter()
             .map(|object| match &self.providers {
-                Some((_, services)) => provider::MeasuredMemo::of(
-                    services,
-                    ((*object).clone(), written.to_owned(), arguments.clone()),
-                    || measure(object),
-                ),
-                None => measure(object),
+                Some((_, services)) if !memoizes => {
+                    provider::MeasuredMemo::of(services, ((*object).clone(), key.clone()), || {
+                        measure(object)
+                    })
+                }
+                _ => measure(object),
             })
             .collect()
     }

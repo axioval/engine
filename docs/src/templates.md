@@ -33,7 +33,9 @@ requirements tables and `property-comparison` candidates against a target
 (#287): every generic judge now runs as a template; `ramp-geometry` is the
 first judging the items of measured lists one by one, and
 `stair-geometry` the first judging the parts of what it selects as objects
-of their own ([#280](https://github.com/axioval/engine/issues/280)).
+of their own ([#280](https://github.com/axioval/engine/issues/280)); `slab-contact` is the first to grade its findings itself and
+to leave objects unjudged
+([#282](https://github.com/axioval/engine/issues/282)).
 
 ## The outside contract
 
@@ -854,6 +856,36 @@ whole-stair mode's included. Per-object parameters are evaluated per
 object first, as before. The defect counts sum the same items:
 `missing_tactile_strips` the strips (an intermediate end only with
 `intermediate=yes`), `handrail_breaks` of a whole stair its breaks.
+### `slab-contact`
+
+| Form | When | Values | Decision |
+| --- | --- | --- | --- |
+| one | always | `share` = `contact_share;with=@counterparts;side=@contact_side;gap=@maximum_gap_metres;intersection=@maximum_intersection_metres;polygon=@minimum_polygon_area_square_metres`; `undecided` = `undecided_count;objects=@counterparts` | `share` at least `minimum_contact_ratio`, no rounding |
+
+The contact values measure one request per face for every value reading
+it, with the rule's counterparts (every other object where the rule names
+none); counterparts the selector cannot decide may add contact, so the
+share runs up to the whole face and a shortfall is left open with `contact
+ratio {share:lower4} is below required {minimum_contact_ratio:fixed4}, but
+the counterpart selection is undecided for {undecided:least} object(s)
+that could support the face`, while a pass stands. Before anything is
+read, `skip_top_storey` and `skip_bottom_storey` each leave a face
+unjudged (`unless`) where `storey_end;end=top|bottom;storeys=@storey_selector`
+along the rule's traversal is 1: its storey is the highest or lowest of its
+source by the storeys' `Elevation` attribute (`storeys cannot be ordered:
+…` where one has none, and the face open where it reaches no storey or
+several). A shortfall is graded (`grading`) by the share,
+`contact_gap` and `relative` (the share over the minimum, derived): none of the face in contact
+(`no contact`) is an error without a candidate near, informational
+nearer than 0.1 m, an error farther than 0.5 m and a warning between; a
+partial one (`contact ratio {share:lower4} below required
+{minimum_contact_ratio:fixed4}`) informational above 0.9 of the minimum,
+an error below 0.3, a warning between. The finding relates what the face
+rests on (`related: share`). The declaration is refused per face after
+`slab-contact declaration is invalid` (`prefixed`), in the capability's
+order and words; the storey selector and the traversal are checked only
+while a storey is left out (`when`), and without the contact service each
+face is open (`contact service is not registered`).
 
 ## Binding and running a rule
 
@@ -1192,6 +1224,17 @@ margins, widths and landings under random step, count, rise, tolerance,
 width and landing bounds; and the `stair-geometry` rules of the case
 `stairs`, recorded before the switch. Both references are compiled only
 with `parity-reference` (`stair_geometry/reference.rs`).
+`slab-contact` is held to `slab_contact/reference.rs`
+(`axioval_rules::reference::SlabContact`, which shares the storey search)
+on every fixture of `tests/slab_contact.rs`, the template measuring exactly
+the requests the capability sent (a face on a storey left out is never
+measured); by generated walls on storeys of random elevations (some
+unstated), resting on slabs a selector picks surely, not or undecidably,
+with random contact, gaps, minimums, sides and storeys left out; by the
+`slab-contact` rules of the `coverage` case, recorded before the switch;
+and its fork, which passes a face where a value leaving it unjudged holds
+and otherwise reaches the template's verdicts, its findings at the rule's
+severity (D25).
 
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the

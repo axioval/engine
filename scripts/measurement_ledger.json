@@ -684,7 +684,7 @@
         "shelf_clear_height"
       ]
     },
-    "slab_contact::evaluate::measure_contact": {
+    "slab_contact::reference::evaluate::measure_contact": {
       "count": 1,
       "providedBy": [
         "contact_area",

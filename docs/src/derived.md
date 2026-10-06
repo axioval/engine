@@ -386,7 +386,7 @@ ignoring ASCII case):
 | `largest_unallocated_region`, `unallocated_share` | a storey's floor no space covers | `SpaceService::measure_unallocated_regions` |
 | `facade_area`, `face_area` | the facade area, or the largest plane face's area | `FacadeAreaService` |
 | `plan_overlap;with=<kinds>[;measure=largest\|total]`, `uncovered_area;by=<kinds>[;growth=<m>]` | the footprint's overlap with, or the area left uncovered by, objects of kinds | `PlanAreaService` |
-| `contact_area`, `contact_share` `;with=<kinds>[;side=below\|above][;gap=…;intersection=…;polygon=…]` | a face's contact with objects of kinds, or its share | `ContactService` |
+| `contact_area`, `contact_share` `[;with=<objects>][;side=below\|above][;gap=…;intersection=…;polygon=…]` | a face's contact with the objects named (kinds or `@` a selector parameter; every other object without `with`), or its share; objects the selector cannot decide may add contact, up to the whole face | built in, over `ContactService` |
 | `effect_covered_area`, `effect_covered_share` `;sources=<kinds>[;blockers=<kinds>][;reach=grown\|travel\|visible][;range=<m>]` | the part of the footprint the sources' effect areas cover, or its share | `PlanAreaService::measure_coverage` |
 | `boundary_covered_share`, `boundary_uncovered_area`, `boundary_overlap_area` `[;plane=<m>]` | a space's declared boundaries over its body's surface | `BoundaryCoverageService` |
 | `boundary_off_surface_count[;plane=<m>]` | how many of a space's declared boundaries lie on no face of its body, a plain number | `BoundaryCoverageService` |
@@ -406,10 +406,12 @@ ignoring ASCII case):
 | `obstruction_count;obstacles=<kinds>;reach=<m>;at=ends\|sides\|within[;side_zone=<m>]` | how many ends or sides of that rectangle obstacles obstruct, or how many stand within it, a plain number | built in, over `PlanSpanService`, `ProximityService`, `VerticalExtentService` |
 | `band_uncovered_area;members=<kinds>;member_path=<steps>;angle_tolerance=<degrees>;maximum=<m>;footprints=<kinds>;footprint_path=<steps>` | the largest area of a reached footprint outside every band between parallel members at most `maximum` apart | built in, over `PlanSpanService`, `ProximityService`, `VerticalExtentService`, `PlanAreaService::measure_outside_bands` |
 | `plan_area[;measure=footprint\|facade]` | the object's own area as `plan-area` measures it, an empty footprint refused | built in, over `PlanAreaService` or `FacadeAreaService` |
-| `contact_gap;with=<kinds>[;side=…;gap=…;intersection=…;polygon=…]` | the distance to the nearest object of the kinds the contact service reports, none where it reports none | `ContactService` |
+| `contact_gap[;with=<objects>][;side=…;gap=…;intersection=…;polygon=…]` | the distance to the nearest object named the contact service reports, none where it reports none; refused while the selection leaves an object undecided | built in, over `ContactService` |
 | `level_rise;levels=<kinds>;order=<set/name>[;anchor=<steps>][;path=<steps>][;lowest=…][;highest=…][;contents=<steps>;content_kinds=<kinds>]`, `prevailing_rise;…[;tolerance=<m>]` | a level's rise to the next one up, and the prevailing rise among its anchor's levels, as `level-spacing` measures them | built in, over the order property and `VerticalExtentService` |
 | `prevailing_elevation;side=bottom\|top;spaces=<steps>[;kinds=<kinds>][;tolerance=<m>]` | the prevailing bottom or top elevation among the spaces of the space's level | built in, over `VerticalExtentService` |
 | `levels_above`, `levels_below` `;levels=<kinds>;path=<steps>` | how many storeys of the source lie above or below the object's one storey by their `Elevation` attribute | built in, over the property and relationship services |
+| `storey_end;end=top\|bottom;storeys=<objects>[;relationship=…;direction=…\|path=<steps>][;follow_chain=…][;skip_absent_relationship_ends=…]` | 1 where the object's one storey is the highest or lowest of its source by the storeys' `Elevation` attribute, 0 where not, as `slab-contact` leaves it out | built in, over the property and relationship services |
+| `undecided_count[;objects=<objects>]` | how many objects other than this one a selection cannot decide; none without `objects` | built in, over the rule's selection |
 | `stack_distance;measure=top_to_top\|bottom_to_bottom\|top_to_bottom;slabs=<kinds>;ratio=<share>` | the distance to the next slab up in the slab's stack, none where none stacks above | built in, over `VerticalExtentService`, `PlanAreaService` |
 | `shelf_length`, `shelf_clear_height` `;depth=…;horizontal=…;vertical=…;bottom=…;top=…;clearance=…;access=<steps>[;doors=<objects>][;openings=<objects>][;spaces=<objects>]` | a space's running metres of shelving and its clear height, as `shelf-capacity` measures them | built in, over `LinearQuantityService` |
 | `body_extent;axis=right\|forward\|up` | the body's depth along one of its own placement axes, as `body-extent` measures it | built in, over `ObjectFrameService`, `VerticalExtentService` |
@@ -823,9 +825,10 @@ so a sum of areas divided by `1 m²` is a plain 0. These differ:
 - `plan-area` leaves an anchor with undecided members open unless its sum
   already exceeds the maximum; the aggregate measures the undecided members
   too, so a sum that stays within the bounds either way passes;
-- `slab-contact` counterparts named by more than a kind cannot be a
-  measured value's candidates: an undecided one leaves a shortfall open in
-  the capability, and the rewrite finds it;
+- `slab-contact` counterparts named by more than a kind need the rule's
+  selector (`with=@counterparts`, as the template binds it): an undecided
+  one leaves a shortfall open in the capability, while a rewrite naming
+  kinds sends every object of them and finds it;
 - `area-ratio`'s light-area numerator (a stated light area, else a size
   table row by type pattern, else a frame allowance, with an oversized
   member reported on its own) stays with the capability.
@@ -924,7 +927,9 @@ sites that cite a value exact:
 | `band_uncovered_area`, `parallel_pairs` | every pair and area is exact and every member was read | the possible bands |
 | `level_rise`, `prevailing_rise`, `prevailing_elevation` | the heights' or extent's evidence is exact (points decide the prevailing value, as `level-spacing` decides it) | rounding |
 | `shelf_length`, `shelf_clear_height` | always: the linear-quantity service refuses inexact evidence | nothing |
-| `levels_above`, `levels_below` | always: counted over stated elevations, which the property service answers exactly | nothing |
+| `levels_above`, `levels_below`, `storey_end` | always: counted over stated elevations, which the property service answers exactly | nothing |
+| `contact_area`, `contact_gap`, `contact_share` | always: the contact service refuses inexact evidence | the share's division, rounded outward; the contact undecided candidates may add |
+| `undecided_count` | always: counted over the selection | nothing |
 | `stack_distance`, `body_extent`, `plan_area`, `triangle_count` | every extent, frame, area or count is exact | rounding |
 | `counterpart_uncovered_share` | every evidence is exact and every counterpart that may cover was read | the undecided cover, as `counterpart-coverage` cites it (`Cited`) |
 | `coordinate_*`, `map_*` | always: coordinate systems are exact by contract | the arithmetic's rounding, widened by a bound on it |

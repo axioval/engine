@@ -12,6 +12,7 @@
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 use axioval_engine::{NotEvaluatedReason, RuleContext};
 use axioval_ir::ObjectId;
@@ -25,10 +26,12 @@ use crate::selection::select_objects;
 use crate::support::{Unavailable, invalid, si_quantity};
 
 /// What one rule's measured values bind, read once per rule: the objects
-/// each selector parameter picks.
+/// each selector parameter picks, and each measured name naming no anchor,
+/// parsed and bound (it binds alike for every object).
 #[derive(Default)]
 pub(crate) struct Arguments {
-    selections: RefCell<BTreeMap<String, Result<MeasuredSelection, Unavailable>>>,
+    selections: RefCell<BTreeMap<String, Result<Arc<MeasuredSelection>, Unavailable>>>,
+    calls: RefCell<BTreeMap<String, Result<axioval_engine::PreparedRead, Unavailable>>>,
 }
 
 /// The objects `selector`, the rule's parameter `parameter`, picks: those
@@ -41,10 +44,14 @@ fn selection(
 ) -> Result<MeasuredSelection, Unavailable> {
     let (matched, outcomes) = select_objects(context, selector);
     let mut undecided = BTreeSet::new();
+    let mut first_undecided = None;
     for outcome in outcomes.not_evaluated_outcomes() {
         match outcome.object_id() {
             Some(object) => {
                 undecided.insert(object.clone());
+                first_undecided.get_or_insert_with(|| {
+                    (outcome.reason().clone(), outcome.message().to_owned())
+                });
             }
             None => {
                 return Err((
@@ -64,6 +71,7 @@ fn selection(
             .map(|object| object.id.clone())
             .collect(),
         undecided,
+        first_undecided,
     })
 }
 
@@ -78,6 +86,36 @@ pub(crate) fn selection_of(
 }
 
 impl Arguments {
+    /// The measured name `name` parsed, bound and prepared for the rule,
+    /// once per rule: `None` where it does not parse, binds nothing or
+    /// names the anchor, which binds per object.
+    pub(crate) fn call(
+        &self,
+        context: &RuleContext<'_>,
+        parameters: Option<&BTreeMap<String, ParameterValue>>,
+        name: &str,
+    ) -> Option<Result<axioval_engine::PreparedRead, Unavailable>> {
+        if let Some(bound) = self.calls.borrow().get(name) {
+            return Some(bound.clone());
+        }
+        let mut call = axioval_ir::measured::parse(name).ok()?;
+        if call.is_bound()
+            || call
+                .references()
+                .any(|(_, argument)| *argument == MeasuredArgument::Anchor)
+        {
+            return None;
+        }
+        // No anchor named: any object binds it alike.
+        let anchor = context.project.objects().next()?.id.clone();
+        let bound = bind(context, parameters, Some(self), &anchor, &mut call)
+            .map(|()| axioval_engine::PreparedRead::of(name, &call));
+        self.calls
+            .borrow_mut()
+            .insert(name.to_owned(), bound.clone());
+        Some(bound)
+    }
+
     /// The objects the selector parameter `parameter` picks, read once.
     pub(crate) fn selection_of(
         &self,
@@ -86,6 +124,7 @@ impl Arguments {
         selector: &Selector,
     ) -> Result<MeasuredSelection, Unavailable> {
         self.selection(context, parameter, selector)
+            .map(|selection| selection.as_ref().clone())
     }
 
     /// The objects the selector parameter `parameter` picks, read once.
@@ -94,11 +133,11 @@ impl Arguments {
         context: &RuleContext<'_>,
         parameter: &str,
         selector: &Selector,
-    ) -> Result<MeasuredSelection, Unavailable> {
+    ) -> Result<Arc<MeasuredSelection>, Unavailable> {
         if let Some(read) = self.selections.borrow().get(parameter) {
             return read.clone();
         }
-        let read = selection(context, parameter, selector);
+        let read = selection(context, parameter, selector).map(Arc::new);
         self.selections
             .borrow_mut()
             .insert(parameter.to_owned(), read.clone());
@@ -121,7 +160,7 @@ fn bound(
         (MeasuredParameterKind::Objects, ParameterValue::Selector { value: selector }) => {
             MeasuredArgument::Objects(match arguments {
                 Some(arguments) => arguments.selection(context, parameter, selector)?,
-                None => selection(context, parameter, selector)?,
+                None => Arc::new(selection(context, parameter, selector)?),
             })
         }
         (MeasuredParameterKind::Objects, _) => return Err(not("a selector")),
@@ -238,7 +277,7 @@ pub(crate) fn bind(
     for (key, reference) in references {
         let argument = match &reference {
             MeasuredArgument::Anchor => {
-                MeasuredArgument::Objects(MeasuredSelection::anchor(anchor.clone()))
+                MeasuredArgument::Objects(Arc::new(MeasuredSelection::anchor(anchor.clone())))
             }
             MeasuredArgument::Parameter(parameter) => {
                 let Some(parameters) = parameters else {

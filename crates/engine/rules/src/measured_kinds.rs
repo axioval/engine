@@ -93,7 +93,7 @@ pub(crate) fn selection(
 ) -> Result<Option<axioval_ir::measured::MeasuredSelection>, PropertyResolutionError> {
     Ok(match call.argument(key) {
         None => None,
-        Some(MeasuredArgument::Objects(selection)) => Some(selection.clone()),
+        Some(MeasuredArgument::Objects(selection)) => Some(selection.as_ref().clone()),
         Some(MeasuredArgument::SourceKind(_)) => {
             let mut matched = every_object_of_kinds(context, call, key)?;
             if let Some(object) = leave_out {
@@ -103,6 +103,7 @@ pub(crate) fn selection(
                 parameter: key.to_owned(),
                 matched,
                 undecided: BTreeSet::new(),
+                first_undecided: None,
             })
         }
         Some(_) => return Err(PropertyResolutionError::InvalidRequest),
@@ -160,5 +161,85 @@ pub(crate) fn interval(
             locator,
             exact: false,
         }
+    }
+}
+
+/// The traversal the call's arguments state, read as a rule states it:
+/// each traversal parameter under its own name.
+pub(crate) fn traversal(
+    call: &MeasuredCall,
+) -> Result<Option<crate::support::Traversal>, crate::support::Unavailable> {
+    use axioval_ir::contract::ParameterValue;
+    let parameters: std::collections::BTreeMap<String, ParameterValue> = call
+        .arguments
+        .iter()
+        .filter_map(|(key, argument)| {
+            let value = match argument {
+                MeasuredArgument::Text(text) => ParameterValue::String {
+                    value: text.clone(),
+                },
+                MeasuredArgument::Path(steps) => ParameterValue::StringList {
+                    value: steps.clone(),
+                },
+                MeasuredArgument::Truth(value) => ParameterValue::Boolean { value: *value },
+                _ => return None,
+            };
+            Some(((*key).to_owned(), value))
+        })
+        .collect();
+    let rule = axioval_engine::CompiledRule {
+        id: axioval_ir::RuleId::new("axioval-measured-traversal").expect("a valid rule id"),
+        capability: "axioval:measured".into(),
+        severity: axioval_ir::contract::Severity::Info,
+        selector: axioval_ir::contract::Selector::All,
+        parameters,
+    };
+    crate::support::Parameters(&rule).traversal()
+}
+
+/// Measures `undecided_count`.
+pub(crate) struct SelectionMeasures;
+
+const UNDECIDED_COUNT: &str = "undecided_count";
+
+impl axioval_engine::MeasuredProvider for SelectionMeasures {
+    fn names(&self) -> &'static [&'static str] {
+        &[UNDECIDED_COUNT]
+    }
+
+    /// How many objects other than the one measured `objects` cannot
+    /// decide: counted over the selection bound into the call, exactly.
+    fn measure(
+        &self,
+        call: &MeasuredCall,
+        object: &ObjectId,
+        context: &RuleContext<'_>,
+    ) -> Result<axioval_engine::Measurement, PropertyResolutionError> {
+        let counted = match call.argument("objects") {
+            Some(MeasuredArgument::Objects(counted)) => {
+                Some(std::borrow::Cow::Borrowed(&**counted))
+            }
+            _ => selection(context, call, "objects", None)?.map(std::borrow::Cow::Owned),
+        };
+        let Some(counted) = counted else {
+            return Ok(axioval_engine::Measurement::Rounded {
+                lower: 0.0,
+                upper: 0.0,
+                dimension: None,
+                locator: format!("{UNDECIDED_COUNT}:{object}: no objects named"),
+            });
+        };
+        #[allow(clippy::cast_precision_loss)]
+        let count = counted
+            .undecided
+            .iter()
+            .filter(|candidate| *candidate != object)
+            .count() as f64;
+        Ok(axioval_engine::Measurement::Rounded {
+            lower: count,
+            upper: count,
+            dimension: None,
+            locator: format!("{UNDECIDED_COUNT}:{object}:{}", counted.parameter),
+        })
     }
 }

@@ -1156,7 +1156,7 @@ fn bind(template: &Template, rule: &CompiledRule) -> Result<Bound, Unavailable> 
         .map(|grading| {
             grading
                 .iter()
-                .flat_map(|grading| &grading.values)
+                .flat_map(|grading| grading.values.iter().chain(&grading.undecided))
                 .map(|step| bound(&step.expression, &constants))
                 .collect()
         })
@@ -1927,7 +1927,59 @@ fn grade(
     let Some(grading) = grading else {
         return Ok(None);
     };
-    for (step, expression) in grading.values.iter().zip(&plan.bound.grading[index]) {
+    read_graded(
+        grading.values.iter().zip(&plan.bound.grading[index]),
+        object,
+        leaves,
+        read,
+    )?;
+    if let Some(outcome) = derive_of(plan, &grading.derived, read) {
+        return Err(outcome);
+    }
+    Ok(grading
+        .bands
+        .iter()
+        .find(|band| band.when.is_none() || holds(plan, read, band.when))
+        .map(|band| band.severity.clone()))
+}
+
+/// Reads the values the form's grading (`index` 0) or its check's
+/// (`index − 1`) reads to word an undecided outcome, if any.
+fn word_undecided(
+    plan: &Plan<'_>,
+    index: usize,
+    object: &Object,
+    leaves: &mut ObjectLeaves<'_>,
+    read: &mut Read,
+) -> Result<(), Outcome> {
+    let grading = if index == 0 {
+        plan.form.grading.as_ref()
+    } else {
+        plan.form.checks[index - 1].grading.as_ref()
+    };
+    let Some(grading) = grading else {
+        return Ok(());
+    };
+    read_graded(
+        grading
+            .undecided
+            .iter()
+            .zip(&plan.bound.grading[index][grading.values.len()..]),
+        object,
+        leaves,
+        read,
+    )
+}
+
+/// Reads grading values into `read`, a `null` kept as one: `Err` the
+/// outcome where one cannot be read.
+fn read_graded<'v>(
+    values: impl Iterator<Item = (&'v TemplateValue, &'v Expression)>,
+    object: &Object,
+    leaves: &mut ObjectLeaves<'_>,
+    read: &mut Read,
+) -> Result<(), Outcome> {
+    for (step, expression) in values {
         let (outcome, evidence) = read_step(expression, step.name, leaves);
         let cited = leaves.take_related();
         if !cited.is_empty() {
@@ -1956,11 +2008,7 @@ fn grade(
             }
         }
     }
-    Ok(grading
-        .bands
-        .iter()
-        .find(|band| band.when.is_none() || holds(plan, read, band.when))
-        .map(|band| band.severity.clone()))
+    Ok(())
 }
 
 /// Each of the form's checks judged on its own over `read` and its own
@@ -2041,6 +2089,13 @@ fn judge_checks_in(
                         continue;
                     }
                 }
+            }
+            (Verdict::Undecided(_), Some(index)) => {
+                if let Err(outcome) = word_undecided(plan, index, object, leaves, &mut checked) {
+                    outcomes.push(outcome);
+                    continue;
+                }
+                None
             }
             _ => None,
         };
@@ -2202,11 +2257,16 @@ fn read_values<'v>(
 /// arithmetic over their intervals: the outcome where one leaves the
 /// object open.
 fn derive(plan: &Plan<'_>, read: &mut Read) -> Option<Outcome> {
+    derive_of(plan, &plan.form.derived, read)
+}
+
+/// [`derive`] of `derived`.
+fn derive_of(plan: &Plan<'_>, derived: &[Derived], read: &mut Read) -> Option<Outcome> {
     let span = |read: &Read, name: &str| match read.values.get(name) {
         Some(Value::Number { value, unit }) => Some((value.lower, value.upper, unit.clone())),
         _ => None,
     };
-    for derived in &plan.form.derived {
+    for derived in derived {
         let (name, lower, upper, unit) = match derived {
             Derived::Difference(difference) => {
                 let (Some(minuend), Some(subtrahend)) = (
@@ -2514,8 +2574,8 @@ fn judge_object(
             };
         }
     }
-    let severity = if matches!(judged.verdict, Verdict::Fail(_)) {
-        match grade(plan, 0, object, &mut leaves, &mut read) {
+    let severity = match judged.verdict {
+        Verdict::Fail(_) => match grade(plan, 0, object, &mut leaves, &mut read) {
             Ok(severity) => severity,
             Err(outcome) => {
                 return Judgement {
@@ -2524,9 +2584,18 @@ fn judge_object(
                     checks,
                 };
             }
+        },
+        Verdict::Undecided(_) => {
+            if let Err(outcome) = word_undecided(plan, 0, object, &mut leaves, &mut read) {
+                return Judgement {
+                    outcome,
+                    row,
+                    checks,
+                };
+            }
+            None
         }
-    } else {
-        None
+        Verdict::Pass => None,
     };
     let outcome = graded(ranged(plan, read, &judged, related), severity);
     Judgement {
@@ -2643,7 +2712,14 @@ fn push(
             deviation,
             severity,
         } => {
-            let mut found = finding(rule, &object.id, message, evidence, related);
+            // A measurement several values read is cited once.
+            let mut cited: Vec<Evidence> = Vec::with_capacity(evidence.len());
+            for evidence in evidence {
+                if !cited.contains(&evidence) {
+                    cited.push(evidence);
+                }
+            }
+            let mut found = finding(rule, &object.id, message, cited, related);
             if let Some(severity) = severity {
                 found.severity = severity;
             }
@@ -2704,24 +2780,7 @@ pub(crate) fn run(
     let arguments = Arguments::default();
     let mut table = report_table(&plan, rule);
     let (selected, mut evaluation) = select_objects(context, &rule.selector);
-    // An object a value may leave unjudged is measured no further than
-    // that value: nothing is read ahead for it.
-    let ahead = plan
-        .form
-        .unless
-        .is_empty()
-        .then_some(())
-        .and(selected.first().copied());
-    let batched = batched(
-        plan.values().map(|(_, expression)| expression),
-        context,
-        ahead,
-    );
-    let bound = if plan.form.unless.is_empty() {
-        bound_batched(&plan, context, rule, &arguments)
-    } else {
-        Vec::new()
-    };
+    let (batched, bound) = read_ahead(&plan, context, rule, &arguments, selected.first().copied());
     for chunk in selected.chunks(BATCH) {
         let prefetched = prefetch(context, &batched, chunk);
         let bound_reads = prefetch_bound(context, &bound, chunk);
@@ -2791,6 +2850,48 @@ fn run_apart(
     })
 }
 
+/// What a run reads ahead for chunks of objects: the measured values the
+/// form and its checks read, and those naming the rule's parameters. An
+/// object a value may leave unjudged is measured no further than that
+/// value, so where such values apply to the rule only they are read ahead
+/// (they are read for every object).
+fn read_ahead(
+    plan: &Plan<'_>,
+    context: &RuleContext<'_>,
+    rule: &CompiledRule,
+    arguments: &Arguments,
+    first: Option<&Object>,
+) -> (Batched, Vec<(Arc<str>, axioval_engine::PreparedRead)>) {
+    let unless: Vec<&Expression> = plan
+        .form
+        .unless
+        .iter()
+        .zip(&plan.bound.unless)
+        .filter(|(unless, _)| each::applies(plan, &unless.applies))
+        .map(|(_, expression)| expression)
+        .collect();
+    if !unless.is_empty() {
+        return (
+            batched(unless.iter().copied(), context, first),
+            bound_batched(unless.into_iter(), context, rule, arguments),
+        );
+    }
+    let batched = batched(
+        plan.values().map(|(_, expression)| expression),
+        context,
+        first,
+    );
+    let bound = bound_batched(
+        plan.values()
+            .chain((0..plan.form.checks.len()).flat_map(|index| plan.check_values(index)))
+            .map(|(_, expression)| expression),
+        context,
+        rule,
+        arguments,
+    );
+    (batched, bound)
+}
+
 /// How many objects' values are measured together: enough to share each
 /// value's parsing and provider set-up, few enough that what is measured
 /// ahead stays small beside the run.
@@ -2830,17 +2931,14 @@ type Batched = Vec<(Option<Arc<str>>, Arc<str>)>;
 /// the plan's form and checks read directly, each bound once for the rule:
 /// they are read for a chunk of objects together. One naming the anchor,
 /// or one that does not bind, is read as it is read (and refused there).
-fn bound_batched(
-    plan: &Plan<'_>,
+fn bound_batched<'e>(
+    reads: impl Iterator<Item = &'e Expression>,
     context: &RuleContext<'_>,
     rule: &CompiledRule,
     arguments: &Arguments,
-) -> Vec<(Arc<str>, axioval_ir::measured::MeasuredCall)> {
-    let mut bound: Vec<(Arc<str>, axioval_ir::measured::MeasuredCall)> = Vec::new();
-    let reads = plan
-        .values()
-        .chain((0..plan.form.checks.len()).flat_map(|index| plan.check_values(index)));
-    for (_, expression) in reads {
+) -> Vec<(Arc<str>, axioval_engine::PreparedRead)> {
+    let mut bound: Vec<(Arc<str>, axioval_engine::PreparedRead)> = Vec::new();
+    for expression in reads {
         let Some((Some(set), name)) = property_read(expression) else {
             continue;
         };
@@ -2872,7 +2970,10 @@ fn bound_batched(
         )
         .is_ok()
         {
-            bound.push((Arc::from(name), call));
+            bound.push((
+                Arc::from(name),
+                axioval_engine::PreparedRead::of(name, &call),
+            ));
         }
     }
     bound
@@ -2882,16 +2983,16 @@ fn bound_batched(
 /// object's bound reads, in `chunk`'s order.
 fn prefetch_bound(
     context: &RuleContext<'_>,
-    bound: &[(Arc<str>, axioval_ir::measured::MeasuredCall)],
+    bound: &[(Arc<str>, axioval_engine::PreparedRead)],
     chunk: &[&Object],
 ) -> Vec<Vec<BoundPrefetched>> {
     let ids: Vec<&ObjectId> = chunk.iter().map(|object| &object.id).collect();
     let mut columns: Vec<_> = match context.services.get::<MeasuredValues>() {
         Some(values) => bound
             .iter()
-            .map(|(name, call)| {
+            .map(|(_, call)| {
                 values
-                    .read_bound_batch(name, call, &ids)
+                    .read_prepared(call, &ids)
                     .into_iter()
                     .map(|read| read.map_err(property_error))
             })

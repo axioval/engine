@@ -283,6 +283,31 @@ expression form names the test (`` `requirement` holds ``), since no
 expression applies a selector to the object in scope; a rule is never
 forked from it.
 
+`Decision::Proportion` judges two exact counts by a proportion the rule
+states (`Proportion`, its parameters named by `ProportionParameters` and
+checked by `Check::Proportion` in the capability's order and words), in
+integer arithmetic: a ratio, `provided / provided_unit` standing in an
+operator word to `required / required_unit` (compared cross-multiplied),
+with an exception for a required count from 1 below
+`small_required_below`, judged as `provided operator small_provided`; or
+a table of rows `R:P` (from `R` required, at least `P` provided), each
+further `additional_required` beyond the last row needing
+`additional_provided` more, nothing required below the first. The counts
+are an anchor's two member populations (`Members::more`), whose undecided
+members leave the anchor open before anything is judged
+(`UndecidedMembers::Open`, `{undecided}` and `{relation}`); or, with
+`Proportion::groups`, the groups the rule's selection forms by a stated
+value per source or across sources (`ProportionGroups`): an object in
+both the selection and a population is counted, one either may pick only
+possibly, and a group with a possible member, or in a scope holding an
+object whose value cannot be read, is open, one with required objects and
+none provided is found as such. Messages read `{requirement}` (`1/1
+at_least 4/1`, `at least 2 provided for 5 required`), a group's
+`{label}`, `{provided}` and `{required}`. Its expression form, for the
+catalogue, is the ratio mode, a branch per operator word; a rule is never
+forked from it, since small counts, tables and groups have no expression
+form the evaluator decides alike.
+
 `Decision::Each` judges an anchor's members one by one (`Each`), with
 three relations no aggregate states:
 

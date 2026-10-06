@@ -263,6 +263,16 @@ pub enum Check {
         when: &'static [&'static str],
         value: &'static str,
     },
+    /// The parameters state a [`Proportion`] in one mode: without a
+    /// `table`, an `operator` (refused unless stated), a small-count
+    /// exception declared whole (`small_required_below and small_provided
+    /// go together`; `… must be positive and … not negative`), positive
+    /// units (`` provided_unit must be a positive integer ``) and a known
+    /// operator (``operator `x` is unsupported``); with one, no ratio
+    /// parameter (`` `x` does not apply in table mode ``), rows written
+    /// `required:provided`, no two starting at one count, positive
+    /// increments declared together, and rows or increments.
+    Proportion(ProportionParameters),
 }
 
 /// The host services a template's values need, and the message leaving
@@ -713,6 +723,12 @@ pub enum Decision {
     /// properties the selector consults, one finding per combination
     /// ([`Conformance`]).
     Conforms(Conformance),
+    /// Two counts stand in a proportion the rule states: a ratio with an
+    /// exception for small counts, or a table of steps ([`Proportion`]),
+    /// judged in exact integer arithmetic. The counts are those of an
+    /// anchor's two member populations, or, with [`Proportion::groups`],
+    /// of the groups the counted objects form by a stated value.
+    Proportion(Box<Proportion>),
     /// The anchor's members ([`Form::members`]) read and judged one by
     /// one, against their neighbours, a reference prevailing among them,
     /// and their own nested members ([`Each`]). Findings are on the
@@ -995,6 +1011,83 @@ pub struct Conformance {
     pub alone: &'static str,
     pub no_value: &'static str,
     pub unknown: &'static str,
+}
+
+/// What [`Decision::Proportion`] reads: the two counts, the parameters
+/// stating the proportion, and, for groups, how the counted objects group.
+///
+/// A count is the exact number of a population's members; a population
+/// with undecided members leaves the decision to
+/// [`UndecidedMembers::Open`] (anchors) or to the group's own messages.
+/// The proportion is checked by [`Check::Proportion`] over
+/// [`ProportionParameters`] and judged as the capabilities judged it: in
+/// ratio mode `provided / provided_unit` stands in `operator` (`equal`,
+/// `not_equal`, `greater`, `at_least`, `less`, `at_most`) to
+/// `required / required_unit`, compared as `provided · required_unit`
+/// against `required · provided_unit`, a required count from 1 below
+/// `small_required_below` instead judged as `provided operator
+/// small_provided`; in table mode the row `R:P` with the largest `R` not
+/// above the required count needs `P` provided, each further
+/// `additional_required` beyond the last row `additional_provided` more,
+/// and below the first row nothing is required. `{requirement}` words the
+/// requirement (`1/1 at_least 4/1`, `at least 2 provided for 5
+/// required`).
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Proportion {
+    pub provided: &'static str,
+    pub required: &'static str,
+    pub parameters: ProportionParameters,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub groups: Option<ProportionGroups>,
+}
+
+/// The parameters stating a [`Proportion`].
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProportionParameters {
+    pub provided_unit: &'static str,
+    pub required_unit: &'static str,
+    pub operator: &'static str,
+    pub small_below: &'static str,
+    pub small_provided: &'static str,
+    pub table: &'static str,
+    pub additional_required: &'static str,
+    pub additional_provided: &'static str,
+}
+
+/// A [`Proportion`] judged per group rather than per anchor.
+///
+/// The counted objects are the rule's selection; each is provided where
+/// both the selection and `provided` surely pick it, required likewise,
+/// and possibly either where one of them may. Each is counted in the group
+/// of its stated `value` (text trimmed, folded unless `case_sensitive`)
+/// within its source, or the project where `across` holds. A counted
+/// object without a value is a finding of its own (`ungrouped`), one that
+/// is only possibly counted is open (`undecided_ungrouped`); one whose
+/// value cannot be read is open and leaves every group of its scope open
+/// (`unreadable`). A group with a possible member is open (`undecided`,
+/// `{undecided}` their count); one with required objects and no provided
+/// one is found as such (`only_required`), whatever the proportion says;
+/// otherwise the proportion decides (`fail`). A group's outcome is on its
+/// lowest required object (its lowest provided or possible one without),
+/// relates its members and reads `{label}` (`label`, the group's value as
+/// `{value:stated}`), `{provided}` and `{required}`.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProportionGroups {
+    pub value: &'static str,
+    pub provided: &'static str,
+    pub required: &'static str,
+    pub across: &'static str,
+    pub case_sensitive: &'static str,
+    pub label: &'static str,
+    pub ungrouped: &'static str,
+    pub undecided_ungrouped: &'static str,
+    pub undecided: &'static str,
+    pub unreadable: &'static str,
+    pub only_required: &'static str,
+    pub fail: &'static str,
 }
 
 /// How [`Consistent`] words its outcomes.
@@ -1483,6 +1576,58 @@ impl Decision {
                     label: None,
                 }
             }
+            // The ratio mode, as a block editor shows it: the counts
+            // cross-multiplied by the units, compared by the operator word
+            // the rule states. Small counts and tables are judged by the
+            // runner in exact integer arithmetic only.
+            Self::Proportion(proportion) => {
+                let parameter = |name: &str| Expression::Parameter {
+                    name: name.to_owned(),
+                    label: None,
+                };
+                let times = |count: &str, unit: &str| Expression::Multiply {
+                    left: boxed(value(count)),
+                    right: boxed(parameter(unit)),
+                    label: None,
+                };
+                let names = proportion.parameters;
+                let branches = [
+                    ("equal", ExpressionComparison::Equals),
+                    ("not_equal", ExpressionComparison::NotEquals),
+                    ("greater", ExpressionComparison::GreaterThan),
+                    ("at_least", ExpressionComparison::GreaterThanOrEquals),
+                    ("less", ExpressionComparison::LessThan),
+                    ("at_most", ExpressionComparison::LessThanOrEquals),
+                ]
+                .into_iter()
+                .map(|(word, operator)| axioval_ir::contract::Branch {
+                    when: Expression::Compare {
+                        operator: ExpressionComparison::Equals,
+                        left: boxed(parameter(names.operator)),
+                        right: boxed(Expression::Literal {
+                            value: ScalarValue::String {
+                                value: word.to_owned(),
+                            },
+                            label: None,
+                        }),
+                        case_sensitive: true,
+                        label: None,
+                    },
+                    then: Expression::Compare {
+                        operator,
+                        left: boxed(times(proportion.provided, names.required_unit)),
+                        right: boxed(times(proportion.required, names.provided_unit)),
+                        case_sensitive: true,
+                        label: Some("provided against required".into()),
+                    },
+                })
+                .collect();
+                Expression::If {
+                    branches,
+                    otherwise: boxed(Expression::Null { label: None }),
+                    label: Some("ratio mode".into()),
+                }
+            }
             // The selector holds of the checked object: an expression has
             // no operator applying a selector to the object in scope, so the
             // catalogue names the test the runner makes.
@@ -1761,6 +1906,39 @@ mod tests {
         )
         .unwrap();
         assert!(widened.contains("rounding allowance"), "{widened}");
+    }
+
+    /// A proportion reads, for the catalogue, as its ratio mode: one branch
+    /// per operator word, the counts cross-multiplied by the units.
+    #[test]
+    fn a_proportion_reads_as_its_ratio() {
+        let names = ProportionParameters {
+            provided_unit: "provided_unit",
+            required_unit: "required_unit",
+            operator: "operator",
+            small_below: "small_required_below",
+            small_provided: "small_provided",
+            table: "table",
+            additional_required: "additional_required",
+            additional_provided: "additional_provided",
+        };
+        let decision = Decision::Proportion(Box::new(Proportion {
+            provided: "provided",
+            required: "required",
+            parameters: names,
+            groups: None,
+        }));
+        let value = |name: &str| Expression::Derived {
+            name: name.to_owned(),
+            label: None,
+        };
+        let Expression::If { branches, .. } = decision.expression(&value) else {
+            panic!("a branch per operator word");
+        };
+        assert_eq!(branches.len(), 6);
+        let json = serde_json::to_string(&branches[3].then).unwrap();
+        assert!(json.contains("greaterThanOrEquals"), "{json}");
+        assert!(json.contains("\"name\":\"required_unit\""), "{json}");
     }
 
     /// A conformance decision names the selector test it makes, since no

@@ -15,6 +15,7 @@ mod compare;
 mod each;
 mod groups;
 mod members;
+mod proportion;
 mod scopes;
 
 use axioval_engine::expression::{
@@ -156,6 +157,8 @@ struct Bound {
     expressions: Vec<Expression>,
     /// The comparison a [`Decision::Compare`] judges, bound.
     comparison: Option<compare::Bound>,
+    /// The proportion a [`Decision::Proportion`] judges, bound.
+    proportion: Option<proportion::Mode>,
     /// A [`Decision::Each`]'s member values' expressions, then each
     /// nested population's, the rule's parameters bound in.
     each: Vec<Vec<Expression>>,
@@ -443,6 +446,7 @@ fn check(check: &Check, rule: &CompiledRule, template: &Template) -> Result<(), 
                 Err(invalid(*message))
             }
         }
+        Check::Proportion(names) => proportion::parse(rule, names).map(|_| ()),
         Check::FalseRequires {
             flag,
             with,
@@ -914,6 +918,10 @@ fn bind(template: &Template, rule: &CompiledRule) -> Result<Bound, Unavailable> 
         .iter()
         .map(|step| bound(&step.expression, &constants))
         .collect();
+    let proportion = match &form.decision {
+        Decision::Proportion(decided) => Some(proportion::parse(rule, &decided.parameters)?),
+        _ => None,
+    };
     let comparison = match &form.decision {
         Decision::Compare { comparison, .. } => Some(compare::bind(rule, comparison)?),
         _ => None,
@@ -958,6 +966,7 @@ fn bind(template: &Template, rule: &CompiledRule) -> Result<Bound, Unavailable> 
         constants,
         expressions,
         comparison,
+        proportion,
         each,
         checks,
         member_checks,
@@ -1873,6 +1882,10 @@ fn judges_stated(decision: &Decision, name: &str) -> bool {
     match decision {
         Decision::Compare { value, .. } | Decision::Unique { value, .. } => *value == name,
         Decision::Consistent { key, value, .. } => *key == name || *value == name,
+        Decision::Proportion(decided) => decided
+            .groups
+            .as_ref()
+            .is_some_and(|groups| groups.value == name),
         _ => false,
     }
 }
@@ -2050,6 +2063,23 @@ fn judge_object(
                 .collect()
         });
     let checks = judge_checks(plan, &read, context, object, &mut leaves);
+    if let Decision::Proportion(decided) = decision {
+        let outcome = proportion::judged(plan, read, (decided.provided, decided.required), related)
+            .unwrap_or_else(|| {
+                Outcome::Open(
+                    NotEvaluatedReason::InvalidEvidence,
+                    format!(
+                        "{}: a count the decision reads is no count",
+                        plan.template.name
+                    ),
+                )
+            });
+        return Judgement {
+            outcome,
+            row,
+            checks,
+        };
+    }
     if let (Decision::Compare { value, .. }, Some(comparison)) = (decision, &plan.comparison) {
         let stated = read.stated.get(value).cloned().flatten();
         let outcome = match comparison.holds(stated.as_ref()) {
@@ -2265,6 +2295,11 @@ pub(crate) fn run(
     }
     if let Decision::Conforms(conformance) = &plan.form.decision {
         return groups::conforms(&plan, conformance, context, rule);
+    }
+    if let Decision::Proportion(decided) = &plan.form.decision
+        && let Some(groups) = &decided.groups
+    {
+        return proportion::groups(&plan, groups, context, rule);
     }
     if let Some(scopes) = &plan.form.scope {
         return scopes::run(&plan, &effective(&plan), scopes, context, rule);
@@ -2646,6 +2681,13 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
         return Err(ForkError::Inexpressible(
             "a value derived in plain binary arithmetic (a difference, or a ratio whose \
              denominator may be zero) has no expression form the evaluator decides alike"
+                .to_owned(),
+        ));
+    }
+    if matches!(plan.form.decision, Decision::Proportion(_)) {
+        return Err(ForkError::Inexpressible(
+            "a proportion is judged in exact integer arithmetic, its small counts and table \
+             steps by the runner, and per group where it groups"
                 .to_owned(),
         ));
     }

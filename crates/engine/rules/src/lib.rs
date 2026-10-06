@@ -69,6 +69,7 @@ pub mod parity;
 mod parking_bay;
 mod passing_spaces;
 mod plan_area;
+mod plan_coverage;
 mod property_comparison;
 mod property_predicate;
 mod property_requirements;
@@ -150,7 +151,8 @@ pub use opening_area::OpeningArea;
 pub use opening_spaces::OpeningSpaces;
 pub use opening_zone::OpeningZone;
 pub use parking_bay::ParkingBay;
-pub use plan_area::{PlanAreaRange, PlanCoverage};
+pub use plan_area::PlanAreaRange;
+pub use plan_coverage::PlanCoverage;
 pub use property_comparison::PropertyComparison;
 pub use property_predicate::PropertyPredicate;
 pub use property_requirements::PropertyRequirements;
@@ -187,6 +189,7 @@ pub mod reference {
     pub use crate::level_spacing::reference::LevelSpacing;
     pub use crate::object_count::reference::ObjectCount;
     pub use crate::plan_area::reference::PlanAreaRange;
+    pub use crate::plan_coverage::reference::PlanCoverage;
     pub use crate::property_predicate::reference::PropertyPredicate;
     pub use crate::related_count::reference::RelatedCount;
     pub use crate::shelf_capacity::reference::ShelfCapacity;
@@ -295,6 +298,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(body_extent::ExtentMeasures))
         .and_then(|registry| registry.register_measured(plan_area::AreaMeasures))
         .and_then(|registry| registry.register_measured(area_ratio::RatioMeasures))
+        .and_then(|registry| registry.register_measured(plan_coverage::CoverageSearch))
         .and_then(|registry| registry.register_measured(light_area::LightMeasures))
         .and_then(|registry| registry.register_measured(level_spacing::LevelMeasures))
         .and_then(|registry| registry.register_measured(slab_stack::StackMeasures))

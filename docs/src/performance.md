@@ -231,3 +231,8 @@ summing at its first unmeasurable member: before that, a storey whose
 walls' facades cannot be measured read every wall, 1.94× on the
 structural models. Members are counted only where a rule asks for a
 finding on an anchor without them.
+
+`plan-coverage` runs the `storeys` case's rule: 1.02 to 1.22× its
+reference's run time and 1.04 to 1.20× its peak heap, the architecture
+models the highest. Its value reads the search once per subject, its
+"none" wording from the search's citation, not a second read.

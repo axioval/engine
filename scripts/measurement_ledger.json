@@ -627,18 +627,6 @@
         "volume"
       ]
     },
-    "plan_area::coverage::measure_footprint": {
-      "count": 1,
-      "providedBy": [
-        "area"
-      ]
-    },
-    "plan_area::coverage::measure_plan_overlap": {
-      "count": 1,
-      "providedBy": [
-        "plan_overlap"
-      ]
-    },
     "plan_area::facades::measure_facade_area": {
       "count": 1,
       "providedBy": [
@@ -661,6 +649,20 @@
       "count": 1,
       "providedBy": [
         "area"
+      ]
+    },
+    "plan_coverage::search::measure_footprint": {
+      "count": 1,
+      "providedBy": [
+        "area",
+        "plan_coverage"
+      ]
+    },
+    "plan_coverage::search::measure_plan_overlap": {
+      "count": 1,
+      "providedBy": [
+        "plan_coverage",
+        "plan_overlap"
       ]
     },
     "quantity_takeoff::measure_coverage::measure_boundary_coverage": {

@@ -115,6 +115,11 @@ const COVERED: &[(&str, &str, &str)] = &[
         "an_area_measured_on_a_tessellation_is_inexact",
     ),
     (
+        "plan_coverage",
+        "tests/plan_area.rs",
+        "an_area_measured_on_a_tessellation_is_inexact",
+    ),
+    (
         "ratio_area",
         "tests/plan_area.rs",
         "an_area_measured_on_a_tessellation_is_inexact",

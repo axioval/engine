@@ -1,11 +1,11 @@
-//! Judgements over plan-projected areas: area ranges and plan coverage, and
-//! the area readers `area-ratio` shares.
+//! Judgements over plan-projected areas: area ranges, and the area readers
+//! `area-ratio` and `plan-coverage` share.
 
 use axioval_engine::template::Template;
 use axioval_engine::{
     BodyVolume, CapabilityEvaluation, CompiledRule, Deviation, FacadeArea, FacadeAreaError,
-    FacadeAreaServiceHandle, NotEvaluatedReason, ParameterDescriptor, ParameterType, PlanArea,
-    PlanAreaError, PlanAreaServiceHandle, ProximityServiceHandle, RuleCapability, RuleContext,
+    FacadeAreaServiceHandle, NotEvaluatedReason, ParameterDescriptor, PlanArea, PlanAreaError,
+    PlanAreaServiceHandle, ProximityServiceHandle, RuleCapability, RuleContext,
 };
 use axioval_ir::{Evidence, Object, ObjectId, PropertyValue, QuantityDimension};
 #[cfg(feature = "parity-reference")]
@@ -19,12 +19,13 @@ mod template;
 pub(crate) use measured::AreaMeasures;
 
 use crate::counts::{Population, tally};
-use crate::selection::select_objects;
-use crate::support::{
-    Parameters, PropertyRef, Unavailable, display, finding, invalid, resolve, traversal_parameters,
-};
+#[cfg(feature = "parity-reference")]
+use crate::support::Parameters;
+use crate::support::{PropertyRef, Unavailable, display, invalid, resolve};
 
-fn service<'a>(context: &RuleContext<'a>) -> Result<&'a PlanAreaServiceHandle, Unavailable> {
+pub(crate) fn service<'a>(
+    context: &RuleContext<'a>,
+) -> Result<&'a PlanAreaServiceHandle, Unavailable> {
     context.services.get::<PlanAreaServiceHandle>().ok_or((
         NotEvaluatedReason::MissingService,
         "plan-area service is not registered".into(),
@@ -339,143 +340,6 @@ pub(crate) fn judge_bounds(
         }
     }
     Verdict::Pass
-}
-
-/// Requires each subject's footprint to lie mostly within one candidate.
-///
-/// A space must lie within a fire compartment: for each subject, the share
-/// of its footprint that overlaps a candidate (an object `candidate_selector`
-/// picks, reached through the declared relationship or anywhere in the
-/// subject's source) must reach `minimum_ratio` for at least one candidate.
-/// The subject fails when no candidate can reach it, and is not evaluated
-/// when one might, given the areas' intervals.
-pub struct PlanCoverage;
-
-impl RuleCapability for PlanCoverage {
-    fn id(&self) -> &'static str {
-        "axioval:capability.plan-coverage"
-    }
-
-    fn parameters(&self) -> Vec<ParameterDescriptor> {
-        vec![
-            ParameterDescriptor::required("candidate_selector", ParameterType::Selector),
-            ParameterDescriptor::required("minimum_ratio", ParameterType::Number),
-        ]
-        .into_iter()
-        .chain(traversal_parameters())
-        .collect()
-    }
-
-    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let parameters = Parameters(rule);
-        let parsed = (|| {
-            let minimum = parameters.number("minimum_ratio")?;
-            match minimum {
-                Some(minimum) if minimum > 0.0 && minimum <= 1.0 => {}
-                _ => return Err(invalid("minimum_ratio must lie in (0, 1]")),
-            }
-            Ok::<_, Unavailable>((
-                parameters.required_selector("candidate_selector")?,
-                minimum.unwrap_or(1.0),
-                parameters.traversal()?,
-            ))
-        })();
-        let (candidates, minimum, traversal) = match parsed {
-            Ok(parsed) => parsed,
-            Err((reason, message)) => {
-                return CapabilityEvaluation::not_evaluated(
-                    reason,
-                    format!("plan-coverage: {message}"),
-                );
-            }
-        };
-        let candidates = Population::of(context, candidates);
-        let (subjects, mut evaluation) = select_objects(context, &rule.selector);
-        for subject in subjects {
-            match coverage(context, traversal.as_ref(), subject, &candidates, minimum) {
-                Ok(None) => {}
-                Ok(Some((message, evidence, best))) => evaluation.push_finding(finding(
-                    rule,
-                    &subject.id,
-                    message,
-                    evidence,
-                    best.into_iter().collect(),
-                )),
-                Err((reason, message)) => {
-                    evaluation.push_object_not_evaluated(subject.id.clone(), reason, message);
-                }
-            }
-        }
-        evaluation
-    }
-}
-
-type Failure = (String, Vec<Evidence>, Option<ObjectId>);
-
-/// `None` when covered; the finding when conclusively not.
-fn coverage(
-    context: &RuleContext<'_>,
-    traversal: Option<&crate::support::Traversal>,
-    subject: &Object,
-    candidates: &Population,
-    minimum: f64,
-) -> Result<Option<Failure>, Unavailable> {
-    let service = service(context)?;
-    let reached = tally(context, traversal, subject, candidates)?;
-    let footprint = service
-        .measure_footprint(&subject.id)
-        .map_err(unavailable)?;
-    if footprint.upper_square_metres() <= 0.0 {
-        return Err((
-            NotEvaluatedReason::IncompleteEvidence,
-            "the subject has no plan footprint".into(),
-        ));
-    }
-    let mut evidence = reached.evidence;
-    evidence.push(footprint.evidence().clone());
-    let mut best: Option<(f64, ObjectId)> = None;
-    let mut undecided = reached.undecided > 0;
-    for candidate in &reached.decided {
-        let overlap = service
-            .measure_plan_overlap(&subject.id, candidate)
-            .map_err(unavailable)?;
-        evidence.push(overlap.evidence().clone());
-        let lower = overlap.lower_square_metres() / footprint.upper_square_metres();
-        let upper = if footprint.lower_square_metres() > 0.0 {
-            overlap.upper_square_metres() / footprint.lower_square_metres()
-        } else {
-            f64::INFINITY
-        };
-        if lower >= minimum {
-            return Ok(None);
-        }
-        if upper >= minimum {
-            undecided = true;
-        }
-        if best.as_ref().is_none_or(|(held, _)| upper > *held) {
-            best = Some((upper, candidate.clone()));
-        }
-    }
-    if undecided {
-        return Err((
-            NotEvaluatedReason::IncompleteEvidence,
-            format!("coverage of {minimum} cannot be decided from the measured areas"),
-        ));
-    }
-    let share = best.as_ref().map_or(0.0, |(share, _)| *share);
-    Ok(Some((
-        format!(
-            "at most {} of the footprint lies within any {}; required {minimum}",
-            (share.min(1.0) * 1e4).round() / 1e4,
-            if reached.decided.is_empty() {
-                "candidate (there are none)".to_owned()
-            } else {
-                "candidate".to_owned()
-            }
-        ),
-        evidence,
-        best.map(|(_, candidate)| candidate),
-    )))
 }
 
 /// Requires measured plan areas to lie within a range, in square metres.

@@ -103,6 +103,16 @@ fn run(
             1e-12,
         );
     }
+    if capability.id() == "axioval:capability.plan-coverage" {
+        return model.holding_contract(
+            capability,
+            &axioval_rules::reference::PlanCoverage,
+            rule,
+            register,
+            &[],
+            0.0,
+        );
+    }
     model.evaluate_with(capability, rule, register)
 }
 
@@ -144,6 +154,19 @@ fn an_area_measured_on_a_tessellation_is_inexact() {
             assert!(lower <= 12.0 && 12.0 <= upper, "{space} {name}");
             assert_eq!(cited, exact, "{space} {name}");
         }
+    }
+    // The share within the best candidate is as exact as the footprint and
+    // overlaps it divides.
+    for (space, exact) in [("mesh", false), ("solid", true)] {
+        let (_, cited) = common::measured_cited(
+            &services,
+            &project,
+            &id(space),
+            "plan_coverage;candidates=compartment;minimum=0.9",
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(cited, exact, "{space} plan_coverage");
     }
     // 0.3 + 0.6 rounds in binary: the total holds the exact 0.9.
     let ((lower, upper), cited) = common::measured_cited(
@@ -963,6 +986,45 @@ mod plan_coverage {
                 Some(!flagged(&evaluation).contains(&space.to_owned())),
                 "{space}"
             );
+        }
+    }
+
+    /// The forked rule reads the same search with the rule's candidates,
+    /// minimum and traversal carried, and reaches the template's verdicts.
+    #[test]
+    fn the_forked_rule_reaches_the_templates_verdicts() {
+        use axioval_rules::templates::{Fork, fork};
+        for minimum in [0.9, 0.5, 0.4] {
+            let bound = rule(
+                ID,
+                kind("space"),
+                vec![
+                    ("candidate_selector", selector(kind("compartment"))),
+                    ("minimum_ratio", number(minimum)),
+                ],
+            );
+            let forked = fork(&PlanCoverage, &bound).unwrap();
+            let mut expression_rule = bound.clone();
+            expression_rule.capability = Fork::CAPABILITY.into();
+            expression_rule.parameters = forked.parameters();
+            let (model, rectangles) = plan();
+            let template = run(model, rectangles, &PlanCoverage, &bound);
+            let (model, rectangles) = plan();
+            let rectangles = Arc::new(rectangles);
+            let forked = model.evaluate_measured(
+                &axioval_rules::ExpressionRequirement,
+                &expression_rule,
+                |services| {
+                    services
+                        .register(PlanAreaServiceHandle::new(rectangles.clone()))
+                        .unwrap();
+                },
+            );
+            let parity = axioval_rules::parity::compare_evaluations(
+                ("template", &template),
+                ("fork", &forked),
+            );
+            assert!(parity.holds(), "{minimum}\n{}", parity.diff());
         }
     }
 
@@ -2307,6 +2369,101 @@ mod generated_ratios {
                 parameters.push(("light_type_path", strings(&["typed"])));
             }
             run(model, rectangles, &AreaRatio, &rule(ID, kind("space"), parameters));
+        }
+    }
+}
+
+/// `plan-coverage` held to the implementation it replaced on generated
+/// spaces and compartments.
+mod generated_coverage {
+    use super::*;
+    use axioval_ir::contract::{ComparisonOperator, Selector};
+    use common::strings;
+    use proptest::collection::vec;
+    use proptest::prelude::*;
+
+    const ID: &str = "axioval:capability.plan-coverage";
+
+    /// One object: a space (0) or a compartment (1), its origin and size in
+    /// metres along x, its slack in m², whether it is measured, whether it
+    /// is picked (0 surely, 1 undecided, 2 not) and the space (`o0` or
+    /// `o1`, or none) a compartment groups.
+    type Placed = (u32, u32, u32, u32, bool, u32, u32);
+
+    fn placed() -> impl Strategy<Value = Placed> {
+        (
+            0u32..2,
+            0u32..20,
+            1u32..12,
+            0u32..3,
+            any::<bool>(),
+            0u32..3,
+            0u32..3,
+        )
+    }
+
+    fn fixture(objects: &[Placed]) -> (Model, Rectangles) {
+        let mut model = Model::default();
+        let mut rectangles = Rectangles::default();
+        for (index, &(kind, origin, size, slack, measured, picked, grouped)) in
+            objects.iter().enumerate()
+        {
+            let local = format!("o{index}");
+            model = model.object(&local, if kind == 0 { "space" } else { "compartment" });
+            match picked {
+                0 => model = model.text(&local, "Pset", "Picked", "yes"),
+                1 => model = model.unreadable(&local),
+                _ => {}
+            }
+            if kind == 1 && grouped < 2 {
+                model = model.edge("groups", &local, &format!("o{grouped}"));
+            }
+            if measured {
+                let origin = f64::from(origin);
+                rectangles = rectangles.with(
+                    &local,
+                    [origin, 0.0, origin + f64::from(size), 4.0],
+                    f64::from(slack),
+                );
+            }
+        }
+        (model, rectangles)
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(64))]
+
+        #[test]
+        fn generated_coverage_holds_parity(
+            objects in vec(placed(), 1..8),
+            minimum in 1u32..11,
+            traversal in 0u32..3,
+        ) {
+            let picked = Selector::AllOf {
+                operands: vec![
+                    common::kind("compartment"),
+                    Selector::property(
+                        Some("Pset".into()),
+                        "Picked",
+                        ComparisonOperator::Exists,
+                        None,
+                    ),
+                ],
+            };
+            let mut parameters = vec![
+                ("candidate_selector", selector(picked)),
+                ("minimum_ratio", number(f64::from(minimum) / 10.0)),
+            ];
+            match traversal {
+                1 => {
+                    parameters.push(("relationship", string("groups")));
+                    parameters.push(("direction", string("backward")));
+                }
+                2 => parameters.push(("path", strings(&["groups:backward"]))),
+                _ => {}
+            }
+            let (model, rectangles) = fixture(&objects);
+            run(model, rectangles, &PlanCoverage, &rule(ID, kind("space"), parameters));
         }
     }
 }

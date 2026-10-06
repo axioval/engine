@@ -751,6 +751,62 @@ const LIGHT_SIDE: MeasuredParameter = MeasuredParameter {
 const LIGHT_UNKNOWN: &str = "no step of the fallback gives a light area";
 const LIGHT_SIZE_UNKNOWN: &str = "the overall width or height is not stated as a positive length";
 
+/// A rule's traversal, each parameter named as the rule names it
+/// (`relationship=@relationship`): what a measured search walks to the
+/// objects it measures against.
+const TRAVERSAL: [MeasuredParameter; 5] = [
+    MeasuredParameter {
+        key: "relationship",
+        kind: MeasuredParameterKind::Text,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The relationship walked from the object.",
+            "Die vom Objekt aus begangene Beziehung.",
+        ),
+    },
+    MeasuredParameter {
+        key: "direction",
+        kind: MeasuredParameterKind::Text,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The relationship's direction: `forward` (the default), `backward` or `either`.",
+            "Die Richtung der Beziehung: `forward` (Vorgabe), `backward` oder `either`.",
+        ),
+    },
+    MeasuredParameter {
+        key: "path",
+        kind: MeasuredParameterKind::Path,
+        required: false,
+        default: None,
+        help: &en_de(
+            "Relationship steps walked instead of one relationship.",
+            "Beziehungsschritte statt einer Beziehung.",
+        ),
+    },
+    MeasuredParameter {
+        key: "follow_chain",
+        kind: MeasuredParameterKind::Truth,
+        required: false,
+        default: None,
+        help: &en_de(
+            "Whether chains of the relationship are followed.",
+            "Ob Ketten der Beziehung verfolgt werden.",
+        ),
+    },
+    MeasuredParameter {
+        key: "skip_absent_relationship_ends",
+        kind: MeasuredParameterKind::Truth,
+        required: false,
+        default: None,
+        help: &en_de(
+            "Whether a relationship end the source does not state is skipped.",
+            "Ob ein von der Quelle nicht angegebenes Beziehungsende übersprungen wird.",
+        ),
+    },
+];
+
 /// What `level-spacing` orders a level among, shared by the level values.
 const LEVEL_KINDS: MeasuredParameter = MeasuredParameter {
     key: "levels",
@@ -3517,6 +3573,43 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              object with a body never has empty, or its facade area.",
             "Die eigene Fläche des Objekts, wie `plan-area` sie misst: sein Grundriss, \
              der bei einem Objekt mit Körper nie leer ist, oder seine Fassadenfläche.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "plan_coverage",
+        parameters: &[
+            selected(
+                "candidates",
+                true,
+                &en_de(
+                    "The candidates that may cover the footprint.",
+                    "Die Kandidaten, die den Grundriss überdecken können.",
+                ),
+            ),
+            MeasuredParameter {
+                key: "minimum",
+                kind: MeasuredParameterKind::Number { minimum: 0.0 },
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The share searched for: a candidate surely covering it ends the search.",
+                    "Der gesuchte Anteil: ein Kandidat, der ihn sicher überdeckt, beendet die Suche.",
+                ),
+            },
+            TRAVERSAL[0],
+            TRAVERSAL[1],
+            TRAVERSAL[2],
+            TRAVERSAL[3],
+            TRAVERSAL[4],
+        ],
+        dimension: None,
+        services: &["plan-area", "relationship-selection"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_GEOMETRY, "the subject has no plan footprint"],
+        label: &en_de("Plan coverage", "Grundrissüberdeckung"),
+        help: &en_de(
+            "The share of the object's footprint within the candidate covering most of it, as `plan-coverage` searches the candidates the traversal reaches: a candidate surely covering the minimum ends the search, and a share or candidate that may reach it leaves the value reaching it at least.",
+            "Der Anteil des Grundrisses des Objekts innerhalb des Kandidaten, der ihn am meisten überdeckt, wie `plan-coverage` die erreichten Kandidaten durchsucht: ein Kandidat, der das Minimum sicher überdeckt, beendet die Suche, und ein Anteil oder Kandidat, der es erreichen kann, lässt den Wert es mindestens erreichen.",
         ),
     },
     plain!(

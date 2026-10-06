@@ -481,6 +481,29 @@ chain's (`arguments`, `light_area::check_arguments`), and a facade measure
 does not combine with it (`excludes`). The table `ratios` holds
 `numerator_area`, `denominator_area` and `ratio` (a plain number).
 
+### `plan-coverage`
+
+| Form | When | Values | Decision |
+| --- | --- | --- | --- |
+| one | always | `share` = `plan_coverage;candidates=@candidate_selector;minimum=@minimum_ratio;relationship=@relationship;direction=@direction;path=@path;follow_chain=@follow_chain;skip_absent_relationship_ends=@skip_absent_relationship_ends` | `share` at least `minimum_ratio`, no rounding |
+
+`plan_coverage` is the capability's search as a measured value
+(`plan_coverage::search`): the candidates the rule's selector picks that
+its traversal reaches (each traversal parameter named as the rule names
+it, unstated ones dropped), searched in the order reached for one surely
+covering `minimum` of the footprint. Its value is the share as far as the
+search needs it: the covering candidate's lower share, where one is found;
+otherwise from the largest lower share to the best candidate's upper share
+or, where a share or an undecided candidate may reach the minimum, the
+minimum at least; it cites the best candidate, which a finding relates
+(`related: share`). The declaration checks the minimum as a share
+(`finite` above 0, `atMost` 1, one message), the candidate selector and
+the traversal. The finding reads `at most {share:share} of the footprint
+lies within any {candidate}; required {minimum_ratio}`, `candidate` being
+`candidate (there are none)` where the search cited none
+(`Condition::Cites`); an undecided one `coverage of {minimum_ratio} cannot
+be decided from the measured areas`.
+
 ## Binding and running a rule
 
 The rules crate's `templates` module runs a template
@@ -718,6 +741,15 @@ traversals, and generated rooms of windows of random stated light areas,
 sizes, type names, light-area rows, tolerances and frame allowances; and
 by the `area-ratio` rules of the `storeys` case, recorded before the
 switch, tables included. It is never forked (D21, D22).
+
+`plan-coverage` is held to `plan_coverage/reference.rs`
+(`axioval_rules::reference::PlanCoverage`, which shares the search) on
+every fixture of `plan_area.rs`; by generated spaces and compartments of
+random extents, slack, measurement and membership, judged everywhere in
+the source, along a relationship or along a path, under random minimums;
+by the `space-on-slab` rule of the `storeys` case, recorded before the
+switch; and its fork, which carries the selector, the minimum and the
+traversal, reaches its verdicts (D23).
 
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the

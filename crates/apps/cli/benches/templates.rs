@@ -117,6 +117,11 @@ const PAIRS: &[Pair] = &[
         case: "storeys",
         reference: |registry| registry.replace(axioval::rules::reference::AreaRatio),
     },
+    Pair {
+        capability: "axioval:capability.plan-coverage",
+        case: "storeys",
+        reference: |registry| registry.replace(axioval::rules::reference::PlanCoverage),
+    },
 ];
 
 /// Warm-up runs per side before measuring.

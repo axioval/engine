@@ -18303,7 +18303,154 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "plan-coverage",
+        "declaration": [
+          {
+            "kind": "kind",
+            "parameter": "minimum_ratio"
+          },
+          {
+            "kind": "finite",
+            "parameters": [
+              "minimum_ratio"
+            ],
+            "above": 0.0,
+            "message": "minimum_ratio must lie in (0, 1]"
+          },
+          {
+            "kind": "atMost",
+            "parameters": [
+              "minimum_ratio"
+            ],
+            "value": 1.0,
+            "message": "minimum_ratio must lie in (0, 1]"
+          },
+          {
+            "kind": "required",
+            "parameter": "candidate_selector"
+          },
+          {
+            "kind": "traversal",
+            "with": [],
+            "message": ""
+          }
+        ],
+        "texts": [
+          {
+            "name": "candidate",
+            "when": {
+              "kind": "not",
+              "condition": {
+                "kind": "cites",
+                "value": "share"
+              }
+            },
+            "text": "candidate (there are none)"
+          },
+          {
+            "name": "candidate",
+            "text": "candidate"
+          }
+        ],
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "share",
+                "expression": {
+                  "kind": "property",
+                  "propertySet": "axioval:measured",
+                  "property": "plan_coverage;candidates=@candidate_selector;minimum=@minimum_ratio;relationship=@relationship;direction=@direction;path=@path;follow_chain=@follow_chain;skip_absent_relationship_ends=@skip_absent_relationship_ends"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "share",
+              "minimum": [
+                {
+                  "sign": "plus",
+                  "operand": {
+                    "kind": "parameter",
+                    "name": "minimum_ratio"
+                  }
+                }
+              ],
+              "rounding": []
+            },
+            "fail": "at most {share:share} of the footprint lies within any {candidate}; required {minimum_ratio}",
+            "undecided": "coverage of {minimum_ratio} cannot be decided from the measured areas",
+            "related": "share"
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "compare",
+                  "operator": "greaterThanOrEquals",
+                  "left": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "plan_coverage;candidates=@candidate_selector;minimum=@minimum_ratio;relationship=@relationship;direction=@direction;path=@path;follow_chain=@follow_chain;skip_absent_relationship_ends=@skip_absent_relationship_ends"
+                  },
+                  "right": {
+                    "kind": "parameter",
+                    "name": "minimum_ratio"
+                  },
+                  "label": "at least the lower bound"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.compare",
+                      "label": "at least the lower bound",
+                      "fields": {
+                        "operator": "greaterThanOrEquals"
+                      },
+                      "inputs": {
+                        "left": {
+                          "block": {
+                            "type": "measured.plan_coverage",
+                            "fields": {
+                              "candidates": "@candidate_selector",
+                              "direction": "@direction",
+                              "follow_chain": "@follow_chain",
+                              "minimum": "@minimum_ratio",
+                              "path": "@path",
+                              "relationship": "@relationship",
+                              "skip_absent_relationship_ends": "@skip_absent_relationship_ends"
+                            }
+                          }
+                        },
+                        "right": {
+                          "block": {
+                            "type": "expression.parameter",
+                            "fields": {
+                              "name": "minimum_ratio"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.property-comparison",
@@ -40297,6 +40444,169 @@
         }
       ],
       "unit": "m2",
+      "available": true
+    },
+    {
+      "name": "plan_coverage",
+      "parameters": [
+        {
+          "key": "candidates",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The candidates that may cover the footprint."
+            },
+            {
+              "language": "de",
+              "text": "Die Kandidaten, die den Grundriss überdecken können."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "minimum",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The share searched for: a candidate surely covering it ends the search."
+            },
+            {
+              "language": "de",
+              "text": "Der gesuchte Anteil: ein Kandidat, der ihn sicher überdeckt, beendet die Suche."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "relationship",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship walked from the object."
+            },
+            {
+              "language": "de",
+              "text": "Die vom Objekt aus begangene Beziehung."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "direction",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship's direction: `forward` (the default), `backward` or `either`."
+            },
+            {
+              "language": "de",
+              "text": "Die Richtung der Beziehung: `forward` (Vorgabe), `backward` oder `either`."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Relationship steps walked instead of one relationship."
+            },
+            {
+              "language": "de",
+              "text": "Beziehungsschritte statt einer Beziehung."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "follow_chain",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether chains of the relationship are followed."
+            },
+            {
+              "language": "de",
+              "text": "Ob Ketten der Beziehung verfolgt werden."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "skip_absent_relationship_ends",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether a relationship end the source does not state is skipped."
+            },
+            {
+              "language": "de",
+              "text": "Ob ein von der Quelle nicht angegebenes Beziehungsende übersprungen wird."
+            }
+          ],
+          "references": "boolean"
+        }
+      ],
+      "services": [
+        "plan-area",
+        "relationship-selection"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "the subject has no plan footprint"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Plan coverage"
+        },
+        {
+          "language": "de",
+          "text": "Grundrissüberdeckung"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The share of the object's footprint within the candidate covering most of it, as `plan-coverage` searches the candidates the traversal reaches: a candidate surely covering the minimum ends the search, and a share or candidate that may reach it leaves the value reaching it at least."
+        },
+        {
+          "language": "de",
+          "text": "Der Anteil des Grundrisses des Objekts innerhalb des Kandidaten, der ihn am meisten überdeckt, wie `plan-coverage` die erreichten Kandidaten durchsucht: ein Kandidat, der das Minimum sicher überdeckt, beendet die Suche, und ein Anteil oder Kandidat, der es erreichen kann, lässt den Wert es mindestens erreichen."
+        }
+      ],
+      "unit": "1",
       "available": true
     },
     {

@@ -46,7 +46,9 @@ follow; `coordinate-consistency` is the first judging the sources themselves,
 against a reference read once per rule, and `external-wall-validation`
 the first leading one measurement to outcomes at source and at object
 level ([#291](https://github.com/axioval/engine/issues/291)): every
-capability of #282 now runs as a template.
+capability of #282 now runs as a template; `space-boundary-coverage` is
+the first wording everything one object leaves open in one outcome
+([#284](https://github.com/axioval/engine/issues/284)).
 
 ## The outside contract
 
@@ -1232,6 +1234,33 @@ derivation, each failing check a warning of its own: a wall whose
 declaration is unknown is open once per derivation (`not compared with the
 {derivation} envelope: …`), its other checks quiet.
 
+### `space-boundary-coverage`
+
+| Form | When | Values | Checks |
+| --- | --- | --- | --- |
+| one | always | `off` = `boundary_coverage_off;plane=@plane_tolerance`, `zero` = 0 | share (`minimum_covered_share` stated): `share` (`boundary_coverage_share`) at least the minimum, worded over `surface` and `uncovered`; uncovered (`maximum_uncovered_area` stated): `uncovered` (`boundary_coverage_uncovered`) at most the maximum; overlap (`maximum_overlap_area` stated): `overlap` (`boundary_coverage_overlap`) at most the maximum; no rounding |
+
+`plane_tolerance` defaults to 0 m. The values read one boundary-coverage
+request per space and tolerance for the run (`BoundaryMeasures`); a space
+the service cannot measure is open once, `space-boundary coverage: …`, for
+the reason its refusal gives. The form's own decision is `off` at most
+zero: a boundary off the body's surface is always a finding, `space
+boundary {off:noted} lies on no face of the space's body, so it covers
+nothing`, relating the elements it bounds against (`related: off`). The
+checks read `declared boundaries cover {share:percent} of the
+{surface:m2} surface, leaving {uncovered:m2} uncovered; at least
+{minimum_covered_share:percent} required`, `declared boundaries leave
+{uncovered:m2} of the {surface:m2} surface uncovered; at most
+{maximum_uncovered_area:m2} allowed` and `declared boundaries overlap over
+{overlap:m2} of the surface{between}; at most {maximum_overlap_area:m2}
+allowed`, `between` naming the pairs that surely overlap (` (boundaries
+b1 and b2)`, `Condition::Noted`) and the finding relating their elements
+(`related: overlap`); a straddling check ends `, which straddles the
+required …` or `the allowed …`. Everything one space leaves open is one
+outcome, joined by `; ` (`joined`). The declaration keeps the
+capability's checks, words and order; without the service the rule is
+open (`space-boundary coverage service is not registered`).
+
 ## Binding and running a rule
 
 The rules crate's `templates` module runs a template
@@ -1693,6 +1722,19 @@ unknown declaration at random, under one or both derivations in either
 order, bounded by decided, undecided or empty selections, with the
 service answering or refusing; and by the `external-walls` rule of the
 `coverage` case, recorded before the switch. It is never forked (D30).
+
+`space-boundary-coverage` is held to `space_boundary_coverage/reference.rs`
+(`axioval_rules::reference::SpaceBoundaryCoverage`) on every fixture of
+`tests/space_boundary_coverage.rs`, its refusals and joined open outcomes
+asserted word for word; by generated spaces of random surfaces, uncovered
+and overlapping parts (some intervals, some inexact), boundaries on and
+off the surface (some without an element), pairs overlapping surely or
+possibly, and spaces the service refuses, under every combination of the
+three bounds and plane tolerances; by the `space-boundary-coverage` rules
+of the `spaces` case, recorded before the switch; and its fork, an
+expression requiring no boundary off the surface and every declared
+check, which reaches its verdicts (one finding where the template may
+report several, as any fork).
 
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the

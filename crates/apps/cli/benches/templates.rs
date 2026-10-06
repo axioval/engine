@@ -214,6 +214,11 @@ const PAIRS: &[Pair] = &[
         case: "coverage",
         reference: |registry| registry.replace(axioval::rules::reference::ExternalWallValidation),
     },
+    Pair {
+        capability: "axioval:capability.space-boundary-coverage",
+        case: "spaces",
+        reference: |registry| registry.replace(axioval::rules::reference::SpaceBoundaryCoverage),
+    },
 ];
 
 /// Warm-up runs per side before measuring.

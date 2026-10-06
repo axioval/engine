@@ -717,7 +717,7 @@
       "searchOnly": "candidate-filter",
       "reason": "the bounding boxes only propose the objects near enough to measure"
     },
-    "space_boundary_coverage::evaluate::measure_boundary_coverage": {
+    "space_boundary_coverage::reference::evaluate::measure_boundary_coverage": {
       "count": 1,
       "providedBy": [
         "boundary_covered_share",

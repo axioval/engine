@@ -1,4 +1,8 @@
 //! `space-boundary-coverage`: declared boundaries against each space's surface.
+//!
+//! The capability runs as a template; every fixture runs it and the
+//! implementation it replaced (`axioval_rules::reference::SpaceBoundaryCoverage`)
+//! and holds the template to its whole outside contract.
 #![allow(missing_docs, clippy::float_cmp)]
 
 mod common;
@@ -14,12 +18,13 @@ use axioval_engine::{
 use axioval_ir::contract::ParameterValue;
 use axioval_ir::{Evidence, NotEvaluatedReason, ObjectId};
 use axioval_rules::SpaceBoundaryCoverage;
+use axioval_rules::reference::SpaceBoundaryCoverage as Reference;
 use common::{Model, findings, id, kind, number, rule, source, unevaluated};
 
 const ID: &str = "axioval:capability.space-boundary-coverage";
 
 /// One space's canned answer.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct Answer {
     surface: (f64, f64),
     uncovered: (f64, f64),
@@ -58,11 +63,18 @@ fn on(boundary: &str, element: &str, area: f64) -> MeasuredBoundary {
 struct Coverages {
     answers: BTreeMap<ObjectId, Answer>,
     tolerance: std::sync::Mutex<Vec<f64>>,
+    /// Spaces measured on a tessellation: inexact even where a point.
+    inexact: std::collections::BTreeSet<ObjectId>,
 }
 
 impl Coverages {
     fn with(mut self, space: &str, answer: Answer) -> Self {
         self.answers.insert(id(space), answer);
+        self
+    }
+
+    fn inexact(mut self, space: &str) -> Self {
+        self.inexact.insert(id(space));
         self
     }
 }
@@ -87,7 +99,9 @@ impl BoundaryCoverageService for Coverages {
         let point = surface.0 == surface.1 && uncovered.0 == uncovered.1;
         let mut evidence =
             Evidence::exact(source(), format!("coverage:{}", request.space().local_id));
-        evidence.exact = point && answer.overlap.0 == answer.overlap.1;
+        evidence.exact = point
+            && answer.overlap.0 == answer.overlap.1
+            && !self.inexact.contains(request.space());
         BoundaryCoverage::try_new(
             request.clone(),
             CoverageAreas {
@@ -138,15 +152,35 @@ fn coverages() -> Coverages {
         .with("vague", vague)
 }
 
-fn run(coverages: Coverages, parameters: Vec<(&str, ParameterValue)>) -> CapabilityEvaluation {
-    model().evaluate_with(
+/// The template's evaluation of `rule` over `model`, held to the replaced
+/// implementation's whole contract.
+#[allow(clippy::needless_pass_by_value)]
+fn held(
+    model: Model,
+    coverages: Option<Arc<Coverages>>,
+    rule: &axioval_engine::CompiledRule,
+) -> CapabilityEvaluation {
+    model.holding_contract(
         &SpaceBoundaryCoverage,
-        &rule(ID, kind("space"), parameters),
+        &Reference,
+        rule,
         |services| {
-            services
-                .register(BoundaryCoverageServiceHandle::new(Arc::new(coverages)))
-                .unwrap();
+            if let Some(coverages) = &coverages {
+                services
+                    .register(BoundaryCoverageServiceHandle::new(coverages.clone()))
+                    .unwrap();
+            }
         },
+        &[],
+        0.0,
+    )
+}
+
+fn run(coverages: Coverages, parameters: Vec<(&str, ParameterValue)>) -> CapabilityEvaluation {
+    held(
+        model(),
+        Some(Arc::new(coverages)),
+        &rule(ID, kind("space"), parameters),
     )
 }
 
@@ -242,9 +276,9 @@ fn gaps_and_overlaps_are_judged_against_their_maxima() {
 #[test]
 fn the_plane_tolerance_is_sent_and_defaults_to_zero() {
     let coverages = Arc::new(coverages());
-    let shared = Arc::clone(&coverages);
-    model().evaluate_with(
-        &SpaceBoundaryCoverage,
+    held(
+        model(),
+        Some(Arc::clone(&coverages)),
         &rule(
             ID,
             kind("space"),
@@ -253,11 +287,6 @@ fn the_plane_tolerance_is_sent_and_defaults_to_zero() {
                 ("plane_tolerance", metres(0.005)),
             ],
         ),
-        |services| {
-            services
-                .register(BoundaryCoverageServiceHandle::new(shared))
-                .unwrap();
-        },
     );
     assert!(
         coverages
@@ -269,15 +298,10 @@ fn the_plane_tolerance_is_sent_and_defaults_to_zero() {
     );
 
     let coverages = Arc::new(Coverages::default());
-    let shared = Arc::clone(&coverages);
-    model().evaluate_with(
-        &SpaceBoundaryCoverage,
+    held(
+        model(),
+        Some(Arc::clone(&coverages)),
         &rule(ID, kind("space"), vec![("maximum_overlap_area", area(1.0))]),
-        |services| {
-            services
-                .register(BoundaryCoverageServiceHandle::new(shared))
-                .unwrap();
-        },
     );
     let seen = coverages.tolerance.lock().unwrap();
     assert!(!seen.is_empty() && seen.iter().all(|t| *t == 0.0));
@@ -285,28 +309,69 @@ fn the_plane_tolerance_is_sent_and_defaults_to_zero() {
 
 #[test]
 fn bad_declarations_and_a_missing_service_judge_nothing() {
-    for parameters in [
-        vec![],
-        vec![("minimum_covered_share", number(1.5))],
-        vec![("maximum_uncovered_area", metres(1.0))],
-        vec![("maximum_overlap_area", area(-1.0))],
-        vec![
-            ("maximum_overlap_area", area(1.0)),
-            ("plane_tolerance", area(1.0)),
-        ],
+    for (parameters, refused) in [
+        (
+            vec![],
+            "`minimum_covered_share`, `maximum_uncovered_area` or `maximum_overlap_area` is \
+             required",
+        ),
+        (
+            vec![("minimum_covered_share", number(1.5))],
+            "`minimum_covered_share` lies outside 0 to 1",
+        ),
+        (
+            vec![("minimum_covered_share", number(-0.5))],
+            "`minimum_covered_share` lies outside 0 to 1",
+        ),
+        (
+            vec![("maximum_uncovered_area", metres(1.0))],
+            "`maximum_uncovered_area` is not an area",
+        ),
+        (
+            vec![("maximum_uncovered_area", metres(-1.0))],
+            "`maximum_uncovered_area` is not an area",
+        ),
+        (
+            vec![("maximum_overlap_area", area(-1.0))],
+            "`maximum_overlap_area` is negative",
+        ),
+        (
+            vec![
+                ("maximum_overlap_area", area(1.0)),
+                ("plane_tolerance", area(1.0)),
+            ],
+            "`plane_tolerance` is not a length",
+        ),
+        (
+            vec![
+                ("maximum_overlap_area", area(1.0)),
+                ("plane_tolerance", metres(-0.1)),
+            ],
+            "`plane_tolerance` is negative",
+        ),
     ] {
+        let evaluation = run(coverages(), parameters);
         assert_eq!(
-            unevaluated(&run(coverages(), parameters)),
+            unevaluated(&evaluation),
             [("-".into(), NotEvaluatedReason::InvalidDeclaration)]
         );
+        assert_eq!(
+            evaluation.not_evaluated_outcomes()[0].message(),
+            format!("space-boundary-coverage: {refused}")
+        );
     }
-    let evaluation = model().evaluate(
-        &SpaceBoundaryCoverage,
+    let evaluation = held(
+        model(),
+        None,
         &rule(ID, kind("space"), vec![("maximum_overlap_area", area(1.0))]),
     );
     assert_eq!(
         unevaluated(&evaluation),
         [("-".into(), NotEvaluatedReason::MissingService)]
+    );
+    assert_eq!(
+        evaluation.not_evaluated_outcomes()[0].message(),
+        "space-boundary coverage service is not registered"
     );
 }
 
@@ -425,5 +490,255 @@ fn the_checks_as_expressions_hold_to_the_parity_harness() {
         let parity =
             axioval_rules::parity::compare_evaluations((ID, &expected), ("expression", &outcome));
         assert!(parity.holds(), "{requirement}:\n{}", parity.diff());
+    }
+}
+
+/// Everything one space leaves open is one outcome, its checks' messages
+/// joined in their order.
+#[test]
+fn what_a_space_leaves_open_is_one_outcome() {
+    let evaluation = run(
+        coverages(),
+        vec![
+            ("minimum_covered_share", number(0.999)),
+            ("maximum_uncovered_area", area(0.1)),
+            ("maximum_overlap_area", area(0.1)),
+        ],
+    );
+    let vague: Vec<&str> = evaluation
+        .not_evaluated_outcomes()
+        .iter()
+        .filter(|outcome| outcome.object_id() == Some(&id("vague")))
+        .map(axioval_engine::CapabilityNotEvaluated::message)
+        .collect();
+    assert_eq!(
+        vague,
+        [
+            "declared boundaries cover between 99.32% and 100% of the between 58.9 m² and 59.1 \
+             m² surface, leaving between 0 m² and 0.2 m² uncovered, which straddles the \
+             required 99.9%; declared boundaries leave between 0 m² and 0.2 m² of the between \
+             58.9 m² and 59.1 m² surface uncovered, which straddles the allowed 0.1 m²; \
+             declared boundaries overlap over between 0 m² and 0.2 m² of the surface, which \
+             straddles the allowed 0.1 m²"
+        ]
+    );
+}
+
+/// A coverage measured on a tessellation is never exact, whichever value
+/// reads it, a point included; one measured exactly is.
+#[test]
+fn coverage_measured_approximately_is_never_exact() {
+    let project = model().project();
+    let mut services = axioval_engine::ServiceRegistry::new();
+    services
+        .register(BoundaryCoverageServiceHandle::new(Arc::new(coverages())))
+        .unwrap();
+    for name in [
+        "boundary_coverage_off",
+        "boundary_coverage_share",
+        "boundary_coverage_uncovered",
+        "boundary_coverage_overlap",
+        "boundary_coverage_surface",
+    ] {
+        for (space, exact) in [("whole", true), ("vague", false)] {
+            let (_, cited) = common::measured_cited(&services, &project, &id(space), name)
+                .unwrap()
+                .unwrap_or_else(|| panic!("{name} of {space}"));
+            assert_eq!(cited, exact, "{name} of {space}");
+        }
+    }
+    // The share of an approximate surface is a point here, and still inexact.
+    let mut flat = exact(59.0, 0.0, 0.0);
+    flat.boundaries = vec![on("b1", "slab", 59.0)];
+    let mut services = axioval_engine::ServiceRegistry::new();
+    services
+        .register(BoundaryCoverageServiceHandle::new(Arc::new(
+            Coverages::default().with("whole", flat).inexact("whole"),
+        )))
+        .unwrap();
+    let (_, cited) =
+        common::measured_cited(&services, &project, &id("whole"), "boundary_coverage_share")
+            .unwrap()
+            .unwrap();
+    assert!(!cited);
+}
+
+/// The forked rule, an expression requiring no boundary off the surface
+/// and every declared check, reaches the template's verdicts on every
+/// space: found, open or passed.
+#[test]
+fn the_forked_rule_reaches_the_templates_verdicts() {
+    use axioval_rules::ExpressionRequirement;
+    use axioval_rules::templates::{Fork, fork};
+    let verdicts = |evaluation: &CapabilityEvaluation| {
+        let mut found: Vec<ObjectId> = evaluation
+            .findings()
+            .iter()
+            .filter_map(|finding| finding.object_id().cloned())
+            .collect();
+        found.sort();
+        found.dedup();
+        let mut open: Vec<ObjectId> = evaluation
+            .not_evaluated_outcomes()
+            .iter()
+            .filter_map(|outcome| outcome.object_id().cloned())
+            .filter(|object| !found.contains(object))
+            .collect();
+        open.sort();
+        open.dedup();
+        (found, open)
+    };
+    for parameters in [
+        vec![("minimum_covered_share", number(0.999))],
+        vec![("maximum_uncovered_area", area(1.0))],
+        vec![
+            ("maximum_overlap_area", area(0.5)),
+            ("plane_tolerance", metres(0.01)),
+        ],
+        vec![
+            ("minimum_covered_share", number(0.5)),
+            ("maximum_uncovered_area", area(0.1)),
+            ("maximum_overlap_area", area(0.1)),
+        ],
+    ] {
+        let bound = rule(ID, kind("space"), parameters);
+        let forked = fork(&SpaceBoundaryCoverage, &bound).unwrap();
+        let mut expression_rule = bound.clone();
+        expression_rule.capability = Fork::CAPABILITY.into();
+        expression_rule.parameters = forked.parameters();
+        let shared = Arc::new(coverages());
+        let register = |services: &mut axioval_engine::ServiceRegistry| {
+            services
+                .register(BoundaryCoverageServiceHandle::new(shared.clone()))
+                .unwrap();
+        };
+        let template = model().evaluate_measured(&SpaceBoundaryCoverage, &bound, register);
+        let forked = model().evaluate_measured(&ExpressionRequirement, &expression_rule, register);
+        assert_eq!(
+            verdicts(&template),
+            verdicts(&forked),
+            "{:?}",
+            bound.parameters
+        );
+    }
+}
+
+mod generated {
+    use super::*;
+    use proptest::collection::vec;
+    use proptest::prelude::*;
+
+    /// One space's answer: its surface, the uncovered and overlapping parts
+    /// (some intervals), its boundaries (some off the surface or without an
+    /// element) and the pairs overlapping, surely or possibly; or none, a
+    /// refusal.
+    fn answer() -> impl Strategy<Value = Option<(Answer, bool)>> {
+        let part = (0u32..40, 0u32..3)
+            .prop_map(|(low, width)| (f64::from(low) / 4.0, f64::from(low + width) / 4.0));
+        let boundary = (0u32..4, any::<bool>(), proptest::option::of(0u32..3)).prop_map(
+            |(index, on_surface, element)| {
+                let name = format!("b{index}");
+                let element = element.map(|element| id(&format!("e{element}")));
+                if on_surface {
+                    MeasuredBoundary::new(
+                        id(&name),
+                        element,
+                        BoundaryPlacement::OnSurface {
+                            area: interval((2.0, 2.0)),
+                        },
+                    )
+                } else {
+                    MeasuredBoundary::new(id(&name), element, BoundaryPlacement::OffSurface)
+                }
+            },
+        );
+        proptest::option::weighted(
+            0.85,
+            (
+                30u32..60,
+                part.clone(),
+                part,
+                vec(boundary, 0..4),
+                vec((0u32..4, 0u32..4, any::<bool>()), 0..3),
+                any::<bool>(),
+            )
+                .prop_map(|(surface, uncovered, overlap, boundaries, pairs, exact)| {
+                    let mut boundaries = boundaries;
+                    boundaries.sort_by(|a, b| a.boundary().cmp(b.boundary()));
+                    boundaries.dedup_by(|a, b| a.boundary() == b.boundary());
+                    let overlaps = pairs
+                        .into_iter()
+                        .filter(|(first, second, _)| first < second)
+                        .filter_map(|(first, second, sure)| {
+                            BoundaryOverlap::try_new(
+                                id(&format!("b{first}")),
+                                id(&format!("b{second}")),
+                                interval((if sure { 0.5 } else { 0.0 }, 1.0)),
+                            )
+                            .ok()
+                        })
+                        .collect();
+                    let surface = f64::from(surface);
+                    (
+                        Answer {
+                            surface: (surface, surface),
+                            uncovered: (uncovered.0.min(surface), uncovered.1.min(surface)),
+                            overlap,
+                            boundaries,
+                            overlaps,
+                        },
+                        exact,
+                    )
+                }),
+        )
+    }
+
+    fn parameters() -> impl Strategy<Value = Vec<(&'static str, ParameterValue)>> {
+        (
+            proptest::option::of(0u32..=100),
+            proptest::option::of(0u32..40),
+            proptest::option::of(0u32..6),
+            proptest::option::of(0u32..3),
+        )
+            .prop_map(|(share, uncovered, overlap, plane)| {
+                let mut parameters = Vec::new();
+                if let Some(share) = share {
+                    parameters.push(("minimum_covered_share", number(f64::from(share) / 100.0)));
+                }
+                if let Some(uncovered) = uncovered {
+                    parameters.push(("maximum_uncovered_area", area(f64::from(uncovered) / 4.0)));
+                }
+                if let Some(overlap) = overlap {
+                    parameters.push(("maximum_overlap_area", area(f64::from(overlap) / 4.0)));
+                }
+                if let Some(plane) = plane {
+                    parameters.push(("plane_tolerance", metres(f64::from(plane) / 100.0)));
+                }
+                parameters
+            })
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(96))]
+
+        #[test]
+        fn generated_spaces_hold_parity(
+            answers in vec(answer(), 1..5),
+            parameters in parameters(),
+        ) {
+            let mut model = Model::default();
+            let mut coverages = Coverages::default();
+            for (index, answer) in answers.into_iter().enumerate() {
+                let space = format!("s{index}");
+                model = model.object(&space, "space");
+                if let Some((answer, exact)) = answer {
+                    coverages = coverages.with(&space, answer);
+                    if !exact {
+                        coverages = coverages.inexact(&space);
+                    }
+                }
+            }
+            held(model, Some(Arc::new(coverages)), &rule(ID, kind("space"), parameters));
+        }
     }
 }

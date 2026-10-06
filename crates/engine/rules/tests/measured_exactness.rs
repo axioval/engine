@@ -70,6 +70,11 @@ const COVERED: &[(&str, &str, &str)] = &[
         "approximate_guard_edges_are_never_measured",
     ),
     (
+        "boundary_coverage_share",
+        "tests/space_boundary_coverage.rs",
+        "coverage_measured_approximately_is_never_exact",
+    ),
+    (
         "plan_diameter",
         "../../facade/axioval/tests/axiolid_bays_and_spacing.rs",
         "values_measured_on_tessellations_are_never_exact",

@@ -336,3 +336,11 @@ generated fixture's 1.24× the cost of selecting before reading the
 declaration and its value once per rule; the small models, under the
 floor, hold together. Each derivation of the envelope is asked of the
 service once per run, however many values and rules read it.
+
+`space-boundary-coverage` runs the `spaces` case's two rules: 0.91 to 1.08×
+its reference's run time and 1.00 to 1.13× its peak heap, the architecture
+models (the only ones with spaces) the highest. Its values read one
+boundary-coverage request per space and plane tolerance for the run
+(`BoundaryMeasures`), so the off-surface count, share, uncovered and
+overlapping areas and the surface share it, and two rules of one tolerance
+share it too.

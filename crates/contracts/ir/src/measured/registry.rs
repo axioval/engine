@@ -649,6 +649,13 @@ const PLANE: MeasuredParameter = metres(
     ),
 );
 
+/// Why `space-boundary-coverage`'s values may not be measured.
+const BOUNDARY_UNMEASURED: &[&str] = &[
+    NO_GEOMETRY,
+    "a boundary surface cannot be read",
+    "the space's body is curved",
+];
+
 const CONTACT: [MeasuredParameter; 5] = [
     selected(
         "with",
@@ -2060,6 +2067,90 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         help: &en_de(
             "A space's summed space-boundary area against elements of one kind.",
             "Die summierte Raumbegrenzungsfläche eines Raums gegen Bauteile einer Art.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "boundary_coverage_off",
+        parameters: &[PLANE],
+        dimension: None,
+        services: &["boundary-coverage"],
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: BOUNDARY_UNMEASURED,
+        label: &en_de("Misplaced boundaries", "Falsch platzierte Begrenzungen"),
+        help: &en_de(
+            "How many of a space's declared boundaries lie on no face of its body, as \
+             `space-boundary-coverage` measures it; it cites the elements they bound against \
+             and notes the boundaries.",
+            "Wie viele Raumbegrenzungen eines Raums auf keiner Fläche seines Körpers liegen, \
+             wie `space-boundary-coverage` es misst; er nennt die Bauteile, gegen die sie \
+             begrenzen, und vermerkt die Begrenzungen.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "boundary_coverage_overlap",
+        parameters: &[PLANE],
+        dimension: Some(QuantityDimension::Area),
+        services: &["boundary-coverage"],
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: BOUNDARY_UNMEASURED,
+        label: &en_de("Boundary overlap", "Überlappung der Begrenzungen"),
+        help: &en_de(
+            "The area a space's declared boundaries cover twice, as \
+             `space-boundary-coverage` measures it; it cites the elements of the boundaries \
+             that surely overlap and notes those pairs.",
+            "Die Fläche, die die Raumbegrenzungen eines Raums doppelt bedecken, wie \
+             `space-boundary-coverage` sie misst; er nennt die Bauteile der sicher \
+             überlappenden Begrenzungen und vermerkt diese Paare.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "boundary_coverage_share",
+        parameters: &[PLANE],
+        dimension: None,
+        services: &["boundary-coverage"],
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: BOUNDARY_UNMEASURED,
+        label: &en_de("Boundary coverage", "Bedeckung durch Begrenzungen"),
+        help: &en_de(
+            "The share of a space body's surface its declared boundaries cover, from 0 to 1, as \
+             `space-boundary-coverage` measures it.",
+            "Der Anteil der Oberfläche eines Raumkörpers, den seine Raumbegrenzungen bedecken, \
+             von 0 bis 1, wie `space-boundary-coverage` ihn misst.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "boundary_coverage_surface",
+        parameters: &[PLANE],
+        dimension: Some(QuantityDimension::Area),
+        services: &["boundary-coverage"],
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: BOUNDARY_UNMEASURED,
+        label: &en_de("Bounded surface", "Begrenzte Oberfläche"),
+        help: &en_de(
+            "The area of the space body's surface its declared boundaries are measured \
+             against, as `space-boundary-coverage` measures it.",
+            "Die Fläche der Oberfläche des Raumkörpers, gegen die seine Raumbegrenzungen \
+             gemessen werden, wie `space-boundary-coverage` sie misst.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "boundary_coverage_uncovered",
+        parameters: &[PLANE],
+        dimension: Some(QuantityDimension::Area),
+        services: &["boundary-coverage"],
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: BOUNDARY_UNMEASURED,
+        label: &en_de("Unbounded surface", "Unbegrenzte Oberfläche"),
+        help: &en_de(
+            "The area of a space body's surface no declared boundary covers, as \
+             `space-boundary-coverage` measures it.",
+            "Die Fläche der Oberfläche eines Raumkörpers, die keine Raumbegrenzung bedeckt, \
+             wie `space-boundary-coverage` sie misst.",
         ),
     },
     MeasuredDescriptor {

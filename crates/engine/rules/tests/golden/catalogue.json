@@ -42611,7 +42611,501 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "space-boundary-coverage",
+        "defaults": [
+          {
+            "parameter": "plane_tolerance",
+            "value": {
+              "type": "quantity",
+              "value": 0.0,
+              "unit": "m"
+            }
+          }
+        ],
+        "declaration": [
+          {
+            "kind": "nonNegative",
+            "parameters": [
+              "minimum_covered_share"
+            ],
+            "message": "`minimum_covered_share` lies outside 0 to 1"
+          },
+          {
+            "kind": "atMost",
+            "parameters": [
+              "minimum_covered_share"
+            ],
+            "value": 1.0,
+            "message": "`minimum_covered_share` lies outside 0 to 1"
+          },
+          {
+            "kind": "quantity",
+            "parameter": "maximum_uncovered_area",
+            "dimension": "area",
+            "message": "`maximum_uncovered_area` is not an area"
+          },
+          {
+            "kind": "nonNegative",
+            "parameters": [
+              "maximum_uncovered_area"
+            ],
+            "message": "`maximum_uncovered_area` is negative"
+          },
+          {
+            "kind": "quantity",
+            "parameter": "maximum_overlap_area",
+            "dimension": "area",
+            "message": "`maximum_overlap_area` is not an area"
+          },
+          {
+            "kind": "nonNegative",
+            "parameters": [
+              "maximum_overlap_area"
+            ],
+            "message": "`maximum_overlap_area` is negative"
+          },
+          {
+            "kind": "anyOf",
+            "parameters": [
+              "minimum_covered_share",
+              "maximum_uncovered_area",
+              "maximum_overlap_area"
+            ],
+            "message": "`minimum_covered_share`, `maximum_uncovered_area` or `maximum_overlap_area` is required"
+          },
+          {
+            "kind": "length",
+            "parameter": "plane_tolerance"
+          }
+        ],
+        "services": {
+          "needs": [
+            "boundary-coverage"
+          ],
+          "message": "space-boundary coverage service is not registered"
+        },
+        "texts": [
+          {
+            "name": "between",
+            "when": {
+              "kind": "noted",
+              "value": "overlap"
+            },
+            "text": " (boundaries {overlap:noted})"
+          }
+        ],
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "off",
+                "expression": {
+                  "kind": "property",
+                  "propertySet": "axioval:measured",
+                  "property": "boundary_coverage_off;plane=@plane_tolerance"
+                }
+              },
+              {
+                "name": "zero",
+                "expression": {
+                  "kind": "literal",
+                  "value": {
+                    "type": "number",
+                    "value": 0.0
+                  }
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "off",
+              "maximum": [
+                {
+                  "sign": "plus",
+                  "operand": {
+                    "kind": "value",
+                    "name": "zero"
+                  }
+                }
+              ],
+              "rounding": []
+            },
+            "fail": "space boundary {off:noted} lies on no face of the space's body, so it covers nothing",
+            "undecided": "space boundary {off:noted} may lie on no face of the space's body",
+            "related": "off",
+            "checks": [
+              {
+                "values": [
+                  {
+                    "name": "share",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "boundary_coverage_share;plane=@plane_tolerance"
+                    }
+                  },
+                  {
+                    "name": "surface",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "boundary_coverage_surface;plane=@plane_tolerance"
+                    },
+                    "expect": "words"
+                  },
+                  {
+                    "name": "uncovered",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "boundary_coverage_uncovered;plane=@plane_tolerance"
+                    },
+                    "expect": "words"
+                  }
+                ],
+                "decision": {
+                  "kind": "within",
+                  "value": "share",
+                  "minimum": [
+                    {
+                      "sign": "plus",
+                      "operand": {
+                        "kind": "parameter",
+                        "name": "minimum_covered_share"
+                      }
+                    }
+                  ],
+                  "rounding": []
+                },
+                "fail": "declared boundaries cover {share:percent} of the {surface:m2} surface, leaving {uncovered:m2} uncovered; at least {minimum_covered_share:percent} required",
+                "undecided": "declared boundaries cover {share:percent} of the {surface:m2} surface, leaving {uncovered:m2} uncovered, which straddles the required {minimum_covered_share:percent}",
+                "applies": {
+                  "when": [
+                    "minimum_covered_share"
+                  ]
+                }
+              },
+              {
+                "values": [
+                  {
+                    "name": "uncovered",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "boundary_coverage_uncovered;plane=@plane_tolerance"
+                    }
+                  },
+                  {
+                    "name": "surface",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "boundary_coverage_surface;plane=@plane_tolerance"
+                    },
+                    "expect": "words"
+                  }
+                ],
+                "decision": {
+                  "kind": "within",
+                  "value": "uncovered",
+                  "maximum": [
+                    {
+                      "sign": "plus",
+                      "operand": {
+                        "kind": "parameter",
+                        "name": "maximum_uncovered_area"
+                      }
+                    }
+                  ],
+                  "rounding": []
+                },
+                "fail": "declared boundaries leave {uncovered:m2} of the {surface:m2} surface uncovered; at most {maximum_uncovered_area:m2} allowed",
+                "undecided": "declared boundaries leave {uncovered:m2} of the {surface:m2} surface uncovered, which straddles the allowed {maximum_uncovered_area:m2}",
+                "applies": {
+                  "when": [
+                    "maximum_uncovered_area"
+                  ]
+                }
+              },
+              {
+                "values": [
+                  {
+                    "name": "overlap",
+                    "expression": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "boundary_coverage_overlap;plane=@plane_tolerance"
+                    }
+                  }
+                ],
+                "decision": {
+                  "kind": "within",
+                  "value": "overlap",
+                  "maximum": [
+                    {
+                      "sign": "plus",
+                      "operand": {
+                        "kind": "parameter",
+                        "name": "maximum_overlap_area"
+                      }
+                    }
+                  ],
+                  "rounding": []
+                },
+                "fail": "declared boundaries overlap over {overlap:m2} of the surface{between}; at most {maximum_overlap_area:m2} allowed",
+                "undecided": "declared boundaries overlap over {overlap:m2} of the surface{between}, which straddles the allowed {maximum_overlap_area:m2}",
+                "related": "overlap",
+                "applies": {
+                  "when": [
+                    "maximum_overlap_area"
+                  ]
+                }
+              }
+            ],
+            "joined": "; "
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "and",
+                  "operands": [
+                    {
+                      "kind": "compare",
+                      "operator": "greaterThanOrEquals",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "boundary_coverage_share;plane=@plane_tolerance"
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "minimum_covered_share"
+                      },
+                      "label": "at least the lower bound"
+                    }
+                  ]
+                },
+                {
+                  "kind": "and",
+                  "operands": [
+                    {
+                      "kind": "compare",
+                      "operator": "lessThanOrEquals",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "boundary_coverage_uncovered;plane=@plane_tolerance"
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "maximum_uncovered_area"
+                      },
+                      "label": "at most the upper bound"
+                    }
+                  ]
+                },
+                {
+                  "kind": "and",
+                  "operands": [
+                    {
+                      "kind": "compare",
+                      "operator": "lessThanOrEquals",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "boundary_coverage_overlap;plane=@plane_tolerance"
+                      },
+                      "right": {
+                        "kind": "parameter",
+                        "name": "maximum_overlap_area"
+                      },
+                      "label": "at most the upper bound"
+                    }
+                  ]
+                },
+                {
+                  "kind": "and",
+                  "operands": [
+                    {
+                      "kind": "compare",
+                      "operator": "lessThanOrEquals",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "boundary_coverage_off;plane=@plane_tolerance"
+                      },
+                      "right": {
+                        "kind": "literal",
+                        "value": {
+                          "type": "number",
+                          "value": 0.0
+                        }
+                      },
+                      "label": "at most the upper bound"
+                    }
+                  ]
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.and",
+                      "inputs": {
+                        "operands": {
+                          "blocks": [
+                            {
+                              "type": "expression.compare",
+                              "label": "at least the lower bound",
+                              "fields": {
+                                "operator": "greaterThanOrEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "measured.boundary_coverage_share",
+                                    "fields": {
+                                      "plane": "@plane_tolerance"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "minimum_covered_share"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.and",
+                      "inputs": {
+                        "operands": {
+                          "blocks": [
+                            {
+                              "type": "expression.compare",
+                              "label": "at most the upper bound",
+                              "fields": {
+                                "operator": "lessThanOrEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "measured.boundary_coverage_uncovered",
+                                    "fields": {
+                                      "plane": "@plane_tolerance"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "maximum_uncovered_area"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.and",
+                      "inputs": {
+                        "operands": {
+                          "blocks": [
+                            {
+                              "type": "expression.compare",
+                              "label": "at most the upper bound",
+                              "fields": {
+                                "operator": "lessThanOrEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "measured.boundary_coverage_overlap",
+                                    "fields": {
+                                      "plane": "@plane_tolerance"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.parameter",
+                                    "fields": {
+                                      "name": "maximum_overlap_area"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.and",
+                      "inputs": {
+                        "operands": {
+                          "blocks": [
+                            {
+                              "type": "expression.compare",
+                              "label": "at most the upper bound",
+                              "fields": {
+                                "operator": "lessThanOrEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "measured.boundary_coverage_off",
+                                    "fields": {
+                                      "plane": "@plane_tolerance"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.literal",
+                                    "fields": {
+                                      "value": {
+                                        "type": "number",
+                                        "value": 0.0
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.space-connection",
@@ -54940,6 +55434,289 @@
         {
           "language": "de",
           "text": "Die summierte Raumbegrenzungsfläche eines Raums gegen Bauteile einer Art."
+        }
+      ],
+      "unit": "m2",
+      "available": true
+    },
+    {
+      "name": "boundary_coverage_off",
+      "parameters": [
+        {
+          "key": "plane",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "default": "0",
+          "help": [
+            {
+              "language": "en",
+              "text": "How far from the body's face planes a boundary still counts, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit von den Flächenebenen des Körpers eine Begrenzung noch zählt, in Metern."
+            }
+          ],
+          "references": "length"
+        }
+      ],
+      "services": [
+        "boundary-coverage"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "a boundary surface cannot be read",
+        "the space's body is curved"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Misplaced boundaries"
+        },
+        {
+          "language": "de",
+          "text": "Falsch platzierte Begrenzungen"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "How many of a space's declared boundaries lie on no face of its body, as `space-boundary-coverage` measures it; it cites the elements they bound against and notes the boundaries."
+        },
+        {
+          "language": "de",
+          "text": "Wie viele Raumbegrenzungen eines Raums auf keiner Fläche seines Körpers liegen, wie `space-boundary-coverage` es misst; er nennt die Bauteile, gegen die sie begrenzen, und vermerkt die Begrenzungen."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
+      "name": "boundary_coverage_overlap",
+      "parameters": [
+        {
+          "key": "plane",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "default": "0",
+          "help": [
+            {
+              "language": "en",
+              "text": "How far from the body's face planes a boundary still counts, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit von den Flächenebenen des Körpers eine Begrenzung noch zählt, in Metern."
+            }
+          ],
+          "references": "length"
+        }
+      ],
+      "dimension": "area",
+      "services": [
+        "boundary-coverage"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "a boundary surface cannot be read",
+        "the space's body is curved"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Boundary overlap"
+        },
+        {
+          "language": "de",
+          "text": "Überlappung der Begrenzungen"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The area a space's declared boundaries cover twice, as `space-boundary-coverage` measures it; it cites the elements of the boundaries that surely overlap and notes those pairs."
+        },
+        {
+          "language": "de",
+          "text": "Die Fläche, die die Raumbegrenzungen eines Raums doppelt bedecken, wie `space-boundary-coverage` sie misst; er nennt die Bauteile der sicher überlappenden Begrenzungen und vermerkt diese Paare."
+        }
+      ],
+      "unit": "m2",
+      "available": true
+    },
+    {
+      "name": "boundary_coverage_share",
+      "parameters": [
+        {
+          "key": "plane",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "default": "0",
+          "help": [
+            {
+              "language": "en",
+              "text": "How far from the body's face planes a boundary still counts, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit von den Flächenebenen des Körpers eine Begrenzung noch zählt, in Metern."
+            }
+          ],
+          "references": "length"
+        }
+      ],
+      "services": [
+        "boundary-coverage"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "a boundary surface cannot be read",
+        "the space's body is curved"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Boundary coverage"
+        },
+        {
+          "language": "de",
+          "text": "Bedeckung durch Begrenzungen"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The share of a space body's surface its declared boundaries cover, from 0 to 1, as `space-boundary-coverage` measures it."
+        },
+        {
+          "language": "de",
+          "text": "Der Anteil der Oberfläche eines Raumkörpers, den seine Raumbegrenzungen bedecken, von 0 bis 1, wie `space-boundary-coverage` ihn misst."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
+      "name": "boundary_coverage_surface",
+      "parameters": [
+        {
+          "key": "plane",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "default": "0",
+          "help": [
+            {
+              "language": "en",
+              "text": "How far from the body's face planes a boundary still counts, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit von den Flächenebenen des Körpers eine Begrenzung noch zählt, in Metern."
+            }
+          ],
+          "references": "length"
+        }
+      ],
+      "dimension": "area",
+      "services": [
+        "boundary-coverage"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "a boundary surface cannot be read",
+        "the space's body is curved"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Bounded surface"
+        },
+        {
+          "language": "de",
+          "text": "Begrenzte Oberfläche"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The area of the space body's surface its declared boundaries are measured against, as `space-boundary-coverage` measures it."
+        },
+        {
+          "language": "de",
+          "text": "Die Fläche der Oberfläche des Raumkörpers, gegen die seine Raumbegrenzungen gemessen werden, wie `space-boundary-coverage` sie misst."
+        }
+      ],
+      "unit": "m2",
+      "available": true
+    },
+    {
+      "name": "boundary_coverage_uncovered",
+      "parameters": [
+        {
+          "key": "plane",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "default": "0",
+          "help": [
+            {
+              "language": "en",
+              "text": "How far from the body's face planes a boundary still counts, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit von den Flächenebenen des Körpers eine Begrenzung noch zählt, in Metern."
+            }
+          ],
+          "references": "length"
+        }
+      ],
+      "dimension": "area",
+      "services": [
+        "boundary-coverage"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "a boundary surface cannot be read",
+        "the space's body is curved"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Unbounded surface"
+        },
+        {
+          "language": "de",
+          "text": "Unbegrenzte Oberfläche"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The area of a space body's surface no declared boundary covers, as `space-boundary-coverage` measures it."
+        },
+        {
+          "language": "de",
+          "text": "Die Fläche der Oberfläche eines Raumkörpers, die keine Raumbegrenzung bedeckt, wie `space-boundary-coverage` sie misst."
         }
       ],
       "unit": "m2",

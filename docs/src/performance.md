@@ -50,6 +50,17 @@ parameters once, or to ask a service about many objects together.
 `body-extent`'s provider parses the axis and end once per batch. The same
 test holds every value read directly to the value resolved one by one.
 
+**Selections shared between rules.** A selector that reads no rule's
+outcomes and evaluates no expression selects the same objects for every
+rule of a run, so the runner selects it once per run
+(`selection::select_shared`, kept in the `MeasuredMemo` by the selector as
+written, as positions in its population): the rules' own selectors and the
+selectors their measured values bind (`doors=@door_selector`), whichever
+reads it first. An entity type is decided once per source and kind within a
+selection. A provider keeping its own measurements keys them by an
+`ArgumentsKey` (hashed once, compared argument by argument, never by
+formatting the arguments), and the memo's tables hash with `foldhash`.
+
 **Aggregates over one pass of the relationship index.** Not done yet: no
 template reads an aggregate, so nothing measures what it would cost. An
 aggregate still walks its relationship path per object. The first rebuild
@@ -156,33 +167,33 @@ the reference's.
 
 | input | objects | body-extent | property-predicate | triangle-count | plan-area |
 | --- | ---: | --- | --- | --- | --- |
-| generated fixture, 400 walls | 421 | 1.21× / 1.43× | 1.24× / 1.11× | 1.38× / 1.00× | 1.11× / 1.20× |
-| building architecture (IFC4) | 38 | 1.15× / 1.15× | 1.03× / 1.03× | 1.07× / 1.01× | 0.70× / 0.97× |
-| building structural (IFC4) | 33 | 0.98× / 1.03× | 1.02× / 1.03× | 1.09× / 1.01× | 1.03× / 0.96× |
-| building HVAC (IFC4) | 18 | 1.01× / 1.00× | 0.95× / 1.00× | 1.03× / 1.00× | 1.14× / 1.00× |
-| infra road (IFC4) | 116 | 1.18× / 1.27× | 1.02× / 1.02× | 1.09× / 1.02× | 1.02× / 1.03× |
-| building architecture (IFC2x3) | 36 | 1.15× / 1.15× | 1.03× / 1.03× | 1.08× / 1.01× | 0.72× / 0.96× |
-| building structural (IFC2x3) | 30 | 1.05× / 1.03× | 1.03× / 1.03× | 1.13× / 1.01× | 0.51× / 0.97× |
-| building architecture (IFC4x3) | 37 | 1.16× / 1.15× | 1.02× / 1.03× | 1.07× / 1.01× | 0.69× / 0.97× |
-| building structural (IFC4x3) | 33 | 0.99× / 1.03× | 1.02× / 1.03× | 1.08× / 1.01× | 1.04× / 0.96× |
-| wall with opening and window | 9 | 1.11× / 1.05× | 0.99× / 1.01× | 1.04× / 1.01× | 1.05× / 0.86× |
-| tessellated column | 3 | 0.99× / 1.00× | 0.91× / 1.00× | 1.08× / 1.01× | 1.05× / 1.00× |
+| generated fixture, 400 walls | 421 | 1.21× / 1.42× | 1.47× / 1.03× | 1.37× / 1.14× | 1.11× / 1.29× |
+| building architecture (IFC4) | 38 | 1.12× / 1.12× | 1.04× / 1.04× | 1.12× / 1.03× | 0.69× / 0.98× |
+| building structural (IFC4) | 33 | 0.97× / 1.06× | 1.04× / 1.07× | 1.12× / 1.04× | 1.03× / 1.04× |
+| building HVAC (IFC4) | 18 | 0.88× / 1.03× | 1.00× / 1.03× | 1.07× / 1.02× | 1.14× / 1.02× |
+| infra road (IFC4) | 116 | 1.21× / 1.48× | 1.04× / 1.06× | 1.11× / 1.05× | 1.02× / 1.04× |
+| building architecture (IFC2x3) | 36 | 1.18× / 1.12× | 1.08× / 1.04× | 1.14× / 1.04× | 0.68× / 0.97× |
+| building structural (IFC2x3) | 30 | 1.00× / 1.06× | 1.07× / 1.07× | 1.16× / 1.04× | 0.51× / 0.99× |
+| building architecture (IFC4x3) | 37 | 1.14× / 1.12× | 1.05× / 1.04× | 1.10× / 1.03× | 0.69× / 0.98× |
+| building structural (IFC4x3) | 33 | 0.96× / 1.06× | 1.05× / 1.07× | 1.13× / 1.04× | 0.98× / 1.04× |
+| wall with opening and window | 9 | 1.11× / 1.13× | 1.13× / 1.03× | 1.12× / 1.14× | 1.08× / 0.89× |
+| tessellated column | 3 | 1.03× / 1.07× | 0.98× / 1.07× | 1.21× / 1.16× | 1.12× / 1.06× |
 
 The templates of #290, measured by the same gate:
 
 | input | objects | level-spacing | object-count | related-count | unique-value |
 | --- | ---: | --- | --- | --- | --- |
-| generated fixture, 400 walls | 421 | 0.83× / 1.00× | 1.20× / 1.24× | 0.99× / 1.00× | 1.14× / 1.12× |
-| building architecture (IFC4) | 38 | 1.11× / 1.13× | 1.09× / 1.04× | 1.15× / 1.12× | 1.04× / 1.00× |
-| building structural (IFC4) | 33 | 1.08× / 1.12× | 1.12× / 1.04× | 1.15× / 1.05× | 1.04× / 1.00× |
-| building HVAC (IFC4) | 18 | 1.10× / 1.12× | 1.15× / 1.04× | 1.18× / 1.11× | 1.00× / 1.00× |
-| infra road (IFC4) | 116 | 0.68× / 1.11× | 1.04× / 1.01× | 1.02× / 1.00× | 1.00× / 1.00× |
-| building architecture (IFC2x3) | 36 | 1.14× / 1.13× | 1.10× / 1.04× | 1.15× / 1.12× | 1.05× / 1.02× |
-| building structural (IFC2x3) | 30 | 1.10× / 1.13× | 1.11× / 1.05× | 1.16× / 1.05× | 1.04× / 1.00× |
-| building architecture (IFC4x3) | 37 | 1.19× / 1.12× | 1.11× / 1.04× | 1.14× / 1.12× | 1.04× / 1.02× |
-| building structural (IFC4x3) | 33 | 1.20× / 1.11× | 1.11× / 1.04× | 1.15× / 1.05× | 1.05× / 1.00× |
-| wall with opening and window | 9 | 1.08× / 1.10× | 1.23× / 1.08× | 1.19× / 1.05× | 1.06× / 1.02× |
-| tessellated column | 3 | 0.85× / 1.00× | 1.34× / 1.02× | 1.01× / 1.00× | 1.01× / 1.00× |
+| generated fixture, 400 walls | 421 | 0.98× / 1.00× | 1.20× / 1.24× | 1.00× / 1.00× | 1.21× / 1.12× |
+| building architecture (IFC4) | 38 | 1.09× / 1.12× | 1.10× / 1.04× | 1.18× / 1.21× | 1.00× / 1.01× |
+| building structural (IFC4) | 33 | 1.05× / 1.13× | 1.11× / 1.04× | 1.21× / 1.14× | 1.00× / 1.01× |
+| building HVAC (IFC4) | 18 | 1.07× / 1.13× | 1.15× / 1.04× | 1.24× / 1.19× | 0.86× / 1.00× |
+| infra road (IFC4) | 116 | 0.96× / 1.12× | 1.04× / 1.01× | 1.06× / 1.00× | 0.92× / 1.00× |
+| building architecture (IFC2x3) | 36 | 1.12× / 1.13× | 1.10× / 1.04× | 1.23× / 1.21× | 1.03× / 1.03× |
+| building structural (IFC2x3) | 30 | 1.09× / 1.14× | 1.12× / 1.05× | 1.24× / 1.14× | 1.03× / 1.02× |
+| building architecture (IFC4x3) | 37 | 1.13× / 1.13× | 1.09× / 1.04× | 1.19× / 1.21× | 0.99× / 1.03× |
+| building structural (IFC4x3) | 33 | 1.15× / 1.12× | 1.10× / 1.04× | 1.20× / 1.14× | 1.01× / 1.01× |
+| wall with opening and window | 9 | 1.08× / 1.12× | 1.23× / 1.08× | 1.24× / 1.14× | 0.93× / 1.05× |
+| tessellated column | 3 | 0.83× / 1.03× | 1.35× / 1.02× | 1.07× / 1.06× | 0.97× / 1.03× |
 
 They run the `storeys` case's `level-spacing` rules (three) and the
 `counts` case's `object-count`, `related-count` and `unique-value` rules
@@ -209,27 +220,41 @@ each memoized by space, name and bound arguments, and its provider keeps
 the access index once per run for its path and selections and each space's
 shelving once per run for its arguments, so `shelf_length` and
 `shelf_clear_height` share one request (`a_run_asks_once_per_space`). On the generated
-fixture (no spaces) and the public models whose spaces the service cannot measure it runs at 0.5
-to 0.75× its reference, and at 1.64 to 1.68× on the three architecture models,
-whose references take under 90 µs (judged together by the floor, where it
-holds); peak heap 0.76 to 1.28×.
+fixture (no spaces) and the public models whose spaces the service cannot measure it runs at 0.42
+to 0.74× its reference, and at 1.18 to 1.19× on the three architecture models
+(peak heap 0.79 to 1.19×). It ran 1.65 to 1.68× there before the runner
+shared selections between rules ([#282](https://github.com/axioval/engine/issues/282)):
+each of the two rules selected its spaces, doors and openings anew for two
+spaces, which the reference does once and only for the elements reaching a
+space, and the provider keyed each space's shelving by its arguments
+formatted with `Debug`, selections included. Its provider now keys them by
+`ArgumentsKey` and keeps its values itself (`memoizes`).
+
+The same work took `body-extent` on the generated fixture from 1.25 to
+1.21× and on the architecture models from 1.20 to 1.22× down to 1.12 to
+1.18×: its provider reads the run's memo once per batch and adds an
+extent in place, and a range verdict no longer copies the object's read.
+Selecting an entity type once per source and kind speeds up the references
+too, so some ratios rose while both sides ran faster (`level-spacing` on
+the road model, 0.67 to 0.96×, and `ramp-geometry` on the fixture, 0.52
+to 0.81×).
 
 The generic judges of #287 run the `judges` case's rules of their
 capability, measured by the same gate:
 
 | input | objects | consistent-value | selector-conformance | relative-count | property-value | property-requirements | property-comparison |
 | --- | ---: | --- | --- | --- | --- | --- | --- |
-| generated fixture, 400 walls | 421 | 1.12× / 1.15× | 1.01× / 0.99× | 1.09× / 1.08× | 0.97× / 1.00× | 1.00× / 1.00× | 0.99× / 1.00× |
-| building architecture (IFC4) | 38 | 1.11× / 1.01× | 1.02× / 1.00× | 1.11× / 1.03× | 1.00× / 1.00× | 1.00× / 1.00× | 1.00× / 1.00× |
-| building structural (IFC4) | 33 | 1.10× / 1.01× | 1.00× / 1.00× | 1.08× / 1.02× | 0.98× / 1.00× | 1.04× / 1.00× | 1.00× / 1.00× |
-| building HVAC (IFC4) | 18 | 1.18× / 1.01× | 1.00× / 1.00× | 1.09× / 1.07× | 1.01× / 1.00× | 1.02× / 1.00× | 1.01× / 1.00× |
-| infra road (IFC4) | 116 | 1.14× / 1.00× | 1.00× / 1.01× | 1.04× / 1.02× | 1.00× / 1.00× | 1.01× / 1.00× | 1.00× / 1.00× |
-| building architecture (IFC2x3) | 36 | 1.11× / 1.01× | 1.00× / 1.00× | 1.09× / 1.02× | 1.00× / 1.00× | 1.00× / 1.00× | 1.02× / 1.00× |
-| building structural (IFC2x3) | 30 | 1.10× / 1.01× | 0.97× / 1.00× | 1.10× / 1.02× | 1.00× / 1.00× | 1.01× / 1.00× | 0.99× / 1.00× |
-| building architecture (IFC4x3) | 37 | 1.08× / 1.01× | 1.00× / 1.00× | 1.10× / 1.03× | 1.01× / 1.00× | 1.00× / 1.00× | 0.97× / 1.00× |
-| building structural (IFC4x3) | 33 | 1.12× / 1.01× | 1.01× / 1.00× | 1.09× / 1.02× | 1.00× / 1.00× | 1.00× / 1.00× | 1.02× / 1.00× |
-| wall with opening and window | 9 | 1.07× / 1.07× | 1.01× / 1.00× | 1.18× / 1.05× | 1.00× / 1.00× | 1.03× / 1.00× | 1.01× / 1.00× |
-| tessellated column | 3 | 1.03× / 1.05× | 1.03× / 0.99× | 0.98× / 1.00× | 1.01× / 1.00× | 1.01× / 1.00× | 1.02× / 1.00× |
+| generated fixture, 400 walls | 421 | 1.13× / 1.15× | 1.03× / 0.99× | 1.13× / 1.08× | 0.99× / 1.00× | 1.00× / 1.00× | 0.97× / 1.00× |
+| building architecture (IFC4) | 38 | 1.11× / 1.02× | 1.01× / 1.01× | 1.11× / 1.06× | 0.96× / 1.00× | 1.01× / 1.00× | 0.97× / 1.00× |
+| building structural (IFC4) | 33 | 1.09× / 1.02× | 1.01× / 1.01× | 1.13× / 1.05× | 0.97× / 1.00× | 1.00× / 1.00× | 0.97× / 1.00× |
+| building HVAC (IFC4) | 18 | 1.18× / 1.02× | 1.03× / 1.02× | 1.11× / 1.12× | 0.95× / 1.00× | 1.02× / 1.00× | 0.87× / 1.00× |
+| infra road (IFC4) | 116 | 1.18× / 1.00× | 1.02× / 1.02× | 1.09× / 1.03× | 0.97× / 1.00× | 1.04× / 1.00× | 0.93× / 1.00× |
+| building architecture (IFC2x3) | 36 | 1.10× / 1.02× | 1.02× / 1.01× | 1.12× / 1.06× | 0.98× / 1.00× | 0.99× / 1.00× | 0.95× / 1.00× |
+| building structural (IFC2x3) | 30 | 1.10× / 1.02× | 1.00× / 1.00× | 1.12× / 1.05× | 0.98× / 1.00× | 1.01× / 1.00× | 0.97× / 1.00× |
+| building architecture (IFC4x3) | 37 | 1.07× / 1.02× | 1.02× / 1.01× | 1.12× / 1.06× | 0.94× / 1.00× | 1.01× / 1.00× | 0.96× / 1.00× |
+| building structural (IFC4x3) | 33 | 1.10× / 1.02× | 1.04× / 1.01× | 1.12× / 1.06× | 0.96× / 1.00× | 0.99× / 1.00× | 0.97× / 1.00× |
+| wall with opening and window | 9 | 1.02× / 1.09× | 1.03× / 1.00× | 1.20× / 1.12× | 0.97× / 1.00× | 0.99× / 1.00× | 0.96× / 1.00× |
+| tessellated column | 3 | 1.02× / 1.08× | 1.09× / 1.01× | 1.02× / 1.07× | 1.00× / 1.00× | 1.01× / 1.00× | 0.99× / 1.00× |
 
 `consistent-value` runs six rules, `selector-conformance` and `relative-count` four each, `property-value` seven, `property-requirements` two, `property-comparison` six.
 

@@ -2428,38 +2428,45 @@
                   "branches": [
                     {
                       "when": {
-                        "kind": "and",
-                        "operands": [
-                          {
-                            "kind": "parameter",
-                            "name": "empty_numerator_finding"
-                          },
-                          {
-                            "kind": "compare",
-                            "operator": "equals",
-                            "left": {
-                              "kind": "aggregate",
-                              "function": "count",
-                              "over": {
-                                "kind": "selector",
-                                "selector": {
-                                  "kind": "expression",
-                                  "expression": {
-                                    "kind": "parameter",
-                                    "name": "numerator_selector"
-                                  }
-                                }
-                              }
-                            },
-                            "right": {
-                              "kind": "literal",
-                              "value": {
-                                "type": "integer",
-                                "value": 0
+                        "kind": "not",
+                        "operand": {
+                          "kind": "parameter",
+                          "name": "empty_numerator_finding"
+                        }
+                      },
+                      "then": {
+                        "kind": "literal",
+                        "value": {
+                          "type": "boolean",
+                          "value": true
+                        }
+                      }
+                    },
+                    {
+                      "when": {
+                        "kind": "compare",
+                        "operator": "equals",
+                        "left": {
+                          "kind": "aggregate",
+                          "function": "count",
+                          "over": {
+                            "kind": "selector",
+                            "selector": {
+                              "kind": "expression",
+                              "expression": {
+                                "kind": "parameter",
+                                "name": "numerator_selector"
                               }
                             }
                           }
-                        ]
+                        },
+                        "right": {
+                          "kind": "literal",
+                          "value": {
+                            "type": "integer",
+                            "value": 0
+                          }
+                        }
                       },
                       "then": {
                         "kind": "null"
@@ -2467,17 +2474,10 @@
                     }
                   ],
                   "else": {
-                    "kind": "aggregate",
-                    "function": "count",
-                    "over": {
-                      "kind": "selector",
-                      "selector": {
-                        "kind": "expression",
-                        "expression": {
-                          "kind": "parameter",
-                          "name": "numerator_selector"
-                        }
-                      }
+                    "kind": "literal",
+                    "value": {
+                      "type": "boolean",
+                      "value": true
                     }
                   },
                   "label": "numerator members"
@@ -2750,38 +2750,45 @@
                   "branches": [
                     {
                       "when": {
-                        "kind": "and",
-                        "operands": [
-                          {
-                            "kind": "parameter",
-                            "name": "empty_numerator_finding"
-                          },
-                          {
-                            "kind": "compare",
-                            "operator": "equals",
-                            "left": {
-                              "kind": "aggregate",
-                              "function": "count",
-                              "over": {
-                                "kind": "selector",
-                                "selector": {
-                                  "kind": "expression",
-                                  "expression": {
-                                    "kind": "parameter",
-                                    "name": "numerator_selector"
-                                  }
-                                }
-                              }
-                            },
-                            "right": {
-                              "kind": "literal",
-                              "value": {
-                                "type": "integer",
-                                "value": 0
+                        "kind": "not",
+                        "operand": {
+                          "kind": "parameter",
+                          "name": "empty_numerator_finding"
+                        }
+                      },
+                      "then": {
+                        "kind": "literal",
+                        "value": {
+                          "type": "boolean",
+                          "value": true
+                        }
+                      }
+                    },
+                    {
+                      "when": {
+                        "kind": "compare",
+                        "operator": "equals",
+                        "left": {
+                          "kind": "aggregate",
+                          "function": "count",
+                          "over": {
+                            "kind": "selector",
+                            "selector": {
+                              "kind": "expression",
+                              "expression": {
+                                "kind": "parameter",
+                                "name": "numerator_selector"
                               }
                             }
                           }
-                        ]
+                        },
+                        "right": {
+                          "kind": "literal",
+                          "value": {
+                            "type": "integer",
+                            "value": 0
+                          }
+                        }
                       },
                       "then": {
                         "kind": "null"
@@ -2789,17 +2796,10 @@
                     }
                   ],
                   "else": {
-                    "kind": "aggregate",
-                    "function": "count",
-                    "over": {
-                      "kind": "selector",
-                      "selector": {
-                        "kind": "expression",
-                        "expression": {
-                          "kind": "parameter",
-                          "name": "numerator_selector"
-                        }
-                      }
+                    "kind": "literal",
+                    "value": {
+                      "type": "boolean",
+                      "value": true
                     }
                   },
                   "label": "numerator members"
@@ -3055,38 +3055,45 @@
                   "branches": [
                     {
                       "when": {
-                        "kind": "and",
-                        "operands": [
-                          {
-                            "kind": "parameter",
-                            "name": "empty_numerator_finding"
-                          },
-                          {
-                            "kind": "compare",
-                            "operator": "equals",
-                            "left": {
-                              "kind": "aggregate",
-                              "function": "count",
-                              "over": {
-                                "kind": "selector",
-                                "selector": {
-                                  "kind": "expression",
-                                  "expression": {
-                                    "kind": "parameter",
-                                    "name": "numerator_selector"
-                                  }
-                                }
-                              }
-                            },
-                            "right": {
-                              "kind": "literal",
-                              "value": {
-                                "type": "integer",
-                                "value": 0
+                        "kind": "not",
+                        "operand": {
+                          "kind": "parameter",
+                          "name": "empty_numerator_finding"
+                        }
+                      },
+                      "then": {
+                        "kind": "literal",
+                        "value": {
+                          "type": "boolean",
+                          "value": true
+                        }
+                      }
+                    },
+                    {
+                      "when": {
+                        "kind": "compare",
+                        "operator": "equals",
+                        "left": {
+                          "kind": "aggregate",
+                          "function": "count",
+                          "over": {
+                            "kind": "selector",
+                            "selector": {
+                              "kind": "expression",
+                              "expression": {
+                                "kind": "parameter",
+                                "name": "numerator_selector"
                               }
                             }
                           }
-                        ]
+                        },
+                        "right": {
+                          "kind": "literal",
+                          "value": {
+                            "type": "integer",
+                            "value": 0
+                          }
+                        }
                       },
                       "then": {
                         "kind": "null"
@@ -3094,17 +3101,10 @@
                     }
                   ],
                   "else": {
-                    "kind": "aggregate",
-                    "function": "count",
-                    "over": {
-                      "kind": "selector",
-                      "selector": {
-                        "kind": "expression",
-                        "expression": {
-                          "kind": "parameter",
-                          "name": "numerator_selector"
-                        }
-                      }
+                    "kind": "literal",
+                    "value": {
+                      "type": "boolean",
+                      "value": true
                     }
                   },
                   "label": "numerator members"
@@ -3244,38 +3244,45 @@
                   "branches": [
                     {
                       "when": {
-                        "kind": "and",
-                        "operands": [
-                          {
-                            "kind": "parameter",
-                            "name": "empty_numerator_finding"
-                          },
-                          {
-                            "kind": "compare",
-                            "operator": "equals",
-                            "left": {
-                              "kind": "aggregate",
-                              "function": "count",
-                              "over": {
-                                "kind": "selector",
-                                "selector": {
-                                  "kind": "expression",
-                                  "expression": {
-                                    "kind": "parameter",
-                                    "name": "numerator_selector"
-                                  }
-                                }
-                              }
-                            },
-                            "right": {
-                              "kind": "literal",
-                              "value": {
-                                "type": "integer",
-                                "value": 0
+                        "kind": "not",
+                        "operand": {
+                          "kind": "parameter",
+                          "name": "empty_numerator_finding"
+                        }
+                      },
+                      "then": {
+                        "kind": "literal",
+                        "value": {
+                          "type": "boolean",
+                          "value": true
+                        }
+                      }
+                    },
+                    {
+                      "when": {
+                        "kind": "compare",
+                        "operator": "equals",
+                        "left": {
+                          "kind": "aggregate",
+                          "function": "count",
+                          "over": {
+                            "kind": "selector",
+                            "selector": {
+                              "kind": "expression",
+                              "expression": {
+                                "kind": "parameter",
+                                "name": "numerator_selector"
                               }
                             }
                           }
-                        ]
+                        },
+                        "right": {
+                          "kind": "literal",
+                          "value": {
+                            "type": "integer",
+                            "value": 0
+                          }
+                        }
                       },
                       "then": {
                         "kind": "null"
@@ -3283,17 +3290,10 @@
                     }
                   ],
                   "else": {
-                    "kind": "aggregate",
-                    "function": "count",
-                    "over": {
-                      "kind": "selector",
-                      "selector": {
-                        "kind": "expression",
-                        "expression": {
-                          "kind": "parameter",
-                          "name": "numerator_selector"
-                        }
-                      }
+                    "kind": "literal",
+                    "value": {
+                      "type": "boolean",
+                      "value": true
                     }
                   },
                   "label": "numerator members"

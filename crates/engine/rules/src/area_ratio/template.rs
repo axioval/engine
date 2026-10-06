@@ -110,35 +110,42 @@ fn value(name: &'static str, expression: Expression) -> TemplateValue {
 /// `null` where the rule asks for a finding on an anchor reaching no
 /// numerator member, which then stands without a ratio.
 fn reached() -> TemplateValue {
-    let count = over(AggregateFunction::Count, NUMERATOR, None);
+    let reached = Expression::Literal {
+        value: ScalarValue::Boolean { value: true },
+        label: None,
+    };
     TemplateValue {
         absent: Some("no numerator object is reached {relation}; the ratio is 0"),
         ..value(
             "reached",
             Expression::If {
-                branches: vec![Branch {
-                    when: Expression::And {
-                        operands: vec![
-                            Expression::Parameter {
+                // Members are counted only where the rule asks.
+                branches: vec![
+                    Branch {
+                        when: Expression::Not {
+                            operand: Box::new(Expression::Parameter {
                                 name: "empty_numerator_finding".into(),
                                 label: None,
-                            },
-                            Expression::Compare {
-                                operator: ExpressionComparison::Equals,
-                                left: Box::new(count.clone()),
-                                right: Box::new(Expression::Literal {
-                                    value: ScalarValue::Integer { value: 0 },
-                                    label: None,
-                                }),
-                                case_sensitive: true,
-                                label: None,
-                            },
-                        ],
-                        label: None,
+                            }),
+                            label: None,
+                        },
+                        then: reached.clone(),
                     },
-                    then: Expression::Null { label: None },
-                }],
-                otherwise: Box::new(count),
+                    Branch {
+                        when: Expression::Compare {
+                            operator: ExpressionComparison::Equals,
+                            left: Box::new(over(AggregateFunction::Count, NUMERATOR, None)),
+                            right: Box::new(Expression::Literal {
+                                value: ScalarValue::Integer { value: 0 },
+                                label: None,
+                            }),
+                            case_sensitive: true,
+                            label: None,
+                        },
+                        then: Expression::Null { label: None },
+                    },
+                ],
+                otherwise: Box::new(reached),
                 label: Some("numerator members".into()),
             },
         )

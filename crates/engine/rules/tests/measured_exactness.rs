@@ -115,6 +115,11 @@ const COVERED: &[(&str, &str, &str)] = &[
         "an_area_measured_on_a_tessellation_is_inexact",
     ),
     (
+        "ratio_area",
+        "tests/plan_area.rs",
+        "an_area_measured_on_a_tessellation_is_inexact",
+    ),
+    (
         "counterpart_uncovered_share",
         "tests/counterpart_coverage.rs",
         "a_share_measured_on_a_tessellation_is_inexact",
@@ -124,9 +129,15 @@ const COVERED: &[(&str, &str, &str)] = &[
         "tests/coordinate_consistency.rs",
         "a_departure_is_exact_only_as_stated_and_rounded_outward",
     ),
-    // Measured from stated facts only (body facts, storey elevations),
-    // which reach a provider only exactly: the property service refuses a
-    // stated value cited approximate.
+    // Measured from stated facts only (body facts, storey elevations, an
+    // opening's stated light area and size), which reach a provider only
+    // exactly: the property service refuses a stated value cited
+    // approximate.
+    (
+        "light_area",
+        "tests/measured_exactness.rs",
+        "a_stated_value_cited_approximate_is_refused",
+    ),
     (
         "opening_area",
         "tests/measured_exactness.rs",

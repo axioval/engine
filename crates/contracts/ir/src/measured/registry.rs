@@ -613,6 +613,144 @@ const PAIRED_PLAN_AREA: &[&str] = &[
     "type-hierarchy",
 ];
 
+/// The fallback an opening's light area is derived by, as `area-ratio`'s
+/// `light-area` numerator names it: each key the rule parameter of that
+/// name, so a value reads `overall_width=@overall_width`.
+const LIGHT: [MeasuredParameter; 8] = [
+    stated(
+        "stated",
+        &en_de(
+            "The light area the object states: the first step, where stated.",
+            "Die Lichtfläche, die das Objekt angibt: der erste Schritt, wo angegeben.",
+        ),
+    ),
+    MeasuredParameter {
+        key: "overall_width",
+        kind: MeasuredParameterKind::Property,
+        required: true,
+        default: None,
+        help: &en_de(
+            "The length the object states as its overall width.",
+            "Die Länge, die das Objekt als Gesamtbreite angibt.",
+        ),
+    },
+    MeasuredParameter {
+        key: "overall_height",
+        kind: MeasuredParameterKind::Property,
+        required: true,
+        default: None,
+        help: &en_de(
+            "The length the object states as its overall height.",
+            "Die Länge, die das Objekt als Gesamthöhe angibt.",
+        ),
+    },
+    MeasuredParameter {
+        key: "light_area_table",
+        kind: MeasuredParameterKind::Table,
+        required: false,
+        default: None,
+        help: &en_de(
+            "Rows of `width`, `height`, `light_area` and an optional `type` pattern: the \
+             most specific row of the object's overall size and type gives its light area.",
+            "Zeilen aus `width`, `height`, `light_area` und einem optionalen `type`-Muster: \
+             die spezifischste Zeile zu Gesamtgröße und Typ des Objekts gibt seine \
+             Lichtfläche.",
+        ),
+    },
+    stated(
+        "light_type",
+        &en_de(
+            "The type name a row's `type` pattern matches.",
+            "Der Typname, den das `type`-Muster einer Zeile prüft.",
+        ),
+    ),
+    MeasuredParameter {
+        key: "light_type_path",
+        kind: MeasuredParameterKind::Path,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The relationship steps to the objects stating the type name; without them, \
+             the object itself.",
+            "Die Beziehungsschritte zu den Objekten, die den Typnamen angeben; ohne sie \
+             das Objekt selbst.",
+        ),
+    },
+    MeasuredParameter {
+        key: "light_size_tolerance",
+        kind: MeasuredParameterKind::Length { minimum: 0.0 },
+        required: false,
+        default: None,
+        help: &en_de(
+            "How far a row's size may differ from the overall size, in metres; none \
+             when not given.",
+            "Wie weit die Größe einer Zeile von der Gesamtgröße abweichen darf, in \
+             Metern; keine Abweichung, wenn nicht angegeben.",
+        ),
+    },
+    MeasuredParameter {
+        key: "frame_width",
+        kind: MeasuredParameterKind::Length { minimum: 0.0 },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The frame allowance, in metres: the last step, the overall size less \
+             2·(W+H) times it.",
+            "Der Rahmenabzug, in Metern: der letzte Schritt, die Gesamtgröße abzüglich \
+             2·(B+H) mal diesem Wert.",
+        ),
+    },
+];
+
+/// What `light_area` reads of the fallback.
+const LIGHT_READ: MeasuredParameter = MeasuredParameter {
+    key: "read",
+    kind: MeasuredParameterKind::Choice {
+        options: &["area", "stated", "overall"],
+    },
+    required: false,
+    default: Some("area"),
+    help: &en_de(
+        "The light `area` by the first step giving one; the area only where it is \
+         `stated` (none otherwise); or the `overall` area, width times height.",
+        "Die Lichtfläche (`area`) nach dem ersten Schritt, der eine ergibt; die Fläche \
+         nur, wo sie angegeben ist (`stated`, sonst keine); oder die Gesamtfläche \
+         (`overall`), Breite mal Höhe.",
+    ),
+};
+
+/// Which step `light_step` tells.
+const LIGHT_STEP: MeasuredParameter = MeasuredParameter {
+    key: "step",
+    kind: MeasuredParameterKind::Choice {
+        options: &["stated", "table", "frame"],
+    },
+    required: true,
+    default: None,
+    help: &en_de(
+        "The step: the `stated` area, the `table`, or the `frame` allowance.",
+        "Der Schritt: die angegebene Fläche (`stated`), die Tabelle (`table`) oder der \
+         Rahmenabzug (`frame`).",
+    ),
+};
+
+/// Which side `light_size` reads.
+const LIGHT_SIDE: MeasuredParameter = MeasuredParameter {
+    key: "side",
+    kind: MeasuredParameterKind::Choice {
+        options: &["width", "height"],
+    },
+    required: true,
+    default: None,
+    help: &en_de(
+        "The overall `width` or `height`.",
+        "Die Gesamtbreite (`width`) oder -höhe (`height`).",
+    ),
+};
+
+const LIGHT_UNKNOWN: &str = "no step of the fallback gives a light area";
+const LIGHT_SIZE_UNKNOWN: &str = "the overall width or height is not stated as a positive length";
+
 /// What `level-spacing` orders a level among, shared by the level values.
 const LEVEL_KINDS: MeasuredParameter = MeasuredParameter {
     key: "levels",
@@ -2931,6 +3069,64 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ),
     },
     MeasuredDescriptor {
+        name: "light_area",
+        parameters: &[
+            LIGHT[0], LIGHT[1], LIGHT[2], LIGHT[3], LIGHT[4], LIGHT[5], LIGHT[6], LIGHT[7],
+            LIGHT_READ,
+        ],
+        dimension: Some(QuantityDimension::Area),
+        services: &["property-resolution", "relationship-selection"],
+        exactness: MeasuredExactness::Stated,
+        not_evaluated: &[LIGHT_UNKNOWN, LIGHT_SIZE_UNKNOWN],
+        label: &en_de("Light area", "Lichtfläche"),
+        help: &en_de(
+            "An opening's light-transmitting area by the first step of a fallback that \
+             gives one, as `area-ratio`'s `light-area` numerator derives it: the area it \
+             states, else the most specific light-area row of its overall size and type, \
+             else its overall size less the frame allowance.",
+            "Die lichtdurchlässige Fläche einer Öffnung nach dem ersten Schritt einer \
+             Rückfallkette, der eine ergibt, wie der Zähler `light-area` von `area-ratio` \
+             sie ableitet: die angegebene Fläche, sonst die spezifischste Lichtflächenzeile \
+             zu Gesamtgröße und Typ, sonst die Gesamtgröße abzüglich des Rahmenabzugs.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "light_size",
+        parameters: &[
+            LIGHT[0], LIGHT[1], LIGHT[2], LIGHT[3], LIGHT[4], LIGHT[5], LIGHT[6], LIGHT[7],
+            LIGHT_SIDE,
+        ],
+        dimension: Some(QuantityDimension::Length),
+        services: &["property-resolution"],
+        exactness: MeasuredExactness::Stated,
+        not_evaluated: &[LIGHT_SIZE_UNKNOWN],
+        label: &en_de("Overall opening size", "Gesamtgröße der Öffnung"),
+        help: &en_de(
+            "The overall width or height an opening states, which its light area is \
+             compared with and derived from.",
+            "Die Gesamtbreite oder -höhe, die eine Öffnung angibt, mit der ihre \
+             Lichtfläche verglichen und aus der sie abgeleitet wird.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "light_step",
+        parameters: &[
+            LIGHT[0], LIGHT[1], LIGHT[2], LIGHT[3], LIGHT[4], LIGHT[5], LIGHT[6], LIGHT[7],
+            LIGHT_STEP,
+        ],
+        dimension: None,
+        services: &["property-resolution", "relationship-selection"],
+        exactness: MeasuredExactness::Stated,
+        not_evaluated: &[LIGHT_UNKNOWN],
+        label: &en_de("Light-area step", "Schritt der Lichtfläche"),
+        help: &en_de(
+            "1 where the opening's light area comes from the step, 0 where another \
+             gives it: summed over openings, how many areas each step gave.",
+            "1, wo die Lichtfläche der Öffnung aus dem Schritt stammt, 0, wo ein anderer \
+             sie ergibt: über Öffnungen summiert, wie viele Flächen jeder Schritt ergab.",
+        ),
+    },
+    MeasuredDescriptor {
         name: "map_conversion",
         parameters: &[
             MeasuredParameter {
@@ -3578,6 +3774,56 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         help: &en_de(
             "How many times a rail of a ramp, or a rail joined to one, reaches over an accessible surface in plan.",
             "Wie oft ein Handlauf einer Rampe oder ein damit verbundener über eine barrierefreie Fläche im Grundriss reicht.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "ratio_area",
+        parameters: &[
+            stated(
+                "property",
+                &en_de(
+                    "The area the object states, read instead of measuring one.",
+                    "Die Fläche, die das Objekt angibt, statt eine zu messen.",
+                ),
+            ),
+            MeasuredParameter {
+                key: "measure",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["footprint", "facade"],
+                },
+                required: false,
+                default: None,
+                help: &en_de(
+                    "The plan `footprint`, or the outward-facing `facade` surface.",
+                    "Der Grundriss (`footprint`) oder die nach außen weisende \
+                     Fassadenfläche (`facade`).",
+                ),
+            },
+            MeasuredParameter {
+                key: "otherwise",
+                kind: MeasuredParameterKind::Choice {
+                    options: &["footprint", "facade"],
+                },
+                required: false,
+                default: None,
+                help: &en_de(
+                    "The measure where `measure` is not given; the footprint where neither \
+                     is.",
+                    "Das Maß, wo `measure` nicht angegeben ist; der Grundriss, wo keines \
+                     angegeben ist.",
+                ),
+            },
+        ],
+        dimension: Some(QuantityDimension::Area),
+        services: &["plan-area", "facade-area", "property-resolution"],
+        exactness: MeasuredExactness::Measured,
+        not_evaluated: &[NO_GEOMETRY, "the property states no area"],
+        label: &en_de("Area in a ratio", "Fläche in einem Verhältnis"),
+        help: &en_de(
+            "The object's area as `area-ratio` sums it: the area a property states, or \
+             its footprint (an empty one counting zero) or facade area.",
+            "Die Fläche des Objekts, wie `area-ratio` sie summiert: die angegebene Fläche \
+             oder sein Grundriss (ein leerer zählt null) oder seine Fassadenfläche.",
         ),
     },
     MeasuredDescriptor {

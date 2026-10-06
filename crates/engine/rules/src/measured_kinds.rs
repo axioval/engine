@@ -17,8 +17,10 @@ pub(crate) type ArgumentCheck = fn(
 /// The argument check the provider of the measured value `name` declares,
 /// if any: a declaration only the measurement knows how to read.
 pub(crate) fn argument_check(name: &str) -> Option<ArgumentCheck> {
-    let _ = name;
-    None
+    match name {
+        "light_area" | "light_size" | "light_step" => Some(crate::light_area::check_arguments),
+        _ => None,
+    }
 }
 
 /// The project's objects of the `,`-separated source kinds `key` names,

@@ -155,6 +155,21 @@ fn run(
             1e-12,
         );
     }
+    // `area-ratio` runs as its template too, held so with its `ratios`.
+    if capability.id() == RATIO {
+        return model.holding_contract(
+            capability,
+            &axioval_rules::reference::AreaRatio,
+            rule,
+            register,
+            &[
+                ("ratios.numerator_area", 1e-9),
+                ("ratios.denominator_area", 1e-9),
+                ("ratios.ratio", 1e-9),
+            ],
+            1e-12,
+        );
+    }
     model.evaluate_with(capability, rule, register)
 }
 

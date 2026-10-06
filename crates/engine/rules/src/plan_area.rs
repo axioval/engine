@@ -1,4 +1,5 @@
-//! Judgements over plan-projected areas: area ranges, ratios and plan coverage.
+//! Judgements over plan-projected areas: area ranges and plan coverage, and
+//! the area readers `area-ratio` shares.
 
 use axioval_engine::template::Template;
 use axioval_engine::{
@@ -6,10 +7,9 @@ use axioval_engine::{
     FacadeAreaServiceHandle, NotEvaluatedReason, ParameterDescriptor, ParameterType, PlanArea,
     PlanAreaError, PlanAreaServiceHandle, ProximityServiceHandle, RuleCapability, RuleContext,
 };
-use axioval_ir::{
-    Evidence, Object, ObjectId, PropertyValue, QuantityDimension, ReportColumn, ReportTable,
-    ReportValue, RuleId,
-};
+use axioval_ir::{Evidence, Object, ObjectId, PropertyValue, QuantityDimension};
+#[cfg(feature = "parity-reference")]
+use axioval_ir::{ReportColumn, ReportTable, RuleId};
 
 mod measured;
 #[cfg(feature = "parity-reference")]
@@ -18,8 +18,7 @@ mod template;
 
 pub(crate) use measured::AreaMeasures;
 
-use crate::counts::{Population, relation_text, tally};
-use crate::light_area::LightArea;
+use crate::counts::{Population, tally};
 use crate::selection::select_objects;
 use crate::support::{
     Parameters, PropertyRef, Unavailable, display, finding, invalid, resolve, traversal_parameters,
@@ -84,6 +83,7 @@ impl Measure {
     }
 
     /// A measure parameter named `name`, if declared.
+    #[cfg(feature = "parity-reference")]
     fn named(parameters: &Parameters<'_>, name: &str) -> Result<Option<Self>, Unavailable> {
         match parameters.string(name)? {
             None => Ok(None),
@@ -98,7 +98,8 @@ impl Measure {
     /// The numerator's and the denominator's measures: `measure` for both,
     /// or `numerator_measure` and `denominator_measure` each (defaulting to
     /// the footprint), never `measure` beside them.
-    fn sides(parameters: &Parameters<'_>) -> Result<(Self, Self), Unavailable> {
+    #[cfg(feature = "parity-reference")]
+    pub(crate) fn sides(parameters: &Parameters<'_>) -> Result<(Self, Self), Unavailable> {
         let both = Self::named(parameters, "measure")?;
         let top = Self::named(parameters, "numerator_measure")?;
         let bottom = Self::named(parameters, "denominator_measure")?;
@@ -112,7 +113,8 @@ impl Measure {
         Ok((top.unwrap_or(both), bottom.unwrap_or(both)))
     }
 
-    fn noun(self) -> &'static str {
+    #[cfg(feature = "parity-reference")]
+    pub(crate) fn noun(self) -> &'static str {
         match self {
             Self::Footprint => "plan area",
             Self::Facade => "facade area",
@@ -130,11 +132,13 @@ impl Measure {
 }
 
 /// A report table with valid, fixed columns.
-fn table(rule: &RuleId, name: &str, columns: Vec<ReportColumn>) -> ReportTable {
+#[cfg(feature = "parity-reference")]
+pub(crate) fn table(rule: &RuleId, name: &str, columns: Vec<ReportColumn>) -> ReportTable {
     ReportTable::new(rule.clone(), name, columns).expect("fixed table columns are valid")
 }
 
-fn area_column(id: &str) -> ReportColumn {
+#[cfg(feature = "parity-reference")]
+pub(crate) fn area_column(id: &str) -> ReportColumn {
     ReportColumn::quantity(id, QuantityDimension::Area)
 }
 
@@ -190,7 +194,7 @@ impl Sum {
 
     /// The summed areas of `objects`: stated by `property` when declared,
     /// otherwise measured as `measure` says.
-    fn measured(
+    pub(crate) fn measured(
         context: &RuleContext<'_>,
         property: Option<PropertyRef<'_>>,
         measure: Measure,
@@ -335,369 +339,6 @@ pub(crate) fn judge_bounds(
         }
     }
     Verdict::Pass
-}
-
-/// Requires the plan area of one population to stand in a ratio to another.
-///
-/// For each anchor, the footprints of the objects `numerator_selector` picks
-/// are summed and divided by the summed footprints of those
-/// `denominator_selector` picks, or by the anchor's own footprint when that
-/// is not declared. Members are reached as in `related-count`: through the
-/// declared relationship, or everywhere in the anchor's source. The ratio
-/// must lie within `minimum` and `maximum`, inclusive; at least one is
-/// required. Footprints are summed, so overlapping members count twice;
-/// select members that do not overlap, such as spaces.
-///
-/// `numerator_property` or `denominator_property` takes that population's
-/// areas from an area-quantity property instead of geometry: a window's
-/// glazing area is not its plan footprint.
-///
-/// `measure: facade` measures the outward-facing surface of each object
-/// instead of its footprint, through the facade-area service: the
-/// window-to-wall ratio of a storey is the facade area of its windows over
-/// that of its external walls and windows (walls are measured with their
-/// openings cut out, so the windows belong in the denominator too).
-/// `numerator_measure` and `denominator_measure` measure each side on its
-/// own instead: a storey's external-wall ratio is the facade area of its
-/// external walls over its gross footprint.
-///
-/// With `numerator_derivation` `light-area`, each numerator member's area is
-/// its light-transmitting area, taken from the first step of a fallback
-/// that produces one: the area `numerator_property` states, else the
-/// `light_area` of the most specific `light_area_table` row whose `width`
-/// and `height` equal the member's `overall_width` and `overall_height`
-/// (within `light_size_tolerance`) and whose `type` pattern matches the
-/// `light_type` name (read from the member or, with `light_type_path`, from
-/// the objects that path reaches), else the overall width × height less the
-/// frame allowance 2·(W+H)·`frame_width`. A step is skipped only when its
-/// input is exactly absent; a value of the wrong kind, an unknown type name
-/// a row tests, or tied rows stop the chain, and a member the chain cannot
-/// give an area leaves its anchor not evaluated. Evidence records the step
-/// behind each area. A stated light area larger than the member's overall
-/// area is a finding against the member, and its anchor is not evaluated.
-///
-/// With `empty_numerator_finding`, an anchor that reaches no numerator
-/// object (a space with no window) is a finding of its own instead of a
-/// ratio of 0.
-///
-/// `measure: facade` together with `light-area` is an invalid declaration:
-/// a light area over facade areas is no defined ratio, and a
-/// window-to-wall ratio measures its windows' facade areas instead.
-///
-/// Areas are intervals, so the ratio is too. An anchor is judged only when
-/// the whole interval is on one side of a bound; one straddling it, an
-/// undecided member, or a zero denominator is not evaluated.
-///
-/// Every run reports the table `ratios`, one row per anchor whose ratio was
-/// measured, passing or not: `numerator_area`, `denominator_area` and
-/// `ratio` (unknown when the denominator may be zero).
-pub struct AreaRatio;
-
-impl RuleCapability for AreaRatio {
-    fn id(&self) -> &'static str {
-        "axioval:capability.area-ratio"
-    }
-
-    fn grades_deviation(&self) -> bool {
-        true
-    }
-
-    fn parameters(&self) -> Vec<ParameterDescriptor> {
-        vec![
-            ParameterDescriptor::required("numerator_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("denominator_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("minimum", ParameterType::Number),
-            ParameterDescriptor::optional("maximum", ParameterType::Number),
-            ParameterDescriptor::optional("numerator_property", ParameterType::PropertyReference),
-            ParameterDescriptor::optional("denominator_property", ParameterType::PropertyReference),
-            ParameterDescriptor::optional("measure", ParameterType::String),
-            ParameterDescriptor::optional("numerator_measure", ParameterType::String),
-            ParameterDescriptor::optional("denominator_measure", ParameterType::String),
-            ParameterDescriptor::optional("numerator_derivation", ParameterType::String),
-            ParameterDescriptor::optional("empty_numerator_finding", ParameterType::Boolean),
-        ]
-        .into_iter()
-        .chain(crate::light_area::parameters())
-        .chain(traversal_parameters())
-        .collect()
-    }
-
-    #[allow(clippy::too_many_lines)]
-    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let parameters = Parameters(rule);
-        let parsed = (|| {
-            let minimum = parameters.number("minimum")?;
-            let maximum = parameters.number("maximum")?;
-            if minimum.is_none() && maximum.is_none() {
-                return Err(invalid("minimum or maximum is required"));
-            }
-            if matches!((minimum, maximum), (Some(low), Some(high)) if low > high) {
-                return Err(invalid("minimum exceeds maximum"));
-            }
-            let top_area = parameters.property("numerator_property")?;
-            Ok::<_, Unavailable>((
-                parameters.required_selector("numerator_selector")?,
-                parameters.selector("denominator_selector")?,
-                top_area,
-                LightArea::parse(&parameters, top_area)?,
-                parameters
-                    .boolean("empty_numerator_finding")?
-                    .unwrap_or(false),
-                parameters.property("denominator_property")?,
-                (minimum, maximum),
-                Measure::sides(&parameters)?,
-                parameters.traversal()?,
-            ))
-        })();
-        let (
-            numerator,
-            denominator,
-            top_area,
-            light,
-            report_empty,
-            bottom_area,
-            (minimum, maximum),
-            (top_measure, bottom_measure),
-            traversal,
-        ) = match parsed {
-            Ok(parsed) => parsed,
-            Err((reason, message)) => {
-                return CapabilityEvaluation::not_evaluated(
-                    reason,
-                    format!("area-ratio: {message}"),
-                );
-            }
-        };
-        if light.is_some() && (top_measure == Measure::Facade || bottom_measure == Measure::Facade)
-        {
-            return CapabilityEvaluation::not_evaluated(
-                NotEvaluatedReason::InvalidDeclaration,
-                "area-ratio: a `facade` measure does not combine with `numerator_derivation` \
-                 `light-area`"
-                    .to_owned(),
-            );
-        }
-        let noun = if top_measure == bottom_measure {
-            top_measure.noun().to_owned()
-        } else {
-            format!("{} to {}", top_measure.noun(), bottom_measure.noun())
-        };
-        let numerator = Population::of(context, numerator);
-        // Members already reported, so one reached by several anchors is
-        // reported once.
-        let mut reported = std::collections::BTreeSet::new();
-        let denominator = denominator.map(|selector| Population::of(context, selector));
-        let (anchors, mut evaluation) = select_objects(context, &rule.selector);
-        let via = relation_text(traversal.as_ref());
-        let mut ratios = table(
-            &rule.id,
-            "ratios",
-            vec![
-                area_column("numerator_area"),
-                area_column("denominator_area"),
-                ReportColumn::number("ratio"),
-            ],
-        );
-        for anchor in anchors {
-            let judged = (|| {
-                let over = tally(context, traversal.as_ref(), anchor, &numerator)?;
-                let under = match &denominator {
-                    Some(population) => {
-                        Some(tally(context, traversal.as_ref(), anchor, population)?)
-                    }
-                    None => None,
-                };
-                let undecided = over.undecided + under.as_ref().map_or(0, |under| under.undecided);
-                if undecided > 0 {
-                    return Err((
-                        NotEvaluatedReason::IncompleteEvidence,
-                        format!("{undecided} related object(s) {via} cannot be assigned"),
-                    ));
-                }
-                if report_empty && over.decided.is_empty() {
-                    return Ok(Judged::Empty(over.evidence));
-                }
-                let (mut top, provenance) = match &light {
-                    None => (
-                        Sum::measured(context, top_area, top_measure, &over.decided)?,
-                        String::new(),
-                    ),
-                    Some(light) => {
-                        let summed = light.sum(context, &over.decided);
-                        for (member, message, evidence) in &summed.oversized {
-                            if reported.insert(member.clone()) {
-                                evaluation.push_finding(finding(
-                                    rule,
-                                    member,
-                                    message.clone(),
-                                    evidence.clone(),
-                                    vec![anchor.id.clone()],
-                                ));
-                            }
-                        }
-                        for (member, message) in &summed.unchecked {
-                            if reported.insert(member.clone()) {
-                                evaluation.push_object_not_evaluated(
-                                    member.clone(),
-                                    NotEvaluatedReason::IncompleteEvidence,
-                                    message.clone(),
-                                );
-                            }
-                        }
-                        if let Some(failure) = summed.failure {
-                            return Err(failure);
-                        }
-                        if let Some((member, _, _)) = summed.oversized.first() {
-                            return Err((
-                                NotEvaluatedReason::InvalidEvidence,
-                                format!(
-                                    "{} member(s), first {member}, state a light area larger \
-                                     than the element",
-                                    summed.oversized.len()
-                                ),
-                            ));
-                        }
-                        let provenance = summed.provenance();
-                        (
-                            Sum {
-                                lower: summed.lower,
-                                upper: summed.upper,
-                                evidence: summed.evidence,
-                            },
-                            provenance,
-                        )
-                    }
-                };
-                top.evidence.extend(over.evidence);
-                let mut bottom = match &under {
-                    Some(under) => {
-                        Sum::measured(context, bottom_area, bottom_measure, &under.decided)?
-                    }
-                    None => Sum::measured(
-                        context,
-                        bottom_area,
-                        bottom_measure,
-                        std::slice::from_ref(&anchor.id),
-                    )?,
-                };
-                if let Some(under) = under {
-                    bottom.evidence.extend(under.evidence);
-                }
-                if bottom.upper <= 0.0 {
-                    return Err((
-                        NotEvaluatedReason::IncompleteEvidence,
-                        format!("the denominator has no {}", bottom_measure.noun()),
-                    ));
-                }
-                let lower = top.lower / bottom.upper;
-                let upper = if bottom.lower > 0.0 {
-                    top.upper / bottom.lower
-                } else {
-                    f64::INFINITY
-                };
-                let mut evidence = top.evidence;
-                evidence.extend(bottom.evidence);
-                Ok(Judged::Ratio {
-                    lower,
-                    upper,
-                    numerator: (top.lower, top.upper),
-                    denominator: (bottom.lower, bottom.upper),
-                    provenance,
-                    evidence,
-                    members: over.decided,
-                })
-            })();
-            let (lower, upper, area, of, provenance, evidence, members) = match judged {
-                Ok(Judged::Ratio {
-                    lower,
-                    upper,
-                    numerator,
-                    denominator,
-                    provenance,
-                    evidence,
-                    members,
-                }) => {
-                    // Anchors are distinct objects, so rows never collide.
-                    let _ = ratios.push_row(
-                        anchor.id.clone(),
-                        vec![
-                            ReportValue::measured(numerator.0, numerator.1),
-                            ReportValue::measured(denominator.0, denominator.1),
-                            ReportValue::measured(lower, upper),
-                        ],
-                    );
-                    (
-                        lower,
-                        upper,
-                        numerator.0,
-                        denominator.0,
-                        provenance,
-                        evidence,
-                        members,
-                    )
-                }
-                Ok(Judged::Empty(evidence)) => {
-                    evaluation.push_finding(finding(
-                        rule,
-                        &anchor.id,
-                        format!("no numerator object is reached {via}; the ratio is 0"),
-                        evidence,
-                        Vec::new(),
-                    ));
-                    continue;
-                }
-                Err((reason, message)) => {
-                    evaluation.push_object_not_evaluated(anchor.id.clone(), reason, message);
-                    continue;
-                }
-            };
-            match judge(lower, upper, minimum, maximum) {
-                Verdict::Pass => {}
-                Verdict::Fail(bound) => evaluation.push_finding_deviating(
-                    finding(
-                        rule,
-                        &anchor.id,
-                        format!(
-                            "{noun} ratio is {} ({} m² of {} m²); required {bound}{provenance}",
-                            shown(lower, upper),
-                            (area * 100.0).round() / 100.0,
-                            (of * 100.0).round() / 100.0,
-                        ),
-                        evidence,
-                        members,
-                    ),
-                    deviation(lower, upper, minimum, maximum),
-                ),
-                Verdict::Undecided(bound) => evaluation.push_object_not_evaluated(
-                    anchor.id.clone(),
-                    NotEvaluatedReason::IncompleteEvidence,
-                    format!(
-                        "{noun} ratio is {}, which straddles the bound {bound}",
-                        shown(lower, upper)
-                    ),
-                ),
-            }
-        }
-        evaluation.push_table(ratios);
-        evaluation
-    }
-}
-
-/// What one anchor of `area-ratio` comes to before the bounds are applied.
-enum Judged {
-    Ratio {
-        lower: f64,
-        upper: f64,
-        /// The summed numerator and denominator areas, as intervals.
-        numerator: (f64, f64),
-        denominator: (f64, f64),
-        /// Which light-area steps produced the numerator, for the message.
-        provenance: String,
-        evidence: Vec<Evidence>,
-        members: Vec<ObjectId>,
-    },
-    /// The anchor reaches no numerator object, and that is reported.
-    Empty(Vec<Evidence>),
 }
 
 /// Requires each subject's footprint to lie mostly within one candidate.

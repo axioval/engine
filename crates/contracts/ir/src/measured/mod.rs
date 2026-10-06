@@ -981,6 +981,33 @@ mod tests {
     }
 
     #[test]
+    fn a_table_is_named_only_as_the_rules_own() {
+        let mut call = parse(
+            "light_area;overall_width=@overall_width;overall_height=Attributes/Height;\
+             light_area_table=@rows",
+        )
+        .unwrap();
+        assert_eq!(
+            call.argument("light_area_table"),
+            Some(&MeasuredArgument::Parameter("rows".into()))
+        );
+        assert!(
+            call.bind("light_area_table", MeasuredArgument::Text("x".into()))
+                .is_err()
+        );
+        call.bind("light_area_table", MeasuredArgument::Table(Vec::new()))
+            .unwrap();
+        let written = parse("light_area;overall_width=W;overall_height=H;light_area_table=rows");
+        assert!(
+            written
+                .map(|call| call.arguments)
+                .unwrap_err()
+                .to_string()
+                .contains("a table is named only as a rule parameter")
+        );
+    }
+
+    #[test]
     fn a_reference_is_refused_where_its_kind_takes_none() {
         for (name, message) in [
             (

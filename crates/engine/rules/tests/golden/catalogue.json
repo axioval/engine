@@ -2025,7 +2025,2586 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "grades": true,
+        "name": "area-ratio",
+        "defaults": [
+          {
+            "parameter": "empty_numerator_finding",
+            "value": {
+              "type": "boolean",
+              "value": false
+            }
+          }
+        ],
+        "declaration": [
+          {
+            "kind": "kind",
+            "parameter": "minimum"
+          },
+          {
+            "kind": "kind",
+            "parameter": "maximum"
+          },
+          {
+            "kind": "anyOf",
+            "parameters": [
+              "minimum",
+              "maximum"
+            ],
+            "message": "minimum or maximum is required"
+          },
+          {
+            "kind": "ordered",
+            "low": "minimum",
+            "high": "maximum",
+            "message": "minimum exceeds maximum"
+          },
+          {
+            "kind": "kind",
+            "parameter": "numerator_property"
+          },
+          {
+            "kind": "required",
+            "parameter": "numerator_selector"
+          },
+          {
+            "kind": "kind",
+            "parameter": "denominator_selector"
+          },
+          {
+            "kind": "kind",
+            "parameter": "numerator_derivation"
+          },
+          {
+            "kind": "requires",
+            "parameter": "overall_width",
+            "with": [
+              "numerator_derivation"
+            ],
+            "message": "`overall_width` applies only to `numerator_derivation` `light-area`"
+          },
+          {
+            "kind": "requires",
+            "parameter": "overall_height",
+            "with": [
+              "numerator_derivation"
+            ],
+            "message": "`overall_height` applies only to `numerator_derivation` `light-area`"
+          },
+          {
+            "kind": "requires",
+            "parameter": "light_area_table",
+            "with": [
+              "numerator_derivation"
+            ],
+            "message": "`light_area_table` applies only to `numerator_derivation` `light-area`"
+          },
+          {
+            "kind": "requires",
+            "parameter": "light_type",
+            "with": [
+              "numerator_derivation"
+            ],
+            "message": "`light_type` applies only to `numerator_derivation` `light-area`"
+          },
+          {
+            "kind": "requires",
+            "parameter": "light_type_path",
+            "with": [
+              "numerator_derivation"
+            ],
+            "message": "`light_type_path` applies only to `numerator_derivation` `light-area`"
+          },
+          {
+            "kind": "requires",
+            "parameter": "light_size_tolerance",
+            "with": [
+              "numerator_derivation"
+            ],
+            "message": "`light_size_tolerance` applies only to `numerator_derivation` `light-area`"
+          },
+          {
+            "kind": "requires",
+            "parameter": "frame_width",
+            "with": [
+              "numerator_derivation"
+            ],
+            "message": "`frame_width` applies only to `numerator_derivation` `light-area`"
+          },
+          {
+            "kind": "among",
+            "parameter": "numerator_derivation",
+            "options": [
+              "light-area"
+            ],
+            "message": "numerator_derivation `{value}` is unsupported; the only one is `light-area`"
+          },
+          {
+            "kind": "arguments",
+            "when": [
+              "numerator_derivation"
+            ],
+            "value": "light_area;stated=@numerator_property;overall_width=@overall_width;overall_height=@overall_height;light_area_table=@light_area_table;light_type=@light_type;light_type_path=@light_type_path;light_size_tolerance=@light_size_tolerance;frame_width=@frame_width"
+          },
+          {
+            "kind": "kind",
+            "parameter": "empty_numerator_finding"
+          },
+          {
+            "kind": "kind",
+            "parameter": "denominator_property"
+          },
+          {
+            "kind": "choice",
+            "parameter": "measure",
+            "options": [
+              "footprint",
+              "facade"
+            ]
+          },
+          {
+            "kind": "choice",
+            "parameter": "numerator_measure",
+            "options": [
+              "footprint",
+              "facade"
+            ]
+          },
+          {
+            "kind": "choice",
+            "parameter": "denominator_measure",
+            "options": [
+              "footprint",
+              "facade"
+            ]
+          },
+          {
+            "kind": "exclusive",
+            "one": [
+              "measure"
+            ],
+            "other": [
+              "numerator_measure",
+              "denominator_measure"
+            ],
+            "message": "`measure` applies to both sides; declare it or `numerator_measure` and `denominator_measure`, not both"
+          },
+          {
+            "kind": "traversal",
+            "with": [],
+            "message": ""
+          },
+          {
+            "kind": "excludes",
+            "when": "numerator_derivation",
+            "parameters": [
+              "measure",
+              "numerator_measure",
+              "denominator_measure"
+            ],
+            "value": "facade",
+            "message": "a `facade` measure does not combine with `numerator_derivation` `light-area`"
+          }
+        ],
+        "texts": [
+          {
+            "name": "noun",
+            "when": {
+              "kind": "equals",
+              "parameter": "measure",
+              "value": "facade"
+            },
+            "text": "facade area"
+          },
+          {
+            "name": "noun",
+            "when": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "equals",
+                  "parameter": "numerator_measure",
+                  "value": "facade"
+                },
+                {
+                  "kind": "equals",
+                  "parameter": "denominator_measure",
+                  "value": "facade"
+                }
+              ]
+            },
+            "text": "facade area"
+          },
+          {
+            "name": "noun",
+            "when": {
+              "kind": "equals",
+              "parameter": "numerator_measure",
+              "value": "facade"
+            },
+            "text": "facade area to plan area"
+          },
+          {
+            "name": "noun",
+            "when": {
+              "kind": "equals",
+              "parameter": "denominator_measure",
+              "value": "facade"
+            },
+            "text": "plan area to facade area"
+          },
+          {
+            "name": "noun",
+            "text": "plan area"
+          },
+          {
+            "name": "bottom",
+            "when": {
+              "kind": "equals",
+              "parameter": "measure",
+              "value": "facade"
+            },
+            "text": "facade area"
+          },
+          {
+            "name": "bottom",
+            "when": {
+              "kind": "equals",
+              "parameter": "denominator_measure",
+              "value": "facade"
+            },
+            "text": "facade area"
+          },
+          {
+            "name": "bottom",
+            "text": "plan area"
+          },
+          {
+            "name": "provenance",
+            "when": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "not",
+                  "condition": {
+                    "kind": "zero",
+                    "value": "stated_count"
+                  }
+                },
+                {
+                  "kind": "not",
+                  "condition": {
+                    "kind": "zero",
+                    "value": "table_count"
+                  }
+                },
+                {
+                  "kind": "not",
+                  "condition": {
+                    "kind": "zero",
+                    "value": "frame_count"
+                  }
+                }
+              ]
+            },
+            "text": "; light areas: {stated_count:least} stated, {table_count:least} from the light-area table, {frame_count:least} by frame allowance"
+          },
+          {
+            "name": "provenance",
+            "when": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "not",
+                  "condition": {
+                    "kind": "zero",
+                    "value": "stated_count"
+                  }
+                },
+                {
+                  "kind": "not",
+                  "condition": {
+                    "kind": "zero",
+                    "value": "table_count"
+                  }
+                }
+              ]
+            },
+            "text": "; light areas: {stated_count:least} stated, {table_count:least} from the light-area table"
+          },
+          {
+            "name": "provenance",
+            "when": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "not",
+                  "condition": {
+                    "kind": "zero",
+                    "value": "stated_count"
+                  }
+                },
+                {
+                  "kind": "not",
+                  "condition": {
+                    "kind": "zero",
+                    "value": "frame_count"
+                  }
+                }
+              ]
+            },
+            "text": "; light areas: {stated_count:least} stated, {frame_count:least} by frame allowance"
+          },
+          {
+            "name": "provenance",
+            "when": {
+              "kind": "all",
+              "conditions": [
+                {
+                  "kind": "not",
+                  "condition": {
+                    "kind": "zero",
+                    "value": "table_count"
+                  }
+                },
+                {
+                  "kind": "not",
+                  "condition": {
+                    "kind": "zero",
+                    "value": "frame_count"
+                  }
+                }
+              ]
+            },
+            "text": "; light areas: {table_count:least} from the light-area table, {frame_count:least} by frame allowance"
+          },
+          {
+            "name": "provenance",
+            "when": {
+              "kind": "not",
+              "condition": {
+                "kind": "zero",
+                "value": "stated_count"
+              }
+            },
+            "text": "; light areas: {stated_count:least} stated"
+          },
+          {
+            "name": "provenance",
+            "when": {
+              "kind": "not",
+              "condition": {
+                "kind": "zero",
+                "value": "table_count"
+              }
+            },
+            "text": "; light areas: {table_count:least} from the light-area table"
+          },
+          {
+            "name": "provenance",
+            "when": {
+              "kind": "not",
+              "condition": {
+                "kind": "zero",
+                "value": "frame_count"
+              }
+            },
+            "text": "; light areas: {frame_count:least} by frame allowance"
+          }
+        ],
+        "forms": [
+          {
+            "when": [
+              "numerator_derivation",
+              "denominator_selector"
+            ],
+            "values": [
+              {
+                "name": "reached",
+                "expression": {
+                  "kind": "if",
+                  "branches": [
+                    {
+                      "when": {
+                        "kind": "and",
+                        "operands": [
+                          {
+                            "kind": "parameter",
+                            "name": "empty_numerator_finding"
+                          },
+                          {
+                            "kind": "compare",
+                            "operator": "equals",
+                            "left": {
+                              "kind": "aggregate",
+                              "function": "count",
+                              "over": {
+                                "kind": "selector",
+                                "selector": {
+                                  "kind": "expression",
+                                  "expression": {
+                                    "kind": "parameter",
+                                    "name": "numerator_selector"
+                                  }
+                                }
+                              }
+                            },
+                            "right": {
+                              "kind": "literal",
+                              "value": {
+                                "type": "integer",
+                                "value": 0
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "then": {
+                        "kind": "null"
+                      }
+                    }
+                  ],
+                  "else": {
+                    "kind": "aggregate",
+                    "function": "count",
+                    "over": {
+                      "kind": "selector",
+                      "selector": {
+                        "kind": "expression",
+                        "expression": {
+                          "kind": "parameter",
+                          "name": "numerator_selector"
+                        }
+                      }
+                    }
+                  },
+                  "label": "numerator members"
+                },
+                "absent": "no numerator object is reached {relation}; the ratio is 0"
+              },
+              {
+                "name": "numerator",
+                "expression": {
+                  "kind": "aggregate",
+                  "function": "sum",
+                  "over": {
+                    "kind": "selector",
+                    "selector": {
+                      "kind": "expression",
+                      "expression": {
+                        "kind": "parameter",
+                        "name": "numerator_selector"
+                      }
+                    }
+                  },
+                  "value": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "light_area;stated=@numerator_property;overall_width=@overall_width;overall_height=@overall_height;light_area_table=@light_area_table;light_type=@light_type;light_type_path=@light_type_path;light_size_tolerance=@light_size_tolerance;frame_width=@frame_width;read=area"
+                  }
+                }
+              },
+              {
+                "name": "stated_count",
+                "expression": {
+                  "kind": "aggregate",
+                  "function": "sum",
+                  "over": {
+                    "kind": "selector",
+                    "selector": {
+                      "kind": "expression",
+                      "expression": {
+                        "kind": "parameter",
+                        "name": "numerator_selector"
+                      }
+                    }
+                  },
+                  "value": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "light_step;stated=@numerator_property;overall_width=@overall_width;overall_height=@overall_height;light_area_table=@light_area_table;light_type=@light_type;light_type_path=@light_type_path;light_size_tolerance=@light_size_tolerance;frame_width=@frame_width;step=stated"
+                  }
+                }
+              },
+              {
+                "name": "table_count",
+                "expression": {
+                  "kind": "aggregate",
+                  "function": "sum",
+                  "over": {
+                    "kind": "selector",
+                    "selector": {
+                      "kind": "expression",
+                      "expression": {
+                        "kind": "parameter",
+                        "name": "numerator_selector"
+                      }
+                    }
+                  },
+                  "value": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "light_step;stated=@numerator_property;overall_width=@overall_width;overall_height=@overall_height;light_area_table=@light_area_table;light_type=@light_type;light_type_path=@light_type_path;light_size_tolerance=@light_size_tolerance;frame_width=@frame_width;step=table"
+                  }
+                }
+              },
+              {
+                "name": "frame_count",
+                "expression": {
+                  "kind": "aggregate",
+                  "function": "sum",
+                  "over": {
+                    "kind": "selector",
+                    "selector": {
+                      "kind": "expression",
+                      "expression": {
+                        "kind": "parameter",
+                        "name": "numerator_selector"
+                      }
+                    }
+                  },
+                  "value": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "light_step;stated=@numerator_property;overall_width=@overall_width;overall_height=@overall_height;light_area_table=@light_area_table;light_type=@light_type;light_type_path=@light_type_path;light_size_tolerance=@light_size_tolerance;frame_width=@frame_width;step=frame"
+                  }
+                }
+              },
+              {
+                "name": "denominator",
+                "expression": {
+                  "kind": "aggregate",
+                  "function": "sum",
+                  "over": {
+                    "kind": "selector",
+                    "selector": {
+                      "kind": "expression",
+                      "expression": {
+                        "kind": "parameter",
+                        "name": "denominator_selector"
+                      }
+                    }
+                  },
+                  "value": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "ratio_area;property=@denominator_property;measure=@denominator_measure;otherwise=@measure"
+                  }
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "ratio",
+              "minimum": [
+                {
+                  "sign": "plus",
+                  "operand": {
+                    "kind": "parameter",
+                    "name": "minimum"
+                  }
+                }
+              ],
+              "maximum": [
+                {
+                  "sign": "plus",
+                  "operand": {
+                    "kind": "parameter",
+                    "name": "maximum"
+                  }
+                }
+              ],
+              "rounding": []
+            },
+            "fail": "{noun} ratio is {ratio:area} ({numerator:least2} m² of {denominator:least2} m²); required {bound:plain}{provenance}",
+            "undecided": "{noun} ratio is {ratio:area}, which straddles the bound {bound:plain}",
+            "members": {
+              "selector": "numerator_selector",
+              "undecided": {
+                "kind": "open",
+                "message": "{undecided} related object(s) {relation} cannot be assigned"
+              },
+              "more": [
+                "denominator_selector"
+              ],
+              "checks": [
+                {
+                  "before": "numerator",
+                  "values": [
+                    {
+                      "name": "light",
+                      "expression": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "light_area;stated=@numerator_property;overall_width=@overall_width;overall_height=@overall_height;light_area_table=@light_area_table;light_type=@light_type;light_type_path=@light_type_path;light_size_tolerance=@light_size_tolerance;frame_width=@frame_width;read=stated"
+                      }
+                    },
+                    {
+                      "name": "overall",
+                      "expression": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "light_area;stated=@numerator_property;overall_width=@overall_width;overall_height=@overall_height;light_area_table=@light_area_table;light_type=@light_type;light_type_path=@light_type_path;light_size_tolerance=@light_size_tolerance;frame_width=@frame_width;read=overall"
+                      }
+                    },
+                    {
+                      "name": "width",
+                      "expression": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "light_size;stated=@numerator_property;overall_width=@overall_width;overall_height=@overall_height;light_area_table=@light_area_table;light_type=@light_type;light_type_path=@light_type_path;light_size_tolerance=@light_size_tolerance;frame_width=@frame_width;side=width"
+                      }
+                    },
+                    {
+                      "name": "height",
+                      "expression": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "light_size;stated=@numerator_property;overall_width=@overall_width;overall_height=@overall_height;light_area_table=@light_area_table;light_type=@light_type;light_type_path=@light_type_path;light_size_tolerance=@light_size_tolerance;frame_width=@frame_width;side=height"
+                      }
+                    }
+                  ],
+                  "decision": {
+                    "kind": "within",
+                    "value": "light",
+                    "maximum": [
+                      {
+                        "sign": "plus",
+                        "operand": {
+                          "kind": "value",
+                          "name": "overall"
+                        }
+                      }
+                    ],
+                    "rounding": [
+                      {
+                        "end": "upper",
+                        "operand": {
+                          "kind": "value",
+                          "name": "overall"
+                        }
+                      }
+                    ]
+                  },
+                  "fail": "light area {light:area} m² ({numerator_property}) is larger than the overall area {overall:area} m² ({overall_width} {width:area} m × {overall_height} {height:area} m)",
+                  "undecided": "light area {light:area} m² ({numerator_property}) straddles the overall area {overall:area} m²",
+                  "open": "the light area cannot be compared with the overall area: {why}",
+                  "failed": "{failed} member(s), first {first}, state a light area larger than the element"
+                }
+              ]
+            },
+            "table": {
+              "name": "ratios",
+              "columns": [
+                {
+                  "id": "numerator_area",
+                  "value": "numerator",
+                  "dimension": "area"
+                },
+                {
+                  "id": "denominator_area",
+                  "value": "denominator",
+                  "dimension": "area"
+                },
+                {
+                  "id": "ratio",
+                  "value": "ratio",
+                  "dimension": {
+                    "other": {
+                      "exponents": [
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            "derived": [
+              {
+                "kind": "ratio",
+                "name": "ratio",
+                "numerator": "numerator",
+                "denominator": "denominator",
+                "zero": "the denominator has no {bottom}"
+              }
+            ],
+            "related": "members:numerator_selector"
+          },
+          {
+            "when": [
+              "numerator_derivation"
+            ],
+            "values": [
+              {
+                "name": "reached",
+                "expression": {
+                  "kind": "if",
+                  "branches": [
+                    {
+                      "when": {
+                        "kind": "and",
+                        "operands": [
+                          {
+                            "kind": "parameter",
+                            "name": "empty_numerator_finding"
+                          },
+                          {
+                            "kind": "compare",
+                            "operator": "equals",
+                            "left": {
+                              "kind": "aggregate",
+                              "function": "count",
+                              "over": {
+                                "kind": "selector",
+                                "selector": {
+                                  "kind": "expression",
+                                  "expression": {
+                                    "kind": "parameter",
+                                    "name": "numerator_selector"
+                                  }
+                                }
+                              }
+                            },
+                            "right": {
+                              "kind": "literal",
+                              "value": {
+                                "type": "integer",
+                                "value": 0
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "then": {
+                        "kind": "null"
+                      }
+                    }
+                  ],
+                  "else": {
+                    "kind": "aggregate",
+                    "function": "count",
+                    "over": {
+                      "kind": "selector",
+                      "selector": {
+                        "kind": "expression",
+                        "expression": {
+                          "kind": "parameter",
+                          "name": "numerator_selector"
+                        }
+                      }
+                    }
+                  },
+                  "label": "numerator members"
+                },
+                "absent": "no numerator object is reached {relation}; the ratio is 0"
+              },
+              {
+                "name": "numerator",
+                "expression": {
+                  "kind": "aggregate",
+                  "function": "sum",
+                  "over": {
+                    "kind": "selector",
+                    "selector": {
+                      "kind": "expression",
+                      "expression": {
+                        "kind": "parameter",
+                        "name": "numerator_selector"
+                      }
+                    }
+                  },
+                  "value": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "light_area;stated=@numerator_property;overall_width=@overall_width;overall_height=@overall_height;light_area_table=@light_area_table;light_type=@light_type;light_type_path=@light_type_path;light_size_tolerance=@light_size_tolerance;frame_width=@frame_width;read=area"
+                  }
+                }
+              },
+              {
+                "name": "stated_count",
+                "expression": {
+                  "kind": "aggregate",
+                  "function": "sum",
+                  "over": {
+                    "kind": "selector",
+                    "selector": {
+                      "kind": "expression",
+                      "expression": {
+                        "kind": "parameter",
+                        "name": "numerator_selector"
+                      }
+                    }
+                  },
+                  "value": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "light_step;stated=@numerator_property;overall_width=@overall_width;overall_height=@overall_height;light_area_table=@light_area_table;light_type=@light_type;light_type_path=@light_type_path;light_size_tolerance=@light_size_tolerance;frame_width=@frame_width;step=stated"
+                  }
+                }
+              },
+              {
+                "name": "table_count",
+                "expression": {
+                  "kind": "aggregate",
+                  "function": "sum",
+                  "over": {
+                    "kind": "selector",
+                    "selector": {
+                      "kind": "expression",
+                      "expression": {
+                        "kind": "parameter",
+                        "name": "numerator_selector"
+                      }
+                    }
+                  },
+                  "value": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "light_step;stated=@numerator_property;overall_width=@overall_width;overall_height=@overall_height;light_area_table=@light_area_table;light_type=@light_type;light_type_path=@light_type_path;light_size_tolerance=@light_size_tolerance;frame_width=@frame_width;step=table"
+                  }
+                }
+              },
+              {
+                "name": "frame_count",
+                "expression": {
+                  "kind": "aggregate",
+                  "function": "sum",
+                  "over": {
+                    "kind": "selector",
+                    "selector": {
+                      "kind": "expression",
+                      "expression": {
+                        "kind": "parameter",
+                        "name": "numerator_selector"
+                      }
+                    }
+                  },
+                  "value": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "light_step;stated=@numerator_property;overall_width=@overall_width;overall_height=@overall_height;light_area_table=@light_area_table;light_type=@light_type;light_type_path=@light_type_path;light_size_tolerance=@light_size_tolerance;frame_width=@frame_width;step=frame"
+                  }
+                }
+              },
+              {
+                "name": "denominator",
+                "expression": {
+                  "kind": "property",
+                  "propertySet": "axioval:measured",
+                  "property": "ratio_area;property=@denominator_property;measure=@denominator_measure;otherwise=@measure"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "ratio",
+              "minimum": [
+                {
+                  "sign": "plus",
+                  "operand": {
+                    "kind": "parameter",
+                    "name": "minimum"
+                  }
+                }
+              ],
+              "maximum": [
+                {
+                  "sign": "plus",
+                  "operand": {
+                    "kind": "parameter",
+                    "name": "maximum"
+                  }
+                }
+              ],
+              "rounding": []
+            },
+            "fail": "{noun} ratio is {ratio:area} ({numerator:least2} m² of {denominator:least2} m²); required {bound:plain}{provenance}",
+            "undecided": "{noun} ratio is {ratio:area}, which straddles the bound {bound:plain}",
+            "members": {
+              "selector": "numerator_selector",
+              "undecided": {
+                "kind": "open",
+                "message": "{undecided} related object(s) {relation} cannot be assigned"
+              },
+              "checks": [
+                {
+                  "before": "numerator",
+                  "values": [
+                    {
+                      "name": "light",
+                      "expression": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "light_area;stated=@numerator_property;overall_width=@overall_width;overall_height=@overall_height;light_area_table=@light_area_table;light_type=@light_type;light_type_path=@light_type_path;light_size_tolerance=@light_size_tolerance;frame_width=@frame_width;read=stated"
+                      }
+                    },
+                    {
+                      "name": "overall",
+                      "expression": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "light_area;stated=@numerator_property;overall_width=@overall_width;overall_height=@overall_height;light_area_table=@light_area_table;light_type=@light_type;light_type_path=@light_type_path;light_size_tolerance=@light_size_tolerance;frame_width=@frame_width;read=overall"
+                      }
+                    },
+                    {
+                      "name": "width",
+                      "expression": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "light_size;stated=@numerator_property;overall_width=@overall_width;overall_height=@overall_height;light_area_table=@light_area_table;light_type=@light_type;light_type_path=@light_type_path;light_size_tolerance=@light_size_tolerance;frame_width=@frame_width;side=width"
+                      }
+                    },
+                    {
+                      "name": "height",
+                      "expression": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "light_size;stated=@numerator_property;overall_width=@overall_width;overall_height=@overall_height;light_area_table=@light_area_table;light_type=@light_type;light_type_path=@light_type_path;light_size_tolerance=@light_size_tolerance;frame_width=@frame_width;side=height"
+                      }
+                    }
+                  ],
+                  "decision": {
+                    "kind": "within",
+                    "value": "light",
+                    "maximum": [
+                      {
+                        "sign": "plus",
+                        "operand": {
+                          "kind": "value",
+                          "name": "overall"
+                        }
+                      }
+                    ],
+                    "rounding": [
+                      {
+                        "end": "upper",
+                        "operand": {
+                          "kind": "value",
+                          "name": "overall"
+                        }
+                      }
+                    ]
+                  },
+                  "fail": "light area {light:area} m² ({numerator_property}) is larger than the overall area {overall:area} m² ({overall_width} {width:area} m × {overall_height} {height:area} m)",
+                  "undecided": "light area {light:area} m² ({numerator_property}) straddles the overall area {overall:area} m²",
+                  "open": "the light area cannot be compared with the overall area: {why}",
+                  "failed": "{failed} member(s), first {first}, state a light area larger than the element"
+                }
+              ]
+            },
+            "table": {
+              "name": "ratios",
+              "columns": [
+                {
+                  "id": "numerator_area",
+                  "value": "numerator",
+                  "dimension": "area"
+                },
+                {
+                  "id": "denominator_area",
+                  "value": "denominator",
+                  "dimension": "area"
+                },
+                {
+                  "id": "ratio",
+                  "value": "ratio",
+                  "dimension": {
+                    "other": {
+                      "exponents": [
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            "derived": [
+              {
+                "kind": "ratio",
+                "name": "ratio",
+                "numerator": "numerator",
+                "denominator": "denominator",
+                "zero": "the denominator has no {bottom}"
+              }
+            ],
+            "related": "members:numerator_selector"
+          },
+          {
+            "when": [
+              "denominator_selector"
+            ],
+            "values": [
+              {
+                "name": "reached",
+                "expression": {
+                  "kind": "if",
+                  "branches": [
+                    {
+                      "when": {
+                        "kind": "and",
+                        "operands": [
+                          {
+                            "kind": "parameter",
+                            "name": "empty_numerator_finding"
+                          },
+                          {
+                            "kind": "compare",
+                            "operator": "equals",
+                            "left": {
+                              "kind": "aggregate",
+                              "function": "count",
+                              "over": {
+                                "kind": "selector",
+                                "selector": {
+                                  "kind": "expression",
+                                  "expression": {
+                                    "kind": "parameter",
+                                    "name": "numerator_selector"
+                                  }
+                                }
+                              }
+                            },
+                            "right": {
+                              "kind": "literal",
+                              "value": {
+                                "type": "integer",
+                                "value": 0
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "then": {
+                        "kind": "null"
+                      }
+                    }
+                  ],
+                  "else": {
+                    "kind": "aggregate",
+                    "function": "count",
+                    "over": {
+                      "kind": "selector",
+                      "selector": {
+                        "kind": "expression",
+                        "expression": {
+                          "kind": "parameter",
+                          "name": "numerator_selector"
+                        }
+                      }
+                    }
+                  },
+                  "label": "numerator members"
+                },
+                "absent": "no numerator object is reached {relation}; the ratio is 0"
+              },
+              {
+                "name": "numerator",
+                "expression": {
+                  "kind": "aggregate",
+                  "function": "sum",
+                  "over": {
+                    "kind": "selector",
+                    "selector": {
+                      "kind": "expression",
+                      "expression": {
+                        "kind": "parameter",
+                        "name": "numerator_selector"
+                      }
+                    }
+                  },
+                  "value": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "ratio_area;property=@numerator_property;measure=@numerator_measure;otherwise=@measure"
+                  }
+                }
+              },
+              {
+                "name": "denominator",
+                "expression": {
+                  "kind": "aggregate",
+                  "function": "sum",
+                  "over": {
+                    "kind": "selector",
+                    "selector": {
+                      "kind": "expression",
+                      "expression": {
+                        "kind": "parameter",
+                        "name": "denominator_selector"
+                      }
+                    }
+                  },
+                  "value": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "ratio_area;property=@denominator_property;measure=@denominator_measure;otherwise=@measure"
+                  }
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "ratio",
+              "minimum": [
+                {
+                  "sign": "plus",
+                  "operand": {
+                    "kind": "parameter",
+                    "name": "minimum"
+                  }
+                }
+              ],
+              "maximum": [
+                {
+                  "sign": "plus",
+                  "operand": {
+                    "kind": "parameter",
+                    "name": "maximum"
+                  }
+                }
+              ],
+              "rounding": []
+            },
+            "fail": "{noun} ratio is {ratio:area} ({numerator:least2} m² of {denominator:least2} m²); required {bound:plain}",
+            "undecided": "{noun} ratio is {ratio:area}, which straddles the bound {bound:plain}",
+            "members": {
+              "selector": "numerator_selector",
+              "undecided": {
+                "kind": "open",
+                "message": "{undecided} related object(s) {relation} cannot be assigned"
+              },
+              "more": [
+                "denominator_selector"
+              ]
+            },
+            "table": {
+              "name": "ratios",
+              "columns": [
+                {
+                  "id": "numerator_area",
+                  "value": "numerator",
+                  "dimension": "area"
+                },
+                {
+                  "id": "denominator_area",
+                  "value": "denominator",
+                  "dimension": "area"
+                },
+                {
+                  "id": "ratio",
+                  "value": "ratio",
+                  "dimension": {
+                    "other": {
+                      "exponents": [
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            "derived": [
+              {
+                "kind": "ratio",
+                "name": "ratio",
+                "numerator": "numerator",
+                "denominator": "denominator",
+                "zero": "the denominator has no {bottom}"
+              }
+            ],
+            "related": "members:numerator_selector"
+          },
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "reached",
+                "expression": {
+                  "kind": "if",
+                  "branches": [
+                    {
+                      "when": {
+                        "kind": "and",
+                        "operands": [
+                          {
+                            "kind": "parameter",
+                            "name": "empty_numerator_finding"
+                          },
+                          {
+                            "kind": "compare",
+                            "operator": "equals",
+                            "left": {
+                              "kind": "aggregate",
+                              "function": "count",
+                              "over": {
+                                "kind": "selector",
+                                "selector": {
+                                  "kind": "expression",
+                                  "expression": {
+                                    "kind": "parameter",
+                                    "name": "numerator_selector"
+                                  }
+                                }
+                              }
+                            },
+                            "right": {
+                              "kind": "literal",
+                              "value": {
+                                "type": "integer",
+                                "value": 0
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "then": {
+                        "kind": "null"
+                      }
+                    }
+                  ],
+                  "else": {
+                    "kind": "aggregate",
+                    "function": "count",
+                    "over": {
+                      "kind": "selector",
+                      "selector": {
+                        "kind": "expression",
+                        "expression": {
+                          "kind": "parameter",
+                          "name": "numerator_selector"
+                        }
+                      }
+                    }
+                  },
+                  "label": "numerator members"
+                },
+                "absent": "no numerator object is reached {relation}; the ratio is 0"
+              },
+              {
+                "name": "numerator",
+                "expression": {
+                  "kind": "aggregate",
+                  "function": "sum",
+                  "over": {
+                    "kind": "selector",
+                    "selector": {
+                      "kind": "expression",
+                      "expression": {
+                        "kind": "parameter",
+                        "name": "numerator_selector"
+                      }
+                    }
+                  },
+                  "value": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "ratio_area;property=@numerator_property;measure=@numerator_measure;otherwise=@measure"
+                  }
+                }
+              },
+              {
+                "name": "denominator",
+                "expression": {
+                  "kind": "property",
+                  "propertySet": "axioval:measured",
+                  "property": "ratio_area;property=@denominator_property;measure=@denominator_measure;otherwise=@measure"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "ratio",
+              "minimum": [
+                {
+                  "sign": "plus",
+                  "operand": {
+                    "kind": "parameter",
+                    "name": "minimum"
+                  }
+                }
+              ],
+              "maximum": [
+                {
+                  "sign": "plus",
+                  "operand": {
+                    "kind": "parameter",
+                    "name": "maximum"
+                  }
+                }
+              ],
+              "rounding": []
+            },
+            "fail": "{noun} ratio is {ratio:area} ({numerator:least2} m² of {denominator:least2} m²); required {bound:plain}",
+            "undecided": "{noun} ratio is {ratio:area}, which straddles the bound {bound:plain}",
+            "members": {
+              "selector": "numerator_selector",
+              "undecided": {
+                "kind": "open",
+                "message": "{undecided} related object(s) {relation} cannot be assigned"
+              }
+            },
+            "table": {
+              "name": "ratios",
+              "columns": [
+                {
+                  "id": "numerator_area",
+                  "value": "numerator",
+                  "dimension": "area"
+                },
+                {
+                  "id": "denominator_area",
+                  "value": "denominator",
+                  "dimension": "area"
+                },
+                {
+                  "id": "ratio",
+                  "value": "ratio",
+                  "dimension": {
+                    "other": {
+                      "exponents": [
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            "derived": [
+              {
+                "kind": "ratio",
+                "name": "ratio",
+                "numerator": "numerator",
+                "denominator": "denominator",
+                "zero": "the denominator has no {bottom}"
+              }
+            ],
+            "related": "members:numerator_selector"
+          }
+        ],
+        "requirements": [
+          {
+            "when": [
+              "numerator_derivation",
+              "denominator_selector"
+            ],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "compare",
+                  "operator": "greaterThanOrEquals",
+                  "left": {
+                    "kind": "divide",
+                    "left": {
+                      "kind": "aggregate",
+                      "function": "sum",
+                      "over": {
+                        "kind": "selector",
+                        "selector": {
+                          "kind": "expression",
+                          "expression": {
+                            "kind": "parameter",
+                            "name": "numerator_selector"
+                          }
+                        }
+                      },
+                      "value": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "light_area;stated=@numerator_property;overall_width=@overall_width;overall_height=@overall_height;light_area_table=@light_area_table;light_type=@light_type;light_type_path=@light_type_path;light_size_tolerance=@light_size_tolerance;frame_width=@frame_width;read=area"
+                      }
+                    },
+                    "right": {
+                      "kind": "aggregate",
+                      "function": "sum",
+                      "over": {
+                        "kind": "selector",
+                        "selector": {
+                          "kind": "expression",
+                          "expression": {
+                            "kind": "parameter",
+                            "name": "denominator_selector"
+                          }
+                        }
+                      },
+                      "value": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "ratio_area;property=@denominator_property;measure=@denominator_measure;otherwise=@measure"
+                      }
+                    },
+                    "label": "ratio"
+                  },
+                  "right": {
+                    "kind": "parameter",
+                    "name": "minimum"
+                  },
+                  "label": "at least the lower bound"
+                },
+                {
+                  "kind": "compare",
+                  "operator": "lessThanOrEquals",
+                  "left": {
+                    "kind": "divide",
+                    "left": {
+                      "kind": "aggregate",
+                      "function": "sum",
+                      "over": {
+                        "kind": "selector",
+                        "selector": {
+                          "kind": "expression",
+                          "expression": {
+                            "kind": "parameter",
+                            "name": "numerator_selector"
+                          }
+                        }
+                      },
+                      "value": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "light_area;stated=@numerator_property;overall_width=@overall_width;overall_height=@overall_height;light_area_table=@light_area_table;light_type=@light_type;light_type_path=@light_type_path;light_size_tolerance=@light_size_tolerance;frame_width=@frame_width;read=area"
+                      }
+                    },
+                    "right": {
+                      "kind": "aggregate",
+                      "function": "sum",
+                      "over": {
+                        "kind": "selector",
+                        "selector": {
+                          "kind": "expression",
+                          "expression": {
+                            "kind": "parameter",
+                            "name": "denominator_selector"
+                          }
+                        }
+                      },
+                      "value": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "ratio_area;property=@denominator_property;measure=@denominator_measure;otherwise=@measure"
+                      }
+                    },
+                    "label": "ratio"
+                  },
+                  "right": {
+                    "kind": "parameter",
+                    "name": "maximum"
+                  },
+                  "label": "at most the upper bound"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.compare",
+                      "label": "at least the lower bound",
+                      "fields": {
+                        "operator": "greaterThanOrEquals"
+                      },
+                      "inputs": {
+                        "left": {
+                          "block": {
+                            "type": "expression.divide",
+                            "label": "ratio",
+                            "inputs": {
+                              "left": {
+                                "block": {
+                                  "type": "expression.aggregate",
+                                  "fields": {
+                                    "function": "sum"
+                                  },
+                                  "inputs": {
+                                    "over": {
+                                      "block": {
+                                        "type": "source.selector",
+                                        "inputs": {
+                                          "selector": {
+                                            "block": {
+                                              "type": "selector.expression",
+                                              "inputs": {
+                                                "expression": {
+                                                  "block": {
+                                                    "type": "expression.parameter",
+                                                    "fields": {
+                                                      "name": "numerator_selector"
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "value": {
+                                      "block": {
+                                        "type": "measured.light_area",
+                                        "fields": {
+                                          "frame_width": "@frame_width",
+                                          "light_area_table": "@light_area_table",
+                                          "light_size_tolerance": "@light_size_tolerance",
+                                          "light_type": "@light_type",
+                                          "light_type_path": "@light_type_path",
+                                          "overall_height": "@overall_height",
+                                          "overall_width": "@overall_width",
+                                          "read": "area",
+                                          "stated": "@numerator_property"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              "right": {
+                                "block": {
+                                  "type": "expression.aggregate",
+                                  "fields": {
+                                    "function": "sum"
+                                  },
+                                  "inputs": {
+                                    "over": {
+                                      "block": {
+                                        "type": "source.selector",
+                                        "inputs": {
+                                          "selector": {
+                                            "block": {
+                                              "type": "selector.expression",
+                                              "inputs": {
+                                                "expression": {
+                                                  "block": {
+                                                    "type": "expression.parameter",
+                                                    "fields": {
+                                                      "name": "denominator_selector"
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "value": {
+                                      "block": {
+                                        "type": "measured.ratio_area",
+                                        "fields": {
+                                          "measure": "@denominator_measure",
+                                          "otherwise": "@measure",
+                                          "property": "@denominator_property"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "right": {
+                          "block": {
+                            "type": "expression.parameter",
+                            "fields": {
+                              "name": "minimum"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.compare",
+                      "label": "at most the upper bound",
+                      "fields": {
+                        "operator": "lessThanOrEquals"
+                      },
+                      "inputs": {
+                        "left": {
+                          "block": {
+                            "type": "expression.divide",
+                            "label": "ratio",
+                            "inputs": {
+                              "left": {
+                                "block": {
+                                  "type": "expression.aggregate",
+                                  "fields": {
+                                    "function": "sum"
+                                  },
+                                  "inputs": {
+                                    "over": {
+                                      "block": {
+                                        "type": "source.selector",
+                                        "inputs": {
+                                          "selector": {
+                                            "block": {
+                                              "type": "selector.expression",
+                                              "inputs": {
+                                                "expression": {
+                                                  "block": {
+                                                    "type": "expression.parameter",
+                                                    "fields": {
+                                                      "name": "numerator_selector"
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "value": {
+                                      "block": {
+                                        "type": "measured.light_area",
+                                        "fields": {
+                                          "frame_width": "@frame_width",
+                                          "light_area_table": "@light_area_table",
+                                          "light_size_tolerance": "@light_size_tolerance",
+                                          "light_type": "@light_type",
+                                          "light_type_path": "@light_type_path",
+                                          "overall_height": "@overall_height",
+                                          "overall_width": "@overall_width",
+                                          "read": "area",
+                                          "stated": "@numerator_property"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              "right": {
+                                "block": {
+                                  "type": "expression.aggregate",
+                                  "fields": {
+                                    "function": "sum"
+                                  },
+                                  "inputs": {
+                                    "over": {
+                                      "block": {
+                                        "type": "source.selector",
+                                        "inputs": {
+                                          "selector": {
+                                            "block": {
+                                              "type": "selector.expression",
+                                              "inputs": {
+                                                "expression": {
+                                                  "block": {
+                                                    "type": "expression.parameter",
+                                                    "fields": {
+                                                      "name": "denominator_selector"
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "value": {
+                                      "block": {
+                                        "type": "measured.ratio_area",
+                                        "fields": {
+                                          "measure": "@denominator_measure",
+                                          "otherwise": "@measure",
+                                          "property": "@denominator_property"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "right": {
+                          "block": {
+                            "type": "expression.parameter",
+                            "fields": {
+                              "name": "maximum"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "when": [
+              "numerator_derivation"
+            ],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "compare",
+                  "operator": "greaterThanOrEquals",
+                  "left": {
+                    "kind": "divide",
+                    "left": {
+                      "kind": "aggregate",
+                      "function": "sum",
+                      "over": {
+                        "kind": "selector",
+                        "selector": {
+                          "kind": "expression",
+                          "expression": {
+                            "kind": "parameter",
+                            "name": "numerator_selector"
+                          }
+                        }
+                      },
+                      "value": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "light_area;stated=@numerator_property;overall_width=@overall_width;overall_height=@overall_height;light_area_table=@light_area_table;light_type=@light_type;light_type_path=@light_type_path;light_size_tolerance=@light_size_tolerance;frame_width=@frame_width;read=area"
+                      }
+                    },
+                    "right": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "ratio_area;property=@denominator_property;measure=@denominator_measure;otherwise=@measure"
+                    },
+                    "label": "ratio"
+                  },
+                  "right": {
+                    "kind": "parameter",
+                    "name": "minimum"
+                  },
+                  "label": "at least the lower bound"
+                },
+                {
+                  "kind": "compare",
+                  "operator": "lessThanOrEquals",
+                  "left": {
+                    "kind": "divide",
+                    "left": {
+                      "kind": "aggregate",
+                      "function": "sum",
+                      "over": {
+                        "kind": "selector",
+                        "selector": {
+                          "kind": "expression",
+                          "expression": {
+                            "kind": "parameter",
+                            "name": "numerator_selector"
+                          }
+                        }
+                      },
+                      "value": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "light_area;stated=@numerator_property;overall_width=@overall_width;overall_height=@overall_height;light_area_table=@light_area_table;light_type=@light_type;light_type_path=@light_type_path;light_size_tolerance=@light_size_tolerance;frame_width=@frame_width;read=area"
+                      }
+                    },
+                    "right": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "ratio_area;property=@denominator_property;measure=@denominator_measure;otherwise=@measure"
+                    },
+                    "label": "ratio"
+                  },
+                  "right": {
+                    "kind": "parameter",
+                    "name": "maximum"
+                  },
+                  "label": "at most the upper bound"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.compare",
+                      "label": "at least the lower bound",
+                      "fields": {
+                        "operator": "greaterThanOrEquals"
+                      },
+                      "inputs": {
+                        "left": {
+                          "block": {
+                            "type": "expression.divide",
+                            "label": "ratio",
+                            "inputs": {
+                              "left": {
+                                "block": {
+                                  "type": "expression.aggregate",
+                                  "fields": {
+                                    "function": "sum"
+                                  },
+                                  "inputs": {
+                                    "over": {
+                                      "block": {
+                                        "type": "source.selector",
+                                        "inputs": {
+                                          "selector": {
+                                            "block": {
+                                              "type": "selector.expression",
+                                              "inputs": {
+                                                "expression": {
+                                                  "block": {
+                                                    "type": "expression.parameter",
+                                                    "fields": {
+                                                      "name": "numerator_selector"
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "value": {
+                                      "block": {
+                                        "type": "measured.light_area",
+                                        "fields": {
+                                          "frame_width": "@frame_width",
+                                          "light_area_table": "@light_area_table",
+                                          "light_size_tolerance": "@light_size_tolerance",
+                                          "light_type": "@light_type",
+                                          "light_type_path": "@light_type_path",
+                                          "overall_height": "@overall_height",
+                                          "overall_width": "@overall_width",
+                                          "read": "area",
+                                          "stated": "@numerator_property"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              "right": {
+                                "block": {
+                                  "type": "measured.ratio_area",
+                                  "fields": {
+                                    "measure": "@denominator_measure",
+                                    "otherwise": "@measure",
+                                    "property": "@denominator_property"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "right": {
+                          "block": {
+                            "type": "expression.parameter",
+                            "fields": {
+                              "name": "minimum"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.compare",
+                      "label": "at most the upper bound",
+                      "fields": {
+                        "operator": "lessThanOrEquals"
+                      },
+                      "inputs": {
+                        "left": {
+                          "block": {
+                            "type": "expression.divide",
+                            "label": "ratio",
+                            "inputs": {
+                              "left": {
+                                "block": {
+                                  "type": "expression.aggregate",
+                                  "fields": {
+                                    "function": "sum"
+                                  },
+                                  "inputs": {
+                                    "over": {
+                                      "block": {
+                                        "type": "source.selector",
+                                        "inputs": {
+                                          "selector": {
+                                            "block": {
+                                              "type": "selector.expression",
+                                              "inputs": {
+                                                "expression": {
+                                                  "block": {
+                                                    "type": "expression.parameter",
+                                                    "fields": {
+                                                      "name": "numerator_selector"
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "value": {
+                                      "block": {
+                                        "type": "measured.light_area",
+                                        "fields": {
+                                          "frame_width": "@frame_width",
+                                          "light_area_table": "@light_area_table",
+                                          "light_size_tolerance": "@light_size_tolerance",
+                                          "light_type": "@light_type",
+                                          "light_type_path": "@light_type_path",
+                                          "overall_height": "@overall_height",
+                                          "overall_width": "@overall_width",
+                                          "read": "area",
+                                          "stated": "@numerator_property"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              "right": {
+                                "block": {
+                                  "type": "measured.ratio_area",
+                                  "fields": {
+                                    "measure": "@denominator_measure",
+                                    "otherwise": "@measure",
+                                    "property": "@denominator_property"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "right": {
+                          "block": {
+                            "type": "expression.parameter",
+                            "fields": {
+                              "name": "maximum"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "when": [
+              "denominator_selector"
+            ],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "compare",
+                  "operator": "greaterThanOrEquals",
+                  "left": {
+                    "kind": "divide",
+                    "left": {
+                      "kind": "aggregate",
+                      "function": "sum",
+                      "over": {
+                        "kind": "selector",
+                        "selector": {
+                          "kind": "expression",
+                          "expression": {
+                            "kind": "parameter",
+                            "name": "numerator_selector"
+                          }
+                        }
+                      },
+                      "value": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "ratio_area;property=@numerator_property;measure=@numerator_measure;otherwise=@measure"
+                      }
+                    },
+                    "right": {
+                      "kind": "aggregate",
+                      "function": "sum",
+                      "over": {
+                        "kind": "selector",
+                        "selector": {
+                          "kind": "expression",
+                          "expression": {
+                            "kind": "parameter",
+                            "name": "denominator_selector"
+                          }
+                        }
+                      },
+                      "value": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "ratio_area;property=@denominator_property;measure=@denominator_measure;otherwise=@measure"
+                      }
+                    },
+                    "label": "ratio"
+                  },
+                  "right": {
+                    "kind": "parameter",
+                    "name": "minimum"
+                  },
+                  "label": "at least the lower bound"
+                },
+                {
+                  "kind": "compare",
+                  "operator": "lessThanOrEquals",
+                  "left": {
+                    "kind": "divide",
+                    "left": {
+                      "kind": "aggregate",
+                      "function": "sum",
+                      "over": {
+                        "kind": "selector",
+                        "selector": {
+                          "kind": "expression",
+                          "expression": {
+                            "kind": "parameter",
+                            "name": "numerator_selector"
+                          }
+                        }
+                      },
+                      "value": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "ratio_area;property=@numerator_property;measure=@numerator_measure;otherwise=@measure"
+                      }
+                    },
+                    "right": {
+                      "kind": "aggregate",
+                      "function": "sum",
+                      "over": {
+                        "kind": "selector",
+                        "selector": {
+                          "kind": "expression",
+                          "expression": {
+                            "kind": "parameter",
+                            "name": "denominator_selector"
+                          }
+                        }
+                      },
+                      "value": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "ratio_area;property=@denominator_property;measure=@denominator_measure;otherwise=@measure"
+                      }
+                    },
+                    "label": "ratio"
+                  },
+                  "right": {
+                    "kind": "parameter",
+                    "name": "maximum"
+                  },
+                  "label": "at most the upper bound"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.compare",
+                      "label": "at least the lower bound",
+                      "fields": {
+                        "operator": "greaterThanOrEquals"
+                      },
+                      "inputs": {
+                        "left": {
+                          "block": {
+                            "type": "expression.divide",
+                            "label": "ratio",
+                            "inputs": {
+                              "left": {
+                                "block": {
+                                  "type": "expression.aggregate",
+                                  "fields": {
+                                    "function": "sum"
+                                  },
+                                  "inputs": {
+                                    "over": {
+                                      "block": {
+                                        "type": "source.selector",
+                                        "inputs": {
+                                          "selector": {
+                                            "block": {
+                                              "type": "selector.expression",
+                                              "inputs": {
+                                                "expression": {
+                                                  "block": {
+                                                    "type": "expression.parameter",
+                                                    "fields": {
+                                                      "name": "numerator_selector"
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "value": {
+                                      "block": {
+                                        "type": "measured.ratio_area",
+                                        "fields": {
+                                          "measure": "@numerator_measure",
+                                          "otherwise": "@measure",
+                                          "property": "@numerator_property"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              "right": {
+                                "block": {
+                                  "type": "expression.aggregate",
+                                  "fields": {
+                                    "function": "sum"
+                                  },
+                                  "inputs": {
+                                    "over": {
+                                      "block": {
+                                        "type": "source.selector",
+                                        "inputs": {
+                                          "selector": {
+                                            "block": {
+                                              "type": "selector.expression",
+                                              "inputs": {
+                                                "expression": {
+                                                  "block": {
+                                                    "type": "expression.parameter",
+                                                    "fields": {
+                                                      "name": "denominator_selector"
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "value": {
+                                      "block": {
+                                        "type": "measured.ratio_area",
+                                        "fields": {
+                                          "measure": "@denominator_measure",
+                                          "otherwise": "@measure",
+                                          "property": "@denominator_property"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "right": {
+                          "block": {
+                            "type": "expression.parameter",
+                            "fields": {
+                              "name": "minimum"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.compare",
+                      "label": "at most the upper bound",
+                      "fields": {
+                        "operator": "lessThanOrEquals"
+                      },
+                      "inputs": {
+                        "left": {
+                          "block": {
+                            "type": "expression.divide",
+                            "label": "ratio",
+                            "inputs": {
+                              "left": {
+                                "block": {
+                                  "type": "expression.aggregate",
+                                  "fields": {
+                                    "function": "sum"
+                                  },
+                                  "inputs": {
+                                    "over": {
+                                      "block": {
+                                        "type": "source.selector",
+                                        "inputs": {
+                                          "selector": {
+                                            "block": {
+                                              "type": "selector.expression",
+                                              "inputs": {
+                                                "expression": {
+                                                  "block": {
+                                                    "type": "expression.parameter",
+                                                    "fields": {
+                                                      "name": "numerator_selector"
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "value": {
+                                      "block": {
+                                        "type": "measured.ratio_area",
+                                        "fields": {
+                                          "measure": "@numerator_measure",
+                                          "otherwise": "@measure",
+                                          "property": "@numerator_property"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              "right": {
+                                "block": {
+                                  "type": "expression.aggregate",
+                                  "fields": {
+                                    "function": "sum"
+                                  },
+                                  "inputs": {
+                                    "over": {
+                                      "block": {
+                                        "type": "source.selector",
+                                        "inputs": {
+                                          "selector": {
+                                            "block": {
+                                              "type": "selector.expression",
+                                              "inputs": {
+                                                "expression": {
+                                                  "block": {
+                                                    "type": "expression.parameter",
+                                                    "fields": {
+                                                      "name": "denominator_selector"
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "value": {
+                                      "block": {
+                                        "type": "measured.ratio_area",
+                                        "fields": {
+                                          "measure": "@denominator_measure",
+                                          "otherwise": "@measure",
+                                          "property": "@denominator_property"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "right": {
+                          "block": {
+                            "type": "expression.parameter",
+                            "fields": {
+                              "name": "maximum"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "compare",
+                  "operator": "greaterThanOrEquals",
+                  "left": {
+                    "kind": "divide",
+                    "left": {
+                      "kind": "aggregate",
+                      "function": "sum",
+                      "over": {
+                        "kind": "selector",
+                        "selector": {
+                          "kind": "expression",
+                          "expression": {
+                            "kind": "parameter",
+                            "name": "numerator_selector"
+                          }
+                        }
+                      },
+                      "value": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "ratio_area;property=@numerator_property;measure=@numerator_measure;otherwise=@measure"
+                      }
+                    },
+                    "right": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "ratio_area;property=@denominator_property;measure=@denominator_measure;otherwise=@measure"
+                    },
+                    "label": "ratio"
+                  },
+                  "right": {
+                    "kind": "parameter",
+                    "name": "minimum"
+                  },
+                  "label": "at least the lower bound"
+                },
+                {
+                  "kind": "compare",
+                  "operator": "lessThanOrEquals",
+                  "left": {
+                    "kind": "divide",
+                    "left": {
+                      "kind": "aggregate",
+                      "function": "sum",
+                      "over": {
+                        "kind": "selector",
+                        "selector": {
+                          "kind": "expression",
+                          "expression": {
+                            "kind": "parameter",
+                            "name": "numerator_selector"
+                          }
+                        }
+                      },
+                      "value": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "ratio_area;property=@numerator_property;measure=@numerator_measure;otherwise=@measure"
+                      }
+                    },
+                    "right": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "ratio_area;property=@denominator_property;measure=@denominator_measure;otherwise=@measure"
+                    },
+                    "label": "ratio"
+                  },
+                  "right": {
+                    "kind": "parameter",
+                    "name": "maximum"
+                  },
+                  "label": "at most the upper bound"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.compare",
+                      "label": "at least the lower bound",
+                      "fields": {
+                        "operator": "greaterThanOrEquals"
+                      },
+                      "inputs": {
+                        "left": {
+                          "block": {
+                            "type": "expression.divide",
+                            "label": "ratio",
+                            "inputs": {
+                              "left": {
+                                "block": {
+                                  "type": "expression.aggregate",
+                                  "fields": {
+                                    "function": "sum"
+                                  },
+                                  "inputs": {
+                                    "over": {
+                                      "block": {
+                                        "type": "source.selector",
+                                        "inputs": {
+                                          "selector": {
+                                            "block": {
+                                              "type": "selector.expression",
+                                              "inputs": {
+                                                "expression": {
+                                                  "block": {
+                                                    "type": "expression.parameter",
+                                                    "fields": {
+                                                      "name": "numerator_selector"
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "value": {
+                                      "block": {
+                                        "type": "measured.ratio_area",
+                                        "fields": {
+                                          "measure": "@numerator_measure",
+                                          "otherwise": "@measure",
+                                          "property": "@numerator_property"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              "right": {
+                                "block": {
+                                  "type": "measured.ratio_area",
+                                  "fields": {
+                                    "measure": "@denominator_measure",
+                                    "otherwise": "@measure",
+                                    "property": "@denominator_property"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "right": {
+                          "block": {
+                            "type": "expression.parameter",
+                            "fields": {
+                              "name": "minimum"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.compare",
+                      "label": "at most the upper bound",
+                      "fields": {
+                        "operator": "lessThanOrEquals"
+                      },
+                      "inputs": {
+                        "left": {
+                          "block": {
+                            "type": "expression.divide",
+                            "label": "ratio",
+                            "inputs": {
+                              "left": {
+                                "block": {
+                                  "type": "expression.aggregate",
+                                  "fields": {
+                                    "function": "sum"
+                                  },
+                                  "inputs": {
+                                    "over": {
+                                      "block": {
+                                        "type": "source.selector",
+                                        "inputs": {
+                                          "selector": {
+                                            "block": {
+                                              "type": "selector.expression",
+                                              "inputs": {
+                                                "expression": {
+                                                  "block": {
+                                                    "type": "expression.parameter",
+                                                    "fields": {
+                                                      "name": "numerator_selector"
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "value": {
+                                      "block": {
+                                        "type": "measured.ratio_area",
+                                        "fields": {
+                                          "measure": "@numerator_measure",
+                                          "otherwise": "@measure",
+                                          "property": "@numerator_property"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              "right": {
+                                "block": {
+                                  "type": "measured.ratio_area",
+                                  "fields": {
+                                    "measure": "@denominator_measure",
+                                    "otherwise": "@measure",
+                                    "property": "@denominator_property"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "right": {
+                          "block": {
+                            "type": "expression.parameter",
+                            "fields": {
+                              "name": "maximum"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.body-extent",
@@ -35879,6 +38458,620 @@
       "available": true
     },
     {
+      "name": "light_area",
+      "parameters": [
+        {
+          "key": "stated",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The light area the object states: the first step, where stated."
+            },
+            {
+              "language": "de",
+              "text": "Die Lichtfläche, die das Objekt angibt: der erste Schritt, wo angegeben."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "overall_width",
+          "kind": {
+            "type": "property"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The length the object states as its overall width."
+            },
+            {
+              "language": "de",
+              "text": "Die Länge, die das Objekt als Gesamtbreite angibt."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "overall_height",
+          "kind": {
+            "type": "property"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The length the object states as its overall height."
+            },
+            {
+              "language": "de",
+              "text": "Die Länge, die das Objekt als Gesamthöhe angibt."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "light_area_table",
+          "kind": {
+            "type": "table"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Rows of `width`, `height`, `light_area` and an optional `type` pattern: the most specific row of the object's overall size and type gives its light area."
+            },
+            {
+              "language": "de",
+              "text": "Zeilen aus `width`, `height`, `light_area` und einem optionalen `type`-Muster: die spezifischste Zeile zu Gesamtgröße und Typ des Objekts gibt seine Lichtfläche."
+            }
+          ],
+          "references": "table"
+        },
+        {
+          "key": "light_type",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The type name a row's `type` pattern matches."
+            },
+            {
+              "language": "de",
+              "text": "Der Typname, den das `type`-Muster einer Zeile prüft."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "light_type_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps to the objects stating the type name; without them, the object itself."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte zu den Objekten, die den Typnamen angeben; ohne sie das Objekt selbst."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "light_size_tolerance",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How far a row's size may differ from the overall size, in metres; none when not given."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit die Größe einer Zeile von der Gesamtgröße abweichen darf, in Metern; keine Abweichung, wenn nicht angegeben."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "frame_width",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The frame allowance, in metres: the last step, the overall size less 2·(W+H) times it."
+            },
+            {
+              "language": "de",
+              "text": "Der Rahmenabzug, in Metern: der letzte Schritt, die Gesamtgröße abzüglich 2·(B+H) mal diesem Wert."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "read",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "area",
+              "stated",
+              "overall"
+            ]
+          },
+          "required": false,
+          "default": "area",
+          "help": [
+            {
+              "language": "en",
+              "text": "The light `area` by the first step giving one; the area only where it is `stated` (none otherwise); or the `overall` area, width times height."
+            },
+            {
+              "language": "de",
+              "text": "Die Lichtfläche (`area`) nach dem ersten Schritt, der eine ergibt; die Fläche nur, wo sie angegeben ist (`stated`, sonst keine); oder die Gesamtfläche (`overall`), Breite mal Höhe."
+            }
+          ],
+          "references": "string"
+        }
+      ],
+      "dimension": "area",
+      "services": [
+        "property-resolution",
+        "relationship-selection"
+      ],
+      "exactness": "stated",
+      "notEvaluated": [
+        "no step of the fallback gives a light area",
+        "the overall width or height is not stated as a positive length"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Light area"
+        },
+        {
+          "language": "de",
+          "text": "Lichtfläche"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "An opening's light-transmitting area by the first step of a fallback that gives one, as `area-ratio`'s `light-area` numerator derives it: the area it states, else the most specific light-area row of its overall size and type, else its overall size less the frame allowance."
+        },
+        {
+          "language": "de",
+          "text": "Die lichtdurchlässige Fläche einer Öffnung nach dem ersten Schritt einer Rückfallkette, der eine ergibt, wie der Zähler `light-area` von `area-ratio` sie ableitet: die angegebene Fläche, sonst die spezifischste Lichtflächenzeile zu Gesamtgröße und Typ, sonst die Gesamtgröße abzüglich des Rahmenabzugs."
+        }
+      ],
+      "unit": "m2",
+      "available": true
+    },
+    {
+      "name": "light_size",
+      "parameters": [
+        {
+          "key": "stated",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The light area the object states: the first step, where stated."
+            },
+            {
+              "language": "de",
+              "text": "Die Lichtfläche, die das Objekt angibt: der erste Schritt, wo angegeben."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "overall_width",
+          "kind": {
+            "type": "property"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The length the object states as its overall width."
+            },
+            {
+              "language": "de",
+              "text": "Die Länge, die das Objekt als Gesamtbreite angibt."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "overall_height",
+          "kind": {
+            "type": "property"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The length the object states as its overall height."
+            },
+            {
+              "language": "de",
+              "text": "Die Länge, die das Objekt als Gesamthöhe angibt."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "light_area_table",
+          "kind": {
+            "type": "table"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Rows of `width`, `height`, `light_area` and an optional `type` pattern: the most specific row of the object's overall size and type gives its light area."
+            },
+            {
+              "language": "de",
+              "text": "Zeilen aus `width`, `height`, `light_area` und einem optionalen `type`-Muster: die spezifischste Zeile zu Gesamtgröße und Typ des Objekts gibt seine Lichtfläche."
+            }
+          ],
+          "references": "table"
+        },
+        {
+          "key": "light_type",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The type name a row's `type` pattern matches."
+            },
+            {
+              "language": "de",
+              "text": "Der Typname, den das `type`-Muster einer Zeile prüft."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "light_type_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps to the objects stating the type name; without them, the object itself."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte zu den Objekten, die den Typnamen angeben; ohne sie das Objekt selbst."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "light_size_tolerance",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How far a row's size may differ from the overall size, in metres; none when not given."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit die Größe einer Zeile von der Gesamtgröße abweichen darf, in Metern; keine Abweichung, wenn nicht angegeben."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "frame_width",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The frame allowance, in metres: the last step, the overall size less 2·(W+H) times it."
+            },
+            {
+              "language": "de",
+              "text": "Der Rahmenabzug, in Metern: der letzte Schritt, die Gesamtgröße abzüglich 2·(B+H) mal diesem Wert."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "side",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "width",
+              "height"
+            ]
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The overall `width` or `height`."
+            },
+            {
+              "language": "de",
+              "text": "Die Gesamtbreite (`width`) oder -höhe (`height`)."
+            }
+          ],
+          "references": "string"
+        }
+      ],
+      "dimension": "length",
+      "services": [
+        "property-resolution"
+      ],
+      "exactness": "stated",
+      "notEvaluated": [
+        "the overall width or height is not stated as a positive length"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Overall opening size"
+        },
+        {
+          "language": "de",
+          "text": "Gesamtgröße der Öffnung"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The overall width or height an opening states, which its light area is compared with and derived from."
+        },
+        {
+          "language": "de",
+          "text": "Die Gesamtbreite oder -höhe, die eine Öffnung angibt, mit der ihre Lichtfläche verglichen und aus der sie abgeleitet wird."
+        }
+      ],
+      "unit": "m",
+      "available": true
+    },
+    {
+      "name": "light_step",
+      "parameters": [
+        {
+          "key": "stated",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The light area the object states: the first step, where stated."
+            },
+            {
+              "language": "de",
+              "text": "Die Lichtfläche, die das Objekt angibt: der erste Schritt, wo angegeben."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "overall_width",
+          "kind": {
+            "type": "property"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The length the object states as its overall width."
+            },
+            {
+              "language": "de",
+              "text": "Die Länge, die das Objekt als Gesamtbreite angibt."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "overall_height",
+          "kind": {
+            "type": "property"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The length the object states as its overall height."
+            },
+            {
+              "language": "de",
+              "text": "Die Länge, die das Objekt als Gesamthöhe angibt."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "light_area_table",
+          "kind": {
+            "type": "table"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Rows of `width`, `height`, `light_area` and an optional `type` pattern: the most specific row of the object's overall size and type gives its light area."
+            },
+            {
+              "language": "de",
+              "text": "Zeilen aus `width`, `height`, `light_area` und einem optionalen `type`-Muster: die spezifischste Zeile zu Gesamtgröße und Typ des Objekts gibt seine Lichtfläche."
+            }
+          ],
+          "references": "table"
+        },
+        {
+          "key": "light_type",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The type name a row's `type` pattern matches."
+            },
+            {
+              "language": "de",
+              "text": "Der Typname, den das `type`-Muster einer Zeile prüft."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "light_type_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps to the objects stating the type name; without them, the object itself."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte zu den Objekten, die den Typnamen angeben; ohne sie das Objekt selbst."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "light_size_tolerance",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How far a row's size may differ from the overall size, in metres; none when not given."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit die Größe einer Zeile von der Gesamtgröße abweichen darf, in Metern; keine Abweichung, wenn nicht angegeben."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "frame_width",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The frame allowance, in metres: the last step, the overall size less 2·(W+H) times it."
+            },
+            {
+              "language": "de",
+              "text": "Der Rahmenabzug, in Metern: der letzte Schritt, die Gesamtgröße abzüglich 2·(B+H) mal diesem Wert."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "step",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "stated",
+              "table",
+              "frame"
+            ]
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The step: the `stated` area, the `table`, or the `frame` allowance."
+            },
+            {
+              "language": "de",
+              "text": "Der Schritt: die angegebene Fläche (`stated`), die Tabelle (`table`) oder der Rahmenabzug (`frame`)."
+            }
+          ],
+          "references": "string"
+        }
+      ],
+      "services": [
+        "property-resolution",
+        "relationship-selection"
+      ],
+      "exactness": "stated",
+      "notEvaluated": [
+        "no step of the fallback gives a light area"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Light-area step"
+        },
+        {
+          "language": "de",
+          "text": "Schritt der Lichtfläche"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "1 where the opening's light area comes from the step, 0 where another gives it: summed over openings, how many areas each step gave."
+        },
+        {
+          "language": "de",
+          "text": "1, wo die Lichtfläche der Öffnung aus dem Schritt stammt, 0, wo ein anderer sie ergibt: über Öffnungen summiert, wie viele Flächen jeder Schritt ergab."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
       "name": "map_conversion",
       "parameters": [
         {
@@ -37808,6 +41001,106 @@
         }
       ],
       "unit": "1",
+      "available": true
+    },
+    {
+      "name": "ratio_area",
+      "parameters": [
+        {
+          "key": "property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The area the object states, read instead of measuring one."
+            },
+            {
+              "language": "de",
+              "text": "Die Fläche, die das Objekt angibt, statt eine zu messen."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "measure",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "footprint",
+              "facade"
+            ]
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The plan `footprint`, or the outward-facing `facade` surface."
+            },
+            {
+              "language": "de",
+              "text": "Der Grundriss (`footprint`) oder die nach außen weisende Fassadenfläche (`facade`)."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "otherwise",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "footprint",
+              "facade"
+            ]
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The measure where `measure` is not given; the footprint where neither is."
+            },
+            {
+              "language": "de",
+              "text": "Das Maß, wo `measure` nicht angegeben ist; der Grundriss, wo keines angegeben ist."
+            }
+          ],
+          "references": "string"
+        }
+      ],
+      "dimension": "area",
+      "services": [
+        "plan-area",
+        "facade-area",
+        "property-resolution"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object has no body the service can measure",
+        "the property states no area"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Area in a ratio"
+        },
+        {
+          "language": "de",
+          "text": "Fläche in einem Verhältnis"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The object's area as `area-ratio` sums it: the area a property states, or its footprint (an empty one counting zero) or facade area."
+        },
+        {
+          "language": "de",
+          "text": "Die Fläche des Objekts, wie `area-ratio` sie summiert: die angegebene Fläche oder sein Grundriss (ein leerer zählt null) oder seine Fassadenfläche."
+        }
+      ],
+      "unit": "m2",
       "available": true
     },
     {

@@ -92,8 +92,27 @@ fn run(
             1e-12,
         );
     }
+    if capability.id() == "axioval:capability.area-ratio" {
+        return model.holding_contract(
+            capability,
+            &axioval_rules::reference::AreaRatio,
+            rule,
+            register,
+            RATIOS,
+            // A sum of members is the evaluator's exact interval sum (D19).
+            1e-12,
+        );
+    }
     model.evaluate_with(capability, rule, register)
 }
+
+/// The `ratios` table's values, compared within a few units in the last
+/// place of a sum (D19).
+const RATIOS: &[(&str, f64)] = &[
+    ("ratios.numerator_area", 1e-9),
+    ("ratios.denominator_area", 1e-9),
+    ("ratios.ratio", 1e-9),
+];
 
 /// An area measured on a tessellated footprint is never exact, whether
 /// built-in code or the engine measures it; a total of overlaps holds the
@@ -116,7 +135,7 @@ fn an_area_measured_on_a_tessellation_is_inexact() {
                 .with("b", [0.1, 0.0, 0.3, 3.0], 0.0),
         )))
         .unwrap();
-    for name in ["plan_area", "area"] {
+    for name in ["plan_area", "area", "ratio_area"] {
         for (space, exact) in [("mesh", false), ("solid", true)] {
             let ((lower, upper), cited) =
                 common::measured_cited(&services, &project, &id(space), name)
@@ -222,10 +241,50 @@ mod area_ratio {
         );
     }
 
+    /// D22: an anchor reaching no member needs no area service to sum
+    /// nothing. The capability asked for the service first and left it open
+    /// without one; the template finds a denominator without area.
+    #[test]
+    fn an_empty_population_needs_no_service() {
+        let model = Model::default()
+            .object("c", "storey")
+            .object("door", "door")
+            .edge("contains", "c", "door");
+        let checked = rule(ID, kind("storey"), parameters(0.5));
+        let replaced =
+            model
+                .clone()
+                .evaluate_with(&axioval_rules::reference::AreaRatio, &checked, |_| {});
+        assert_eq!(
+            replaced.not_evaluated_outcomes()[0].message(),
+            "plan-area service is not registered"
+        );
+        assert_eq!(
+            unevaluated(&replaced),
+            [("c".to_owned(), NotEvaluatedReason::MissingService)]
+        );
+        let template = model.evaluate_measured(&AreaRatio, &checked, |_| {});
+        assert_eq!(
+            template.not_evaluated_outcomes()[0].message(),
+            "the denominator has no plan area"
+        );
+        assert_eq!(
+            unevaluated(&template),
+            [("c".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+        );
+    }
+
     #[test]
     fn without_geometry_nothing_is_judged() {
         let (model, _) = storeys();
-        let evaluation = model.evaluate(&AreaRatio, &rule(ID, kind("storey"), parameters(0.5)));
+        let evaluation = model.holding_contract(
+            &AreaRatio,
+            &axioval_rules::reference::AreaRatio,
+            &rule(ID, kind("storey"), parameters(0.5)),
+            |_| {},
+            super::RATIOS,
+            1e-12,
+        );
         assert_eq!(
             unevaluated(&evaluation),
             [
@@ -641,6 +700,56 @@ mod light_area {
         assert_eq!(
             unevaluated(&evaluation),
             [("room".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+        );
+    }
+
+    /// D21: the template sums the members' light areas as the evaluator
+    /// sums any aggregate, an exact interval. 0.443 m² and 0.212 m² sum to
+    /// 0.655 m², which binary rounding puts just above or just below: the
+    /// capability's rounded sum showed `0.66` and a ratio of `0.0328`, the
+    /// template's interval holds both neighbours and shows its lower end
+    /// and the interval. The verdict is the same.
+    #[test]
+    fn a_sum_on_a_rounding_midpoint_is_shown_as_its_interval() {
+        let (model, rectangles) = rooms(&["w1", "w2"]);
+        let model = sized(sized(model, "w1", 0.5, 1.0), "w2", 0.5, 0.5);
+        let mut declared = parameters(vec![("minimum", number(0.05))]);
+        declared.retain(|(name, _)| {
+            !matches!(
+                *name,
+                "light_area_table" | "light_type" | "light_type_path" | "numerator_property"
+            )
+        });
+        declared.push(("frame_width", quantity(19.0, "mm")));
+        let checked = rule(ID, kind("space"), declared);
+        let rectangles = Arc::new(rectangles);
+        let register = |services: &mut axioval_engine::ServiceRegistry| {
+            services
+                .register(PlanAreaServiceHandle::new(rectangles.clone()))
+                .unwrap();
+        };
+        let replaced =
+            model
+                .clone()
+                .evaluate_with(&axioval_rules::reference::AreaRatio, &checked, register);
+        let template = model.evaluate_measured(&AreaRatio, &checked, register);
+        assert_eq!(
+            findings(&replaced),
+            [(
+                "room".to_owned(),
+                "plan area ratio is 0.0328 (0.66 m² of 20 m²); required at least 0.05; \
+                 light areas: 2 by frame allowance"
+                    .to_owned()
+            )]
+        );
+        assert_eq!(
+            findings(&template),
+            [(
+                "room".to_owned(),
+                "plan area ratio is between 0.0327 and 0.0328 (0.65 m² of 20 m²); required \
+                 at least 0.05; light areas: 2 by frame allowance"
+                    .to_owned()
+            )]
         );
     }
 
@@ -1390,13 +1499,17 @@ mod parity {
         #[test]
         fn without_geometry_both_leave_every_storey_open() {
             let (model, _) = super::super::area_ratio::storeys_fixture();
-            let found = model.evaluate(
+            let found = model.holding_contract(
                 &AreaRatio,
+                &axioval_rules::reference::AreaRatio,
                 &rule(
                     ID,
                     kind("storey"),
                     super::super::area_ratio::parameters_fixture(0.5),
                 ),
+                |_| {},
+                super::super::RATIOS,
+                1e-12,
             );
             let (model, _) = super::super::area_ratio::storeys_fixture();
             let rewritten = model.evaluate_measured(
@@ -1951,6 +2064,249 @@ mod generated {
             });
             let (model, rectangles) = fixture(&spaces);
             run(model, rectangles, &PlanAreaRange, &rule(ID, kind("storey"), parameters));
+        }
+    }
+}
+
+/// `area-ratio` held to the implementation it replaced on generated
+/// storeys and rooms.
+mod generated_ratios {
+    use super::*;
+    use axioval_ir::contract::{ComparisonOperator, Selector, TableRow};
+    use axioval_ir::{PropertyValue, QuantityDimension};
+    use common::{boolean, property, strings};
+    use proptest::collection::vec;
+    use proptest::prelude::*;
+
+    const ID: &str = "axioval:capability.area-ratio";
+
+    /// One member: a space (0) or a slab (1), its width and depth in dm (0
+    /// is bodiless), its slack in m², whether it is measured, its storey (0
+    /// to 2, 3 none), whether it is picked (0 surely, 1 undecided, 2 not)
+    /// and the area it states (0 none, 1 an area, 2 a text).
+    type Member = (u32, u32, u32, u32, bool, u32, u32, u32);
+
+    fn member() -> impl Strategy<Value = Member> {
+        (
+            0u32..2,
+            0u32..60,
+            0u32..60,
+            0u32..3,
+            any::<bool>(),
+            0u32..4,
+            0u32..3,
+            0u32..3,
+        )
+    }
+
+    fn fixture(members: &[Member], storeys: bool) -> (Model, Rectangles) {
+        let mut model = Model::default()
+            .object("s0", "storey")
+            .object("s1", "storey")
+            .object("s2", "storey");
+        let mut rectangles = Rectangles::default();
+        if storeys {
+            for storey in ["s0", "s1"] {
+                rectangles = rectangles.with(storey, [0.0, 0.0, 10.0, 10.0], 0.0);
+            }
+        }
+        for (index, &(kind, width, depth, slack, measured, storey, picked, stated)) in
+            members.iter().enumerate()
+        {
+            let local = format!("m{index}");
+            model = model.object(&local, if kind == 0 { "space" } else { "slab" });
+            if storey < 3 {
+                model = model.edge("contains", &format!("s{storey}"), &local);
+            }
+            match picked {
+                0 => model = model.text(&local, "Pset", "Picked", "yes"),
+                1 => model = model.unreadable(&local),
+                _ => {}
+            }
+            match stated {
+                1 => {
+                    model = model.value(
+                        &local,
+                        "Qto",
+                        "Area",
+                        PropertyValue::Quantity {
+                            value: f64::from(width * depth) / 100.0,
+                            dimension: QuantityDimension::Area,
+                        },
+                    );
+                }
+                2 => model = model.text(&local, "Qto", "Area", "large"),
+                _ => {}
+            }
+            if measured {
+                rectangles = rectangles.with(
+                    &local,
+                    [0.0, 0.0, f64::from(width) / 10.0, f64::from(depth) / 10.0],
+                    f64::from(slack),
+                );
+            }
+        }
+        (model, rectangles)
+    }
+
+    fn picked(kind: &str) -> Selector {
+        Selector::AllOf {
+            operands: vec![
+                common::kind(kind),
+                Selector::property(
+                    Some("Pset".into()),
+                    "Picked",
+                    ComparisonOperator::Exists,
+                    None,
+                ),
+            ],
+        }
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(64))]
+
+        #[test]
+        fn generated_ratios_hold_parity(
+            members in vec(member(), 0..8),
+            minimum in proptest::option::of(0u32..15),
+            maximum in proptest::option::of(0u32..15),
+            denominator in 0u32..3,
+            stated in 0u32..3,
+            empty in proptest::option::of(any::<bool>()),
+            path in any::<bool>(),
+            storeys in any::<bool>(),
+        ) {
+            let mut parameters = vec![("numerator_selector", selector(picked("space")))];
+            if let Some(minimum) = minimum {
+                parameters.push(("minimum", number(f64::from(minimum) / 10.0)));
+            }
+            if let Some(maximum) = maximum {
+                let low = minimum.unwrap_or(0);
+                parameters.push(("maximum", number(f64::from(low + maximum) / 10.0)));
+            }
+            match denominator {
+                1 => parameters.push(("denominator_selector", selector(common::kind("slab")))),
+                2 => parameters.push(("denominator_selector", selector(picked("slab")))),
+                _ => {}
+            }
+            match stated {
+                1 => parameters.push(("numerator_property", property(Some("Qto"), "Area"))),
+                2 => parameters.push(("denominator_property", property(Some("Qto"), "Area"))),
+                _ => {}
+            }
+            if let Some(empty) = empty {
+                parameters.push(("empty_numerator_finding", boolean(empty)));
+            }
+            parameters.push(if path {
+                ("path", strings(&["contains:forward"]))
+            } else {
+                ("relationship", string("contains"))
+            });
+            let (model, rectangles) = fixture(&members, storeys);
+            run(model, rectangles, &AreaRatio, &rule(ID, kind("storey"), parameters));
+        }
+
+        #[test]
+        fn generated_light_areas_hold_parity(
+            windows in vec((0u32..4, 0u32..4, 0u32..4, 0u32..3), 0..5),
+            rows in vec((0u32..3, 0u32..4, 0u32..4, 1u32..20), 0..3),
+            frame in proptest::option::of(0u32..16),
+            tolerance in proptest::option::of(0u32..3),
+            typed in any::<bool>(),
+            minimum in 0u32..5,
+        ) {
+            // Each window: its stated light area (0 none, 1 an area, 2 a
+            // larger one, 3 a text), its width and height in half metres
+            // (0 unstated) and its type name (0 none, 1 `Casement`, 2
+            // `Fixed`).
+            let mut model = Model::default().object("room", "space");
+            let rectangles = Rectangles::default().with("room", [0.0, 0.0, 4.0, 5.0], 0.0);
+            let metres = |value: f64| PropertyValue::Quantity {
+                value,
+                dimension: QuantityDimension::Length,
+            };
+            for (index, &(light, width, height, name)) in windows.iter().enumerate() {
+                let window = format!("w{index}");
+                let kind_object = format!("t{index}");
+                model = model
+                    .object(&window, "window")
+                    .object(&kind_object, "windowType")
+                    .edge("opens", "room", &window)
+                    .edge("typed", &window, &kind_object);
+                if width > 0 {
+                    model = model.value(&window, "Attr", "Width", metres(f64::from(width) / 2.0));
+                }
+                if height > 0 {
+                    model = model.value(&window, "Attr", "Height", metres(f64::from(height) / 2.0));
+                }
+                let area = |value: f64| PropertyValue::Quantity {
+                    value,
+                    dimension: QuantityDimension::Area,
+                };
+                match light {
+                    1 => model = model.value(&window, "Pset", "LightArea", area(0.25)),
+                    2 => model = model.value(&window, "Pset", "LightArea", area(9.0)),
+                    3 => model = model.text(&window, "Pset", "LightArea", "bright"),
+                    _ => {}
+                }
+                match name {
+                    1 => model = model.text(&kind_object, "Attr", "Name", "Casement"),
+                    2 => model = model.text(&kind_object, "Attr", "Name", "Fixed"),
+                    _ => {}
+                }
+            }
+            let quantity = |value: f64, unit: &str| ParameterValue::Quantity {
+                value,
+                unit: unit.into(),
+            };
+            let table: Vec<TableRow> = rows
+                .iter()
+                .map(|&(pattern, width, height, light)| {
+                    let (width, height) = (f64::from(width + 1) * 500.0, f64::from(height + 1) * 500.0);
+                    let mut cells = TableRow::new();
+                    match pattern {
+                        1 => {
+                            cells.insert("type".into(), string("Case*"));
+                        }
+                        2 => {
+                            cells.insert("type".into(), string("Fixed"));
+                        }
+                        _ => {}
+                    }
+                    cells.insert("width".into(), quantity(width, "mm"));
+                    cells.insert("height".into(), quantity(height, "mm"));
+                    let most = width * height / 1e6;
+                    cells.insert(
+                        "light_area".into(),
+                        quantity(most * f64::from(light) / 32.0, "m2"),
+                    );
+                    cells
+                })
+                .collect();
+            let mut parameters = vec![
+                ("numerator_selector", selector(common::kind("window"))),
+                ("numerator_derivation", string("light-area")),
+                ("numerator_property", property(Some("Pset"), "LightArea")),
+                ("overall_width", property(Some("Attr"), "Width")),
+                ("overall_height", property(Some("Attr"), "Height")),
+                ("minimum", number(f64::from(minimum) / 40.0)),
+                ("relationship", string("opens")),
+            ];
+            if !table.is_empty() {
+                parameters.push(("light_area_table", ParameterValue::Table { value: table }));
+                if let Some(tolerance) = tolerance {
+                    parameters.push(("light_size_tolerance", quantity(f64::from(tolerance) * 100.0, "mm")));
+                }
+            }
+            if let Some(frame) = frame {
+                parameters.push(("frame_width", quantity(f64::from(frame) / 64.0, "m")));
+            }
+            if typed {
+                parameters.push(("light_type", property(Some("Attr"), "Name")));
+                parameters.push(("light_type_path", strings(&["typed"])));
+            }
+            run(model, rectangles, &AreaRatio, &rule(ID, kind("space"), parameters));
         }
     }
 }

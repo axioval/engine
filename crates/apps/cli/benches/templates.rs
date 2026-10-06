@@ -112,6 +112,11 @@ const PAIRS: &[Pair] = &[
         case: "shelving",
         reference: |registry| registry.replace(axioval::rules::reference::ShelfCapacity),
     },
+    Pair {
+        capability: "axioval:capability.area-ratio",
+        case: "storeys",
+        reference: |registry| registry.replace(axioval::rules::reference::AreaRatio),
+    },
 ];
 
 /// Warm-up runs per side before measuring.

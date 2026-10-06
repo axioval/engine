@@ -23,7 +23,9 @@ and `property-predicate` is the first of the generic judges
 is the first deciding per source or for the project
 ([#290](https://github.com/axioval/engine/issues/290)); `shelf-capacity` is the
 first whose values take the rule's selectors
-([#289](https://github.com/axioval/engine/issues/289)).
+([#289](https://github.com/axioval/engine/issues/289)); `area-ratio` is the
+first over two populations and a derived ratio
+([#290](https://github.com/axioval/engine/issues/290)).
 
 ## The outside contract
 
@@ -159,7 +161,7 @@ still decides; a denominator surely zero leaves the object open with
 `zero`. A form with derived values is not forked (its requirement, for the
 catalogue, states a ratio as a division and a difference as a
 subtraction); one with further populations forks each into an aggregate
-along the same path, filtered by its selector.
+along the same path, filtered by its selector. `area-ratio` runs on both;
 `tests/template_features.rs` holds them to small templates of their own.
 
 **Member checks.** `Members::checks` judge each member of the first
@@ -172,8 +174,8 @@ value that cannot be read leaves the member open (`open`, `{why}`). A
 member found is a finding on the member relating the anchor, and one left
 open is open, each reported once however many anchors reach it; once the
 value `before` is read, an anchor with a member found is open as invalid
-evidence (`failed`: `{failed}` how many, `{first}` the first): a light
-area stated larger than its window, say.
+evidence (`failed`: `{failed}` how many, `{first}` the first). A light
+area stated larger than its window is such a check of `area-ratio`.
 
 `Members::every_when_unstated` reads an unstated selector parameter as
 every object (`Selector::All`) rather than refusing the rule.
@@ -439,6 +441,46 @@ Messages show the length's upper end and the minimum to three decimals
 the access index and each space's shelving for the run, so both values
 read one request per space ([Template performance](./performance.md)).
 
+### `area-ratio`
+
+| Form | When | Values | Decision |
+| --- | --- | --- | --- |
+| light areas over members | `numerator_derivation`, `denominator_selector` | `reached`, `null` where `empty_numerator_finding` holds and the anchor reaches no numerator member; `numerator` = the sum over the numerator's members of `light_area;…`; `stated_count`, `table_count`, `frame_count` = the sums of `light_step;…;step=stated\|table\|frame`; `denominator` = the sum over the denominator's members of `ratio_area;property=@denominator_property;measure=@denominator_measure;otherwise=@measure` | `ratio` = `numerator / denominator` (`Derived::Ratio`) within `minimum` and `maximum`, no rounding, graded |
+| light areas over the anchor | `numerator_derivation` | the same, `denominator` the anchor's own `ratio_area;…` | the same |
+| members | `denominator_selector` | `reached`; `numerator` = the sum of `ratio_area;property=@numerator_property;measure=@numerator_measure;otherwise=@measure`; `denominator` as above | the same |
+| own | always | `reached`, `numerator`, the anchor's own `denominator` | the same |
+
+`light_area`, `light_size` and `light_step` name the light-area chain as
+the rule declares it (`stated=@numerator_property;overall_width=@overall_width;…;frame_width=@frame_width`),
+each key the rule's parameter of that name; the rule's table and property
+references bind as stated. The members are the `numerator_selector`
+objects the rule's traversal reaches, and the `denominator_selector`
+objects (`Members::more`); any undecided one leaves the anchor open with
+`{undecided} related object(s) {relation} cannot be assigned` before
+anything is read (`UndecidedMembers::Open`). A finding relates the
+numerator's members (`members:numerator_selector`) and reads
+`{noun} ratio is {ratio:area} ({numerator:least2} m² of {denominator:least2} m²); required {bound:plain}`,
+in the light-area forms followed by `{provenance}` (`; light areas: 1
+stated, 1 from the light-area table`, composed of texts over the step
+counts with `Condition::All` and `Condition::Not`); `noun` is `plan area`,
+`facade area`, or `facade area to plan area` and the reverse, by the
+measures. A denominator surely zero leaves the anchor open with `the
+denominator has no {bottom}`. In the light-area forms a member check
+(`before` the numerator) compares a stated light area
+(`light_area;…;read=stated`, none where another step gave it) with the
+member's overall area (`read=overall`), within four units in the last
+place: `light area {light:area} m² ({numerator_property}) is larger than
+the overall area {overall:area} m² ({overall_width} {width:area} m ×
+{overall_height} {height:area} m)`, the anchor open with `{failed}
+member(s), first {first}, state a light area larger than the element`; an
+overall size that cannot be read leaves the member open (`the light area
+cannot be compared with the overall area: {why}`). The declaration keeps
+the capability's order and words: the light-area parameters are refused
+without the mode (`requires`), the mode's own checks are the light-area
+chain's (`arguments`, `light_area::check_arguments`), and a facade measure
+does not combine with it (`excludes`). The table `ratios` holds
+`numerator_area`, `denominator_area` and `ratio` (a plain number).
+
 ## Binding and running a rule
 
 The rules crate's `templates` module runs a template
@@ -664,6 +706,17 @@ the linear-quantity service unable to measure, so they hold the
 refusals, not the layout); and the fork, an `expression` rule passing the
 rule's selectors (`doors=@door_selector`) and reaching the template's
 verdicts, compared uncounted (D1).
+
+`area-ratio` is held to `area_ratio/reference.rs`
+(`axioval_rules::reference::AreaRatio`) on every fixture of
+`plan_area.rs` and `storey_metrics.rs` under `Parity::contract()`, the
+`ratios` table's values included; by generated storeys of spaces and
+slabs of random footprints, slack, statements and membership under random
+bounds, populations, stated sides, empty-numerator findings and
+traversals, and generated rooms of windows of random stated light areas,
+sizes, type names, light-area rows, tolerances and frame allowances; and
+by the `area-ratio` rules of the `storeys` case, recorded before the
+switch, tables included. It is never forked (D21, D22).
 
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the

@@ -6,11 +6,18 @@
 //! ratio's traversal, population and interval judgement are unchanged, and
 //! only where each member's area comes from differs.
 
-use axioval_engine::{
-    ColumnKind, NotEvaluatedReason, ParameterDescriptor, ParameterType, RuleContext, TableColumn,
-};
-use axioval_ir::{Evidence, Object, ObjectId, PropertyValue, QuantityDimension};
+use std::collections::BTreeMap;
 
+use axioval_engine::{
+    Citation, ColumnKind, CompiledRule, MeasuredMemo, MeasuredProvider, Measurement,
+    NotEvaluatedReason, ParameterDescriptor, ParameterType, PropertyResolutionError, RuleContext,
+    TableColumn,
+};
+use axioval_ir::contract::{ParameterValue, Selector, Severity};
+use axioval_ir::measured::{MeasuredArgument, MeasuredCall};
+use axioval_ir::{Evidence, Object, ObjectId, PropertyValue, QuantityDimension, RuleId};
+
+use crate::measured_kinds::{interval, refused};
 use crate::support::table::{Matched, RowSelection, RowTest, TextPattern, match_rows};
 use crate::support::{
     Parameters, PropertyRef, Traversal, Unavailable, display, invalid, resolve, si_quantity,
@@ -28,6 +35,7 @@ const COLUMNS: &[TableColumn] = &[
 ];
 
 /// Parameters that only this mode reads.
+#[cfg(feature = "parity-reference")]
 const OWN: [&str; 7] = [
     "overall_width",
     "overall_height",
@@ -114,6 +122,7 @@ fn cell(
 impl<'a> LightArea<'a> {
     /// The declared chain, or `None` when `numerator_derivation` is not
     /// `light-area`; `stated` is the rule's `numerator_property`, step one.
+    #[cfg(feature = "parity-reference")]
     pub(crate) fn parse(
         parameters: &Parameters<'a>,
         stated: Option<PropertyRef<'a>>,
@@ -136,6 +145,15 @@ impl<'a> LightArea<'a> {
                 )));
             }
         }
+        Self::declared(parameters, stated).map(Some)
+    }
+
+    /// The chain the mode's own parameters declare, read and refused in
+    /// the order and words of [`Self::parse`]; `stated` is step one.
+    pub(crate) fn declared(
+        parameters: &Parameters<'a>,
+        stated: Option<PropertyRef<'a>>,
+    ) -> Result<Self, Unavailable> {
         let width = parameters.property("overall_width")?;
         let height = parameters.property("overall_height")?;
         let (Some(width), Some(height)) = (width, height) else {
@@ -197,7 +215,7 @@ impl<'a> LightArea<'a> {
                 "a light-area row matches `type`, but the rule declares no `light_type`",
             ));
         }
-        Ok(Some(Self {
+        Ok(Self {
             stated,
             width,
             height,
@@ -205,7 +223,7 @@ impl<'a> LightArea<'a> {
             kind,
             tolerance,
             frame,
-        }))
+        })
     }
 }
 
@@ -219,14 +237,18 @@ pub(crate) enum Origin {
 
 /// One member's light area, with the evidence it rests on and, for a stated
 /// area, how it compares with the member's overall area.
+#[derive(Clone)]
 struct Derived {
     area: f64,
     step: Origin,
     evidence: Vec<Evidence>,
+    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
     check: Check,
 }
 
 /// The comparison of a stated light area with the overall area.
+#[derive(Clone)]
+#[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
 enum Check {
     /// Within the overall area, or derived and so within it by construction.
     Within,
@@ -535,6 +557,7 @@ impl LightArea<'_> {
     ///
     /// Every member is derived even after one fails, so that each stated
     /// area larger than its element is reported.
+    #[cfg(feature = "parity-reference")]
     pub(crate) fn sum(&self, context: &RuleContext<'_>, members: &[ObjectId]) -> Summed {
         let mut summed = Summed::default();
         for id in members {
@@ -578,6 +601,7 @@ impl LightArea<'_> {
 }
 
 /// The light areas of one anchor's members.
+#[cfg(feature = "parity-reference")]
 #[derive(Default)]
 pub(crate) struct Summed {
     pub(crate) lower: f64,
@@ -593,6 +617,7 @@ pub(crate) struct Summed {
     steps: [usize; 3],
 }
 
+#[cfg(feature = "parity-reference")]
 impl Summed {
     /// The steps that produced the areas, for a finding message.
     pub(crate) fn provenance(&self) -> String {
@@ -608,4 +633,248 @@ impl Summed {
             format!("; light areas: {}", parts.join(", "))
         }
     }
+}
+
+/// The rule a light-area value's arguments stand for: the parameters it
+/// names, under the keys it names them by, which are the mode's own
+/// parameter names (`overall_width=@overall_width`), so the chain is read
+/// and refused in the mode's words.
+fn synthesised(parameters: BTreeMap<String, ParameterValue>) -> CompiledRule {
+    CompiledRule {
+        id: RuleId::new("axioval-measured-light-area").expect("a valid rule id"),
+        capability: "axioval:capability.area-ratio".into(),
+        severity: Severity::Info,
+        selector: Selector::All,
+        parameters,
+    }
+}
+
+/// Checks the rule parameters a light-area value names, as the rule states
+/// them and keyed by the value's keys, as the mode reads its declaration:
+/// what [`LightArea::declared`] refuses, in its order and words.
+///
+/// # Errors
+///
+/// The declaration's refusal.
+pub(crate) fn check_arguments(
+    arguments: &BTreeMap<String, ParameterValue>,
+) -> Result<(), Unavailable> {
+    let rule = synthesised(arguments.clone());
+    let parameters = Parameters(&rule);
+    let stated = parameters.property("stated")?;
+    LightArea::declared(&parameters, stated).map(|_| ())
+}
+
+/// The rule parameters a bound light-area call holds, as a rule states
+/// them, keyed by the call's keys: everything but what it reads.
+fn stated_arguments(call: &MeasuredCall) -> BTreeMap<String, ParameterValue> {
+    call.arguments
+        .iter()
+        .filter_map(|(key, argument)| {
+            let value = match argument {
+                MeasuredArgument::Property { set, name } => ParameterValue::PropertyReference {
+                    property: name.clone(),
+                    property_set: set.clone(),
+                },
+                MeasuredArgument::Table(rows) => ParameterValue::Table {
+                    value: rows.clone(),
+                },
+                MeasuredArgument::Length(metres) => ParameterValue::Quantity {
+                    value: *metres,
+                    unit: "m".into(),
+                },
+                MeasuredArgument::Path(steps) => ParameterValue::StringList {
+                    value: steps.clone(),
+                },
+                _ => return None,
+            };
+            Some(((*key).to_owned(), value))
+        })
+        .collect()
+}
+
+/// The memo key of one object's light area under one chain.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+struct AreaKey;
+
+/// The memo key of one object's overall size under one chain.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+struct SizeKey;
+
+/// One object's light area, with its step's record: what every read of it
+/// shares.
+#[derive(Clone)]
+struct Lit {
+    area: f64,
+    step: Origin,
+    evidence: Vec<Evidence>,
+    record: Evidence,
+}
+
+/// Measures `light_area`, `light_size` and `light_step`: the light area of
+/// an opening as the `light-area` mode derives it, the overall size it is
+/// compared with, and which step gave it.
+pub(crate) struct LightMeasures;
+
+const LIGHT_AREA: &str = "light_area";
+const LIGHT_SIZE: &str = "light_size";
+const LIGHT_STEP: &str = "light_step";
+
+impl LightMeasures {
+    /// The light area of `object` under the chain `call` states, derived
+    /// once per object and chain for the run.
+    fn lit(
+        call: &MeasuredCall,
+        object: &ObjectId,
+        context: &RuleContext<'_>,
+    ) -> Result<Lit, Unavailable> {
+        let arguments = stated_arguments(call);
+        let key = format!("{arguments:?}");
+        MeasuredMemo::of(context.services, (AreaKey, object.clone(), key), || {
+            let rule = synthesised(arguments);
+            let parameters = Parameters(&rule);
+            let chain = LightArea::declared(&parameters, parameters.property("stated")?)?;
+            let member = context
+                .project
+                .object(object)
+                .ok_or_else(|| invalid(format!("{object} is not in the project")))?;
+            let derived = chain.derive(context, member)?;
+            Ok(Lit {
+                area: derived.area,
+                step: derived.step,
+                evidence: derived.evidence,
+                record: chain.record(object, derived.step),
+            })
+        })
+    }
+
+    /// The overall width and height of `object`, or why they are not known.
+    fn size(
+        call: &MeasuredCall,
+        object: &ObjectId,
+        context: &RuleContext<'_>,
+    ) -> Result<(f64, f64, Vec<Evidence>), Unavailable> {
+        let arguments = stated_arguments(call);
+        let key = format!("{arguments:?}");
+        MeasuredMemo::of(context.services, (SizeKey, object.clone(), key), || {
+            let rule = synthesised(arguments);
+            let parameters = Parameters(&rule);
+            let chain = LightArea::declared(&parameters, parameters.property("stated")?)?;
+            let member = context
+                .project
+                .object(object)
+                .ok_or_else(|| invalid(format!("{object} is not in the project")))?;
+            match chain.size(context, member) {
+                Ok(Ok(size)) => Ok(size),
+                // Unknown, however it is unknown: the comparison cannot be made.
+                Ok(Err(why)) | Err((_, why)) => Err((NotEvaluatedReason::IncompleteEvidence, why)),
+            }
+        })
+    }
+}
+
+/// Whether every evidence entry is exact.
+fn exact(evidence: &[Evidence]) -> bool {
+    evidence.iter().all(|evidence| evidence.exact)
+}
+
+impl MeasuredProvider for LightMeasures {
+    fn names(&self) -> &'static [&'static str] {
+        &[LIGHT_AREA, LIGHT_SIZE, LIGHT_STEP]
+    }
+
+    /// A light area cites the record of the step that produced it beside
+    /// its value, as the capability's evidence recorded each member's step.
+    fn measure_cited(
+        &self,
+        call: &MeasuredCall,
+        object: &ObjectId,
+        context: &RuleContext<'_>,
+    ) -> Result<(Measurement, Citation), PropertyResolutionError> {
+        let measurement = self.measure(call, object, context)?;
+        let cites = call.name() == LIGHT_AREA
+            && matches!(call.choice("read"), None | Some("area" | "stated"))
+            && !matches!(measurement, Measurement::Absent { .. });
+        let citation = match Self::lit(call, object, context) {
+            Ok(lit) if cites => Citation {
+                related: Vec::new(),
+                evidence: vec![lit.record],
+            },
+            _ => Citation::default(),
+        };
+        Ok((measurement, citation))
+    }
+
+    fn measure(
+        &self,
+        call: &MeasuredCall,
+        object: &ObjectId,
+        context: &RuleContext<'_>,
+    ) -> Result<Measurement, PropertyResolutionError> {
+        let refused = refused(call.name(), object);
+        match call.name() {
+            LIGHT_SIZE => {
+                let (width, height, evidence) =
+                    Self::size(call, object, context).map_err(refused)?;
+                let value = if call.choice("side") == Some("height") {
+                    height
+                } else {
+                    width
+                };
+                Ok(interval(
+                    (value, value),
+                    Some(QuantityDimension::Length),
+                    exact(&evidence),
+                    format!("{LIGHT_SIZE}:{object}"),
+                ))
+            }
+            LIGHT_STEP => {
+                let lit = Self::lit(call, object, context).map_err(refused)?;
+                let counted = match (call.choice("step"), lit.step) {
+                    (Some("stated"), Origin::Stated)
+                    | (Some("table"), Origin::Table(_))
+                    | (Some("frame"), Origin::Frame) => 1.0,
+                    _ => 0.0,
+                };
+                Ok(interval(
+                    (counted, counted),
+                    None,
+                    true,
+                    format!("{LIGHT_STEP}:{object}"),
+                ))
+            }
+            _ => match call.choice("read") {
+                Some("overall") => {
+                    let (width, height, evidence) =
+                        Self::size(call, object, context).map_err(refused)?;
+                    let area = width * height;
+                    Ok(interval(
+                        (area, area),
+                        Some(QuantityDimension::Area),
+                        exact(&evidence),
+                        format!("{LIGHT_SIZE}:{object}"),
+                    ))
+                }
+                Some("stated") => match Self::lit(call, object, context) {
+                    Ok(lit) if lit.step == Origin::Stated => Ok(light(&lit)),
+                    // Taken from another step, or from none: not stated.
+                    _ => Ok(Measurement::Absent {
+                        locator: format!("{LIGHT_AREA}:{object}:not-stated"),
+                    }),
+                },
+                _ => Ok(light(&Self::lit(call, object, context).map_err(refused)?)),
+            },
+        }
+    }
+}
+
+/// A light area, exact where everything it rests on is, the record of its
+/// step among that; [`LightMeasures::measure_cited`] cites the record.
+fn light(lit: &Lit) -> Measurement {
+    interval(
+        (lit.area, lit.area),
+        Some(QuantityDimension::Area),
+        exact(&lit.evidence) && lit.record.exact,
+        format!("{LIGHT_AREA}:{}", lit.record.locator),
+    )
 }

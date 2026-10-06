@@ -5,6 +5,7 @@ use axioval_engine::{CapabilityRegistry, EngineError};
 
 mod accessible_route;
 mod allowed_profile;
+mod area_ratio;
 mod body_extent;
 mod body_facts;
 pub mod catalogue;
@@ -101,6 +102,7 @@ mod xsd_pattern;
 
 pub use accessible_route::AccessibleRoute;
 pub use allowed_profile::AllowedProfile;
+pub use area_ratio::AreaRatio;
 pub use body_extent::BodyExtent;
 pub use centre_line_distance::CentreLineDistance;
 pub use clash::Clash;
@@ -148,7 +150,7 @@ pub use opening_area::OpeningArea;
 pub use opening_spaces::OpeningSpaces;
 pub use opening_zone::OpeningZone;
 pub use parking_bay::ParkingBay;
-pub use plan_area::{AreaRatio, PlanAreaRange, PlanCoverage};
+pub use plan_area::{PlanAreaRange, PlanCoverage};
 pub use property_comparison::PropertyComparison;
 pub use property_predicate::PropertyPredicate;
 pub use property_requirements::PropertyRequirements;
@@ -180,6 +182,7 @@ pub use wall_spacing::WallSpacing;
 /// Never register one: the capability id resolves to the template.
 #[cfg(feature = "parity-reference")]
 pub mod reference {
+    pub use crate::area_ratio::reference::AreaRatio;
     pub use crate::body_extent::reference::BodyExtent;
     pub use crate::level_spacing::reference::LevelSpacing;
     pub use crate::object_count::reference::ObjectCount;
@@ -291,6 +294,8 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(triangle_count::TriangleMeasures))
         .and_then(|registry| registry.register_measured(body_extent::ExtentMeasures))
         .and_then(|registry| registry.register_measured(plan_area::AreaMeasures))
+        .and_then(|registry| registry.register_measured(area_ratio::RatioMeasures))
+        .and_then(|registry| registry.register_measured(light_area::LightMeasures))
         .and_then(|registry| registry.register_measured(level_spacing::LevelMeasures))
         .and_then(|registry| registry.register_measured(slab_stack::StackMeasures))
         .and_then(|registry| registry.register_measured(shelf_capacity::ShelfMeasures))

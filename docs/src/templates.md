@@ -185,16 +185,26 @@ The rules crate's `templates` module runs a template
    `{target_property.name}`) is filled and every `parameter` read of a
    constant folded into a literal. The result is the rule's plan: the same
    expressions an equivalent hand-written `expression` rule would hold.
+   Binding is a pure function of the template and the rule's parameters,
+   so each capability keeps the plans it bound (`Plans`, at most 64, by
+   the rule's parameters) and a rule binds once, however many runs it is
+   in (see [Template performance](./performance.md)).
 2. **Check the services**, and leave the rule open without them.
 3. **Select** the objects as every capability does (`select_objects`).
-4. **Read the values** of each object with the shared evaluator, through
-   the same leaves an `expression` rule reads (`ObjectLeaves`): stated
-   properties through property resolution and concept binding, measured
-   values through the registered providers. The first value that cannot be
-   read leaves the object not evaluated, for the reason its leaf gives and
-   worded as the measured value refused it (`{why}`); a `null` value is a
-   missing-information finding (`absent`); a value not of the expected
-   kind is invalid evidence (`mismatch`).
+4. **Read the values** of each object through the same leaves an
+   `expression` rule reads (`ObjectLeaves`): stated properties through
+   property resolution and concept binding, measured values through the
+   registered providers. A value that is one plain property read is read
+   straight from the leaf (spending the same evaluation budget); any other
+   expression goes through the shared evaluator. A value that is one
+   measured read is measured for a chunk of selected objects at once
+   through the run's `MeasuredValues`, the same value and evidence the
+   run's resolver answers, and each object takes its own from the leaf.
+   The first value that cannot be read leaves the object not evaluated,
+   for the reason its leaf gives and worded as the measured value refused
+   it (`{why}`); a `null` value is a missing-information finding
+   (`absent`); a value not of the expected kind is invalid evidence
+   (`mismatch`).
 5. **Decide** and word the outcome with the form's messages.
 
 ### Messages
@@ -364,15 +374,14 @@ addition data the runner interprets, never code per capability:
 
 ## Performance
 
-A template must stay within the budget of the code it replaces (#279).
-Nothing here precludes the plan #279 compiles: binding already folds the
-parameters into constants and fills every slot, so a plan is built once per
-rule and evaluated per object. Still to come there: caching the bound plan
-per compiled rule instead of per evaluation, and memoizing measured values
-per object and call for the run. `body-extent` reads three measured values
-per object (`body_extent` and both `body_position` ends) where the
-capability measured once; memoizing the directional extent per object and
-axis in the provider brings it back to one service call.
+A template must stay within the budget of the code it replaces: at most
+1.25 times its run time and 1.5 times its peak heap. How the runner keeps
+there, and the benchmark that holds every rebuild to it, are in
+[Template performance](./performance.md). `body-extent` reads three
+measured values per object (`body_extent` and both `body_position` ends)
+where the capability measured once; its provider measures each body's
+frame once and its extent once per axis for the whole run, so the three
+values, and every rule reading them, share one measurement.
 
 ## Rebuilding a capability as a template
 
@@ -398,4 +407,9 @@ axis in the provider brings it back to one service call.
    switch and compare. Record any divergence with its reason and decision.
 7. Bless the catalogue (`AXIOVAL_BLESS=1 cargo test -p axioval-rules --test
    catalogue`); never the descriptors.
-8. Document the template here and in the capability's section.
+8. Add the capability to the template benchmark (`PAIRS` in
+   `crates/apps/cli/benches/templates.rs`: its id, its parity case and its
+   reference) and run its gate, `python3 scripts/bench.py gate`; the
+   rebuild is done only within the budget (see
+   [Template performance](./performance.md)).
+9. Document the template here and in the capability's section.

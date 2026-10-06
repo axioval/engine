@@ -41,6 +41,7 @@
 - [Command line](./cli.md)
 - [Capability migration](./migration.md)
 - [Parity harness](./parity.md)
+- [Template performance](./performance.md)
 - [Not-evaluated inventory](./not-evaluated-inventory.md)
 - [Compatibility ledger](./compatibility.md)
 - [Contributing](./contributing.md)

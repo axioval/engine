@@ -200,6 +200,7 @@ pub mod reference {
     pub use crate::level_spacing::reference::LevelSpacing;
     pub use crate::light_well::reference::LightWell;
     pub use crate::object_count::reference::ObjectCount;
+    pub use crate::opening_area::reference::OpeningArea;
     pub use crate::plan_area::reference::PlanAreaRange;
     pub use crate::plan_coverage::reference::PlanCoverage;
     pub use crate::property_comparison::reference::PropertyComparison;

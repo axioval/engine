@@ -22410,7 +22410,584 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "opening-area",
+        "defaults": [
+          {
+            "parameter": "area_tolerance",
+            "value": {
+              "type": "quantity",
+              "value": 0.0,
+              "unit": "m2"
+            }
+          }
+        ],
+        "declaration": [
+          {
+            "kind": "required",
+            "parameter": "opening_path"
+          },
+          {
+            "kind": "path",
+            "parameter": "opening_path"
+          },
+          {
+            "kind": "kind",
+            "parameter": "opening_selector"
+          },
+          {
+            "kind": "required",
+            "parameter": "length_axis"
+          },
+          {
+            "kind": "required",
+            "parameter": "height_axis"
+          },
+          {
+            "kind": "arguments",
+            "when": [],
+            "value": "opening_count;path=@opening_path;length_axis=@length_axis;height_axis=@height_axis;minimum=@minimum_opening_area;openings=@opening_selector"
+          },
+          {
+            "kind": "required",
+            "parameter": "gross_area"
+          },
+          {
+            "kind": "required",
+            "parameter": "net_area"
+          },
+          {
+            "kind": "nonNegativeQuantity",
+            "parameter": "area_tolerance",
+            "dimension": "area",
+            "message": "`area_tolerance` is not a non-negative area"
+          }
+        ],
+        "texts": [
+          {
+            "name": "openings",
+            "when": {
+              "kind": "cites",
+              "value": "voided"
+            },
+            "text": "its openings ({voided:cited_ids}) cover {voided:m2} of its face"
+          },
+          {
+            "name": "openings",
+            "text": "it has no openings"
+          }
+        ],
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "gross",
+                "expression": {
+                  "kind": "property",
+                  "propertySet": "{gross_area.set}",
+                  "property": "{gross_area.name}"
+                },
+                "expect": "area",
+                "mismatch": "`{gross_area}` is {gross:stated}, not an area",
+                "refused": "`{gross_area}`: {why}"
+              },
+              {
+                "name": "net",
+                "expression": {
+                  "kind": "property",
+                  "propertySet": "{net_area.set}",
+                  "property": "{net_area.name}"
+                },
+                "expect": "area",
+                "mismatch": "`{net_area}` is {net:stated}, not an area",
+                "refused": "`{net_area}`: {why}"
+              },
+              {
+                "name": "agrees",
+                "expression": {
+                  "kind": "implies",
+                  "antecedent": {
+                    "kind": "or",
+                    "operands": [
+                      {
+                        "kind": "isDefined",
+                        "operand": {
+                          "kind": "property",
+                          "propertySet": "{gross_area.set}",
+                          "property": "{gross_area.name}"
+                        }
+                      },
+                      {
+                        "kind": "isDefined",
+                        "operand": {
+                          "kind": "property",
+                          "propertySet": "{net_area.set}",
+                          "property": "{net_area.name}"
+                        }
+                      }
+                    ],
+                    "label": "it states a side area"
+                  },
+                  "consequent": {
+                    "kind": "compare",
+                    "operator": "lessThanOrEquals",
+                    "left": {
+                      "kind": "abs",
+                      "operand": {
+                        "kind": "subtract",
+                        "left": {
+                          "kind": "property",
+                          "propertySet": "axioval:measured",
+                          "property": "opening_area;path=@opening_path;length_axis=@length_axis;height_axis=@height_axis;minimum=@minimum_opening_area;openings=@opening_selector"
+                        },
+                        "right": {
+                          "kind": "subtract",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "{gross_area.set}",
+                            "property": "{gross_area.name}"
+                          },
+                          "right": {
+                            "kind": "property",
+                            "propertySet": "{net_area.set}",
+                            "property": "{net_area.name}"
+                          },
+                          "label": "gross less net"
+                        }
+                      }
+                    },
+                    "right": {
+                      "kind": "add",
+                      "left": {
+                        "kind": "parameter",
+                        "name": "area_tolerance"
+                      },
+                      "right": {
+                        "kind": "multiply",
+                        "left": {
+                          "kind": "literal",
+                          "value": {
+                            "type": "number",
+                            "value": 1e-9
+                          }
+                        },
+                        "right": {
+                          "kind": "add",
+                          "left": {
+                            "kind": "add",
+                            "left": {
+                              "kind": "add",
+                              "left": {
+                                "kind": "literal",
+                                "value": {
+                                  "type": "quantity",
+                                  "value": 1.0,
+                                  "unit": "m2"
+                                }
+                              },
+                              "right": {
+                                "kind": "abs",
+                                "operand": {
+                                  "kind": "property",
+                                  "propertySet": "{gross_area.set}",
+                                  "property": "{gross_area.name}"
+                                }
+                              }
+                            },
+                            "right": {
+                              "kind": "abs",
+                              "operand": {
+                                "kind": "property",
+                                "propertySet": "{net_area.set}",
+                                "property": "{net_area.name}"
+                              }
+                            }
+                          },
+                          "right": {
+                            "kind": "property",
+                            "propertySet": "axioval:measured",
+                            "property": "opening_area;path=@opening_path;length_axis=@length_axis;height_axis=@height_axis;minimum=@minimum_opening_area;openings=@opening_selector"
+                          }
+                        },
+                        "label": "rounding allowance"
+                      }
+                    },
+                    "label": "its openings take the difference"
+                  }
+                }
+              },
+              {
+                "name": "voided",
+                "expression": {
+                  "kind": "property",
+                  "propertySet": "axioval:measured",
+                  "property": "opening_area;path=@opening_path;length_axis=@length_axis;height_axis=@height_axis;minimum=@minimum_opening_area;openings=@opening_selector"
+                }
+              },
+              {
+                "name": "expected",
+                "expression": {
+                  "kind": "subtract",
+                  "left": {
+                    "kind": "property",
+                    "propertySet": "{gross_area.set}",
+                    "property": "{gross_area.name}"
+                  },
+                  "right": {
+                    "kind": "property",
+                    "propertySet": "{net_area.set}",
+                    "property": "{net_area.name}"
+                  }
+                }
+              }
+            ],
+            "decision": {
+              "kind": "holds",
+              "value": "agrees"
+            },
+            "fail": "{openings}, but its gross side area {gross:m2} less its net side area {net:m2} is {expected:m2}; they must agree within {area_tolerance:m2}",
+            "undecided": "it states only one of `{gross_area}` and `{net_area}`",
+            "related": "voided"
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "implies",
+              "antecedent": {
+                "kind": "or",
+                "operands": [
+                  {
+                    "kind": "isDefined",
+                    "operand": {
+                      "kind": "property",
+                      "propertySet": "{gross_area.set}",
+                      "property": "{gross_area.name}"
+                    }
+                  },
+                  {
+                    "kind": "isDefined",
+                    "operand": {
+                      "kind": "property",
+                      "propertySet": "{net_area.set}",
+                      "property": "{net_area.name}"
+                    }
+                  }
+                ],
+                "label": "it states a side area"
+              },
+              "consequent": {
+                "kind": "compare",
+                "operator": "lessThanOrEquals",
+                "left": {
+                  "kind": "abs",
+                  "operand": {
+                    "kind": "subtract",
+                    "left": {
+                      "kind": "property",
+                      "propertySet": "axioval:measured",
+                      "property": "opening_area;path=@opening_path;length_axis=@length_axis;height_axis=@height_axis;minimum=@minimum_opening_area;openings=@opening_selector"
+                    },
+                    "right": {
+                      "kind": "subtract",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "{gross_area.set}",
+                        "property": "{gross_area.name}"
+                      },
+                      "right": {
+                        "kind": "property",
+                        "propertySet": "{net_area.set}",
+                        "property": "{net_area.name}"
+                      },
+                      "label": "gross less net"
+                    }
+                  }
+                },
+                "right": {
+                  "kind": "add",
+                  "left": {
+                    "kind": "parameter",
+                    "name": "area_tolerance"
+                  },
+                  "right": {
+                    "kind": "multiply",
+                    "left": {
+                      "kind": "literal",
+                      "value": {
+                        "type": "number",
+                        "value": 1e-9
+                      }
+                    },
+                    "right": {
+                      "kind": "add",
+                      "left": {
+                        "kind": "add",
+                        "left": {
+                          "kind": "add",
+                          "left": {
+                            "kind": "literal",
+                            "value": {
+                              "type": "quantity",
+                              "value": 1.0,
+                              "unit": "m2"
+                            }
+                          },
+                          "right": {
+                            "kind": "abs",
+                            "operand": {
+                              "kind": "property",
+                              "propertySet": "{gross_area.set}",
+                              "property": "{gross_area.name}"
+                            }
+                          }
+                        },
+                        "right": {
+                          "kind": "abs",
+                          "operand": {
+                            "kind": "property",
+                            "propertySet": "{net_area.set}",
+                            "property": "{net_area.name}"
+                          }
+                        }
+                      },
+                      "right": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "opening_area;path=@opening_path;length_axis=@length_axis;height_axis=@height_axis;minimum=@minimum_opening_area;openings=@opening_selector"
+                      }
+                    },
+                    "label": "rounding allowance"
+                  }
+                },
+                "label": "its openings take the difference"
+              }
+            },
+            "blocks": {
+              "type": "expression.implies",
+              "inputs": {
+                "antecedent": {
+                  "block": {
+                    "type": "expression.or",
+                    "label": "it states a side area",
+                    "inputs": {
+                      "operands": {
+                        "blocks": [
+                          {
+                            "type": "expression.isDefined",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.property",
+                                  "fields": {
+                                    "property": "{gross_area.name}",
+                                    "propertySet": "{gross_area.set}"
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          {
+                            "type": "expression.isDefined",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.property",
+                                  "fields": {
+                                    "property": "{net_area.name}",
+                                    "propertySet": "{net_area.set}"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                "consequent": {
+                  "block": {
+                    "type": "expression.compare",
+                    "label": "its openings take the difference",
+                    "fields": {
+                      "operator": "lessThanOrEquals"
+                    },
+                    "inputs": {
+                      "left": {
+                        "block": {
+                          "type": "expression.abs",
+                          "inputs": {
+                            "operand": {
+                              "block": {
+                                "type": "expression.subtract",
+                                "inputs": {
+                                  "left": {
+                                    "block": {
+                                      "type": "measured.opening_area",
+                                      "fields": {
+                                        "height_axis": "@height_axis",
+                                        "length_axis": "@length_axis",
+                                        "minimum": "@minimum_opening_area",
+                                        "openings": "@opening_selector",
+                                        "path": "@opening_path"
+                                      }
+                                    }
+                                  },
+                                  "right": {
+                                    "block": {
+                                      "type": "expression.subtract",
+                                      "label": "gross less net",
+                                      "inputs": {
+                                        "left": {
+                                          "block": {
+                                            "type": "expression.property",
+                                            "fields": {
+                                              "property": "{gross_area.name}",
+                                              "propertySet": "{gross_area.set}"
+                                            }
+                                          }
+                                        },
+                                        "right": {
+                                          "block": {
+                                            "type": "expression.property",
+                                            "fields": {
+                                              "property": "{net_area.name}",
+                                              "propertySet": "{net_area.set}"
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "right": {
+                        "block": {
+                          "type": "expression.add",
+                          "inputs": {
+                            "left": {
+                              "block": {
+                                "type": "expression.parameter",
+                                "fields": {
+                                  "name": "area_tolerance"
+                                }
+                              }
+                            },
+                            "right": {
+                              "block": {
+                                "type": "expression.multiply",
+                                "label": "rounding allowance",
+                                "inputs": {
+                                  "left": {
+                                    "block": {
+                                      "type": "expression.literal",
+                                      "fields": {
+                                        "value": {
+                                          "type": "number",
+                                          "value": 1e-9
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "right": {
+                                    "block": {
+                                      "type": "expression.add",
+                                      "inputs": {
+                                        "left": {
+                                          "block": {
+                                            "type": "expression.add",
+                                            "inputs": {
+                                              "left": {
+                                                "block": {
+                                                  "type": "expression.add",
+                                                  "inputs": {
+                                                    "left": {
+                                                      "block": {
+                                                        "type": "expression.literal",
+                                                        "fields": {
+                                                          "value": {
+                                                            "type": "quantity",
+                                                            "unit": "m2",
+                                                            "value": 1.0
+                                                          }
+                                                        }
+                                                      }
+                                                    },
+                                                    "right": {
+                                                      "block": {
+                                                        "type": "expression.abs",
+                                                        "inputs": {
+                                                          "operand": {
+                                                            "block": {
+                                                              "type": "expression.property",
+                                                              "fields": {
+                                                                "property": "{gross_area.name}",
+                                                                "propertySet": "{gross_area.set}"
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              },
+                                              "right": {
+                                                "block": {
+                                                  "type": "expression.abs",
+                                                  "inputs": {
+                                                    "operand": {
+                                                      "block": {
+                                                        "type": "expression.property",
+                                                        "fields": {
+                                                          "property": "{net_area.name}",
+                                                          "propertySet": "{net_area.set}"
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        "right": {
+                                          "block": {
+                                            "type": "measured.opening_area",
+                                            "fields": {
+                                              "height_axis": "@height_axis",
+                                              "length_axis": "@length_axis",
+                                              "minimum": "@minimum_opening_area",
+                                              "openings": "@opening_selector",
+                                              "path": "@opening_path"
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.opening-spaces",

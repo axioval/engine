@@ -3,7 +3,8 @@
 
 use super::face_area;
 use crate::counts::Population;
-use crate::opening_area::{Openings, area_tolerance, square_metres, voided};
+use crate::opening_area::reference::{area_tolerance, square_metres};
+use crate::opening_area::{Openings, voided};
 use crate::opening_zone::face::ROUNDING;
 use crate::selection::select_objects;
 use crate::support::{Parameters, Unavailable, finding};

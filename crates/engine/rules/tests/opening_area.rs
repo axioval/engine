@@ -163,7 +163,20 @@ fn check_with(model: Model, extra: Vec<(&'static str, ParameterValue)>) -> Capab
         ),
     ];
     parameters.extend(extra);
-    model.evaluate(&OpeningArea, &rule(ID, kind("wall"), parameters))
+    held(model, &rule(ID, kind("wall"), parameters))
+}
+
+/// The template's evaluation of `rule`, held to the implementation it
+/// replaced under `Parity::contract()`.
+fn held(model: Model, rule: &axioval_engine::CompiledRule) -> CapabilityEvaluation {
+    model.holding_contract(
+        &OpeningArea,
+        &axioval_rules::reference::OpeningArea,
+        rule,
+        |_| {},
+        &[],
+        0.0,
+    )
 }
 
 /// Two windows of 1.2 m² and a recess stopping short of the middle plane.
@@ -483,6 +496,252 @@ fn the_measured_opening_area_reaches_the_verdicts() {
         let voided = 15.0 - net;
         let agrees = (area.0 - voided).abs() <= 0.01 && (area.1 - voided).abs() <= 0.01;
         assert_eq!(agrees, !found, "net {net}: openings {area:?}");
+    }
+}
+
+/// A side area stated of every kind: an area, `null`, a length, a text, a
+/// value that cannot be read, or nothing, on either side; each wall judged
+/// as the capability judged it, word for word.
+#[test]
+fn side_areas_of_every_kind_are_judged_as_before() {
+    let stated: [Option<PropertyValue>; 6] = [
+        Some(quantity(15.0, QuantityDimension::Area)),
+        Some(PropertyValue::Null),
+        Some(length(15.0)),
+        Some(PropertyValue::String("15".into())),
+        Some(PropertyValue::Integer(15)),
+        None,
+    ];
+    let net = [
+        Some(quantity(13.8, QuantityDimension::Area)),
+        Some(PropertyValue::Null),
+        Some(length(1.0)),
+        None,
+    ];
+    let mut opened = 0;
+    for gross in &stated {
+        for net in &net {
+            for unreadable in [false, true] {
+                let mut model = window(
+                    extrusion(
+                        Model::default(),
+                        "w",
+                        "wall",
+                        [0.0; 3],
+                        [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+                        3.0,
+                        "rectangle",
+                        &[("XDim", 5.0), ("YDim", 0.2), ("PositionX", 2.5)],
+                    ),
+                    "o1",
+                    1.0,
+                );
+                if let Some(gross) = gross {
+                    model = model.value("w", QTO, "GrossSideArea", gross.clone());
+                }
+                if let Some(net) = net {
+                    model = model.value("w", QTO, "NetSideArea", net.clone());
+                }
+                if unreadable {
+                    model = model.unreadable_value("w", QTO, "GrossSideArea", "IFCAREAMEASURE");
+                }
+                let evaluation = check(model);
+                opened += evaluation.not_evaluated_outcomes().len();
+            }
+        }
+    }
+    assert!(opened > 0);
+}
+
+/// Every refused declaration is worded as the capability worded it, in
+/// its order.
+#[test]
+fn refused_declarations_are_worded_as_before() {
+    let square = |value: f64| ParameterValue::Quantity {
+        value,
+        unit: "m2".into(),
+    };
+    let base = || {
+        vec![
+            ("opening_path", strings(&["voids:forward"])),
+            ("length_axis", string("profile-x")),
+            ("height_axis", string("extrusion")),
+            ("gross_area", property(Some(QTO), "GrossSideArea")),
+            ("net_area", property(Some(QTO), "NetSideArea")),
+        ]
+    };
+    let without = |name: &str| {
+        base()
+            .into_iter()
+            .filter(|(key, _)| *key != name)
+            .collect::<Vec<_>>()
+    };
+    let with = |extra: Vec<(&'static str, ParameterValue)>| {
+        let mut parameters = base();
+        for (name, value) in extra {
+            parameters.retain(|(key, _)| *key != name);
+            parameters.push((name, value));
+        }
+        parameters
+    };
+    let cases: Vec<(Vec<(&'static str, ParameterValue)>, &str)> = vec![
+        (
+            without("opening_path"),
+            "opening-area: parameter `opening_path` is required",
+        ),
+        (
+            with(vec![
+                ("length_axis", string("profile-x")),
+                ("height_axis", string("profile-x")),
+            ]),
+            "opening-area: `length_axis` and `height_axis` must differ",
+        ),
+        (
+            with(vec![("height_axis", string("up"))]),
+            "opening-area: `height_axis` `up` is unsupported; use `extrusion`, `profile-x` or \
+             `profile-y`",
+        ),
+        (
+            without("gross_area"),
+            "opening-area: parameter `gross_area` is required",
+        ),
+        (
+            with(vec![("net_area", string("NetSideArea"))]),
+            "opening-area: parameter `net_area` has the wrong type",
+        ),
+        (
+            with(vec![("area_tolerance", square(-0.5))]),
+            "opening-area: `area_tolerance` is not a non-negative area",
+        ),
+        (
+            with(vec![
+                ("minimum_opening_area", square(-0.5)),
+                ("gross_area", string("x")),
+            ]),
+            "opening-area: `minimum_opening_area` is not a non-negative area",
+        ),
+        (
+            with(vec![
+                ("gross_area", string("x")),
+                ("area_tolerance", square(-0.5)),
+            ]),
+            "opening-area: parameter `gross_area` has the wrong type",
+        ),
+    ];
+    for (parameters, message) in cases {
+        let evaluation = held(recessed(), &rule(ID, kind("wall"), parameters));
+        let refused = evaluation.not_evaluated_outcomes();
+        assert_eq!(refused.len(), 1, "{message}");
+        assert_eq!(*refused[0].reason(), NotEvaluatedReason::InvalidDeclaration);
+        assert_eq!(refused[0].message(), message);
+    }
+}
+
+/// The rule forked from the template reaches its verdicts on the walls
+/// stating both areas: its finding is worded as an expression rule's, so
+/// only outcomes are compared.
+#[test]
+fn the_forked_rule_reaches_the_templates_verdicts() {
+    use axioval_rules::templates::{Fork, fork};
+    for net in [12.6, 13.0, 15.0] {
+        let model = || window(window(wall(Some(net)), "o1", 1.0), "o2", 3.0);
+        let bound = rule(
+            ID,
+            kind("wall"),
+            vec![
+                ("opening_path", strings(&["voids:forward"])),
+                ("length_axis", string("profile-x")),
+                ("height_axis", string("extrusion")),
+                ("gross_area", property(Some(QTO), "GrossSideArea")),
+                ("net_area", property(Some(QTO), "NetSideArea")),
+            ],
+        );
+        let forked = fork(&OpeningArea, &bound).unwrap();
+        let mut expression_rule = bound.clone();
+        expression_rule.capability = Fork::CAPABILITY.into();
+        expression_rule.parameters = forked.parameters();
+        let template = held(model(), &bound);
+        let rewritten = model().evaluate_measured(
+            &axioval_rules::ExpressionRequirement,
+            &expression_rule,
+            |_| {},
+        );
+        let parity = axioval_rules::parity::compare_evaluations(
+            ("template", &template),
+            ("fork", &rewritten),
+        );
+        assert!(parity.holds(), "{net}\n{}", parity.diff());
+    }
+}
+
+/// Generated walls of up to three rectangular openings of random size and
+/// place, through the wall or recessed into it, stating random side areas
+/// (or one, or none), under random tolerances and minimum areas, judged
+/// alike by the template and the implementation it replaced.
+mod generated {
+    use super::*;
+    use proptest::prelude::*;
+
+    /// An opening's centre, size along the wall and up it, and depth.
+    type Hole = (f64, f64, f64, f64, f64);
+
+    fn hole() -> impl Strategy<Value = Hole> {
+        (
+            0.0..5.0f64,
+            0.0..3.0f64,
+            0.05..3.0f64,
+            0.05..2.0f64,
+            prop_oneof![Just(0.2), 0.02..0.2f64],
+        )
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(96))]
+
+        #[test]
+        fn generated_walls_hold_parity(
+            holes in proptest::collection::vec(hole(), 0..4),
+            gross in proptest::option::of(prop_oneof![Just(15.0), 10.0..16.0f64]),
+            net in proptest::option::of(0.0..15.0f64),
+            tolerance in proptest::option::of(0.0..2.0f64),
+            minimum in proptest::option::of(0.0..1.0f64),
+        ) {
+            let mut model = extrusion(
+                Model::default(),
+                "w",
+                "wall",
+                [0.0; 3],
+                [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+                3.0,
+                "rectangle",
+                &[("XDim", 5.0), ("YDim", 0.2), ("PositionX", 2.5)],
+            );
+            if let Some(gross) = gross {
+                model = model.value("w", QTO, "GrossSideArea", quantity(gross, QuantityDimension::Area));
+            }
+            if let Some(net) = net {
+                model = model.value("w", QTO, "NetSideArea", quantity(net, QuantityDimension::Area));
+            }
+            for (index, (x, z, width, height, depth)) in holes.into_iter().enumerate() {
+                model = opening(
+                    model,
+                    &format!("o{index}"),
+                    x,
+                    z,
+                    depth,
+                    "rectangle",
+                    &[("XDim", width), ("YDim", height)],
+                );
+            }
+            let mut extra = Vec::new();
+            if let Some(tolerance) = tolerance {
+                extra.push(("area_tolerance", ParameterValue::Quantity { value: tolerance, unit: "m2".into() }));
+            }
+            if let Some(minimum) = minimum {
+                extra.push(("minimum_opening_area", ParameterValue::Quantity { value: minimum, unit: "m2".into() }));
+            }
+            check_with(model, extra);
+        }
     }
 }
 

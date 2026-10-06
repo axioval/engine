@@ -73,6 +73,11 @@ const PAIRS: &[Pair] = &[
         reference: |registry| registry.replace(axioval::rules::reference::EmptyHost),
     },
     Pair {
+        capability: "axioval:capability.opening-area",
+        case: "openings",
+        reference: |registry| registry.replace(axioval::rules::reference::OpeningArea),
+    },
+    Pair {
         capability: "axioval:capability.body-extent",
         case: "elements",
         reference: |registry| registry.replace(axioval::rules::reference::BodyExtent),

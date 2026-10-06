@@ -10,7 +10,7 @@ use axioval_engine::{
 
 #[cfg(feature = "parity-reference")]
 pub(crate) mod reference;
-mod template;
+pub(crate) mod template;
 
 use crate::opening_zone::face::{Axis, FaceAxes, Host};
 use crate::support::Unavailable;

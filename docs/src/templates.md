@@ -1329,6 +1329,25 @@ realisable`, naming the capability itself), then each role selector's
 kind after `horizontal-guard: `; a rule selecting nothing judges nothing. Without the
 service the rule is open (`guard service is not registered`).
 
+### `opening-area`
+
+| Form | When | Values | Decision |
+| --- | --- | --- | --- |
+| one | always | `gross`, `net` = the stated `{gross_area}` and `{net_area}`, areas or absent; `agrees` = either stated implies `abs(opening_area;… − (gross − net))` at most `area_tolerance` and the rounding allowance; `voided` = `opening_area;…`, `expected` = `gross − net`, read only for a finding | `Holds` over `agrees` |
+
+A side area stated of another kind is open as the capability worded it
+(`` `{gross_area}` is 15 m, not an area ``), one that cannot be read too
+(`` `{gross_area}`: {why} ``, the value's `refused`); neither stated
+holds without measuring, and one stated alone leaves the difference
+`null`, the wall open with `it states only one of `…` and `…`` (D12's
+decision). The declaration is `empty-host`'s, then both side areas
+required and the tolerance. The finding reads `{openings}, but its gross
+side area {gross:m2} less its net side area {net:m2} is {expected:m2};
+they must agree within {area_tolerance:m2}`, `openings` being `its
+openings ({voided:cited_ids}) cover {voided:m2} of its face` where
+`opening_area` cites an opening and `it has no openings` otherwise, and
+relates every opening reached.
+
 ### `empty-host`
 
 | Form | When | Values | Decision |
@@ -1835,6 +1854,16 @@ of the `spaces` case, recorded before the switch; and its fork, an
 expression requiring no boundary off the surface and every declared
 check, which reaches its verdicts (one finding where the template may
 report several, as any fork).
+
+`opening-area` is held to `opening_area/reference.rs`
+(`axioval_rules::reference::OpeningArea`) on every fixture of
+`tests/opening_area.rs` under `Parity::contract()`, its refusals asserted
+word for word and side areas stated of every kind (an area, `null`, a
+length, a text, an integer, unreadable or absent) on either side; by
+generated walls of up to three openings, through the wall or recessed,
+stating random side areas, one or none, under random tolerances and
+minimum areas; by the `opening-area` rules of the case `openings`,
+recorded before the switch; and by its fork on walls stating both areas.
 
 `empty-host` is held to `empty_host/reference.rs`
 (`axioval_rules::reference::EmptyHost`) on every fixture of

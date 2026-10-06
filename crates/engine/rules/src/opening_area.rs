@@ -1,19 +1,23 @@
 //! `opening-area`: a wall's stated gross side area less its net side area
 //! equals the area of the openings it hosts.
 
+use std::sync::LazyLock;
+
+use axioval_engine::template::Template;
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor, ParameterType,
     RuleCapability, RuleContext,
 };
 use axioval_ir::contract::Selector;
-use axioval_ir::{Evidence, Object, ObjectId, PropertyValue, QuantityDimension};
+use axioval_ir::{Evidence, Object, ObjectId, QuantityDimension};
 
 use crate::counts::Population;
 use crate::opening_zone::face::{FaceAxes, Host, ROUNDING, Solid, Span, read_host, separation};
-use crate::selection::select_objects;
-use crate::support::{
-    Parameters, PropertyRef, Traversal, Unavailable, display, finding, invalid, resolve,
-};
+use crate::support::{Parameters, Traversal, Unavailable, invalid};
+
+#[cfg(feature = "parity-reference")]
+pub(crate) mod reference;
+mod template;
 
 /// Requires the openings each selected host holds to account for the
 /// difference between its stated gross and net side areas: the sum of their
@@ -38,15 +42,46 @@ use crate::support::{
 /// A host stating neither area is not checked. One stating only one, an
 /// opening whose area cannot be placed, or an opening whose selection is
 /// undecided leaves the host not evaluated.
+///
+/// It runs as a template ([`axioval_engine::template`]): the truth that a
+/// host stating either area has openings (`opening_area`) taking the
+/// difference of the two, within the tolerance, judged by the truth judge.
 pub struct OpeningArea;
+
+static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
+
+/// The plans of the rules bound to it, kept across runs.
+static PLANS: crate::templates::Plans = crate::templates::Plans::new();
+
+impl RuleCapability for OpeningArea {
+    fn id(&self) -> &'static str {
+        template::ID
+    }
+
+    fn parameters(&self) -> Vec<ParameterDescriptor> {
+        TEMPLATE.parameters.clone()
+    }
+
+    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
+        crate::templates::run((&TEMPLATE, &PLANS), context, rule)
+    }
+
+    fn template(&self) -> Option<&Template> {
+        Some(&TEMPLATE)
+    }
+}
 
 /// The openings of a host and the face they are placed in: what
 /// `opening-area` and `empty-host` share.
 pub(crate) struct Openings<'a> {
     path: Traversal,
+    /// The openings' selector, which the replaced implementations read;
+    /// the measured values take it as an argument instead.
+    #[cfg(feature = "parity-reference")]
     pub(crate) selector: &'a Selector,
     pub(crate) axes: FaceAxes,
     minimum_area: Option<f64>,
+    marker: std::marker::PhantomData<&'a Selector>,
 }
 
 impl<'a> Openings<'a> {
@@ -54,16 +89,21 @@ impl<'a> Openings<'a> {
         let path = parameters
             .strings("opening_path")?
             .ok_or_else(|| invalid("parameter `opening_path` is required"))?;
+        let path = Traversal::path(path)?;
+        #[cfg_attr(not(feature = "parity-reference"), allow(unused_variables))]
+        let selector = parameters
+            .selector("opening_selector")?
+            .unwrap_or(&Selector::All);
         Ok(Self {
-            path: Traversal::path(path)?,
-            selector: parameters
-                .selector("opening_selector")?
-                .unwrap_or(&Selector::All),
+            path,
+            #[cfg(feature = "parity-reference")]
+            selector,
             axes: FaceAxes::parse(
                 parameters.required_string("length_axis")?,
                 parameters.required_string("height_axis")?,
             )?,
             minimum_area: minimum_area(parameters)?,
+            marker: std::marker::PhantomData,
         })
     }
 
@@ -92,105 +132,6 @@ pub(crate) fn minimum_area(parameters: &Parameters<'_>) -> Result<Option<f64>, U
     }
 }
 
-struct Config<'a> {
-    openings: Openings<'a>,
-    gross: PropertyRef<'a>,
-    net: PropertyRef<'a>,
-    tolerance: f64,
-}
-
-/// Reads `area_tolerance`, a non-negative area, zero when absent.
-pub(crate) fn area_tolerance(parameters: &Parameters<'_>) -> Result<f64, Unavailable> {
-    match parameters.quantity("area_tolerance")? {
-        None => Ok(0.0),
-        Some((value, QuantityDimension::Area)) if value >= 0.0 => Ok(value),
-        Some(_) => Err(invalid("`area_tolerance` is not a non-negative area")),
-    }
-}
-
-impl<'a> Config<'a> {
-    fn parse(rule: &'a CompiledRule) -> Result<Self, Unavailable> {
-        let parameters = Parameters(rule);
-        Ok(Self {
-            openings: Openings::parse(&parameters)?,
-            gross: parameters.required_property("gross_area")?,
-            net: parameters.required_property("net_area")?,
-            tolerance: area_tolerance(&parameters)?,
-        })
-    }
-}
-
-impl RuleCapability for OpeningArea {
-    fn id(&self) -> &'static str {
-        "axioval:capability.opening-area"
-    }
-
-    fn parameters(&self) -> Vec<ParameterDescriptor> {
-        let mut parameters = Openings::parameters();
-        parameters.extend([
-            ParameterDescriptor::required("gross_area", ParameterType::PropertyReference),
-            ParameterDescriptor::required("net_area", ParameterType::PropertyReference),
-            ParameterDescriptor::optional("area_tolerance", ParameterType::Quantity),
-        ]);
-        parameters
-    }
-
-    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let config = match Config::parse(rule) {
-            Ok(config) => config,
-            Err((reason, message)) => {
-                return CapabilityEvaluation::not_evaluated(
-                    reason,
-                    format!("opening-area: {message}"),
-                );
-            }
-        };
-        let (selected, mut evaluation) = select_objects(context, &rule.selector);
-        let openings = Population::of(context, config.openings.selector);
-        for host in selected {
-            match check(context, &config, &openings, host) {
-                Ok(None) => {}
-                Ok(Some((message, evidence, related))) => {
-                    evaluation.push_finding(finding(rule, &host.id, message, evidence, related));
-                }
-                Err((reason, message)) => {
-                    evaluation.push_object_not_evaluated(host.id.clone(), reason, message);
-                }
-            }
-        }
-        evaluation
-    }
-}
-
-type Mismatch = (String, Vec<Evidence>, Vec<ObjectId>);
-
-/// A stated area, `None` when exactly absent.
-fn area(
-    context: &RuleContext<'_>,
-    host: &Object,
-    property: PropertyRef<'_>,
-    evidence: &mut Vec<Evidence>,
-) -> Result<Option<f64>, Unavailable> {
-    let resolved = resolve(context, host, property)
-        .map_err(|(reason, message)| (reason, format!("`{property}`: {message}")))?;
-    evidence.extend(resolved.evidence());
-    match resolved.value() {
-        None => Ok(None),
-        Some(PropertyValue::Quantity {
-            value,
-            dimension: QuantityDimension::Area,
-        }) if value.is_finite() => Ok(Some(*value)),
-        Some(other) => Err((
-            NotEvaluatedReason::InvalidEvidence,
-            format!("`{property}` is {}, not an area", display(Some(other))),
-        )),
-    }
-}
-
-pub(crate) fn square_metres(value: f64) -> String {
-    format!("{} m²", (value * 1e6).round() / 1e6)
-}
-
 /// The area a host's openings take from its middle plane.
 pub(crate) struct Voided {
     /// The summed area of the counted openings.
@@ -199,6 +140,9 @@ pub(crate) struct Voided {
     pub(crate) reached: Vec<ObjectId>,
     /// The openings taking area from the middle plane.
     pub(crate) counted: Vec<ObjectId>,
+    /// The host's face, which the replaced `empty-host` measured from;
+    /// `middle_face_area` measures it for the template.
+    #[cfg(feature = "parity-reference")]
     pub(crate) face: Host,
 }
 
@@ -260,65 +204,9 @@ pub(crate) fn voided(
         sum,
         reached,
         counted: placed.into_iter().map(|(id, _)| id).collect(),
+        #[cfg(feature = "parity-reference")]
         face,
     })
-}
-
-/// Checks one host; `Ok(None)` when it passes or is not checked.
-fn check(
-    context: &RuleContext<'_>,
-    config: &Config<'_>,
-    openings: &Population,
-    host: &Object,
-) -> Result<Option<Mismatch>, Unavailable> {
-    let mut evidence = Vec::new();
-    let gross = area(context, host, config.gross, &mut evidence)?;
-    let net = area(context, host, config.net, &mut evidence)?;
-    let (gross, net) = match (gross, net) {
-        (None, None) => return Ok(None),
-        (Some(gross), Some(net)) => (gross, net),
-        (Some(_), None) | (None, Some(_)) => {
-            return Err((
-                NotEvaluatedReason::IncompleteEvidence,
-                format!(
-                    "it states only one of `{}` and `{}`",
-                    config.gross, config.net
-                ),
-            ));
-        }
-    };
-    let Voided { sum, reached, .. } =
-        voided(context, &config.openings, openings, host, &mut evidence)?;
-    let expected = gross - net;
-    let slack = config.tolerance + ROUNDING * (1.0 + gross.abs() + net.abs() + sum);
-    if (sum - expected).abs() <= slack {
-        return Ok(None);
-    }
-    let described = if reached.is_empty() {
-        "it has no openings".to_owned()
-    } else {
-        format!(
-            "its openings ({}) cover {} of its face",
-            reached
-                .iter()
-                .map(|id| id.local_id.as_str())
-                .collect::<Vec<_>>()
-                .join(", "),
-            square_metres(sum)
-        )
-    };
-    Ok(Some((
-        format!(
-            "{described}, but its gross side area {} less its net side area {} is {}; they \
-             must agree within {}",
-            square_metres(gross),
-            square_metres(net),
-            square_metres(expected),
-            square_metres(config.tolerance)
-        ),
-        evidence,
-        reached,
-    )))
 }
 
 /// The area an opening takes from its host's middle plane, and its extents

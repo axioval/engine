@@ -35,6 +35,8 @@ enum Seen {
 struct Scene {
     targets: BTreeMap<ObjectId, (f64, Seen)>,
     asked: Mutex<Vec<SightRequest>>,
+    /// Whether the line-of-sight service answers from a tessellation.
+    approximate: bool,
 }
 
 impl Scene {
@@ -78,7 +80,10 @@ impl SightService for Scene {
             target.clone(),
             (distance, distance),
             outcome,
-            evidence(format!("sight:{target}")),
+            Evidence {
+                exact: !self.approximate,
+                ..evidence(format!("sight:{target}"))
+            },
         )
     }
 }
@@ -175,8 +180,15 @@ fn model(scene: &Scene) -> Model {
     })
 }
 
+/// `component-visibility` as it runs, held to the implementation it
+/// replaced on every evaluation.
+static HELD: common::Held = common::Held(
+    &ComponentVisibility,
+    &axioval_rules::reference::ComponentVisibility,
+);
+
 fn run_with(model: Model, scene: Arc<Scene>, rule: &CompiledRule) -> CapabilityEvaluation {
-    model.evaluate_with(&ComponentVisibility, rule, |services| {
+    model.evaluate_measured(&HELD, rule, move |services| {
         services
             .register(SightServiceHandle::new(scene.clone()))
             .unwrap();
@@ -184,7 +196,7 @@ fn run_with(model: Model, scene: Arc<Scene>, rule: &CompiledRule) -> CapabilityE
             .register(PlanSpanServiceHandle::new(scene.clone()))
             .unwrap();
         services
-            .register(VerticalExtentServiceHandle::new(scene))
+            .register(VerticalExtentServiceHandle::new(scene.clone()))
             .unwrap();
     })
 }
@@ -278,11 +290,11 @@ fn an_undecided_view_decides_only_what_it_cannot_change() {
         unevaluated(&evaluation),
         [("d".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
     );
-    assert!(
-        evaluation.not_evaluated_outcomes()[0]
-            .message()
-            .contains("can be proven neither in view nor hidden"),
-        "{evaluation:#?}"
+    assert_eq!(
+        evaluation.not_evaluated_outcomes()[0].message(),
+        "0 target(s) are in view, 1 required; 1 target(s) within 10 m of the eye 1.6 m above \
+         the base of test:model/d are undecided: test:model/t1 can be proven neither in view \
+         nor hidden (grazed, or covered only where blockers meet)"
     );
     // Another door in view settles it.
     let evaluation = run(
@@ -314,16 +326,98 @@ fn a_blocker_whose_selection_is_undecided_cannot_prove_a_target_hidden() {
 
 #[test]
 fn a_bad_declaration_or_a_missing_service_is_not_evaluated() {
-    let scene = Scene::default().with("t1", 6.0, Seen::Open);
-    let evaluation = run(scene, &visibility("none", Some(2)));
+    let refused = |mode: &str, minimum: Option<i64>| {
+        let scene = Scene::default().with("t1", 6.0, Seen::Open);
+        let evaluation = run(scene, &visibility(mode, minimum));
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+        evaluation.not_evaluated_outcomes()[0].message().to_owned()
+    };
     assert_eq!(
-        unevaluated(&evaluation),
-        [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
+        refused("none", Some(2)),
+        "component-visibility: minimum applies only to mode `at-least`"
+    );
+    assert_eq!(
+        refused("at-least", Some(0)),
+        "component-visibility: minimum must be a positive count"
+    );
+    assert_eq!(
+        refused("all", None),
+        "component-visibility: mode `all` is unsupported; use `at-least` or `none`"
     );
     let scene = Scene::default().with("t1", 6.0, Seen::Open);
-    let evaluation = model(&scene).evaluate(&ComponentVisibility, &visibility("at-least", None));
+    let evaluation = model(&scene).evaluate_measured(&HELD, &visibility("at-least", None), |_| {});
     assert_eq!(
         unevaluated(&evaluation),
         [("d".to_owned(), NotEvaluatedReason::MissingService)]
+    );
+    assert_eq!(
+        evaluation.not_evaluated_outcomes()[0].message(),
+        "line-of-sight service is not registered"
+    );
+}
+
+/// Generated scenes: doors at random distances, in view, hidden by a wall
+/// or by an undecided pillar, or undecided, judged under either mode and
+/// many minimums; each held to the implementation the template replaced.
+#[test]
+fn generated_views_hold_parity() {
+    let seen = [
+        Seen::Open,
+        Seen::HiddenBy("w"),
+        Seen::HiddenBy("p"),
+        Seen::Undecided,
+    ];
+    let mut judged = 0;
+    for doors in 0..4_usize {
+        for pattern in 0..16_usize {
+            let mut scene = Scene::default();
+            for door in 0..doors {
+                let distance = 4.0 + 3.0 * f64::from(u32::try_from((pattern + door) % 4).unwrap());
+                scene = scene.with(
+                    &format!("t{door}"),
+                    distance,
+                    seen[(pattern / (door + 1)) % seen.len()],
+                );
+            }
+            for (mode, minimum) in [
+                ("at-least", None),
+                ("at-least", Some(2)),
+                ("at-least", Some(3)),
+                ("none", None),
+            ] {
+                let scene = Arc::new(Scene {
+                    targets: scene.targets.clone(),
+                    asked: Mutex::new(Vec::new()),
+                    approximate: doors % 2 == 1,
+                });
+                let model = model(&scene).object("p", "pillar").unreadable("p");
+                // `run_with` holds the template to the reference.
+                let evaluation = run_with(model, scene, &visibility(mode, minimum));
+                judged += evaluation.findings().len() + evaluation.not_evaluated_outcomes().len();
+            }
+        }
+    }
+    assert!(judged > 0);
+}
+
+/// A view the line-of-sight service answers only approximately is cited as
+/// inexact, as the capability cited it.
+#[test]
+fn a_view_measured_approximately_is_inexact() {
+    let scene = Scene {
+        approximate: true,
+        ..Scene::default().with("t1", 6.0, Seen::Open)
+    };
+    let evaluation = run(scene, &visibility("none", None));
+    assert_eq!(common::flagged(&evaluation), ["d"]);
+    assert!(
+        evaluation.findings()[0]
+            .evidence
+            .iter()
+            .any(|evidence| !evidence.exact),
+        "{evaluation:#?}"
     );
 }

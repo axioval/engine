@@ -197,6 +197,11 @@ const PAIRS: &[Pair] = &[
         case: "spans",
         reference: |registry| registry.replace(axioval::rules::reference::CentreLineDistance),
     },
+    Pair {
+        capability: "axioval:capability.component-visibility",
+        case: "proximity",
+        reference: |registry| registry.replace(axioval::rules::reference::ComponentVisibility),
+    },
 ];
 
 /// Warm-up runs per side before measuring.

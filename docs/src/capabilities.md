@@ -1549,7 +1549,7 @@ Each judged side (or the nearest wall) is its own finding or not-evaluated outco
 
 ### Visibility of targets
 
-`axioval:capability.component-visibility` requires targets to be in view from an eye above each selected component: a reception desk that must see the entrance doors, or a device that must be seen from nowhere. The eye stands `eye_height` above the component's base (the bottom of its vertical extent) over the centre of its footprint, read through `VerticalExtentService` and `PlanSpanService`; each target is asked about through the line-of-sight service (`SightService`), so it needs a geometry adapter.
+`axioval:capability.component-visibility` requires targets to be in view from an eye above each selected component: a reception desk that must see the entrance doors, or a device that must be seen from nowhere. The eye stands `eye_height` above the component's base (the bottom of its vertical extent) over the centre of its footprint, read through `VerticalExtentService` and `PlanSpanService`; each target is asked about through the line-of-sight service (`SightService`), so it needs a geometry adapter. It runs as a template ([Capability templates](./templates.md#component-visibility)) over the measured view.
 
 | Parameter | Kind | Meaning |
 |---|---|---|

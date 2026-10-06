@@ -188,6 +188,7 @@ pub mod reference {
     pub use crate::area_ratio::reference::AreaRatio;
     pub use crate::body_extent::reference::BodyExtent;
     pub use crate::centre_line_distance::reference::CentreLineDistance;
+    pub use crate::component_visibility::reference::ComponentVisibility;
     pub use crate::conformance::reference::SelectorConformance;
     pub use crate::consistent_value::reference::ConsistentValue;
     pub use crate::counterpart_coverage::reference::CounterpartCoverage;
@@ -306,6 +307,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(stair_geometry::StairItems))
         .and_then(|registry| registry.register_measured(horizontal_guard::GuardMeasures))
         .and_then(|registry| registry.register_measured(measured_plan::PlanMeasures))
+        .and_then(|registry| registry.register_measured(component_visibility::ViewMeasures))
         .and_then(|registry| registry.register_measured(axioval_engine::FacePieceMeasures))
         .and_then(|registry| registry.register_measured(escape_route::TravelMeasures))
         .and_then(|registry| registry.register_measured(free_floor::PlacementMeasures))

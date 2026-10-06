@@ -1535,6 +1535,142 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             },
         ],
     },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
+            name: "sight_view",
+            parameters: &[
+                MeasuredParameter {
+                    key: "targets",
+                    kind: MeasuredParameterKind::Objects,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The targets looked for: source kinds or the objects a selector \
+                         parameter of the rule picks (`@name`), those it leaves undecided \
+                         possible targets.",
+                        "Die gesuchten Ziele: Quellarten oder die Objekte, die ein \
+                         Selektorparameter der Regel wählt (`@name`), die unentschiedenen \
+                         mögliche Ziele.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "blockers",
+                    kind: MeasuredParameterKind::Objects,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The objects that may hide a target, those the selection leaves \
+                         undecided possible blockers.",
+                        "Die Objekte, die ein Ziel verdecken können, die von der Auswahl \
+                         unentschiedenen mögliche Verdecker.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "eye_height",
+                    kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "How far above the component's base the eye stands, over the centre \
+                         of its footprint.",
+                        "Wie weit über der Unterkante des Bauteils das Auge steht, über dem \
+                         Mittelpunkt seines Grundrisses.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "radius",
+                    kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "How far from the eye a target is looked for.",
+                        "Wie weit vom Auge ein Ziel gesucht wird.",
+                    ),
+                },
+            ],
+            dimension: None,
+            services: &["line-of-sight", "plan-span", "vertical-extent"],
+            exactness: MeasuredExactness::Measured,
+            not_evaluated: &[
+                "a service is not registered",
+                "the component's centre or base is not known exactly",
+            ],
+            label: &en_de("View from the eye", "Sicht vom Auge"),
+            help: &en_de(
+                "One item: the targets within the radius in view from an eye above the \
+                 component, as `component-visibility` sees them: surely in view, possibly in \
+                 view, or hidden.",
+                "Ein Element: die Ziele innerhalb des Radius, die von einem Auge über dem \
+                 Bauteil zu sehen sind, wie `component-visibility` sie sieht: sicher sichtbar, \
+                 möglicherweise sichtbar oder verdeckt.",
+            ),
+        },
+        fields: &[
+            field(
+                "visible",
+                RATIO,
+                &en_de("Targets in view", "Sichtbare Ziele"),
+                &en_de(
+                    "From the targets surely in view to every target that may be.",
+                    "Von den sicher sichtbaren Zielen bis zu jedem, das es sein kann.",
+                ),
+            ),
+            field(
+                "sure",
+                RATIO,
+                &en_de("Targets surely in view", "Sicher sichtbare Ziele"),
+                &en_de(
+                    "The targets surely in view.",
+                    "Die sicher sichtbaren Ziele.",
+                ),
+            ),
+            field(
+                "hidden",
+                RATIO,
+                &en_de("Hidden targets", "Verdeckte Ziele"),
+                &en_de(
+                    "The targets within the radius surely hidden.",
+                    "Die Ziele innerhalb des Radius, die sicher verdeckt sind.",
+                ),
+            ),
+            field(
+                "seen",
+                MemberFieldKind::Objects,
+                &en_de("In view", "Sichtbar"),
+                &en_de(
+                    "The targets surely in view.",
+                    "Die sicher sichtbaren Ziele.",
+                ),
+            ),
+            field(
+                "found",
+                MemberFieldKind::Objects,
+                &en_de("Decided", "Entschieden"),
+                &en_de(
+                    "The targets surely in view, then those surely hidden.",
+                    "Die sicher sichtbaren Ziele, dann die sicher verdeckten.",
+                ),
+            ),
+            field(
+                "within",
+                MemberFieldKind::Text,
+                &en_de("Eye", "Auge"),
+                &en_de(
+                    "Words naming the eye and the radius.",
+                    "Worte, die Auge und Radius nennen.",
+                ),
+            ),
+            field(
+                "undecided",
+                MemberFieldKind::Text,
+                &en_de("Undecided targets", "Unentschiedene Ziele"),
+                &en_de(
+                    "How many targets are undecided, and why, for the first three.",
+                    "Wie viele Ziele unentschieden sind, und warum, für die ersten drei.",
+                ),
+            ),
+        ],
+    },
     walking::STAIR_CLEAR_WIDTHS,
     walking::STAIR_CONTINUITY,
     walking::STAIRS,

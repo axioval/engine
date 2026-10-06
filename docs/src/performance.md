@@ -319,3 +319,9 @@ whose storeys hold a body without a mesh.
 its reference's run time and 1.00 to 1.10× its peak heap. Its list reads
 the wall selection bound once per rule and measures each footprint's
 sides once per object, as the capability did.
+
+`component-visibility` runs the `proximity` case's two rules: 0.58 to
+1.06× its reference's run time and 0.81 to 1.16× its peak heap. Its view
+binds the target and blocker selections once per rule, where the
+capability selected them per rule as well, and asks the line-of-sight
+service exactly what the capability asked.

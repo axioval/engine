@@ -41,7 +41,8 @@ a value without an upper bound
 the first of the plan-span capabilities
 ([#283](https://github.com/axioval/engine/issues/283)), judging the items
 of a measured list against a row its provider selects from the rule's
-table, and `light-well` and `centre-line-distance` follow.
+table, and `light-well`, `centre-line-distance` and `component-visibility`
+follow.
 
 ## The outside contract
 
@@ -1076,6 +1077,27 @@ once, `centre line: {why}`. The declaration keeps the capability's checks,
 words and order (`finiteLength` for its lengths); without the plan-span
 service the rule is open as a whole.
 
+### `component-visibility`
+
+| Form | When | Values | Checks |
+| --- | --- | --- | --- |
+| one | always | `judged` = 1 | `Items` over `sight_view;targets=@targets;blockers=@blockers;eye_height=@eye_height;radius=@radius`: `visible` at least `minimum` (1 by default) under `mode` `at-least`, at most 0 under `none` |
+
+The view is the capability's own search (`View::of`): the line-of-sight
+service asked about every target, selected or undecided, from the eye
+over the component's exact centre, the undecided blockers re-asked
+without. Its one item counts the targets in view from those surely in view
+to every one that may be (`visible`), states `sure`, `hidden` and their
+objects (`seen`, `found`), and words the eye (`within`) and the first
+three undecided targets (`undecided`). Under `at-least` a shortfall reads
+`{sure:count} target(s) {within} are in view; required at least
+{minimum:count}` and `; {hidden:count} hidden` where any is, relating the
+targets in view and hidden; under `none` a target in view reads `… are in
+view, none allowed: {seen}`. Services missing and an eye that is not a
+point leave each component open, as the view reports them. The
+declaration keeps the capability's checks, words and order (`holds` for a
+positive minimum).
+
 ## Binding and running a rule
 
 The rules crate's `templates` module runs a template
@@ -1493,6 +1515,16 @@ many distances from one or two walls, along every centre line, on one
 side or both, under many bounds; and by the `centre-line-distance` rules
 of the `spans` case, recorded before the switch. It is never forked
 (D28).
+
+`component-visibility` is held to `component_visibility/reference.rs`
+(`axioval_rules::reference::ComponentVisibility`, which searches the same
+view) through `common::Held` on every fixture of
+`tests/component_visibility.rs`, its messages and refusals asserted
+literally; by generated scenes of doors at many distances, in view, hidden
+by a wall or by a pillar of undecided selection, or undecided, some
+answered approximately, under either mode and many minimums; and by the
+`component-visibility` rules of the `proximity` case, recorded before the
+switch. It is never forked (D29).
 
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the

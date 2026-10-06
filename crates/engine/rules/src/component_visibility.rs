@@ -3,21 +3,27 @@
 //! nowhere.
 
 use std::collections::BTreeSet;
-use std::fmt::Write as _;
+use std::sync::LazyLock;
+
+use axioval_engine::template::Template;
 
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor, ParameterType,
+    CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor,
     PlanSpanServiceHandle, RuleCapability, RuleContext, SightError, SightEvidence, SightOutcome,
     SightRequest, SightServiceHandle, VerticalExtentServiceHandle,
 };
-use axioval_ir::contract::Selector;
-use axioval_ir::{Evidence, Object, ObjectId, QuantityDimension};
+use axioval_ir::{Evidence, Object, ObjectId};
 
-use crate::pairs::refuse_all;
-use crate::selection::select_objects;
-use crate::support::{Parameters, Unavailable, finding, invalid};
+mod measured;
+#[cfg(feature = "parity-reference")]
+pub(crate) mod reference;
+mod template;
 
-const NAME: &str = "component-visibility";
+pub(crate) use measured::ViewMeasures;
+
+use crate::support::Unavailable;
+
+pub(crate) const NAME: &str = "component-visibility";
 
 /// Requires targets within a radius to be in view from an eye point above
 /// each selected component.
@@ -45,111 +51,37 @@ const NAME: &str = "component-visibility";
 /// `axioval:presentation.Transparency`; the rule has no threshold of its own.
 pub struct ComponentVisibility;
 
-/// What the rule requires.
-#[derive(Clone, Copy)]
-enum Mode {
-    AtLeast(u64),
-    None,
-}
+static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
 
-struct Config<'a> {
-    targets: &'a Selector,
-    blockers: &'a Selector,
-    eye_height: f64,
-    radius: f64,
-    mode: Mode,
-}
+/// The plans of the rules bound to it, kept across runs.
+static PLANS: crate::templates::Plans = crate::templates::Plans::new();
 
 impl RuleCapability for ComponentVisibility {
     fn id(&self) -> &'static str {
-        "axioval:capability.component-visibility"
+        template::ID
     }
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
-        vec![
-            ParameterDescriptor::required("targets", ParameterType::Selector),
-            ParameterDescriptor::required("blockers", ParameterType::Selector),
-            ParameterDescriptor::required("eye_height", ParameterType::Quantity),
-            ParameterDescriptor::required("radius", ParameterType::Quantity),
-            ParameterDescriptor::required("mode", ParameterType::String),
-            ParameterDescriptor::optional("minimum", ParameterType::Integer),
-        ]
+        TEMPLATE.parameters.clone()
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let config = match parse(&Parameters(rule)) {
-            Ok(config) => config,
-            Err((reason, message)) => {
-                return CapabilityEvaluation::not_evaluated(reason, format!("{NAME}: {message}"));
-            }
-        };
-        let (components, evaluation) = select_objects(context, &rule.selector);
-        let services = match Services::of(context) {
-            Ok(services) => services,
-            Err((reason, message)) => {
-                return refuse_all(&components, evaluation, &reason, &message);
-            }
-        };
-        let targets = Picked::of(context, config.targets);
-        let blockers = Picked::of(context, config.blockers);
-        let mut evaluation = evaluation;
-        for component in components {
-            match View::of(&services, &config, &targets, &blockers, component) {
-                Ok(view) => view.judge(rule, &config, &mut evaluation),
-                Err((reason, message)) => {
-                    evaluation.push_object_not_evaluated(component.id.clone(), reason, message);
-                }
-            }
-        }
-        evaluation
+        crate::templates::run((&TEMPLATE, &PLANS), context, rule)
+    }
+
+    fn template(&self) -> Option<&Template> {
+        Some(&TEMPLATE)
     }
 }
 
-fn parse<'a>(parameters: &Parameters<'a>) -> Result<Config<'a>, Unavailable> {
-    let length = |name: &str| match parameters.quantity(name)? {
-        Some((value, QuantityDimension::Length)) if value.is_finite() && value >= 0.0 => Ok(value),
-        Some(_) => Err(invalid(format!("{name} must be a non-negative length"))),
-        None => Err(invalid(format!("{name} is required"))),
-    };
-    let minimum = parameters.integer("minimum")?;
-    let mode = match parameters.string("mode")? {
-        Some("at-least") => match minimum {
-            None => Mode::AtLeast(1),
-            Some(minimum) => Mode::AtLeast(
-                u64::try_from(minimum)
-                    .ok()
-                    .filter(|minimum| *minimum > 0)
-                    .ok_or_else(|| invalid("minimum must be a positive count"))?,
-            ),
-        },
-        Some("none") if minimum.is_some() => {
-            return Err(invalid("minimum applies only to mode `at-least`"));
-        }
-        Some("none") => Mode::None,
-        Some(other) => {
-            return Err(invalid(format!(
-                "mode `{other}` is unsupported; use `at-least` or `none`"
-            )));
-        }
-        None => return Err(invalid("mode is required")),
-    };
-    Ok(Config {
-        targets: parameters.required_selector("targets")?,
-        blockers: parameters.required_selector("blockers")?,
-        eye_height: length("eye_height")?,
-        radius: length("radius")?,
-        mode,
-    })
-}
-
-struct Services<'a> {
+pub(crate) struct Services<'a> {
     sight: &'a SightServiceHandle,
     centres: &'a PlanSpanServiceHandle,
     extents: &'a VerticalExtentServiceHandle,
 }
 
 impl<'a> Services<'a> {
-    fn of(context: &RuleContext<'a>) -> Result<Self, Unavailable> {
+    pub(crate) fn of(context: &RuleContext<'a>) -> Result<Self, Unavailable> {
         let missing = |what: &str| {
             (
                 NotEvaluatedReason::MissingService,
@@ -174,14 +106,15 @@ impl<'a> Services<'a> {
 }
 
 /// The objects a selector picks, and those it cannot decide.
-struct Picked {
-    matched: BTreeSet<ObjectId>,
-    undecided: BTreeSet<ObjectId>,
+pub(crate) struct Picked {
+    pub(crate) matched: BTreeSet<ObjectId>,
+    pub(crate) undecided: BTreeSet<ObjectId>,
 }
 
 impl Picked {
-    fn of(context: &RuleContext<'_>, selector: &Selector) -> Self {
-        let (matched, selection) = select_objects(context, selector);
+    #[cfg(feature = "parity-reference")]
+    pub(crate) fn of(context: &RuleContext<'_>, selector: &axioval_ir::contract::Selector) -> Self {
+        let (matched, selection) = crate::selection::select_objects(context, selector);
         Self {
             matched: matched.iter().map(|object| object.id.clone()).collect(),
             undecided: selection
@@ -206,23 +139,24 @@ enum Seen {
 }
 
 /// The targets of one component, sorted by what is known of them.
-struct View<'o> {
-    component: &'o Object,
-    visible: Vec<ObjectId>,
+pub(crate) struct View {
+    pub(crate) visible: Vec<ObjectId>,
     /// Targets that may be in view, and why they are not known to be.
-    unknown: Vec<(ObjectId, String)>,
+    pub(crate) unknown: Vec<(ObjectId, String)>,
     /// Targets in range, known hidden.
-    hidden: Vec<ObjectId>,
-    evidence: Vec<Evidence>,
+    pub(crate) hidden: Vec<ObjectId>,
+    pub(crate) evidence: Vec<Evidence>,
 }
 
-impl<'o> View<'o> {
-    fn of(
+impl View {
+    /// The view from the eye `eye_height` above the component's base over
+    /// its centre, of the targets within `radius`.
+    pub(crate) fn of(
         services: &Services<'_>,
-        config: &Config<'_>,
+        (eye_height, radius): (f64, f64),
         targets: &Picked,
         blockers: &Picked,
-        component: &'o Object,
+        component: &Object,
     ) -> Result<Self, Unavailable> {
         let own = &component.id;
         let centre = services.centres.measure_centre(own).map_err(|error| {
@@ -257,9 +191,8 @@ impl<'o> View<'o> {
             ));
         }
         let [x, y] = centre.point();
-        let eye = [x, y, base.lower_metres() + config.eye_height];
+        let eye = [x, y, base.lower_metres() + eye_height];
         let mut view = Self {
-            component,
             visible: Vec::new(),
             unknown: Vec::new(),
             hidden: Vec::new(),
@@ -276,14 +209,12 @@ impl<'o> View<'o> {
                     .collect()
             };
             let ask = |list: &[ObjectId]| {
-                SightRequest::try_new(eye, target.clone(), except(list), Some(config.radius))
+                SightRequest::try_new(eye, target.clone(), except(list), Some(radius))
                     .and_then(|request| services.sight.assess_sight(&request))
             };
             let (seen, why) = match ask(&all_blockers) {
                 Err(error) => (Seen::Maybe, describe(&error)),
-                Ok(answer) => {
-                    view.classify(&answer, blockers, config.radius, || ask(&sure_blockers))
-                }
+                Ok(answer) => view.classify(&answer, blockers, radius, || ask(&sure_blockers)),
             };
             match (seen, selected) {
                 (Seen::No, _) => {
@@ -354,78 +285,6 @@ impl<'o> View<'o> {
                  blockers meet)"
                     .into(),
             ),
-        }
-    }
-
-    fn judge(
-        self,
-        rule: &CompiledRule,
-        config: &Config<'_>,
-        evaluation: &mut CapabilityEvaluation,
-    ) {
-        let id = &self.component.id;
-        let sure = self.visible.len() as u64;
-        let most = sure + self.unknown.len() as u64;
-        let within = format!(
-            "within {} m of the eye {} m above the base of {id}",
-            config.radius, config.eye_height
-        );
-        let undecided = || {
-            let mut message = format!("{} target(s) {within} are undecided:", self.unknown.len());
-            for (target, why) in self.unknown.iter().take(3) {
-                let _ = write!(message, " {target} {why};");
-            }
-            message.pop();
-            message
-        };
-        match config.mode {
-            Mode::AtLeast(minimum) => {
-                if sure >= minimum {
-                    return;
-                }
-                if most >= minimum {
-                    evaluation.push_object_not_evaluated(
-                        id.clone(),
-                        NotEvaluatedReason::IncompleteEvidence,
-                        format!(
-                            "{sure} target(s) are in view, {minimum} required; {}",
-                            undecided()
-                        ),
-                    );
-                    return;
-                }
-                let mut message =
-                    format!("{sure} target(s) {within} are in view; required at least {minimum}");
-                if !self.hidden.is_empty() {
-                    let _ = write!(message, "; {} hidden", self.hidden.len());
-                }
-                let mut related = self.visible.clone();
-                related.extend(self.hidden.iter().cloned());
-                evaluation.push_finding(finding(rule, id, message, self.evidence, related));
-            }
-            Mode::None => {
-                if sure > 0 {
-                    let named = self
-                        .visible
-                        .iter()
-                        .map(ToString::to_string)
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    evaluation.push_finding(finding(
-                        rule,
-                        id,
-                        format!("{sure} target(s) {within} are in view, none allowed: {named}"),
-                        self.evidence,
-                        self.visible,
-                    ));
-                } else if most > 0 {
-                    evaluation.push_object_not_evaluated(
-                        id.clone(),
-                        NotEvaluatedReason::IncompleteEvidence,
-                        undecided(),
-                    );
-                }
-            }
         }
     }
 }

@@ -8553,7 +8553,391 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "component-visibility",
+        "defaults": [
+          {
+            "parameter": "minimum",
+            "value": {
+              "type": "integer",
+              "value": 1
+            }
+          }
+        ],
+        "declaration": [
+          {
+            "kind": "kind",
+            "parameter": "minimum"
+          },
+          {
+            "kind": "choice",
+            "parameter": "mode",
+            "options": [
+              "at-least",
+              "none"
+            ]
+          },
+          {
+            "kind": "requiresValue",
+            "parameter": "minimum",
+            "with": "mode",
+            "value": "at-least",
+            "message": "minimum applies only to mode `at-least`"
+          },
+          {
+            "kind": "holds",
+            "condition": {
+              "kind": "atLeast",
+              "parameter": "minimum",
+              "than": 1.0
+            },
+            "message": "minimum must be a positive count"
+          },
+          {
+            "kind": "nonNegativeLength",
+            "parameter": "eye_height",
+            "message": "eye_height must be a non-negative length"
+          },
+          {
+            "kind": "nonNegativeLength",
+            "parameter": "radius",
+            "message": "radius must be a non-negative length"
+          },
+          {
+            "kind": "required",
+            "parameter": "targets"
+          },
+          {
+            "kind": "required",
+            "parameter": "blockers"
+          }
+        ],
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "judged",
+                "expression": {
+                  "kind": "literal",
+                  "value": {
+                    "type": "integer",
+                    "value": 1
+                  },
+                  "label": "the view is judged"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "judged",
+              "rounding": []
+            },
+            "fail": "",
+            "undecided": "",
+            "checks": [
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {},
+                  "list": "sight_view;targets=@targets;blockers=@blockers;eye_height=@eye_height;radius=@radius",
+                  "refused": "{why}",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "equals",
+                          "parameter": "mode",
+                          "value": "at-least"
+                        }
+                      ],
+                      "judge": {
+                        "kind": "range",
+                        "value": "visible",
+                        "unit": "count",
+                        "atLeast": [
+                          {
+                            "name": "minimum",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "parameter",
+                                    "name": "minimum"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "none"
+                        },
+                        "grade": false,
+                        "null": {
+                          "kind": "skip"
+                        }
+                      },
+                      "fail": "{sure:count} target(s) {within} are in view; required at least {minimum:count}{hidden_note}",
+                      "undecided": "{sure:count} target(s) are in view, {minimum:count} required; {undecided}",
+                      "related": "found"
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "equals",
+                          "parameter": "mode",
+                          "value": "none"
+                        }
+                      ],
+                      "judge": {
+                        "kind": "range",
+                        "value": "visible",
+                        "unit": "count",
+                        "atMost": [
+                          {
+                            "name": "none",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "literal",
+                                  "value": 0.0
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "none"
+                        },
+                        "grade": false,
+                        "null": {
+                          "kind": "skip"
+                        }
+                      },
+                      "fail": "{sure:count} target(s) {within} are in view, none allowed: {seen}",
+                      "undecided": "{undecided}",
+                      "related": "seen"
+                    }
+                  ],
+                  "texts": [
+                    {
+                      "name": "hidden_note",
+                      "when": [
+                        {
+                          "kind": "is",
+                          "field": "hidden",
+                          "value": 0.0
+                        }
+                      ],
+                      "text": ""
+                    },
+                    {
+                      "name": "hidden_note",
+                      "text": "; {hidden:count} hidden"
+                    }
+                  ]
+                },
+                "fail": "",
+                "undecided": ""
+              }
+            ]
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "aggregate",
+                  "function": "none",
+                  "over": {
+                    "kind": "measured",
+                    "name": "sight_view;targets=@targets;blockers=@blockers;eye_height=@eye_height;radius=@radius"
+                  },
+                  "value": {
+                    "kind": "not",
+                    "operand": {
+                      "kind": "and",
+                      "operands": [
+                        {
+                          "kind": "compare",
+                          "operator": "greaterThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "visible"
+                          },
+                          "right": {
+                            "kind": "parameter",
+                            "name": "minimum"
+                          }
+                        },
+                        {
+                          "kind": "compare",
+                          "operator": "lessThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "visible"
+                          },
+                          "right": {
+                            "kind": "literal",
+                            "value": {
+                              "type": "number",
+                              "value": 0.0
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "label": "no item fails"
+                },
+                {
+                  "kind": "isDefined",
+                  "operand": {
+                    "kind": "literal",
+                    "value": {
+                      "type": "integer",
+                      "value": 1
+                    },
+                    "label": "the view is judged"
+                  },
+                  "label": "read"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.aggregate",
+                      "label": "no item fails",
+                      "fields": {
+                        "function": "none"
+                      },
+                      "inputs": {
+                        "over": {
+                          "block": {
+                            "type": "members.sight_view",
+                            "fields": {
+                              "blockers": "@blockers",
+                              "eye_height": "@eye_height",
+                              "radius": "@radius",
+                              "targets": "@targets"
+                            }
+                          }
+                        },
+                        "value": {
+                          "block": {
+                            "type": "expression.not",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.and",
+                                  "inputs": {
+                                    "operands": {
+                                      "blocks": [
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "greaterThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "visible",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.parameter",
+                                                "fields": {
+                                                  "name": "minimum"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "lessThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "visible",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.literal",
+                                                "fields": {
+                                                  "value": {
+                                                    "type": "number",
+                                                    "value": 0.0
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.isDefined",
+                      "label": "read",
+                      "inputs": {
+                        "operand": {
+                          "block": {
+                            "type": "expression.literal",
+                            "label": "the view is judged",
+                            "fields": {
+                              "value": {
+                                "type": "integer",
+                                "value": 1
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.consistent-value",
@@ -66331,6 +66715,278 @@
       "available": true
     },
     {
+      "name": "centre_line_sides",
+      "parameters": [
+        {
+          "key": "walls",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The walls beside the footprint: source kinds, `,`-separated, or the objects a selector parameter of the rule picks (`@name`), those it leaves undecided walls that may be there."
+            },
+            {
+              "language": "de",
+              "text": "Die Wände neben dem Grundriss: Quellarten, durch `,` getrennt, oder die Objekte, die ein Selektorparameter der Regel wählt (`@name`), die unentschiedenen Wände, die dort sein können."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "centre_line",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "long",
+              "short",
+              "against-wall"
+            ]
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The footprint's centre line: along its long or short axis, or from the wall it stands against to its front."
+            },
+            {
+              "language": "de",
+              "text": "Die Mittellinie des Grundrisses: entlang seiner langen oder kurzen Achse oder von der Wand, vor der es steht, zu seiner Vorderseite."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "sides",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "nearest",
+              "both"
+            ]
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "Both sides of the centre line, each an item, or the nearer of the two, one item."
+            },
+            {
+              "language": "de",
+              "text": "Beide Seiten der Mittellinie, jede ein Element, oder die nähere der beiden, ein Element."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "reach",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "How far from the centre line a wall is searched."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit von der Mittellinie eine Wand gesucht wird."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "inset",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How far the strip beside the footprint is narrowed at both ends; not at all without it."
+            },
+            {
+              "language": "de",
+              "text": "Um wie viel der Streifen neben dem Grundriss an beiden Enden verkürzt wird; ohne Angabe gar nicht."
+            }
+          ],
+          "references": "length"
+        }
+      ],
+      "services": [
+        "plan-span",
+        "type-hierarchy"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the walls beside the footprint cannot be measured",
+        "the footprint has no long axis",
+        "no side is surely nearer a wall than the others"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Sides of the centre line"
+        },
+        {
+          "language": "de",
+          "text": "Seiten der Mittellinie"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "Each side of the centre line of the footprint's least-area rectangle a `centre-line-distance` rule judges, with the walls beside it, square to it, as that capability reads them."
+        },
+        {
+          "language": "de",
+          "text": "Jede Seite der Mittellinie des kleinsten umschließenden Rechtecks des Grundrisses, die eine `centre-line-distance`-Regel prüft, mit den Wänden daneben, rechtwinklig zu ihr, wie diese Fähigkeit sie liest."
+        }
+      ],
+      "fields": [
+        {
+          "name": "label",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Side"
+            },
+            {
+              "language": "de",
+              "text": "Seite"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "How the side is named: `centre line to the left`, `… beside the +first side`, `… to the nearest wall`."
+            },
+            {
+              "language": "de",
+              "text": "Wie die Seite benannt ist: `centre line to the left`, `… beside the +first side`, `… to the nearest wall`."
+            }
+          ]
+        },
+        {
+          "name": "distance",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Distance"
+            },
+            {
+              "language": "de",
+              "text": "Abstand"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "From every wall that may lie beside the side to the nearest wall surely there, or just past `reach` without one; `null` where no wall may lie within `reach`."
+            },
+            {
+              "language": "de",
+              "text": "Von jeder Wand, die neben der Seite liegen kann, bis zur nächsten sicher dort liegenden, oder knapp jenseits von `reach` ohne eine; `null`, wo keine Wand innerhalb von `reach` liegen kann."
+            }
+          ]
+        },
+        {
+          "name": "lower",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Least distance"
+            },
+            {
+              "language": "de",
+              "text": "Kleinster Abstand"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The least distance of any wall that may lie beside the side; `null` where none may."
+            },
+            {
+              "language": "de",
+              "text": "Der kleinste Abstand einer Wand, die neben der Seite liegen kann; `null`, wo keine liegen kann."
+            }
+          ]
+        },
+        {
+          "name": "sure",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Nearest sure wall"
+            },
+            {
+              "language": "de",
+              "text": "Nächste sichere Wand"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The distance of the nearest wall surely beside the side; `null` where none surely is."
+            },
+            {
+              "language": "de",
+              "text": "Der Abstand der nächsten Wand, die sicher neben der Seite liegt; `null`, wo keine sicher liegt."
+            }
+          ]
+        },
+        {
+          "name": "wall",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Wall"
+            },
+            {
+              "language": "de",
+              "text": "Wand"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The nearest wall surely beside the side, if any."
+            },
+            {
+              "language": "de",
+              "text": "Die nächste Wand, die sicher neben der Seite liegt, falls eine."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
       "name": "clear_widths",
       "parameters": [
         {
@@ -73222,6 +73878,300 @@
       "available": true
     },
     {
+      "name": "sight_view",
+      "parameters": [
+        {
+          "key": "targets",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The targets looked for: source kinds or the objects a selector parameter of the rule picks (`@name`), those it leaves undecided possible targets."
+            },
+            {
+              "language": "de",
+              "text": "Die gesuchten Ziele: Quellarten oder die Objekte, die ein Selektorparameter der Regel wählt (`@name`), die unentschiedenen mögliche Ziele."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "blockers",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects that may hide a target, those the selection leaves undecided possible blockers."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, die ein Ziel verdecken können, die von der Auswahl unentschiedenen mögliche Verdecker."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "eye_height",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "How far above the component's base the eye stands, over the centre of its footprint."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit über der Unterkante des Bauteils das Auge steht, über dem Mittelpunkt seines Grundrisses."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "radius",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "How far from the eye a target is looked for."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit vom Auge ein Ziel gesucht wird."
+            }
+          ],
+          "references": "length"
+        }
+      ],
+      "services": [
+        "line-of-sight",
+        "plan-span",
+        "vertical-extent"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "a service is not registered",
+        "the component's centre or base is not known exactly"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "View from the eye"
+        },
+        {
+          "language": "de",
+          "text": "Sicht vom Auge"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "One item: the targets within the radius in view from an eye above the component, as `component-visibility` sees them: surely in view, possibly in view, or hidden."
+        },
+        {
+          "language": "de",
+          "text": "Ein Element: die Ziele innerhalb des Radius, die von einem Auge über dem Bauteil zu sehen sind, wie `component-visibility` sie sieht: sicher sichtbar, möglicherweise sichtbar oder verdeckt."
+        }
+      ],
+      "fields": [
+        {
+          "name": "visible",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Targets in view"
+            },
+            {
+              "language": "de",
+              "text": "Sichtbare Ziele"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "From the targets surely in view to every target that may be."
+            },
+            {
+              "language": "de",
+              "text": "Von den sicher sichtbaren Zielen bis zu jedem, das es sein kann."
+            }
+          ]
+        },
+        {
+          "name": "sure",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Targets surely in view"
+            },
+            {
+              "language": "de",
+              "text": "Sicher sichtbare Ziele"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The targets surely in view."
+            },
+            {
+              "language": "de",
+              "text": "Die sicher sichtbaren Ziele."
+            }
+          ]
+        },
+        {
+          "name": "hidden",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Hidden targets"
+            },
+            {
+              "language": "de",
+              "text": "Verdeckte Ziele"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The targets within the radius surely hidden."
+            },
+            {
+              "language": "de",
+              "text": "Die Ziele innerhalb des Radius, die sicher verdeckt sind."
+            }
+          ]
+        },
+        {
+          "name": "seen",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "In view"
+            },
+            {
+              "language": "de",
+              "text": "Sichtbar"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The targets surely in view."
+            },
+            {
+              "language": "de",
+              "text": "Die sicher sichtbaren Ziele."
+            }
+          ]
+        },
+        {
+          "name": "found",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Decided"
+            },
+            {
+              "language": "de",
+              "text": "Entschieden"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The targets surely in view, then those surely hidden."
+            },
+            {
+              "language": "de",
+              "text": "Die sicher sichtbaren Ziele, dann die sicher verdeckten."
+            }
+          ]
+        },
+        {
+          "name": "within",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Eye"
+            },
+            {
+              "language": "de",
+              "text": "Auge"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Words naming the eye and the radius."
+            },
+            {
+              "language": "de",
+              "text": "Worte, die Auge und Radius nennen."
+            }
+          ]
+        },
+        {
+          "name": "undecided",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Undecided targets"
+            },
+            {
+              "language": "de",
+              "text": "Unentschiedene Ziele"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "How many targets are undecided, and why, for the first three."
+            },
+            {
+              "language": "de",
+              "text": "Wie viele Ziele unentschieden sind, und warum, für die ersten drei."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
       "name": "stair_clear_widths",
       "parameters": [
         {
@@ -74718,278 +75668,6 @@
             {
               "language": "de",
               "text": "Ob das Ende auf einem Podest zwischen zwei Läufen der Treppe liegt."
-            }
-          ]
-        }
-      ],
-      "available": true
-    },
-    {
-      "name": "centre_line_sides",
-      "parameters": [
-        {
-          "key": "walls",
-          "kind": {
-            "type": "objects"
-          },
-          "required": true,
-          "help": [
-            {
-              "language": "en",
-              "text": "The walls beside the footprint: source kinds, `,`-separated, or the objects a selector parameter of the rule picks (`@name`), those it leaves undecided walls that may be there."
-            },
-            {
-              "language": "de",
-              "text": "Die Wände neben dem Grundriss: Quellarten, durch `,` getrennt, oder die Objekte, die ein Selektorparameter der Regel wählt (`@name`), die unentschiedenen Wände, die dort sein können."
-            }
-          ],
-          "references": "selector"
-        },
-        {
-          "key": "centre_line",
-          "kind": {
-            "type": "choice",
-            "options": [
-              "long",
-              "short",
-              "against-wall"
-            ]
-          },
-          "required": true,
-          "help": [
-            {
-              "language": "en",
-              "text": "The footprint's centre line: along its long or short axis, or from the wall it stands against to its front."
-            },
-            {
-              "language": "de",
-              "text": "Die Mittellinie des Grundrisses: entlang seiner langen oder kurzen Achse oder von der Wand, vor der es steht, zu seiner Vorderseite."
-            }
-          ],
-          "references": "string"
-        },
-        {
-          "key": "sides",
-          "kind": {
-            "type": "choice",
-            "options": [
-              "nearest",
-              "both"
-            ]
-          },
-          "required": true,
-          "help": [
-            {
-              "language": "en",
-              "text": "Both sides of the centre line, each an item, or the nearer of the two, one item."
-            },
-            {
-              "language": "de",
-              "text": "Beide Seiten der Mittellinie, jede ein Element, oder die nähere der beiden, ein Element."
-            }
-          ],
-          "references": "string"
-        },
-        {
-          "key": "reach",
-          "kind": {
-            "type": "length",
-            "minimum": 0.0
-          },
-          "required": true,
-          "help": [
-            {
-              "language": "en",
-              "text": "How far from the centre line a wall is searched."
-            },
-            {
-              "language": "de",
-              "text": "Wie weit von der Mittellinie eine Wand gesucht wird."
-            }
-          ],
-          "references": "length"
-        },
-        {
-          "key": "inset",
-          "kind": {
-            "type": "length",
-            "minimum": 0.0
-          },
-          "required": false,
-          "help": [
-            {
-              "language": "en",
-              "text": "How far the strip beside the footprint is narrowed at both ends; not at all without it."
-            },
-            {
-              "language": "de",
-              "text": "Um wie viel der Streifen neben dem Grundriss an beiden Enden verkürzt wird; ohne Angabe gar nicht."
-            }
-          ],
-          "references": "length"
-        }
-      ],
-      "services": [
-        "plan-span",
-        "type-hierarchy"
-      ],
-      "exactness": "measured",
-      "notEvaluated": [
-        "the walls beside the footprint cannot be measured",
-        "the footprint has no long axis",
-        "no side is surely nearer a wall than the others"
-      ],
-      "label": [
-        {
-          "language": "en",
-          "text": "Sides of the centre line"
-        },
-        {
-          "language": "de",
-          "text": "Seiten der Mittellinie"
-        }
-      ],
-      "help": [
-        {
-          "language": "en",
-          "text": "Each side of the centre line of the footprint's least-area rectangle a `centre-line-distance` rule judges, with the walls beside it, square to it, as that capability reads them."
-        },
-        {
-          "language": "de",
-          "text": "Jede Seite der Mittellinie des kleinsten umschließenden Rechtecks des Grundrisses, die eine `centre-line-distance`-Regel prüft, mit den Wänden daneben, rechtwinklig zu ihr, wie diese Fähigkeit sie liest."
-        }
-      ],
-      "fields": [
-        {
-          "name": "label",
-          "kind": {
-            "type": "text"
-          },
-          "label": [
-            {
-              "language": "en",
-              "text": "Side"
-            },
-            {
-              "language": "de",
-              "text": "Seite"
-            }
-          ],
-          "help": [
-            {
-              "language": "en",
-              "text": "How the side is named: `centre line to the left`, `… beside the +first side`, `… to the nearest wall`."
-            },
-            {
-              "language": "de",
-              "text": "Wie die Seite benannt ist: `centre line to the left`, `… beside the +first side`, `… to the nearest wall`."
-            }
-          ]
-        },
-        {
-          "name": "distance",
-          "kind": {
-            "type": "number",
-            "dimension": "length"
-          },
-          "label": [
-            {
-              "language": "en",
-              "text": "Distance"
-            },
-            {
-              "language": "de",
-              "text": "Abstand"
-            }
-          ],
-          "help": [
-            {
-              "language": "en",
-              "text": "From every wall that may lie beside the side to the nearest wall surely there, or just past `reach` without one; `null` where no wall may lie within `reach`."
-            },
-            {
-              "language": "de",
-              "text": "Von jeder Wand, die neben der Seite liegen kann, bis zur nächsten sicher dort liegenden, oder knapp jenseits von `reach` ohne eine; `null`, wo keine Wand innerhalb von `reach` liegen kann."
-            }
-          ]
-        },
-        {
-          "name": "lower",
-          "kind": {
-            "type": "number",
-            "dimension": "length"
-          },
-          "label": [
-            {
-              "language": "en",
-              "text": "Least distance"
-            },
-            {
-              "language": "de",
-              "text": "Kleinster Abstand"
-            }
-          ],
-          "help": [
-            {
-              "language": "en",
-              "text": "The least distance of any wall that may lie beside the side; `null` where none may."
-            },
-            {
-              "language": "de",
-              "text": "Der kleinste Abstand einer Wand, die neben der Seite liegen kann; `null`, wo keine liegen kann."
-            }
-          ]
-        },
-        {
-          "name": "sure",
-          "kind": {
-            "type": "number",
-            "dimension": "length"
-          },
-          "label": [
-            {
-              "language": "en",
-              "text": "Nearest sure wall"
-            },
-            {
-              "language": "de",
-              "text": "Nächste sichere Wand"
-            }
-          ],
-          "help": [
-            {
-              "language": "en",
-              "text": "The distance of the nearest wall surely beside the side; `null` where none surely is."
-            },
-            {
-              "language": "de",
-              "text": "Der Abstand der nächsten Wand, die sicher neben der Seite liegt; `null`, wo keine sicher liegt."
-            }
-          ]
-        },
-        {
-          "name": "wall",
-          "kind": {
-            "type": "objects"
-          },
-          "label": [
-            {
-              "language": "en",
-              "text": "Wall"
-            },
-            {
-              "language": "de",
-              "text": "Wand"
-            }
-          ],
-          "help": [
-            {
-              "language": "en",
-              "text": "The nearest wall surely beside the side, if any."
-            },
-            {
-              "language": "de",
-              "text": "Die nächste Wand, die sicher neben der Seite liegt, falls eine."
             }
           ]
         }

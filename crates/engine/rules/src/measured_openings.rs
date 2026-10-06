@@ -4,8 +4,11 @@
 //! is that capability's comparison; and, as `empty-host` compares them, how
 //! many openings it counts and the area of the face they void.
 //!
-//! The openings of a host are placed once per run for each way a value
-//! names them, so `opening_area` and `opening_count` share one placement.
+//! A host's face is measured once per run for its axes. Its openings are
+//! placed where a value reads them, once per object and rule: keeping each
+//! placement (or each value, `MeasuredProvider::memoizes`) for the run
+//! holds more than placing it again costs, as a run of many rules over
+//! many hosts shows.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -44,19 +47,26 @@ fn middle_face(
     context: &RuleContext<'_>,
     host: &ObjectId,
 ) -> Result<Measurement, Unavailable> {
-    let axes = FaceAxes::parse(
-        call.choice("length_axis").unwrap_or("extrusion"),
-        call.choice("height_axis").unwrap_or("profile-y"),
-    )?;
-    let face = read_host(context, host)?;
-    let area = face_area(&face, axes)?;
+    let length = call.choice("length_axis").unwrap_or("extrusion");
+    let height = call.choice("height_axis").unwrap_or("profile-y");
+    let key = FaceKey(host.clone(), format!("{length};{height}"));
+    let (area, exact) = MeasuredMemo::of(context.services, key, || {
+        let axes = FaceAxes::parse(length, height)?;
+        let face = read_host(context, host)?;
+        Ok::<_, Unavailable>((face_area(&face, axes)?, exact(&face.evidence)))
+    })?;
     Ok(crate::measured_kinds::interval(
         (area, area),
         Some(QuantityDimension::Area),
-        exact(&face.evidence),
+        exact,
         format!("{MIDDLE_FACE_AREA}:{host}"),
     ))
 }
+
+/// The key of a host's middle face in the run's memo: the host and its
+/// axes as written.
+#[derive(Hash, PartialEq, Eq)]
+struct FaceKey(ObjectId, String);
 
 /// Whether every evidence a value was measured from is exact: the body
 /// facts are stated, so this holds unless a source cites an estimate.
@@ -166,9 +176,7 @@ struct Voids {
 #[derive(Hash, PartialEq, Eq)]
 struct EveryObject;
 
-/// The openings of `host` the call names, placed. Each value is measured
-/// once per run (the run memoizes it), and `opening_area` alone says what
-/// `empty-host` and `opening-area` compare, so nothing is kept here.
+/// The openings of `host` the call names, placed.
 fn voids(
     call: &MeasuredCall,
     host: &ObjectId,
@@ -311,6 +319,13 @@ impl MeasuredProvider for OpeningMeasures {
                 ))
             }
         }
+    }
+
+    /// A host's face is kept once per run; its values are not, since each
+    /// is read once per object and rule, and keeping them holds more than
+    /// measuring them again costs.
+    fn memoizes(&self) -> bool {
+        true
     }
 }
 

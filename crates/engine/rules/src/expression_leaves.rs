@@ -505,11 +505,19 @@ impl<'a> ObjectLeaves<'a> {
                 let (written, read) = self.bound[index].clone();
                 (Some(written), read)
             }
-            None => (
-                None,
-                match bound {
-                    Ok(prepared) => self.measure_prepared(&prepared),
-                    Err((reason, why)) => Err((
+            None => match bound {
+                Ok(prepared) => {
+                    // Kept for a value read again (a truth composing it and
+                    // the value worded), as one read ahead is: a provider
+                    // keeping nothing for the run measures it once.
+                    let read = self.measure_prepared(&prepared);
+                    let written: Arc<str> = Arc::from(name);
+                    self.bound.push((Arc::clone(&written), read.clone()));
+                    (Some(written), read)
+                }
+                Err((reason, why)) => (
+                    None,
+                    Err((
                         reason,
                         format!(
                             "`{}` of {}: {why}",
@@ -517,8 +525,8 @@ impl<'a> ObjectLeaves<'a> {
                             self.object.id
                         ),
                     )),
-                },
-            ),
+                ),
+            },
         };
         self.bound_leaf_named(name, written, read)
     }
@@ -964,11 +972,23 @@ impl ExpressionContext for ObjectLeaves<'_> {
                         },
                     );
                     if self.cached {
+                        // Exact evidence is cited once: none is kept.
+                        let kept = match &read {
+                            Ok((stated, evidence)) => Ok((
+                                stated.clone(),
+                                if evidence.iter().all(|evidence| evidence.exact) {
+                                    Vec::new()
+                                } else {
+                                    evidence.clone()
+                                },
+                            )),
+                            Err(error) => Err(error.clone()),
+                        };
                         self.resolved.borrow_mut().push((
                             self.object.id.clone(),
                             key.0.clone(),
                             key.1.clone(),
-                            read.clone(),
+                            kept,
                         ));
                     }
                     (key, read)

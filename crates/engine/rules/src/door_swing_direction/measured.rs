@@ -3,10 +3,9 @@
 //! whether the door swings into it and whether it surely swings away from
 //! it.
 //!
-//! A door's leaves are read once per run, and each space it may open onto
-//! is probed once per run, however many lists name it.
-
-use std::sync::Arc;
+//! A door's leaves are read where its list is measured, once per rule,
+//! and each space it may open onto is probed once per run, however many
+//! lists name it.
 
 use axioval_engine::{
     DoorLeaves, FreeSpaceServiceHandle, MeasuredMember, MeasuredMemo, MeasuredProvider,
@@ -33,10 +32,6 @@ fn missing(service: &str) -> Unavailable {
         format!("the {service} service is not registered"),
     )
 }
-
-/// The key of a door's hinged leaves in the run's memo.
-#[derive(Hash, PartialEq, Eq)]
-struct LeavesKey(ObjectId);
 
 /// The key of where a space lies against a door's swing.
 #[derive(Hash, PartialEq, Eq)]
@@ -74,9 +69,7 @@ impl SwingMeasures {
         let Some(MeasuredArgument::Path(steps)) = call.argument("path") else {
             return Err(invalid("`path` is required"));
         };
-        let leaves = MeasuredMemo::of(context.services, LeavesKey(door.id.clone()), || {
-            hinged_leaves(frames, door).map(Arc::new)
-        })?;
+        let leaves = hinged_leaves(frames, door)?;
         let everything: Vec<&Object> = context.project.objects().collect();
         let (mut reached, _) = Traversal::path(steps)?.related(context, &door.id, &everything)?;
         if call.argument("kinds").is_some() {

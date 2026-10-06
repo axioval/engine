@@ -358,7 +358,8 @@ fn value(
     // The services the call's check needs, before anything is measured.
     Services::of(context, &asked.services)?;
     let summary = summary(context, &asked, object)?;
-    let locator = format!("{}:{}", call.name(), object.id);
+    // One measurement of the element, cited once however many values read it.
+    let locator = format!("counterpart-coverage:{}", object.id);
     let cited = |lower: f64, upper: f64, dimension, exact| Measurement::Cited {
         lower,
         upper,

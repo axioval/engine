@@ -390,7 +390,8 @@ fn value(
     object: &Object,
     context: &RuleContext<'_>,
 ) -> Result<(Measurement, Citation), Unavailable> {
-    let locator = format!("{}:{}", call.name(), object.id);
+    // One measurement of the element, cited once however many values read it.
+    let locator = format!("effective-coverage:{}", object.id);
     let summary = match summary(context, call, object) {
         Ok(summary) => summary,
         // Nothing is measured of an element stating no area: its reach is

@@ -10054,7 +10054,232 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "corridor-end-openings",
+        "declaration": [
+          {
+            "kind": "required",
+            "parameter": "opening_path"
+          },
+          {
+            "kind": "path",
+            "parameter": "opening_path"
+          },
+          {
+            "kind": "required",
+            "parameter": "opening_selector"
+          },
+          {
+            "kind": "nonNegative",
+            "parameters": [
+              "wall_depth"
+            ],
+            "message": "`wall_depth` must be a non-negative length in metres"
+          },
+          {
+            "kind": "nonNegative",
+            "parameters": [
+              "facing"
+            ],
+            "message": "`facing` must be a non-negative length in metres"
+          }
+        ],
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "corridor",
+                "expression": {
+                  "kind": "literal",
+                  "value": {
+                    "type": "boolean",
+                    "value": true
+                  }
+                }
+              }
+            ],
+            "decision": {
+              "kind": "holds",
+              "value": "corridor"
+            },
+            "fail": "",
+            "undecided": "",
+            "checks": [
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {},
+                  "list": "corridor_end_openings;path=@opening_path;openings=@opening_selector;depth=@wall_depth;facing=@facing",
+                  "refused": "{why}",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "picked",
+                          "value": true
+                        }
+                      ],
+                      "judge": {
+                        "kind": "truth",
+                        "value": "sits",
+                        "finding": true
+                      },
+                      "fail": "sits in the end wall of corridor {corridor}: {walls}",
+                      "undecided": "whether it sits in an end wall of corridor {corridor} is undecided: {why}",
+                      "related": "corridor"
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "unknown",
+                          "field": "picked"
+                        },
+                        {
+                          "kind": "field",
+                          "field": "sits",
+                          "value": true
+                        }
+                      ],
+                      "judge": {
+                        "kind": "fails"
+                      },
+                      "fail": "",
+                      "undecided": "",
+                      "effects": [
+                        {
+                          "on": "fail",
+                          "message": "sits in the end wall of corridor {corridor}, but whether it is selected is undecided: {unpicked}"
+                        }
+                      ]
+                    }
+                  ],
+                  "at": "opening"
+                },
+                "fail": "",
+                "undecided": ""
+              }
+            ]
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "aggregate",
+                  "function": "none",
+                  "over": {
+                    "kind": "measured",
+                    "name": "corridor_end_openings;path=@opening_path;openings=@opening_selector;depth=@wall_depth;facing=@facing"
+                  },
+                  "value": {
+                    "kind": "not",
+                    "operand": {
+                      "kind": "and",
+                      "operands": [
+                        {
+                          "kind": "not",
+                          "operand": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "sits"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "label": "no item fails"
+                },
+                {
+                  "kind": "literal",
+                  "value": {
+                    "type": "boolean",
+                    "value": true
+                  }
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.aggregate",
+                      "label": "no item fails",
+                      "fields": {
+                        "function": "none"
+                      },
+                      "inputs": {
+                        "over": {
+                          "block": {
+                            "type": "members.corridor_end_openings",
+                            "fields": {
+                              "depth": "@wall_depth",
+                              "facing": "@facing",
+                              "openings": "@opening_selector",
+                              "path": "@opening_path"
+                            }
+                          }
+                        },
+                        "value": {
+                          "block": {
+                            "type": "expression.not",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.and",
+                                  "inputs": {
+                                    "operands": {
+                                      "blocks": [
+                                        {
+                                          "type": "expression.not",
+                                          "inputs": {
+                                            "operand": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "sits",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.literal",
+                      "fields": {
+                        "value": {
+                          "type": "boolean",
+                          "value": true
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.counterpart-coverage",
@@ -72968,6 +73193,273 @@
             {
               "language": "de",
               "text": "`flight` oder `ramp`."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "corridor_end_openings",
+      "parameters": [
+        {
+          "key": "path",
+          "kind": {
+            "type": "path"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from the corridor to its openings."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte vom Flur zu seinen Öffnungen."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "openings",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The openings searched: source kinds, `,`-separated, or `@` a selector parameter of the rule, whose undecided objects are searched too."
+            },
+            {
+              "language": "de",
+              "text": "Die gesuchten Öffnungen: Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel, dessen unentschiedene Objekte ebenfalls gesucht werden."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "depth",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How far behind an end wall's face an opening may lie, in metres; half a metre without it."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit hinter der Ansicht einer Endwand eine Öffnung liegen darf, in Metern; ohne Angabe ein halber Meter."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "facing",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How much of an end wall an opening must face, more than this many metres; a tenth of a metre without it."
+            },
+            {
+              "language": "de",
+              "text": "Wie viel einer Endwand eine Öffnung zugewandt sein muss, mehr als so viele Meter; ohne Angabe ein Zehntelmeter."
+            }
+          ],
+          "references": "number"
+        }
+      ],
+      "services": [
+        "plan-span",
+        "relationship-selection"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the corridor ends cannot be measured",
+        "the path from the corridor cannot be followed"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Openings at a corridor's ends"
+        },
+        {
+          "language": "de",
+          "text": "Öffnungen an Flurenden"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The openings a corridor reaches, each searched against the walls its ends run into, as `corridor-end-openings` searches them: whether it sits in one, which, and whether the selection picks it."
+        },
+        {
+          "language": "de",
+          "text": "Die Öffnungen, die ein Flur erreicht, je gegen die Wände gesucht, auf die seine Enden treffen, wie `corridor-end-openings` sucht: ob sie in einer liegt, in welcher, und ob die Auswahl sie trifft."
+        }
+      ],
+      "fields": [
+        {
+          "name": "opening",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Opening"
+            },
+            {
+              "language": "de",
+              "text": "Öffnung"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The opening searched."
+            },
+            {
+              "language": "de",
+              "text": "Die gesuchte Öffnung."
+            }
+          ]
+        },
+        {
+          "name": "corridor",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Corridor"
+            },
+            {
+              "language": "de",
+              "text": "Flur"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The corridor searched from."
+            },
+            {
+              "language": "de",
+              "text": "Der Flur, von dem aus gesucht wird."
+            }
+          ]
+        },
+        {
+          "name": "picked",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Selected"
+            },
+            {
+              "language": "de",
+              "text": "Ausgewählt"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the selection surely picks the opening; undecided where it cannot tell."
+            },
+            {
+              "language": "de",
+              "text": "Ob die Auswahl die Öffnung sicher trifft; unentschieden, wo sie es nicht entscheidet."
+            }
+          ]
+        },
+        {
+          "name": "unpicked",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Why undecided"
+            },
+            {
+              "language": "de",
+              "text": "Warum unentschieden"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Why the selection cannot decide the opening; empty where it can."
+            },
+            {
+              "language": "de",
+              "text": "Warum die Auswahl die Öffnung nicht entscheidet; leer, wo sie es kann."
+            }
+          ]
+        },
+        {
+          "name": "sits",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Sits in an end wall"
+            },
+            {
+              "language": "de",
+              "text": "Liegt in einer Endwand"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the opening sits in a wall the corridor ends at; undecided where an end wall, or the opening's contact with one, cannot decide it."
+            },
+            {
+              "language": "de",
+              "text": "Ob die Öffnung in einer Wand liegt, an der der Flur endet; unentschieden, wo eine Endwand oder ihr Kontakt damit es nicht entscheidet."
+            }
+          ]
+        },
+        {
+          "name": "walls",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "End walls"
+            },
+            {
+              "language": "de",
+              "text": "Endwände"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The end walls it sits in, with its gap to each and how much it faces."
+            },
+            {
+              "language": "de",
+              "text": "Die Endwände, in denen sie liegt, mit Abstand und zugewandter Länge."
             }
           ]
         }

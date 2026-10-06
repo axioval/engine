@@ -26,6 +26,7 @@ const CAPABILITY: &str = "axioval:capability.corridor-end-openings";
 type Contact = ((f64, f64), (f64, f64));
 
 /// One end: its wall (or why it is undecided) and each window against it.
+#[derive(Clone)]
 struct End {
     wall: Result<([f64; 2], [f64; 2]), String>,
     contacts: BTreeMap<String, Contact>,
@@ -52,7 +53,7 @@ impl End {
     }
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct Ends(BTreeMap<String, Vec<End>>);
 
 impl Ends {
@@ -161,16 +162,30 @@ fn evaluate_with(
         ("opening_selector", selector(kind("window"))),
     ];
     parameters.extend(extra);
-    model.evaluate_with(
+    held(model, &rule(CAPABILITY, kind("corridor"), parameters), ends)
+}
+
+/// The template's evaluation of `rule` with the corridor ends `ends`,
+/// held to the implementation it replaced under `Parity::contract()`.
+#[allow(clippy::needless_pass_by_value)]
+fn held(
+    model: Model,
+    rule: &axioval_engine::CompiledRule,
+    ends: Option<Ends>,
+) -> CapabilityEvaluation {
+    model.holding_contract(
         &CorridorEndOpenings,
-        &rule(CAPABILITY, kind("corridor"), parameters),
+        &axioval_rules::reference::CorridorEndOpenings,
+        rule,
         |services| {
-            if let Some(ends) = ends {
+            if let Some(ends) = ends.clone() {
                 services
                     .register(PlanSpanServiceHandle::new(Arc::new(ends)))
                     .unwrap();
             }
         },
+        &[],
+        0.0,
     )
 }
 
@@ -438,4 +453,150 @@ fn end_walls_as_members_reach_the_verdicts() {
         );
         assert!(parity.holds(), "case {index}:\n{}", parity.diff());
     }
+}
+
+/// Windows whose `Pset.Kind` is `window`: a selection that cannot decide
+/// a window whose kind cannot be read.
+fn windows_by_kind() -> ParameterValue {
+    selector(
+        serde_json::from_value(serde_json::json!({
+            "kind": "property", "propertySet": "Pset", "property": "Kind",
+            "operator": "equals", "value": {"type": "string", "value": "window"}}))
+        .unwrap(),
+    )
+}
+
+/// An opening the selection cannot decide is open only where it would
+/// sit in an end wall, worded with the selection's reason; and the
+/// declaration is refused in the capability's order and words.
+#[test]
+fn undecided_openings_and_refusals_are_worded_as_before() {
+    let model = || {
+        model()
+            .unreadable_value("end", "Pset", "Kind", "IFCLABEL")
+            .unreadable_value("side", "Pset", "Kind", "IFCLABEL")
+    };
+    let evaluation = evaluate_with(
+        model(),
+        Some(straight()),
+        vec![("opening_selector", windows_by_kind())],
+    );
+    assert!(findings(&evaluation).is_empty());
+    let open = evaluation.not_evaluated_outcomes();
+    assert_eq!(open.len(), 1, "{open:?}");
+    assert!(
+        open[0]
+            .message()
+            .starts_with("sits in the end wall of corridor test:model/hall, but whether it is selected is undecided: "),
+        "{}",
+        open[0].message()
+    );
+    let refused = |parameters: Vec<(&'static str, ParameterValue)>| {
+        let evaluation = held(
+            model(),
+            &rule(CAPABILITY, kind("corridor"), parameters),
+            Some(straight()),
+        );
+        evaluation.not_evaluated_outcomes()[0].message().to_owned()
+    };
+    assert_eq!(
+        refused(vec![("opening_selector", selector(kind("window")))]),
+        "corridor-end-openings: parameter `opening_path` is required"
+    );
+    assert_eq!(
+        refused(vec![("opening_path", strings(&["bounds:backward"]))]),
+        "corridor-end-openings: parameter `opening_selector` is required"
+    );
+    assert_eq!(
+        refused(vec![
+            ("opening_path", strings(&["bounds:backward"])),
+            ("opening_selector", selector(kind("window"))),
+            ("wall_depth", number(-0.5)),
+            ("facing", number(-1.0)),
+        ]),
+        "corridor-end-openings: `wall_depth` must be a non-negative length in metres"
+    );
+}
+
+/// Generated corridors: two ends, each a wall or undecided, three windows
+/// of random gap and facing against each, selected by kind or by a kind
+/// that may not be read, under random depths and facings, judged alike by
+/// the template and the implementation it replaced.
+mod generated {
+    use super::*;
+    use proptest::prelude::*;
+
+    fn contact() -> impl Strategy<Value = ((f64, f64), (f64, f64))> {
+        (0.0..1.0f64, 0.0..0.2f64, 0.0..0.4f64, 0.0..0.2f64)
+            .prop_map(|(gap, wide, facing, more)| ((gap, gap + wide), (facing, facing + more)))
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(96))]
+
+        #[test]
+        fn generated_corridors_hold_parity(
+            decided in [any::<bool>(), any::<bool>()],
+            contacts in proptest::collection::vec(contact(), 6),
+            unreadable in [any::<bool>(), any::<bool>(), any::<bool>()],
+            by_kind in any::<bool>(),
+            depth in proptest::option::of(0.0..1.0f64),
+            facing in proptest::option::of(0.0..0.3f64),
+        ) {
+            let windows = ["end", "side", "office-end"];
+            let mut model = model();
+            for (window, unreadable) in windows.into_iter().zip(unreadable) {
+                model = if unreadable {
+                    model.unreadable_value(window, "Pset", "Kind", "IFCLABEL")
+                } else {
+                    model.text(window, "Pset", "Kind", "window")
+                };
+            }
+            let mut walls = Vec::new();
+            for (index, decided) in decided.into_iter().enumerate() {
+                let mut end = if decided {
+                    End::wall([if index == 0 { 0.0 } else { 20.0 }, 0.0], [if index == 0 { 0.0 } else { 20.0 }, 2.0])
+                } else {
+                    End::undecided("the end is a bend")
+                };
+                for (window, (gap, facing)) in windows.into_iter().zip(&contacts[index * 3..]) {
+                    end = end.window(window, *gap, *facing);
+                }
+                walls.push(end);
+            }
+            let mut extra = Vec::new();
+            if !by_kind {
+                extra.push(("opening_selector", windows_by_kind()));
+            }
+            if let Some(depth) = depth {
+                extra.push(("wall_depth", number(depth)));
+            }
+            if let Some(facing) = facing {
+                extra.push(("facing", number(facing)));
+            }
+            evaluate_with(model, Some(Ends::default().space("hall", walls)), extra);
+        }
+    }
+}
+
+/// The openings a corridor reaches are searched against ends found on an
+/// approximate skeleton, so every member is inexact, as the capability's
+/// findings cite the skeleton inexact.
+#[test]
+fn openings_searched_at_approximate_ends_are_never_exact() {
+    use axioval_engine::{CapabilityRegistry, measured_members};
+    let (project, mut services) = model().services();
+    services
+        .register(PlanSpanServiceHandle::new(Arc::new(straight())))
+        .unwrap();
+    let registry = axioval_rules::register_builtins(CapabilityRegistry::new()).unwrap();
+    registry.install_measured(&mut services, &project);
+    let openings = measured_members(
+        &services,
+        &id("hall"),
+        "corridor_end_openings;path=bounds:backward;openings=window",
+    )
+    .unwrap();
+    assert_eq!(openings.len(), 2);
+    assert!(openings.iter().all(|opening| !opening.exact));
 }

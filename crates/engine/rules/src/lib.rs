@@ -192,9 +192,10 @@ pub mod reference {
     pub use crate::conformance::reference::SelectorConformance;
     pub use crate::consistent_value::reference::ConsistentValue;
     pub use crate::coordinate_consistency::reference::CoordinateConsistencyCheck;
+    pub use crate::corridor_end_openings::reference::CorridorEndOpenings;
     pub use crate::counterpart_coverage::reference::CounterpartCoverage;
-    pub use crate::effective_coverage::reference::EffectiveCoverage;
     pub use crate::door_swing_direction::reference::DoorSwing;
+    pub use crate::effective_coverage::reference::EffectiveCoverage;
     pub use crate::empty_host::reference::EmptyHost;
     pub use crate::external_wall_validation::reference::ExternalWallValidation;
     pub use crate::horizontal_guard::reference::HorizontalGuard;
@@ -308,6 +309,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(measured_openings::OpeningMeasures))
         .and_then(|registry| registry.register_measured(keyed_limit::DoorMeasures))
         .and_then(|registry| registry.register_measured(door_swing_direction::SwingMeasures))
+        .and_then(|registry| registry.register_measured(corridor_end_openings::CorridorEndSearch))
         .and_then(|registry| registry.register_measured(opening_zone::PlacementMeasures))
         .and_then(|registry| registry.register_measured(allowed_profile::ProfileMeasures))
         .and_then(|registry| registry.register_measured(stair_geometry::StairMeasures))

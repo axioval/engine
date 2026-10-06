@@ -22,124 +22,61 @@
 //! footprints. An opening whose selection is undecided is found only as
 //! not evaluated, and only where it would sit in an end wall.
 
-use std::collections::BTreeMap;
+use std::sync::LazyLock;
 
+use axioval_engine::template::Template;
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, CorridorEndRequest, CorridorEnds, EndWall,
-    NotEvaluatedReason, ParameterDescriptor, ParameterType, PlanSpanError, PlanSpanServiceHandle,
-    RuleCapability, RuleContext, WallContact,
+    CapabilityEvaluation, CompiledRule, CorridorEnds, EndWall, NotEvaluatedReason,
+    ParameterDescriptor, PlanSpanError, RuleCapability, RuleContext, WallContact,
 };
-use axioval_ir::contract::Selector;
-use axioval_ir::{Object, ObjectId};
 
 use crate::plan_area::shown;
-use crate::selection::{Selection, select_objects, selector_matches};
-use crate::support::{Parameters, Traversal, Unavailable, finding, invalid};
+use crate::support::Unavailable;
+
+mod measured;
+#[cfg(feature = "parity-reference")]
+pub(crate) mod reference;
+mod template;
+
+pub(crate) use measured::CorridorEndSearch;
 
 /// Finds openings in the wall a selected corridor ends at.
+///
+/// It runs as a template ([`axioval_engine::template`]): the openings a
+/// corridor reaches, each searched against the corridor's end walls (the
+/// measured list `corridor_end_openings`), judged on the opening by
+/// whether it sits in one and whether it is selected.
 pub struct CorridorEndOpenings;
 
-struct Declaration<'a> {
-    openings: Traversal,
-    opening_selector: &'a Selector,
-    wall_depth: f64,
-    facing: f64,
-}
+static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
 
-fn length(parameters: &Parameters<'_>, name: &str, default: f64) -> Result<f64, Unavailable> {
-    match parameters.number(name)? {
-        None => Ok(default),
-        Some(value) if value.is_finite() && value >= 0.0 => Ok(value),
-        Some(_) => Err(invalid(format!(
-            "`{name}` must be a non-negative length in metres"
-        ))),
-    }
-}
-
-fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
-    let parameters = Parameters(rule);
-    Ok(Declaration {
-        openings: Traversal::path(
-            parameters
-                .strings("opening_path")?
-                .ok_or_else(|| invalid("parameter `opening_path` is required"))?,
-        )?,
-        opening_selector: parameters.required_selector("opening_selector")?,
-        wall_depth: length(&parameters, "wall_depth", 0.5)?,
-        facing: length(&parameters, "facing", 0.1)?,
-    })
-}
+/// The plans of the rules bound to it, kept across runs.
+static PLANS: crate::templates::Plans = crate::templates::Plans::new();
 
 impl RuleCapability for CorridorEndOpenings {
     fn id(&self) -> &'static str {
-        "axioval:capability.corridor-end-openings"
+        template::ID
     }
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
-        vec![
-            ParameterDescriptor::required("opening_path", ParameterType::StringList),
-            ParameterDescriptor::required("opening_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("wall_depth", ParameterType::Number),
-            ParameterDescriptor::optional("facing", ParameterType::Number),
-        ]
+        TEMPLATE.parameters.clone()
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let declared = match declaration(rule) {
-            Ok(declared) => declared,
-            Err((reason, message)) => {
-                return CapabilityEvaluation::not_evaluated(
-                    reason,
-                    format!("corridor-end-openings: {message}"),
-                );
-            }
-        };
-        let (universe, undecided) = candidates(context, declared.opening_selector);
-        let (spaces, mut evaluation) = select_objects(context, &rule.selector);
-        for space in spaces {
-            match check(context, rule, &declared, &universe, &undecided, space) {
-                Err((reason, message)) => {
-                    evaluation.push_object_not_evaluated(space.id.clone(), reason, message);
-                }
-                Ok(outcomes) => {
-                    for outcome in outcomes {
-                        match outcome {
-                            Outcome::Found(found) => evaluation.push_finding(*found),
-                            Outcome::Unknown(opening, reason, message) => {
-                                evaluation.push_object_not_evaluated(opening, reason, message);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        evaluation
+        crate::templates::run((&TEMPLATE, &PLANS), context, rule)
+    }
+
+    fn template(&self) -> Option<&Template> {
+        Some(&TEMPLATE)
     }
 }
 
-/// The objects `opening_selector` picks, with those it cannot decide and why.
-fn candidates<'a>(
-    context: &RuleContext<'a>,
-    selector: &Selector,
-) -> (Vec<&'a Object>, BTreeMap<ObjectId, String>) {
-    let mut universe = Vec::new();
-    let mut undecided = BTreeMap::new();
-    for object in context.project.objects() {
-        match selector_matches(context, selector, object, &mut Vec::new()) {
-            Selection::Match => universe.push(object),
-            Selection::NoMatch => {}
-            Selection::NotEvaluated(_, message) => {
-                undecided.insert(object.id.clone(), message);
-                universe.push(object);
-            }
-        }
-    }
-    (universe, undecided)
-}
-
-enum Outcome {
-    Found(Box<axioval_ir::Finding>),
-    Unknown(ObjectId, NotEvaluatedReason, String),
+/// How far an opening may lie from an end wall, and how much of it it
+/// must face, to sit in it.
+#[derive(Clone, Copy)]
+pub(crate) struct Margins {
+    pub(crate) wall_depth: f64,
+    pub(crate) facing: f64,
 }
 
 /// Where an opening stands against one end wall.
@@ -149,12 +86,12 @@ enum Standing {
     Unknown(String),
 }
 
-fn standing(declared: &Declaration<'_>, contact: &WallContact) -> Standing {
+fn standing(margins: Margins, contact: &WallContact) -> Standing {
     let (gap, facing) = (contact.gap(), contact.facing());
-    if gap.lower_metres() > declared.wall_depth || facing.upper_metres() <= declared.facing {
+    if gap.lower_metres() > margins.wall_depth || facing.upper_metres() <= margins.facing {
         return Standing::Out;
     }
-    if gap.upper_metres() <= declared.wall_depth && facing.lower_metres() > declared.facing {
+    if gap.upper_metres() <= margins.wall_depth && facing.lower_metres() > margins.facing {
         return Standing::In;
     }
     Standing::Unknown(format!(
@@ -162,96 +99,13 @@ fn standing(declared: &Declaration<'_>, contact: &WallContact) -> Standing {
          within {} m and more than {} m",
         shown(gap.lower_metres(), gap.upper_metres()),
         shown(facing.lower_metres(), facing.upper_metres()),
-        declared.wall_depth,
-        declared.facing
+        margins.wall_depth,
+        margins.facing
     ))
 }
 
-fn check(
-    context: &RuleContext<'_>,
-    rule: &CompiledRule,
-    declared: &Declaration<'_>,
-    universe: &[&Object],
-    undecided: &BTreeMap<ObjectId, String>,
-    space: &Object,
-) -> Result<Vec<Outcome>, Unavailable> {
-    let (openings, path_evidence) = declared.openings.related(context, &space.id, universe)?;
-    if openings.is_empty() {
-        return Ok(Vec::new());
-    }
-    let spans = context
-        .services
-        .get::<PlanSpanServiceHandle>()
-        .ok_or_else(|| {
-            (
-                NotEvaluatedReason::MissingService,
-                "plan-span service is not registered".to_owned(),
-            )
-        })?;
-    let request = CorridorEndRequest::try_new(space.id.clone(), openings.iter().cloned())
-        .map_err(|error| unavailable(&error))?;
-    let ends = spans
-        .measure_corridor_ends(&request)
-        .map_err(|error| unavailable(&error))?;
-    let mut outcomes = Vec::new();
-    for (index, opening) in request.subjects().iter().enumerate() {
-        let judged = judge(declared, &ends, index);
-        match (judged, undecided.get(opening)) {
-            (Judged::In(walls), None) => {
-                let mut evidence = path_evidence.clone();
-                evidence.push(ends.evidence().clone());
-                let mut described = Vec::new();
-                for (start, end, contact) in walls {
-                    evidence.push(contact.gap().evidence().clone());
-                    evidence.push(contact.facing().evidence().clone());
-                    described.push(format!(
-                        "{} m from the wall {} and facing {} m of it",
-                        shown(contact.gap().lower_metres(), contact.gap().upper_metres()),
-                        wall(start, end),
-                        shown(
-                            contact.facing().lower_metres(),
-                            contact.facing().upper_metres()
-                        ),
-                    ));
-                }
-                outcomes.push(Outcome::Found(Box::new(finding(
-                    rule,
-                    opening,
-                    format!(
-                        "sits in the end wall of corridor {}: {}",
-                        space.id,
-                        described.join("; ")
-                    ),
-                    evidence,
-                    vec![space.id.clone()],
-                ))));
-            }
-            (Judged::In(_), Some(why)) => outcomes.push(Outcome::Unknown(
-                opening.clone(),
-                NotEvaluatedReason::IncompleteEvidence,
-                format!(
-                    "sits in the end wall of corridor {}, but whether it is selected is \
-                     undecided: {why}",
-                    space.id
-                ),
-            )),
-            (Judged::Out, _) | (Judged::Unknown(_), Some(_)) => {}
-            (Judged::Unknown(why), None) => outcomes.push(Outcome::Unknown(
-                opening.clone(),
-                NotEvaluatedReason::IncompleteEvidence,
-                format!(
-                    "whether it sits in an end wall of corridor {} is undecided: {}",
-                    space.id,
-                    why.join("; ")
-                ),
-            )),
-        }
-    }
-    Ok(outcomes)
-}
-
 /// How an opening stands against every end of a corridor.
-enum Judged<'a> {
+pub(crate) enum Judged<'a> {
     /// In these end walls.
     In(Vec<([f64; 2], [f64; 2], &'a WallContact)>),
     /// In none.
@@ -260,7 +114,8 @@ enum Judged<'a> {
     Unknown(Vec<String>),
 }
 
-fn judge<'a>(declared: &Declaration<'_>, ends: &'a CorridorEnds, index: usize) -> Judged<'a> {
+/// How the opening `index` of the request stands against every end.
+pub(crate) fn judge(margins: Margins, ends: &CorridorEnds, index: usize) -> Judged<'_> {
     let mut walls = Vec::new();
     let mut unknown = Vec::new();
     for corridor_end in ends.ends() {
@@ -275,7 +130,7 @@ fn judge<'a>(declared: &Declaration<'_>, ends: &'a CorridorEnds, index: usize) -
                 start,
                 end,
                 contacts,
-            } => match standing(declared, &contacts[index]) {
+            } => match standing(margins, &contacts[index]) {
                 Standing::In => walls.push((*start, *end, &contacts[index])),
                 Standing::Out => {}
                 Standing::Unknown(why) => unknown.push(format!("{why} ({})", wall(*start, *end))),
@@ -291,6 +146,25 @@ fn judge<'a>(declared: &Declaration<'_>, ends: &'a CorridorEnds, index: usize) -
     }
 }
 
+/// The end walls an opening sits in, worded as a finding names them.
+pub(crate) fn described(walls: &[([f64; 2], [f64; 2], &WallContact)]) -> String {
+    walls
+        .iter()
+        .map(|(start, end, contact)| {
+            format!(
+                "{} m from the wall {} and facing {} m of it",
+                shown(contact.gap().lower_metres(), contact.gap().upper_metres()),
+                wall(*start, *end),
+                shown(
+                    contact.facing().lower_metres(),
+                    contact.facing().upper_metres()
+                ),
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
 fn wall(start: [f64; 2], end: [f64; 2]) -> String {
     format!(
         "({}, {})–({}, {})",
@@ -301,7 +175,7 @@ fn wall(start: [f64; 2], end: [f64; 2]) -> String {
     )
 }
 
-fn unavailable(error: &PlanSpanError) -> Unavailable {
+pub(crate) fn unavailable(error: &PlanSpanError) -> Unavailable {
     let reason = match error {
         PlanSpanError::UnknownObject(_) | PlanSpanError::Unavailable(_) => {
             NotEvaluatedReason::IncompleteEvidence

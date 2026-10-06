@@ -1344,6 +1344,25 @@ realisable`, naming the capability itself), then each role selector's
 kind after `horizontal-guard: `; a rule selecting nothing judges nothing. Without the
 service the rule is open (`guard service is not registered`).
 
+### `corridor-end-openings`
+
+One form, judged by one check over the measured list
+`corridor_end_openings;path=@opening_path;openings=@opening_selector;depth=@wall_depth;facing=@facing`:
+each opening the corridor reaches, searched against the walls its ends
+run into (the plan-span service's corridor ends) as the capability
+searched them: `sits` in one (true, false, or undecided with why), the
+`walls` it sits in, and whether the selection picks it (`picked`, its
+reason `unpicked`). The list names the opening as each item's `subject`,
+so every outcome is on the opening: a selected opening sitting in an end
+wall is a finding relating the corridor (`sits in the end wall of
+corridor {corridor}: {walls}`), one whose standing is undecided is open,
+and one the selection cannot decide is open only where it sits in one. A
+corridor whose ends cannot be measured, or without the plan-span
+service, is open on the corridor with the list's refusal and reason. The
+declaration checks the path, the selector and both margins (`nonNegative`),
+in the capability's order and words; an unstated margin is the search's
+default (0.5 m deep, 0.1 m facing).
+
 ### `door-swing`
 
 One form, judged by its checks, both over the measured list
@@ -1900,6 +1919,15 @@ generated walls of up to three openings, through the wall or recessed,
 stating random side areas, one or none, under random tolerances and
 minimum areas; by the `opening-area` rules of the case `openings`,
 recorded before the switch; and by its fork on walls stating both areas.
+
+`corridor-end-openings` is held to `corridor_end_openings/reference.rs`
+(`axioval_rules::reference::CorridorEndOpenings`) on every fixture of
+`tests/corridor_end_openings.rs` under `Parity::contract()`, its undecided
+openings and refusals worded literally; by generated corridors of two
+ends (each a wall or undecided) and three windows of random gap and
+facing, selected by kind or by a kind that may not be read, under random
+margins; and by the `corridor-end-openings` rules of the case `openings`,
+recorded before the switch. It is never forked.
 
 `door-swing` is held to `door_swing_direction/reference.rs`
 (`axioval_rules::reference::DoorSwing`) on every fixture of

@@ -188,7 +188,7 @@
       "searchOnly": "classification",
       "reason": "face distances decide which container an object lies in, by the containment search"
     },
-    "corridor_end_openings::check::measure_corridor_ends": {
+    "corridor_end_openings::reference::check::measure_corridor_ends": {
       "count": 1,
       "providedBy": [
         "end_walls"

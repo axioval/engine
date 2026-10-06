@@ -1,17 +1,24 @@
 //! The spaces a door opens onto as measured members, probed as
-//! `door-swing` probes them: each with whether the door swings into it and
-//! whether it surely swings away from it.
+//! `door-swing` probes them: each with whether a selection picks it,
+//! whether the door swings into it and whether it surely swings away from
+//! it.
+//!
+//! A door's leaves are read once per run, and each space it may open onto
+//! is probed once per run, however many lists name it.
+
+use std::sync::Arc;
 
 use axioval_engine::{
-    FreeSpaceServiceHandle, MeasuredMember, MeasuredProvider, Measurement, MemberValue,
-    NotEvaluatedReason, ObjectFrameServiceHandle, PropertyResolutionError, RuleContext,
+    DoorLeaves, FreeSpaceServiceHandle, MeasuredMember, MeasuredMemo, MeasuredProvider,
+    Measurement, MemberValue, NotEvaluatedReason, ObjectFrameServiceHandle,
+    PropertyResolutionError, RuleContext,
 };
 use axioval_ir::measured::{MeasuredArgument, MeasuredCall};
-use axioval_ir::{Object, ObjectId};
+use axioval_ir::{Evidence, Object, ObjectId};
 
 use super::hinged_leaves;
 use crate::door_swing::{self, Relation};
-use crate::measured_kinds::{objects_of_kinds, resolution_error};
+use crate::measured_kinds::{objects_of_kinds, resolution_error, selection_cow};
 use crate::support::{Traversal, Unavailable, invalid};
 
 /// The member list measured here.
@@ -24,6 +31,29 @@ fn missing(service: &str) -> Unavailable {
     (
         NotEvaluatedReason::MissingService,
         format!("the {service} service is not registered"),
+    )
+}
+
+/// The key of a door's hinged leaves in the run's memo.
+#[derive(Hash, PartialEq, Eq)]
+struct LeavesKey(ObjectId);
+
+/// The key of where a space lies against a door's swing.
+#[derive(Hash, PartialEq, Eq)]
+struct RelationKey(ObjectId, ObjectId);
+
+/// Where `space` lies against the swing of `door`'s `leaves`, probed once
+/// per run.
+fn relation(
+    context: &RuleContext<'_>,
+    free: &FreeSpaceServiceHandle,
+    (door, leaves): (&ObjectId, &DoorLeaves),
+    space: &ObjectId,
+) -> Result<(Relation, Vec<Evidence>), Unavailable> {
+    MeasuredMemo::of(
+        context.services,
+        RelationKey(door.clone(), space.clone()),
+        || door_swing::relation(free, leaves, space),
     )
 }
 
@@ -44,7 +74,9 @@ impl SwingMeasures {
         let Some(MeasuredArgument::Path(steps)) = call.argument("path") else {
             return Err(invalid("`path` is required"));
         };
-        let leaves = hinged_leaves(frames, door)?;
+        let leaves = MeasuredMemo::of(context.services, LeavesKey(door.id.clone()), || {
+            hinged_leaves(frames, door).map(Arc::new)
+        })?;
         let everything: Vec<&Object> = context.project.objects().collect();
         let (mut reached, _) = Traversal::path(steps)?.related(context, &door.id, &everything)?;
         if call.argument("kinds").is_some() {
@@ -52,16 +84,42 @@ impl SwingMeasures {
                 .map_err(|error| (NotEvaluatedReason::BackendUnavailable, error.to_string()))?;
             reached.retain(|space| kinds.contains(space));
         }
+        let read = |key: &str| {
+            selection_cow(context, call, key)
+                .map_err(|error| (NotEvaluatedReason::IncompleteEvidence, error.to_string()))
+        };
+        let (towards, not_towards) = (read("towards")?, read("not_towards")?);
+        let selections = [&towards, &not_towards];
         Ok(reached
             .iter()
-            .map(|space| {
+            .filter_map(|space| {
                 let truth = |value: bool| MemberValue::Truth {
                     value,
                     locator: format!("{SWING_SPACES}:{}:{space}", door.id),
                 };
                 let undecided = |why: String| MemberValue::Undecided { why };
+                // Only the spaces a selection may pick are probed.
+                if selections.iter().any(|selection| selection.is_some())
+                    && !selections.iter().any(|selection| {
+                        selection.as_ref().is_some_and(|selection| {
+                            selection.matched.contains(space) || selection.undecided.contains(space)
+                        })
+                    })
+                {
+                    return None;
+                }
+                let chosen = |selection: &Option<
+                    std::borrow::Cow<'_, axioval_ir::measured::MeasuredSelection>,
+                >| match selection {
+                    None => truth(true),
+                    Some(picked) if picked.matched.contains(space) => truth(true),
+                    Some(picked) if picked.undecided.contains(space) => {
+                        undecided(format!("whether the selection picks {space} is undecided"))
+                    }
+                    Some(_) => truth(false),
+                };
                 let mut exact = false;
-                let (into, away) = match door_swing::relation(free, &leaves, space) {
+                let (into, away) = match relation(context, free, (&door.id, &leaves), space) {
                     Ok((relation, evidence)) => {
                         // As exact as the leaves and every probe were.
                         exact = evidence.iter().all(|evidence| evidence.exact);
@@ -78,11 +136,24 @@ impl SwingMeasures {
                     }
                     Err((_, why)) => (undecided(why.clone()), undecided(why)),
                 };
-                MeasuredMember {
+                Some(MeasuredMember {
                     certain: true,
                     exact,
-                    fields: [("into", into), ("away", away)].into_iter().collect(),
-                }
+                    fields: [
+                        (
+                            "space",
+                            MemberValue::Objects {
+                                objects: vec![space.clone()],
+                            },
+                        ),
+                        ("towards", chosen(&towards)),
+                        ("not_towards", chosen(&not_towards)),
+                        ("into", into),
+                        ("away", away),
+                    ]
+                    .into_iter()
+                    .collect(),
+                })
             })
             .collect())
     }

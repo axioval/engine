@@ -1344,6 +1344,26 @@ realisable`, naming the capability itself), then each role selector's
 kind after `horizontal-guard: `; a rule selecting nothing judges nothing. Without the
 service the rule is open (`guard service is not registered`).
 
+### `door-swing`
+
+One form, judged by its checks, both over the measured list
+`swing_spaces;path=@space_path;towards=@swing_into;not_towards=@swing_not_into`:
+the spaces the door opens onto that either selector may pick, whether each
+picks it (`towards`, `not_towards`: true, false, or undecided), each probed
+once (`into`, and `away`, undecided where neither probe lies in it).
+
+| Check | When | Judgement |
+| --- | --- | --- |
+| not into | `swing_not_into` | each space's `into` a finding (`swings into {space}, which `swing_not_into` forbids`, relating it), open where the selection may pick it or the probes cannot place it |
+| into | `swing_into` | `Any`: a picked space swung into passes; otherwise the first space left open (the probes cannot place it, it may not be picked, or neither probe lies in it) opens the check; otherwise the picked spaces surely swung away from are one finding (`swings away from {failing}, …`) |
+
+Both checks leave the door open once (`once`), as the capability
+reported one doubt per door, and a door without a hinged leaf, or whose
+spaces cannot be reached, is open once with the list's refusal. The
+services are `object-frame` and `free-space`, checked before anything is
+selected. The declaration checks `space_path`, both selectors' kinds,
+that one is stated, and the path, in the capability's order and words.
+
 ### `opening-area`
 
 | Form | When | Values | Decision |
@@ -1880,6 +1900,16 @@ generated walls of up to three openings, through the wall or recessed,
 stating random side areas, one or none, under random tolerances and
 minimum areas; by the `opening-area` rules of the case `openings`,
 recorded before the switch; and by its fork on walls stating both areas.
+
+`door-swing` is held to `door_swing_direction/reference.rs`
+(`axioval_rules::reference::DoorSwing`) on every fixture of
+`tests/door_swing.rs` under `Parity::contract()`, its outcomes worded
+literally (selections that cannot decide a space, both directions
+together, refused declarations and services); by generated doors of six
+leaves opening onto random rooms whose uses are stated, unreadable or
+absent, judged by kind or by use in either direction; and by the
+`door-swing` rules of the case `openings`, recorded before the switch. It
+is never forked.
 
 `empty-host` is held to `empty_host/reference.rs`
 (`axioval_rules::reference::EmptyHost`) on every fixture of

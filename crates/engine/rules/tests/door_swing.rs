@@ -63,17 +63,35 @@ fn doors() -> Doors {
 fn run(parameters: Vec<(&str, ParameterValue)>) -> CapabilityEvaluation {
     let mut all = vec![("space_path", strings(&["opens:forward"]))];
     all.extend(parameters);
-    model().evaluate_with(&DoorSwing, &rule(ID, kind("door"), all), |services| {
-        services.register(doors().handle()).unwrap();
-        services
-            .register(
-                Rooms::default()
-                    .room("office", [-5.0, 0.0], [5.0, 4.0])
-                    .room("corridor", [-5.0, -2.0], [5.0, 0.0])
-                    .handle(),
-            )
-            .unwrap();
-    })
+    held(model(), &rule(ID, kind("door"), all), doors)
+}
+
+/// The template's evaluation of `rule` over `model` with the leaves
+/// `doors` states and the two rooms, held to the implementation it
+/// replaced under `Parity::contract()`.
+fn held(
+    model: Model,
+    rule: &axioval_engine::CompiledRule,
+    doors: impl Fn() -> Doors,
+) -> CapabilityEvaluation {
+    model.holding_contract(
+        &DoorSwing,
+        &axioval_rules::reference::DoorSwing,
+        rule,
+        |services| {
+            services.register(doors().handle()).unwrap();
+            services
+                .register(
+                    Rooms::default()
+                        .room("office", [-5.0, 0.0], [5.0, 4.0])
+                        .room("corridor", [-5.0, -2.0], [5.0, 0.0])
+                        .handle(),
+                )
+                .unwrap();
+        },
+        &[],
+        0.0,
+    )
 }
 
 fn flagged(evaluation: &CapabilityEvaluation) -> Vec<String> {
@@ -298,5 +316,154 @@ fn the_directions_as_expressions_over_the_swung_spaces_reach_the_verdicts() {
         );
         assert!(parity.holds(), "{direction} {picked}:\n{}", parity.diff());
         assert!(parity.found > 0 && parity.open > 0, "{direction} {picked}");
+    }
+}
+
+/// Spaces whose `Pset.Use` is `use`: a selection that cannot decide a
+/// space whose use cannot be read.
+fn used_as(use_: &str) -> ParameterValue {
+    selector(
+        serde_json::from_value(serde_json::json!({
+            "kind": "property", "propertySet": "Pset", "property": "Use",
+            "operator": "equals", "value": {"type": "string", "value": use_}}))
+        .unwrap(),
+    )
+}
+
+/// Every outcome worded as the capability worded it: probes that place
+/// nothing, selections that cannot decide a space, both directions
+/// together (the door left open once), and the refused declarations and
+/// services.
+#[test]
+fn every_outcome_is_worded_as_before() {
+    let model = || {
+        model()
+            .text("office", "Pset", "Use", "office")
+            .unreadable_value("corridor", "Pset", "Use", "IFCLABEL")
+    };
+    let both = vec![
+        ("space_path", strings(&["opens:forward"])),
+        ("swing_into", used_as("office")),
+        ("swing_not_into", used_as("corridor")),
+    ];
+    let evaluation = held(model(), &rule(ID, kind("door"), both), doors);
+    let open: Vec<String> = evaluation
+        .not_evaluated_outcomes()
+        .iter()
+        .map(|outcome| outcome.message().to_owned())
+        .collect();
+    // `out` and `both` swing into the corridor, which the selection may
+    // pick; `slide` and `unknown` are open once.
+    assert!(
+        open.iter()
+            .any(|message| message.ends_with("which `swing_not_into` may pick")),
+        "{open:?}"
+    );
+    assert_eq!(
+        evaluation
+            .not_evaluated_outcomes()
+            .iter()
+            .filter(|outcome| outcome.object_id().unwrap().local_id == "slide")
+            .count(),
+        1
+    );
+    let refused = |parameters: Vec<(&'static str, ParameterValue)>| {
+        let evaluation = held(model(), &rule(ID, kind("door"), parameters), doors);
+        evaluation.not_evaluated_outcomes()[0].message().to_owned()
+    };
+    assert_eq!(
+        refused(vec![("swing_into", used_as("office"))]),
+        "door-swing: parameter `space_path` is required"
+    );
+    assert_eq!(
+        refused(vec![
+            ("space_path", strings(&["opens:forward"])),
+            ("swing_into", strings(&["office"])),
+        ]),
+        "door-swing: parameter `swing_into` has the wrong type"
+    );
+    assert_eq!(
+        refused(vec![("space_path", strings(&["opens:sideways"]))]),
+        "door-swing: declare `swing_into`, `swing_not_into` or both"
+    );
+    let unserved = model().holding_contract(
+        &DoorSwing,
+        &axioval_rules::reference::DoorSwing,
+        &rule(
+            ID,
+            kind("door"),
+            vec![
+                ("space_path", strings(&["opens:forward"])),
+                ("swing_into", used_as("office")),
+            ],
+        ),
+        |services| {
+            services.register(doors().handle()).unwrap();
+        },
+        &[],
+        0.0,
+    );
+    assert_eq!(
+        unserved.not_evaluated_outcomes()[0].message(),
+        "door-swing needs the object-frame and free-space services"
+    );
+}
+
+/// Generated doors: each of six leaves (into the office, the corridor,
+/// both ways, sliding, beside neither room, unknown) opening onto a random
+/// set of the rooms, the rooms' uses stated, unreadable or absent, judged
+/// against `swing_into` and `swing_not_into` by kind or by use, alike by
+/// the template and the implementation it replaced.
+mod generated {
+    use super::*;
+    use proptest::prelude::*;
+
+    fn direction() -> impl Strategy<Value = Option<(bool, &'static str)>> {
+        proptest::option::of((any::<bool>(), prop_oneof![Just("office"), Just("corridor")]))
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(96))]
+
+        #[test]
+        fn generated_doors_hold_parity(
+            opens in proptest::collection::vec((any::<bool>(), any::<bool>()), 6),
+            uses in [0u8..3, 0u8..3],
+            into in direction(),
+            not_into in direction(),
+        ) {
+            let mut model = Model::default()
+                .object("office", "office")
+                .object("corridor", "corridor");
+            for (room, stated) in ["office", "corridor"].into_iter().zip(uses) {
+                model = match stated {
+                    0 => model.text(room, "Pset", "Use", room),
+                    1 => model.unreadable_value(room, "Pset", "Use", "IFCLABEL"),
+                    _ => model,
+                };
+            }
+            for (door, (office, corridor)) in
+                ["in", "out", "both", "slide", "far", "unknown"].into_iter().zip(opens)
+            {
+                model = model.object(door, "door");
+                if office {
+                    model = model.edge("opens", door, "office");
+                }
+                if corridor {
+                    model = model.edge("opens", door, "corridor");
+                }
+            }
+            let pick = |(by_use, room): (bool, &str)| {
+                if by_use { used_as(room) } else { selector(kind(room)) }
+            };
+            let mut parameters = vec![("space_path", strings(&["opens:forward"]))];
+            if let Some(into) = into {
+                parameters.push(("swing_into", pick(into)));
+            }
+            if let Some(not_into) = not_into {
+                parameters.push(("swing_not_into", pick(not_into)));
+            }
+            held(model, &rule(ID, kind("door"), parameters), doors);
+        }
     }
 }

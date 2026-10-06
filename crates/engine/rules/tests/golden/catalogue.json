@@ -11734,7 +11734,451 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "door-swing",
+        "declaration": [
+          {
+            "kind": "required",
+            "parameter": "space_path"
+          },
+          {
+            "kind": "kind",
+            "parameter": "swing_into"
+          },
+          {
+            "kind": "kind",
+            "parameter": "swing_not_into"
+          },
+          {
+            "kind": "anyOf",
+            "parameters": [
+              "swing_into",
+              "swing_not_into"
+            ],
+            "message": "declare `swing_into`, `swing_not_into` or both"
+          },
+          {
+            "kind": "path",
+            "parameter": "space_path"
+          }
+        ],
+        "services": {
+          "needs": [
+            "object-frame",
+            "free-space"
+          ],
+          "message": "door-swing needs the object-frame and free-space services"
+        },
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "door",
+                "expression": {
+                  "kind": "literal",
+                  "value": {
+                    "type": "boolean",
+                    "value": true
+                  }
+                }
+              }
+            ],
+            "decision": {
+              "kind": "holds",
+              "value": "door"
+            },
+            "fail": "",
+            "undecided": "",
+            "checks": [
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {
+                    "when": [
+                      "swing_not_into"
+                    ]
+                  },
+                  "list": "swing_spaces;path=@space_path;towards=@swing_into;not_towards=@swing_not_into",
+                  "refused": "door-swing: {why}",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "not_towards",
+                          "value": true
+                        }
+                      ],
+                      "judge": {
+                        "kind": "truth",
+                        "value": "into",
+                        "finding": true
+                      },
+                      "fail": "swings into {space}, which `swing_not_into` forbids",
+                      "undecided": "door-swing: {why}",
+                      "related": "space"
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "unknown",
+                          "field": "not_towards"
+                        }
+                      ],
+                      "judge": {
+                        "kind": "truth",
+                        "value": "into",
+                        "finding": true
+                      },
+                      "fail": "swings into {space}, which `swing_not_into` forbids",
+                      "undecided": "door-swing: {why}",
+                      "effects": [
+                        {
+                          "on": "fail",
+                          "message": "door-swing: it swings into {space}, which `swing_not_into` may pick"
+                        }
+                      ],
+                      "related": "space"
+                    }
+                  ],
+                  "once": true
+                },
+                "fail": "",
+                "undecided": ""
+              },
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {
+                    "when": [
+                      "swing_into"
+                    ]
+                  },
+                  "list": "swing_spaces;path=@space_path;towards=@swing_into;not_towards=@swing_not_into",
+                  "refused": "door-swing: {why}",
+                  "together": {
+                    "name": "{space}",
+                    "judge": {
+                      "kind": "any",
+                      "holds": [
+                        {
+                          "kind": "field",
+                          "field": "into",
+                          "value": true
+                        },
+                        {
+                          "kind": "field",
+                          "field": "towards",
+                          "value": true
+                        }
+                      ],
+                      "fails": [
+                        {
+                          "kind": "field",
+                          "field": "away",
+                          "value": true
+                        },
+                        {
+                          "kind": "field",
+                          "field": "towards",
+                          "value": true
+                        }
+                      ],
+                      "open": [
+                        {
+                          "when": [
+                            {
+                              "kind": "unknown",
+                              "field": "into"
+                            },
+                            {
+                              "kind": "field",
+                              "field": "towards",
+                              "value": true
+                            }
+                          ],
+                          "why": "into",
+                          "message": "door-swing: {why}"
+                        },
+                        {
+                          "when": [
+                            {
+                              "kind": "unknown",
+                              "field": "away"
+                            },
+                            {
+                              "kind": "field",
+                              "field": "towards",
+                              "value": true
+                            }
+                          ],
+                          "message": "door-swing: whether it swings into {space} is undecided"
+                        },
+                        {
+                          "when": [
+                            {
+                              "kind": "unknown",
+                              "field": "into"
+                            },
+                            {
+                              "kind": "unknown",
+                              "field": "towards"
+                            }
+                          ],
+                          "why": "into",
+                          "message": "door-swing: {why}"
+                        },
+                        {
+                          "when": [
+                            {
+                              "kind": "unknown",
+                              "field": "away"
+                            },
+                            {
+                              "kind": "unknown",
+                              "field": "towards"
+                            }
+                          ],
+                          "message": "door-swing: whether it swings into {space} is undecided"
+                        },
+                        {
+                          "when": [
+                            {
+                              "kind": "field",
+                              "field": "into",
+                              "value": true
+                            },
+                            {
+                              "kind": "unknown",
+                              "field": "towards"
+                            }
+                          ],
+                          "message": "door-swing: whether it swings into {space} is undecided"
+                        }
+                      ],
+                      "item": "{space}",
+                      "fail": "swings away from {failing}, which `swing_into` requires it to swing into",
+                      "related": "space"
+                    }
+                  },
+                  "once": true
+                },
+                "fail": "",
+                "undecided": ""
+              }
+            ]
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "aggregate",
+                  "function": "none",
+                  "over": {
+                    "kind": "measured",
+                    "name": "swing_spaces;path=@space_path;towards=@swing_into;not_towards=@swing_not_into"
+                  },
+                  "value": {
+                    "kind": "not",
+                    "operand": {
+                      "kind": "and",
+                      "operands": [
+                        {
+                          "kind": "not",
+                          "operand": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "into"
+                          }
+                        },
+                        {
+                          "kind": "not",
+                          "operand": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "into"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "label": "no item fails"
+                },
+                {
+                  "kind": "aggregate",
+                  "function": "none",
+                  "over": {
+                    "kind": "measured",
+                    "name": "swing_spaces;path=@space_path;towards=@swing_into;not_towards=@swing_not_into"
+                  },
+                  "value": {
+                    "kind": "not",
+                    "operand": {
+                      "kind": "and",
+                      "operands": [
+                        {
+                          "kind": "literal",
+                          "value": {
+                            "type": "boolean",
+                            "value": true
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "label": "no item fails"
+                },
+                {
+                  "kind": "literal",
+                  "value": {
+                    "type": "boolean",
+                    "value": true
+                  }
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.aggregate",
+                      "label": "no item fails",
+                      "fields": {
+                        "function": "none"
+                      },
+                      "inputs": {
+                        "over": {
+                          "block": {
+                            "type": "members.swing_spaces",
+                            "fields": {
+                              "not_towards": "@swing_not_into",
+                              "path": "@space_path",
+                              "towards": "@swing_into"
+                            }
+                          }
+                        },
+                        "value": {
+                          "block": {
+                            "type": "expression.not",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.and",
+                                  "inputs": {
+                                    "operands": {
+                                      "blocks": [
+                                        {
+                                          "type": "expression.not",
+                                          "inputs": {
+                                            "operand": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "into",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.not",
+                                          "inputs": {
+                                            "operand": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "into",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.aggregate",
+                      "label": "no item fails",
+                      "fields": {
+                        "function": "none"
+                      },
+                      "inputs": {
+                        "over": {
+                          "block": {
+                            "type": "members.swing_spaces",
+                            "fields": {
+                              "not_towards": "@swing_not_into",
+                              "path": "@space_path",
+                              "towards": "@swing_into"
+                            }
+                          }
+                        },
+                        "value": {
+                          "block": {
+                            "type": "expression.not",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.and",
+                                  "inputs": {
+                                    "operands": {
+                                      "blocks": [
+                                        {
+                                          "type": "expression.literal",
+                                          "fields": {
+                                            "value": {
+                                              "type": "boolean",
+                                              "value": true
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.literal",
+                      "fields": {
+                        "value": {
+                          "type": "boolean",
+                          "value": true
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.effective-coverage",
@@ -80747,6 +81191,42 @@
             }
           ],
           "references": "string"
+        },
+        {
+          "key": "towards",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Spaces the door is judged to swing towards: source kinds, `,`-separated, or `@` a selector parameter of the rule. With it or `not_towards`, only the spaces either may pick are listed and probed, undecided ones too."
+            },
+            {
+              "language": "de",
+              "text": "Räume, zu denen die Tür aufschlagen soll: Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel. Mit ihr oder `not_towards` werden nur die Räume aufgeführt und geprüft, die eine der beiden treffen kann, unentschiedene eingeschlossen."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "not_towards",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Spaces the door is judged not to swing towards, as `towards`."
+            },
+            {
+              "language": "de",
+              "text": "Räume, zu denen die Tür nicht aufschlagen soll, wie `towards`."
+            }
+          ],
+          "references": "selector"
         }
       ],
       "services": [
@@ -80781,6 +81261,84 @@
         }
       ],
       "fields": [
+        {
+          "name": "space",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Space"
+            },
+            {
+              "language": "de",
+              "text": "Raum"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The space reached."
+            },
+            {
+              "language": "de",
+              "text": "Der erreichte Raum."
+            }
+          ]
+        },
+        {
+          "name": "towards",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Towards"
+            },
+            {
+              "language": "de",
+              "text": "Hin"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether `towards` surely picks the space; undecided where its selection cannot tell, true without it."
+            },
+            {
+              "language": "de",
+              "text": "Ob `towards` den Raum sicher auswählt; unentschieden, wo die Auswahl es nicht entscheidet, wahr ohne sie."
+            }
+          ]
+        },
+        {
+          "name": "not_towards",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Not towards"
+            },
+            {
+              "language": "de",
+              "text": "Nicht hin"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether `not_towards` surely picks the space, as `towards`."
+            },
+            {
+              "language": "de",
+              "text": "Ob `not_towards` den Raum sicher auswählt, wie `towards`."
+            }
+          ]
+        },
         {
           "name": "into",
           "kind": {

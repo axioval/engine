@@ -1,19 +1,21 @@
 //! `door-swing`: which spaces each door swings into.
 
-use std::collections::BTreeMap;
+use std::sync::LazyLock;
 
+use axioval_engine::template::Template;
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, FreeSpaceServiceHandle, NotEvaluatedReason,
-    ObjectFrameServiceHandle, ParameterDescriptor, ParameterType, RuleCapability, RuleContext,
+    CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ObjectFrameServiceHandle,
+    ParameterDescriptor, RuleCapability, RuleContext,
 };
-use axioval_ir::contract::Selector;
-use axioval_ir::{Evidence, Object, ObjectId};
+use axioval_ir::Object;
 
-use crate::door_swing::{self, Relation};
-use crate::selection::{Selection, select_objects, selector_matches};
-use crate::support::{Parameters, Traversal, Unavailable, finding, invalid};
+use crate::door_swing;
+use crate::support::Unavailable;
 
 mod measured;
+#[cfg(feature = "parity-reference")]
+pub(crate) mod reference;
+mod template;
 
 pub(crate) use measured::SwingMeasures;
 
@@ -38,104 +40,32 @@ pub(crate) use measured::SwingMeasures;
 /// not evaluated, like a door whose leaves cannot be read. A space whose
 /// selection is undecided, a probe the service cannot answer, and a space
 /// neither probe lies in decide only what they cannot change.
+///
+/// It runs as a template ([`axioval_engine::template`]): the spaces a door
+/// opens onto, as the measured list `swing_spaces` probes them, judged one
+/// by one against `swing_not_into` and together against `swing_into`.
 pub struct DoorSwing;
 
-const ID: &str = "axioval:capability.door-swing";
+static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
 
-struct Config<'a> {
-    spaces: Traversal,
-    into: Option<&'a Selector>,
-    not_into: Option<&'a Selector>,
-}
-
-impl<'a> Config<'a> {
-    fn parse(rule: &'a CompiledRule) -> Result<Self, Unavailable> {
-        let parameters = Parameters(rule);
-        let path = parameters
-            .strings("space_path")?
-            .ok_or_else(|| invalid("parameter `space_path` is required"))?;
-        let into = parameters.selector("swing_into")?;
-        let not_into = parameters.selector("swing_not_into")?;
-        if into.is_none() && not_into.is_none() {
-            return Err(invalid("declare `swing_into`, `swing_not_into` or both"));
-        }
-        Ok(Self {
-            spaces: Traversal::path(path)?,
-            into,
-            not_into,
-        })
-    }
-}
+/// The plans of the rules bound to it, kept across runs.
+static PLANS: crate::templates::Plans = crate::templates::Plans::new();
 
 impl RuleCapability for DoorSwing {
     fn id(&self) -> &'static str {
-        ID
+        template::ID
     }
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
-        vec![
-            ParameterDescriptor::required("space_path", ParameterType::StringList),
-            ParameterDescriptor::optional("swing_into", ParameterType::Selector),
-            ParameterDescriptor::optional("swing_not_into", ParameterType::Selector),
-        ]
+        TEMPLATE.parameters.clone()
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let config = match Config::parse(rule) {
-            Ok(config) => config,
-            Err((reason, message)) => {
-                return CapabilityEvaluation::not_evaluated(
-                    reason,
-                    format!("door-swing: {message}"),
-                );
-            }
-        };
-        let (Some(frames), Some(free)) = (
-            context.services.get::<ObjectFrameServiceHandle>(),
-            context.services.get::<FreeSpaceServiceHandle>(),
-        ) else {
-            return CapabilityEvaluation::not_evaluated(
-                NotEvaluatedReason::MissingService,
-                "door-swing needs the object-frame and free-space services",
-            );
-        };
-        let (doors, mut evaluation) = select_objects(context, &rule.selector);
-        let everything: Vec<&Object> = context.project.objects().collect();
-        for door in doors {
-            let judged = check(context, &config, frames, free, &everything, door);
-            let Judged {
-                findings,
-                doubts,
-                evidence,
-            } = match judged {
-                Ok(judged) => judged,
-                Err((reason, message)) => {
-                    evaluation.push_object_not_evaluated(
-                        door.id.clone(),
-                        reason,
-                        format!("door-swing: {message}"),
-                    );
-                    continue;
-                }
-            };
-            for (message, related) in findings {
-                evaluation.push_finding(finding(
-                    rule,
-                    &door.id,
-                    message,
-                    evidence.clone(),
-                    related,
-                ));
-            }
-            if let Some((reason, message)) = doubts.into_iter().next() {
-                evaluation.push_object_not_evaluated(
-                    door.id.clone(),
-                    reason,
-                    format!("door-swing: {message}"),
-                );
-            }
-        }
-        evaluation
+        crate::templates::run((&TEMPLATE, &PLANS), context, rule)
+    }
+
+    fn template(&self) -> Option<&Template> {
+        Some(&TEMPLATE)
     }
 }
 
@@ -156,109 +86,4 @@ pub(crate) fn hinged_leaves(
         ));
     }
     Ok(leaves)
-}
-
-/// What checking one door found.
-#[derive(Default)]
-struct Judged {
-    findings: Vec<(String, Vec<ObjectId>)>,
-    doubts: Vec<Unavailable>,
-    evidence: Vec<Evidence>,
-}
-
-fn check(
-    context: &RuleContext<'_>,
-    config: &Config<'_>,
-    frames: &ObjectFrameServiceHandle,
-    free: &FreeSpaceServiceHandle,
-    everything: &[&Object],
-    door: &Object,
-) -> Result<Judged, Unavailable> {
-    let leaves = hinged_leaves(frames, door)?;
-    let (reached, cited) = config.spaces.related(context, &door.id, everything)?;
-    let mut judged = Judged {
-        evidence: cited,
-        ..Judged::default()
-    };
-    judged.evidence.push(leaves.evidence().clone());
-    let mut relations: BTreeMap<ObjectId, Result<Relation, Unavailable>> = BTreeMap::new();
-    let mut relation = |space: &ObjectId, evidence: &mut Vec<Evidence>| {
-        relations
-            .entry(space.clone())
-            .or_insert_with(|| {
-                door_swing::relation(free, &leaves, space).map(|(relation, proof)| {
-                    evidence.extend(proof);
-                    relation
-                })
-            })
-            .clone()
-    };
-    let picked = |selector: &Selector, space: &ObjectId, evidence: &mut Vec<Evidence>| {
-        context
-            .project
-            .object(space)
-            .map_or(Selection::NoMatch, |object| {
-                selector_matches(context, selector, object, evidence)
-            })
-    };
-    if let Some(selector) = config.not_into {
-        for space in &reached {
-            let selection = picked(selector, space, &mut judged.evidence);
-            if matches!(selection, Selection::NoMatch) {
-                continue;
-            }
-            match (relation(space, &mut judged.evidence), selection) {
-                (Ok(found), Selection::Match) if found.swings_into() => judged.findings.push((
-                    format!("swings into {space}, which `swing_not_into` forbids"),
-                    vec![space.clone()],
-                )),
-                (Ok(found), _) if found.swings_into() => judged.doubts.push((
-                    NotEvaluatedReason::IncompleteEvidence,
-                    format!("it swings into {space}, which `swing_not_into` may pick"),
-                )),
-                (Ok(_), _) => {}
-                (Err(unavailable), _) => judged.doubts.push(unavailable),
-            }
-        }
-    }
-    if let Some(selector) = config.into {
-        let mut sure_away = Vec::new();
-        let mut open = None;
-        let mut satisfied = false;
-        for space in &reached {
-            let selection = picked(selector, space, &mut judged.evidence);
-            if matches!(selection, Selection::NoMatch) {
-                continue;
-            }
-            match (relation(space, &mut judged.evidence), &selection) {
-                (Ok(found), Selection::Match) if found.swings_into() => satisfied = true,
-                (Ok(Relation::Away), Selection::Match) => sure_away.push(space.clone()),
-                (Ok(Relation::Away), _) => {}
-                (Ok(_), _) => {
-                    open.get_or_insert((
-                        NotEvaluatedReason::IncompleteEvidence,
-                        format!("whether it swings into {space} is undecided"),
-                    ));
-                }
-                (Err(unavailable), _) => {
-                    open.get_or_insert(unavailable);
-                }
-            }
-        }
-        match (satisfied, open) {
-            (false, Some(unavailable)) => judged.doubts.push(unavailable),
-            (false, None) if !sure_away.is_empty() => {
-                let names: Vec<String> = sure_away.iter().map(ToString::to_string).collect();
-                judged.findings.push((
-                    format!(
-                        "swings away from {}, which `swing_into` requires it to swing into",
-                        names.join(", ")
-                    ),
-                    sure_away,
-                ));
-            }
-            _ => {}
-        }
-    }
-    Ok(judged)
 }

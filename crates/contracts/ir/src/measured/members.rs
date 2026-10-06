@@ -2026,6 +2026,32 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
                          eingeschlossen; ohne Angabe jeder erreichte Raum.",
                     ),
                 },
+                MeasuredParameter {
+                    key: "towards",
+                    kind: MeasuredParameterKind::Objects,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "Spaces the door is judged to swing towards: source kinds, \
+                         `,`-separated, or `@` a selector parameter of the rule. With it or \
+                         `not_towards`, only the spaces either may pick are listed and \
+                         probed, undecided ones too.",
+                        "Räume, zu denen die Tür aufschlagen soll: Quellarten, durch `,` \
+                         getrennt, oder mit `@` ein Selektorparameter der Regel. Mit ihr oder \
+                         `not_towards` werden nur die Räume aufgeführt und geprüft, die eine \
+                         der beiden treffen kann, unentschiedene eingeschlossen.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "not_towards",
+                    kind: MeasuredParameterKind::Objects,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "Spaces the door is judged not to swing towards, as `towards`.",
+                        "Räume, zu denen die Tür nicht aufschlagen soll, wie `towards`.",
+                    ),
+                },
             ],
             dimension: None,
             services: &["object-frame", "free-space", "relationship-selection"],
@@ -2046,6 +2072,32 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             ),
         },
         fields: &[
+            field(
+                "space",
+                MemberFieldKind::Objects,
+                &en_de("Space", "Raum"),
+                &en_de("The space reached.", "Der erreichte Raum."),
+            ),
+            field(
+                "towards",
+                TRUTH,
+                &en_de("Towards", "Hin"),
+                &en_de(
+                    "Whether `towards` surely picks the space; undecided where its \
+                     selection cannot tell, true without it.",
+                    "Ob `towards` den Raum sicher auswählt; unentschieden, wo die Auswahl es \
+                     nicht entscheidet, wahr ohne sie.",
+                ),
+            ),
+            field(
+                "not_towards",
+                TRUTH,
+                &en_de("Not towards", "Nicht hin"),
+                &en_de(
+                    "Whether `not_towards` surely picks the space, as `towards`.",
+                    "Ob `not_towards` den Raum sicher auswählt, wie `towards`.",
+                ),
+            ),
             field(
                 "into",
                 TRUTH,

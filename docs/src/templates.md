@@ -606,9 +606,11 @@ addition data the runner interprets, never code per capability:
   parameter picks, read as an aggregate over them, findings relating the
   decided members; a source or the project judged over the objects the
   rule selects there.
-- **Several findings per object.** A capability reporting one finding per
-  failed check needs one decision per check in a form, each with its
-  messages, so counts match (divergence D1).
+- **Several findings per object** (built for members, `Judgement`s of
+  `Decision::Each`, each its own outcome). An object-level form reporting
+  one finding per failed check (divergence D1, `property-comparison`,
+  `property-requirements`) still takes one decision: give `Form` a list of
+  judgements like `Each::checks` when the first of them is rebuilt.
 - **Tables and defaults.** Table parameters reach values through `lookup`;
   fallbacks (a stated value, then a table, then a declared default, each on
   an exact absence only) are a value list read in order, the first that is

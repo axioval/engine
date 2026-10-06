@@ -15,10 +15,13 @@
 //!
 //! Messages render placeholders over the item: a text field or objects
 //! field by name (objects joined `, `), a number field with a format
-//! (`{rise:length}`, `{slope:ratio}`, `{angle:degrees}`, `{count:count}`),
+//! (`{rise:length}`, `{slope:ratio}`, `{angle:degrees}`, `{count:count}`,
+//! `{area:area}`),
 //! a parameter (`{landing_depth_minimum:length}`), a requirement's chosen
 //! operand (`{stated:length}`), `{bound}` (the judgement's bounds as
-//! declared, `0.15 m to 0.19 m`, `at least 0.26 m`), `{why}` (an undecided
+//! declared, `0.15 m to 0.19 m`, `at least 0.26 m`), `{bound:plain}` (the
+//! bound a range failed or straddled, its number as declared and without a
+//! unit, as a range judge words it: `at least 4`), `{why}` (an undecided
 //! field's reason), `{index}` and `{count}` (an item's place among the
 //! items judged together), and the [`ItemText`]s by name.
 
@@ -271,6 +274,9 @@ pub enum ItemUnit {
     Ratio,
     /// An integer count: `12`.
     Count,
+    /// Square metres as the area capabilities showed them, rounded to
+    /// 1e-4: `26`, or `between 24 and 26` for an interval.
+    Area,
 }
 
 /// The rounding allowance a bound is widened by.

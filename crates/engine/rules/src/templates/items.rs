@@ -149,6 +149,10 @@ impl<'p, 't> Scope<'_, 'p, 't> {
     }
 
     fn placeholder(&self, key: &str) -> Option<String> {
+        // A placeholder a judgement states with its format (`bound:plain`).
+        if let Some((_, text)) = self.named.iter().find(|(named, _)| *named == key) {
+            return Some(text.clone());
+        }
         let (name, format) = key.rsplit_once(':').unwrap_or((key, ""));
         if format.is_empty() {
             if let Some((_, text)) = self.named.iter().find(|(named, _)| *named == name) {
@@ -212,6 +216,7 @@ fn unit_of(format: &str) -> Option<ItemUnit> {
         "degrees" => Some(ItemUnit::Degrees),
         "ratio" => Some(ItemUnit::Ratio),
         "count" => Some(ItemUnit::Count),
+        "area" => Some(ItemUnit::Area),
         _ => None,
     }
 }
@@ -240,6 +245,7 @@ fn point(value: f64, unit: ItemUnit) -> String {
         ItemUnit::Ratio => format!("{}", (value * 1e6).round() / 1e6),
         #[allow(clippy::cast_possible_truncation)]
         ItemUnit::Count => format!("{}", value.round() as i64),
+        ItemUnit::Area => format!("{}", (value * 1e4).round() / 1e4),
     }
 }
 
@@ -266,6 +272,24 @@ fn bound_words(minimum: Option<f64>, maximum: Option<f64>, unit: ItemUnit) -> St
         (Some(minimum), None) => format!("at least {}", point(minimum, unit)),
         (None, Some(maximum)) => format!("at most {}", point(maximum, unit)),
         (None, None) => String::new(),
+    }
+}
+
+/// The bound a range failed or straddled, its number as declared, as a
+/// range judge words it (`at least 4`): the lower bound where the value
+/// fails below it or reaches below it, the upper otherwise; the lenient end
+/// of a bound that is an interval.
+fn plain_bound(
+    (lower, _): Span,
+    minimum: Option<Span>,
+    maximum: Option<Span>,
+    below: Option<bool>,
+) -> String {
+    let below = below.unwrap_or_else(|| minimum.is_some_and(|(low, _)| lower < low));
+    match (minimum, maximum) {
+        (Some((low, _)), _) if below || maximum.is_none() => format!("at least {low}"),
+        (_, Some((_, high))) => format!("at most {high}"),
+        _ => String::new(),
     }
 }
 
@@ -844,10 +868,17 @@ fn test_item(
             match ranged(value, minimum, maximum, allowance) {
                 Ranged::Pass => passed(&scope),
                 Ranged::Fail { below, deviation } => {
+                    scope.named(
+                        "bound:plain",
+                        plain_bound(value, minimum, maximum, Some(below)),
+                    );
                     let graded = scope.plan.template.grades && range.grade;
                     finding(&scope, deviation.filter(|_| graded), below)
                 }
-                Ranged::Undecided => straddles(&scope),
+                Ranged::Undecided => {
+                    scope.named("bound:plain", plain_bound(value, minimum, maximum, None));
+                    straddles(&scope)
+                }
             }
         }
         Judge::Rows(rows) => judge_rows(&scope, rows, test, listed, object),
@@ -1303,5 +1334,45 @@ fn judge_least(
             }
         }
         Verdict::Undecided(_) => open(scope.render(least.undecided)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ItemUnit, plain_bound, point, show};
+
+    /// An area is shown as the area capabilities showed one: rounded to
+    /// 1e-4, an interval where its ends differ when rounded.
+    #[test]
+    fn an_area_is_shown_rounded_to_a_ten_thousandth() {
+        assert_eq!(point(26.000_04, ItemUnit::Area), "26");
+        assert_eq!(point(0.123_456, ItemUnit::Area), "0.1235");
+        assert_eq!(show((24.0, 26.0), ItemUnit::Area), "between 24 and 26");
+        assert_eq!(show((5.000_01, 5.000_02), ItemUnit::Area), "5");
+    }
+
+    /// The plain bound is the one a range judge words: the bound failed or
+    /// straddled, its number as declared and without a unit.
+    #[test]
+    fn the_plain_bound_is_the_one_failed_or_straddled() {
+        let four = Some((4.0, 4.0));
+        let six = Some((6.25, 6.25));
+        assert_eq!(
+            plain_bound((3.0, 3.5), four, None, Some(true)),
+            "at least 4"
+        );
+        assert_eq!(
+            plain_bound((7.0, 7.0), four, six, Some(false)),
+            "at most 6.25"
+        );
+        // Open: the bound the value reaches past.
+        assert_eq!(plain_bound((3.9, 4.1), four, six, None), "at least 4");
+        assert_eq!(plain_bound((6.0, 6.5), four, six, None), "at most 6.25");
+        assert_eq!(plain_bound((6.0, 6.5), None, six, None), "at most 6.25");
+        // A bound that is an interval is worded by its lenient end.
+        assert_eq!(
+            plain_bound((0.5, 0.6), Some((1.0, 2.0)), None, Some(true)),
+            "at least 1"
+        );
     }
 }

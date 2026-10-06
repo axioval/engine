@@ -500,9 +500,12 @@ it.
 (`undecided`): once, or per item of another list grouping them by a key
 (each stretch whose rails all pass). Messages read item fields
 (`{label}`, `{governing}`, `{governing:and}`, `{rise:length}`,
-`{slope:ratio}`, `{angle:degrees}`), parameters (`{minimum:length}`),
+`{slope:ratio}`, `{angle:degrees}`, `{area:area}`: square metres rounded
+to 1e-4, `ItemUnit::Area`), parameters (`{minimum:length}`),
 the chosen requirements (`{stated:length}`, `{requirements}` their words
-joined by ` and `), `{bound}` (`0.15 m to 0.19 m`), `{why}` and the
+joined by ` and `), `{bound}` (`0.15 m to 0.19 m`), `{bound:plain}` (the
+bound a range failed or straddled, its number as declared and without a
+unit, as the range judge words it: `at least 4`), `{why}` and the
 `ItemText`s, each under conditions. A form with such a check is never
 forked (`ForkError::Inexpressible`); its expression form is a `none`
 aggregate over the list of an item failing its tests.

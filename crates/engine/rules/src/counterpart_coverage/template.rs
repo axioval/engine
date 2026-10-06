@@ -5,7 +5,7 @@
 //! or footprint cannot be read open once for both checks.
 
 use axioval_engine::template::{
-    Applies, Band, Check, Condition, Decision, End, Form, FormCheck, Grading, Operand,
+    Applies, Band, Check, Condition, Decision, End, Expect, Form, FormCheck, Grading, Operand,
     ParameterDefault, Refusals, Template, TemplateValue, Term, Text,
 };
 use axioval_engine::{ParameterDescriptor, ParameterType};
@@ -395,6 +395,10 @@ fn check(
     if framed {
         values.push(measured("framed", named("framed")));
     }
+    // Only the share is cited: the other values word the same measurement.
+    for value in &mut values[1..] {
+        value.expect = Some(Expect::Words);
+    }
     FormCheck {
         derived: Vec::new(),
         values,
@@ -481,10 +485,10 @@ pub(crate) fn template() -> Template {
             when: &[],
             // Read first: the services the checks need, and an element whose
             // extent or footprint cannot be read, open once for both checks.
-            values: vec![measured(
-                "covering",
-                cover!("counterpart_covering", "@measure"),
-            )],
+            values: vec![TemplateValue {
+                expect: Some(Expect::Words),
+                ..measured("covering", cover!("counterpart_covering", "@measure"))
+            }],
             decision: Decision::Within {
                 value: "covering",
                 minimum: None,

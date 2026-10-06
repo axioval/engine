@@ -9677,7 +9677,8 @@
                   "kind": "property",
                   "propertySet": "axioval:measured",
                   "property": "counterpart_covering;by=@counterparts;measure=@measure;horizontal=@horizontal;vertical=@vertical;axis_tolerance=@axis_tolerance;frame=@infill_counterparts;infill_above=@infill_above"
-                }
+                },
+                "expect": "words"
               }
             ],
             "decision": {
@@ -9704,7 +9705,8 @@
                       "kind": "property",
                       "propertySet": "axioval:measured",
                       "property": "counterpart_uncovered;by=@counterparts;measure=plan;horizontal=@horizontal;vertical=@vertical;axis_tolerance=@axis_tolerance;frame=@infill_counterparts;infill_above=@infill_above"
-                    }
+                    },
+                    "expect": "words"
                   },
                   {
                     "name": "whole",
@@ -9712,7 +9714,8 @@
                       "kind": "property",
                       "propertySet": "axioval:measured",
                       "property": "counterpart_whole;by=@counterparts;measure=plan;horizontal=@horizontal;vertical=@vertical;axis_tolerance=@axis_tolerance;frame=@infill_counterparts;infill_above=@infill_above"
-                    }
+                    },
+                    "expect": "words"
                   }
                 ],
                 "decision": {
@@ -9800,7 +9803,8 @@
                       "kind": "property",
                       "propertySet": "axioval:measured",
                       "property": "counterpart_uncovered;by=@counterparts;measure=height;horizontal=@horizontal;vertical=@vertical;axis_tolerance=@axis_tolerance;frame=@infill_counterparts;infill_above=@infill_above"
-                    }
+                    },
+                    "expect": "words"
                   },
                   {
                     "name": "whole",
@@ -9808,7 +9812,8 @@
                       "kind": "property",
                       "propertySet": "axioval:measured",
                       "property": "counterpart_whole;by=@counterparts;measure=height;horizontal=@horizontal;vertical=@vertical;axis_tolerance=@axis_tolerance;frame=@infill_counterparts;infill_above=@infill_above"
-                    }
+                    },
+                    "expect": "words"
                   }
                 ],
                 "decision": {
@@ -9896,7 +9901,8 @@
                       "kind": "property",
                       "propertySet": "axioval:measured",
                       "property": "counterpart_uncovered;by=@counterparts;measure=elevation;horizontal=@horizontal;vertical=@vertical;axis_tolerance=@axis_tolerance;frame=@infill_counterparts;infill_above=@infill_above"
-                    }
+                    },
+                    "expect": "words"
                   },
                   {
                     "name": "whole",
@@ -9904,7 +9910,8 @@
                       "kind": "property",
                       "propertySet": "axioval:measured",
                       "property": "counterpart_whole;by=@counterparts;measure=elevation;horizontal=@horizontal;vertical=@vertical;axis_tolerance=@axis_tolerance;frame=@infill_counterparts;infill_above=@infill_above"
-                    }
+                    },
+                    "expect": "words"
                   },
                   {
                     "name": "framed",
@@ -9912,7 +9919,8 @@
                       "kind": "property",
                       "propertySet": "axioval:measured",
                       "property": "counterpart_infill;by=@counterparts;measure=elevation;horizontal=@horizontal;vertical=@vertical;axis_tolerance=@axis_tolerance;frame=@infill_counterparts;infill_above=@infill_above"
-                    }
+                    },
+                    "expect": "words"
                   }
                 ],
                 "decision": {

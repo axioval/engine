@@ -1,0 +1,834 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:relationship-scan:IfcRelContainedInSpatialStructure:1",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:relationship:#44",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "115f40d7-9a81-5e46-81bd-204bbdacfc70",
+      "message": "count of compared components is 1 and is not greater_or_equal 2",
+      "object_id": {
+        "local_id": "#38",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pc-storey-wall-count",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:attribute:#38:Name",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:attribute:#45:Name",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:relationship-scan:IfcRelContainedInSpatialStructure:1",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:relationship:#44",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "e396fb98-5217-514b-9ae8-bcab2ab225de",
+      "message": "[Default Building Storey] no candidate satisfies comparison",
+      "object_id": {
+        "local_id": "#38",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pc-storey-wall-names",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:absence:#45:Qto_WallBaseQuantities:NetVolume",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:relationship-scan:IfcRelContainedInSpatialStructure:1",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:relationship:#44",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "9ca73f06-ce86-5c38-9cce-8836f0927fff",
+      "message": "compared property is absent",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pc-storey-wall-volume",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:absence:#45:Qto_WallBaseQuantities:Width",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "2ccbba2e-d01d-504d-bbe7-8d26e2510b6b",
+      "message": "target property is absent",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pc-wall-length-width",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:absence:#45:Qto_WallBaseQuantities:Width",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "a57b449c-d67d-54e1-b124-c3d17c93af2c",
+      "message": "compared property is absent",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pc-wall-width",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:occurrence:#49/#52",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "dee27317-0c3b-5f6f-9a16-06a1a09d82d9",
+      "message": "forbidden property present: axioval:parity.public.judges.wall-common.axioval:parity.public.judges.fire-rating is `` (requirement row 4)",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pr-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:enumeration:#45:/Qto_[^\\n\\r]*/:*",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:enumeration:#45:/Qto_[^\\n\\r]*/:/Net[^\\n\\r]*/",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "41a2a0a6-1fbe-535a-9ce3-d2291b266c4a",
+      "message": "missing property set: /Qto_.*/ is absent (requirement row 3)",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pr-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:absence:#45:Qto_WallBaseQuantities:Width",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:enumeration:#45:Qto_WallBaseQuantities:*",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "ff36ba83-c000-5ff7-be9b-7e985e3c121d",
+      "message": "missing property set: axioval:parity.public.judges.wall-quantities is absent (requirement row 0)",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pr-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:absence:#45:Qto_WallBaseQuantities:Length",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:enumeration:#45:Qto_WallBaseQuantities:*",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "2bb987d1-e19b-5f8a-9741-69dd24fd9819",
+      "message": "missing property set: axioval:parity.public.judges.wall-quantities is absent (requirement row 2)",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pr-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:attribute:#45:Name",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "c0764513-ffc9-54b0-b711-d264b3b8bad3",
+      "message": "wrong value: axioval:attributes.axioval:parity.public.judges.name is `Wall for Test Example`; required like `Basic Wall*` (requirement row 5)",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pr-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:enumeration:#45:/Pset_[^\\n\\r]*Common/:/[^\\n\\r]*Rating/",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:occurrence:#49/#51",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "79c31070-51ec-58a8-9f57-340522dbae01",
+      "message": "property Pset_WallCommon.AcousticRating is IFCLABEL, not IFCIDENTIFIER",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pv-ratings",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:enumeration:#45:/Pset_[^\\n\\r]*Common/:/[^\\n\\r]*Rating/",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:occurrence:#49/#52",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "01000718-b236-56fe-9535-95ad29d6fcf4",
+      "message": "property Pset_WallCommon.FireRating is IFCLABEL, not IFCIDENTIFIER",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pv-ratings",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:enumeration:#45:/Pset_[^\\n\\r]*Common/:/FireRating/",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:occurrence:#49/#52",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "8ae4fbd2-0c0c-5cae-9059-dc6e4d5810de",
+      "message": "missing required property Pset_WallCommon.FireRating",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pv-required-ratings",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:attribute:#45:Name",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "ab7bbb60-b685-511c-98f3-3754bcd21c24",
+      "message": "property axioval:parity.public.judges.name is \"Wall for Test Example\", which matches no required pattern",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pv-wall-name",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:absence:#45:Qto_WallBaseQuantities:Width",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "43d1a2b7-1564-57dc-b434-666d78ecf26f",
+      "message": "missing required property axioval:parity.public.judges.width",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pv-wall-width-range",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:absence:#45:Qto_WallBaseQuantities:Width",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "6f05b5f6-b895-50ff-957c-f5134b0cb21b",
+      "message": "missing required property axioval:parity.public.judges.width",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pv-wall-width-unitless",
+      "severity": "error"
+    },
+    {
+      "evidence": [],
+      "id": "ad1f689e-edf7-5973-8506-66d546add0fd",
+      "message": "1 provided and 1 required object(s) in the same source; required 1/1 greater 1/1",
+      "object_id": {
+        "local_id": "#34",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#102",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#45",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "rc-source-ratio",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:relationship-scan:IfcRelContainedInSpatialStructure:1",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:relationship:#44",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "518d00a9-5691-5d4b-aca5-77ff468785b8",
+      "message": "0 provided and 1 required object(s) via IfcRelContainedInSpatialStructure; required at least 1 provided for 1 required",
+      "object_id": {
+        "local_id": "#38",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#45",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "rc-storey-table",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:absence:#45:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "fdfcd651-daa6-5d89-8f5c-3f32df1fbe63",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is absent, so the object counts in no group",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "rc-type-groups",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:absence:#110:axioval:attributes:Description",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "b60d57fe-8588-50cc-8a9a-2a1c43703146",
+      "message": "axioval:attributes.axioval:parity.public.judges.description has no value to compare with the agreed list",
+      "object_id": {
+        "local_id": "#110",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "sc-every-object",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:absence:#45:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:73b0e45d931d5dc13bfee5fdc7bd80f796526445458b2de74c4168d209097832:attribute:#45:Name",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "a5682ec5-db49-5e27-883a-fd22fcdf921e",
+      "message": "does not match any agreed combination of values: axioval:attributes.axioval:parity.public.judges.object-type absent, axioval:attributes.axioval:parity.public.judges.name `Wall for Test Example`",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "sc-wall-types",
+      "severity": "error"
+    }
+  ],
+  "not_evaluated": [
+    {
+      "message": "the unit of a IFCTHERMALTRANSMITTANCEMEASURE cannot be resolved exactly: exact IFC unit resolution failed: NoProjectUnit { unit_type: \"THERMALTRANSMITTANCEUNIT\" }",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "pv-required-ratings"
+    }
+  ],
+  "rules": [
+    {
+      "checked": 9,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "cv-names-across",
+      "status": "passed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "cv-slab-type-depth",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "cv-slab-type-rating",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "cv-storey-wall-types",
+      "status": "passed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "cv-wall-type-width",
+      "status": "passed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "cv-wall-type-width-quantity",
+      "status": "passed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pc-slab-type-defined",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "pc-storey-wall-count",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "pc-storey-wall-names",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "pc-storey-wall-volume",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "pc-wall-length-width",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "pc-wall-width",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pr-slabs",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "pr-walls",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "pv-ratings",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 1,
+      "rule_id": "pv-required-ratings",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pv-slab-depth-digits",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pv-slab-external",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "pv-wall-name",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "pv-wall-width-range",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "pv-wall-width-unitless",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "rc-source-ratio",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "rc-storey-ratio",
+      "status": "passed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "rc-storey-table",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "rc-type-groups",
+      "status": "failed"
+    },
+    {
+      "checked": 9,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "sc-every-object",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "sc-slab-external",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "sc-space-names",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "sc-wall-types",
+      "status": "failed"
+    }
+  ]
+}

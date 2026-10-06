@@ -196,7 +196,16 @@ case `counts` holds `object-count` (per source and across sources),
 `related-count` (along a relationship, and every object of the anchor's
 source) and `unique-value` (per source, per storey and across sources)
 rules over every public model, unmeshed, recorded before they are
-rebuilt as templates (#287, #290). The
+rebuilt as templates (#287, #290). The case `judges` holds the remaining
+generic judges, `consistent-value` (exact, within a number or quantity
+tolerance, across sources and per storey), `selector-conformance`,
+`relative-count` (ratios with small counts, tables, the whole source and
+groups by value), `property-value` (ranges, literals, patterns over names
+and digits), `property-requirements` (exact and pattern rows, grouped by
+value under a category) and `property-comparison` (each, at least one,
+count and sum, against constants, properties and text lists), over every
+public model, unmeshed, recorded before they are rebuilt as templates
+(#287). The
 case `shelving` records two `shelf-capacity` rules (doors through stated
 space boundaries, and through the derived adjacency among selected
 spaces) before it became a template (#289).

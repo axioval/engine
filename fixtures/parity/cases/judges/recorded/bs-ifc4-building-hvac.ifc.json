@@ -1,0 +1,1025 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:absence:#115:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#115:Name",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#117:Name",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#117:ObjectType",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "f89f7217-083a-55c6-aa92-249734aedabb",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is absent where other objects with axioval:attributes.axioval:parity.public.judges.name `origin` have `origin`",
+      "object_id": {
+        "local_id": "#115",
+        "source": {
+          "document": "bs-ifc4-building-hvac.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#117",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:absence:#115:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#115:Name",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#117:Name",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#117:ObjectType",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "9c1027ec-f913-5385-b54b-b9646c07d00a",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is `origin` where other objects with axioval:attributes.axioval:parity.public.judges.name `origin` have absent",
+      "object_id": {
+        "local_id": "#117",
+        "source": {
+          "document": "bs-ifc4-building-hvac.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#115",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:absence:#134:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#134:Name",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#136:Name",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#136:ObjectType",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "5cb553d5-d8a6-5a88-be45-bd8c1c9d7305",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is absent where other objects with axioval:attributes.axioval:parity.public.judges.name `geo-reference` have `origin`",
+      "object_id": {
+        "local_id": "#134",
+        "source": {
+          "document": "bs-ifc4-building-hvac.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#136",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:absence:#134:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#134:Name",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#136:Name",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#136:ObjectType",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "d1a3a0d9-40a2-51e0-900c-2f87dba99c15",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is `origin` where other objects with axioval:attributes.axioval:parity.public.judges.name `geo-reference` have absent",
+      "object_id": {
+        "local_id": "#136",
+        "source": {
+          "document": "bs-ifc4-building-hvac.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#134",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:absence:#48:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#48:Name",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#50:Name",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#50:ObjectType",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "9077fbfd-3983-5e72-8d47-ee1ba895c876",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is absent where other objects with axioval:attributes.axioval:parity.public.judges.name `house - chimney` have `flue`",
+      "object_id": {
+        "local_id": "#48",
+        "source": {
+          "document": "bs-ifc4-building-hvac.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#50",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:absence:#48:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#48:Name",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#50:Name",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#50:ObjectType",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "b45b410d-5690-5d60-82ae-8d694ed90357",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is `flue` where other objects with axioval:attributes.axioval:parity.public.judges.name `house - chimney` have absent",
+      "object_id": {
+        "local_id": "#50",
+        "source": {
+          "document": "bs-ifc4-building-hvac.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#48",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:absence:#61:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#61:Name",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#63:Name",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#63:ObjectType",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "63f81e82-c074-58c1-9379-22bcde9b5c6d",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is absent where other objects with axioval:attributes.axioval:parity.public.judges.name `chimney cover` have `chimney cover`",
+      "object_id": {
+        "local_id": "#61",
+        "source": {
+          "document": "bs-ifc4-building-hvac.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#63",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:absence:#61:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#61:Name",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#63:Name",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#63:ObjectType",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "48839a29-ae6f-59ef-949a-b4f6d5f71a84",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is `chimney cover` where other objects with axioval:attributes.axioval:parity.public.judges.name `chimney cover` have absent",
+      "object_id": {
+        "local_id": "#63",
+        "source": {
+          "document": "bs-ifc4-building-hvac.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#61",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:absence:#79:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#79:Name",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#81:Name",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#81:ObjectType",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "0446bb45-bc60-5cc0-8fba-fc5aa560cccd",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is absent where other objects with axioval:attributes.axioval:parity.public.judges.name `building element` have `rigidsegment`",
+      "object_id": {
+        "local_id": "#79",
+        "source": {
+          "document": "bs-ifc4-building-hvac.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#81",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:absence:#79:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#79:Name",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#81:Name",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#81:ObjectType",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "0fd80f72-af56-507a-8436-76cfa7f49eb1",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is `rigidsegment` where other objects with axioval:attributes.axioval:parity.public.judges.name `building element` have absent",
+      "object_id": {
+        "local_id": "#81",
+        "source": {
+          "document": "bs-ifc4-building-hvac.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#79",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:absence:#97:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#97:Name",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#99:Name",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#99:ObjectType",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "dd509f32-a7b8-5cac-ba88-1db7be57fda9",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is absent where other objects with axioval:attributes.axioval:parity.public.judges.name `house fireplace cap` have `fireplace cap`",
+      "object_id": {
+        "local_id": "#97",
+        "source": {
+          "document": "bs-ifc4-building-hvac.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#99",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:absence:#97:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#97:Name",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#99:Name",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#99:ObjectType",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "0054cde9-284e-5a2e-9ce3-d6637937ecb0",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is `fireplace cap` where other objects with axioval:attributes.axioval:parity.public.judges.name `house fireplace cap` have absent",
+      "object_id": {
+        "local_id": "#99",
+        "source": {
+          "document": "bs-ifc4-building-hvac.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#97",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:relationship-scan:IfcRelContainedInSpatialStructure:3",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:relationship:#53",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "f5dd7b48-04af-595a-9c74-e402d7c1d01f",
+      "message": "count of compared components is 0 and is not greater_or_equal 2",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-building-hvac.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pc-storey-wall-count",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:attribute:#45:Name",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:relationship-scan:IfcRelContainedInSpatialStructure:3",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:relationship:#53",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "026ac44e-911e-5414-b013-782e36b3eebd",
+      "message": "[00 groundfloor] no candidate satisfies comparison",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-building-hvac.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pc-storey-wall-names",
+      "severity": "error"
+    },
+    {
+      "evidence": [],
+      "id": "f620fa6f-cdc9-531c-873c-93d9ff464419",
+      "message": "0 provided and 0 required object(s) in the same source; required 0/1 greater 0/1",
+      "object_id": {
+        "local_id": "#35",
+        "source": {
+          "document": "bs-ifc4-building-hvac.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "rc-source-ratio",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:absence:#79:axioval:attributes:Description",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "99d90860-3c6e-5108-a932-76894324b4a0",
+      "message": "axioval:attributes.axioval:parity.public.judges.description has no value to compare with the agreed list",
+      "object_id": {
+        "local_id": "#79",
+        "source": {
+          "document": "bs-ifc4-building-hvac.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "sc-every-object",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:2c17ecad2b0fbd3335420ee42ba48963b5a395294e86bcdcfc786ee559f9a344:absence:#81:axioval:attributes:Description",
+          "source": {
+            "document": "bs-ifc4-building-hvac.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "bc6331b2-0aba-5036-9e76-04fad933a767",
+      "message": "axioval:attributes.axioval:parity.public.judges.description has no value to compare with the agreed list",
+      "object_id": {
+        "local_id": "#81",
+        "source": {
+          "document": "bs-ifc4-building-hvac.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "sc-every-object",
+      "severity": "error"
+    }
+  ],
+  "not_evaluated": [
+    {
+      "message": "property values have incompatible types or dimensions",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4-building-hvac.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "pc-storey-wall-volume"
+    }
+  ],
+  "rules": [
+    {
+      "checked": 18,
+      "failed": 12,
+      "not_evaluated": 0,
+      "rule_id": "cv-names-across",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "cv-slab-type-depth",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "cv-slab-type-rating",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "cv-storey-wall-types",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "cv-wall-type-width",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "cv-wall-type-width-quantity",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pc-slab-type-defined",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "pc-storey-wall-count",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "pc-storey-wall-names",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "pc-storey-wall-volume",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pc-wall-length-width",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pc-wall-width",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pr-slabs",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pr-walls",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pv-ratings",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pv-required-ratings",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pv-slab-depth-digits",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pv-slab-external",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pv-wall-name",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pv-wall-width-range",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pv-wall-width-unitless",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "rc-source-ratio",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "rc-storey-ratio",
+      "status": "passed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "rc-storey-table",
+      "status": "passed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "rc-type-groups",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 18,
+      "failed": 2,
+      "not_evaluated": 0,
+      "rule_id": "sc-every-object",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "sc-slab-external",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "sc-space-names",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "sc-wall-types",
+      "status": "nothing_selected"
+    }
+  ]
+}

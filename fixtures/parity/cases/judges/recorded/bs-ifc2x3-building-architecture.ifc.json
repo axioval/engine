@@ -1,0 +1,3324 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#317:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#317:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#319:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#319:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "c3fa7a50-2fdb-5154-ba62-de8bf485d60c",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is absent where other objects with axioval:attributes.axioval:parity.public.judges.name `house - outer wall - house right front` have `solidwall`",
+      "object_id": {
+        "local_id": "#317",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#319",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#317:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#317:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#319:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#319:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "4aeb33ec-be09-5886-8012-03440e723735",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is `solidwall` where other objects with axioval:attributes.axioval:parity.public.judges.name `house - outer wall - house right front` have absent",
+      "object_id": {
+        "local_id": "#319",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#317",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#368:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#368:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#370:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#370:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "8862e7ee-32e3-5d9f-b2ac-ba6bdd488e51",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is absent where other objects with axioval:attributes.axioval:parity.public.judges.name `house - outer wall - house right back` have `solidwall`",
+      "object_id": {
+        "local_id": "#368",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#370",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#368:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#368:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#370:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#370:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "3a455c55-f966-5518-982f-c229de029a63",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is `solidwall` where other objects with axioval:attributes.axioval:parity.public.judges.name `house - outer wall - house right back` have absent",
+      "object_id": {
+        "local_id": "#370",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#368",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#413:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#413:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#415:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#415:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "c7ff2363-c8ca-5e24-93e6-37e9776aacab",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is absent where other objects with axioval:attributes.axioval:parity.public.judges.name `house - outer wall - house left` have `solidwall`",
+      "object_id": {
+        "local_id": "#413",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#415",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#413:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#413:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#415:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#415:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "05586ace-f64d-57f9-a2be-48ebdcf3f2ce",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is `solidwall` where other objects with axioval:attributes.axioval:parity.public.judges.name `house - outer wall - house left` have absent",
+      "object_id": {
+        "local_id": "#415",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#413",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#458:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#458:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#460:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#460:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "9077fbfd-3983-5e72-8d47-ee1ba895c876",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is absent where other objects with axioval:attributes.axioval:parity.public.judges.name `house - chimney` have `flue`",
+      "object_id": {
+        "local_id": "#458",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#460",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#458:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#458:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#460:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#460:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "b45b410d-5690-5d60-82ae-8d694ed90357",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is `flue` where other objects with axioval:attributes.axioval:parity.public.judges.name `house - chimney` have absent",
+      "object_id": {
+        "local_id": "#460",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#458",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#466:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#466:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#468:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#468:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "34c9fa6c-5319-5a79-8aaf-8814dd9038d1",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is absent where other objects with axioval:attributes.axioval:parity.public.judges.name `plumbing wall` have `plumbingwall`",
+      "object_id": {
+        "local_id": "#466",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#468",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#466:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#466:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#468:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#468:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "84296c91-ebc8-58d7-8284-96464fcde64b",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is `plumbingwall` where other objects with axioval:attributes.axioval:parity.public.judges.name `plumbing wall` have absent",
+      "object_id": {
+        "local_id": "#468",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#466",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#553:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#553:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#555:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#555:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "5ba24bca-b396-581f-ba4d-1f1106bb459e",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is absent where other objects with axioval:attributes.axioval:parity.public.judges.name `house - roof - slab left` have `roof`",
+      "object_id": {
+        "local_id": "#553",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#555",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#553:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#553:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#555:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#555:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "de9f0ec0-87e9-5b4e-beb9-a1afc9b5d721",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is `roof` where other objects with axioval:attributes.axioval:parity.public.judges.name `house - roof - slab left` have absent",
+      "object_id": {
+        "local_id": "#555",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#553",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#604:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#604:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#606:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#606:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "551dedb0-375a-50d6-ba51-f57b86cf618c",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is absent where other objects with axioval:attributes.axioval:parity.public.judges.name `house - roof - slab right` have `roof`",
+      "object_id": {
+        "local_id": "#604",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#606",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#604:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#604:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#606:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#606:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "f546f30c-361f-5870-8069-6a9e611e8c9b",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is `roof` where other objects with axioval:attributes.axioval:parity.public.judges.name `house - roof - slab right` have absent",
+      "object_id": {
+        "local_id": "#606",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#604",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#682:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#682:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#684:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#684:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "490043a5-96f5-5758-91cd-3234b977fc4d",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is absent where other objects with axioval:attributes.axioval:parity.public.judges.name `house - gross volume` have `gross volume`",
+      "object_id": {
+        "local_id": "#682",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#684",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#682:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#682:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#684:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#684:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "e762d54a-f7fd-53a4-9fd6-c44592b012bc",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is `gross volume` where other objects with axioval:attributes.axioval:parity.public.judges.name `house - gross volume` have absent",
+      "object_id": {
+        "local_id": "#684",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#682",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#742:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#742:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#744:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#744:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "475bfd11-d18d-5ef6-97c8-c57edf52ca37",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is absent where other objects with axioval:attributes.axioval:parity.public.judges.name `sand bedding` have `subgrade`",
+      "object_id": {
+        "local_id": "#742",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#744",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#742:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#742:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#744:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#744:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "c8955a72-78bc-516f-9a2f-a5f7c9b37b42",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is `subgrade` where other objects with axioval:attributes.axioval:parity.public.judges.name `sand bedding` have absent",
+      "object_id": {
+        "local_id": "#744",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#742",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#853:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#853:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#855:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#855:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "f89f7217-083a-55c6-aa92-249734aedabb",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is absent where other objects with axioval:attributes.axioval:parity.public.judges.name `origin` have `origin`",
+      "object_id": {
+        "local_id": "#853",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#855",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#853:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#853:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#855:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#855:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "9c1027ec-f913-5385-b54b-b9646c07d00a",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is `origin` where other objects with axioval:attributes.axioval:parity.public.judges.name `origin` have absent",
+      "object_id": {
+        "local_id": "#855",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#853",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#898:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#898:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#900:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#900:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "5cb553d5-d8a6-5a88-be45-bd8c1c9d7305",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is absent where other objects with axioval:attributes.axioval:parity.public.judges.name `geo-reference` have `origin`",
+      "object_id": {
+        "local_id": "#898",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#900",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#898:axioval:attributes:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#898:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#900:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#900:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "d1a3a0d9-40a2-51e0-900c-2f87dba99c15",
+      "message": "axioval:attributes.axioval:parity.public.judges.object-type is `origin` where other objects with axioval:attributes.axioval:parity.public.judges.name `geo-reference` have absent",
+      "object_id": {
+        "local_id": "#900",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#898",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-names-across",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#319:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#319:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#370:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#370:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#415:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#415:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:relationship-scan:IfcRelContainedInSpatialStructure:3",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:relationship:#58",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "79871b9a-7158-53df-bfb6-b0c0908be5e5",
+      "message": "axioval:attributes.axioval:parity.public.judges.name is `house - outer wall - house right front` where other objects with axioval:attributes.axioval:parity.public.judges.object-type `solidwall` have `house - outer wall - house right back`, `house - outer wall - house left`",
+      "object_id": {
+        "local_id": "#319",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#370",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#415",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-storey-wall-types",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#319:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#319:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#370:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#370:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#415:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#415:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:relationship-scan:IfcRelContainedInSpatialStructure:3",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:relationship:#58",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "05cec49e-429d-5f81-8985-99fac09de5a4",
+      "message": "axioval:attributes.axioval:parity.public.judges.name is `house - outer wall - house right back` where other objects with axioval:attributes.axioval:parity.public.judges.object-type `solidwall` have `house - outer wall - house right front`, `house - outer wall - house left`",
+      "object_id": {
+        "local_id": "#370",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#319",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#415",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-storey-wall-types",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#319:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#319:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#370:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#370:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#415:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#415:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:relationship-scan:IfcRelContainedInSpatialStructure:3",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:relationship:#58",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "23e5cfb1-8a25-5cb0-99b9-fd5b09cf60e3",
+      "message": "axioval:attributes.axioval:parity.public.judges.name is `house - outer wall - house left` where other objects with axioval:attributes.axioval:parity.public.judges.object-type `solidwall` have `house - outer wall - house right front`, `house - outer wall - house right back`",
+      "object_id": {
+        "local_id": "#415",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#319",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#370",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-storey-wall-types",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#319:Pset_SlabCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#370:Pset_SlabCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#415:Pset_SlabCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#468:Pset_SlabCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:occurrence:#326/#323",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:occurrence:#375/#372",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:occurrence:#420/#417",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:occurrence:#475/#472",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "2be80c60-1a29-5b0e-bae7-2ce9ea46a359",
+      "message": "axioval:parity.public.judges.wall-quantities.axioval:parity.public.judges.width is 0.024 m, farther than the tolerance 0.01 from the median 0.2 m of the objects without axioval:parity.public.judges.slab-common.axioval:parity.public.judges.is-external",
+      "object_id": {
+        "local_id": "#468",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#319",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#370",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#415",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-wall-type-width",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#319:Pset_SlabCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#370:Pset_SlabCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#415:Pset_SlabCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#468:Pset_SlabCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:occurrence:#326/#323",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:occurrence:#375/#372",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:occurrence:#420/#417",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:occurrence:#475/#472",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "31fc1a0a-f031-525e-a7ec-61604ff8ad6b",
+      "message": "axioval:parity.public.judges.wall-quantities.axioval:parity.public.judges.width is 0.024 m, farther than the tolerance 0.15 m from the median 0.2 m of the objects without axioval:parity.public.judges.slab-common.axioval:parity.public.judges.is-external",
+      "object_id": {
+        "local_id": "#468",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#319",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#370",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#415",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "cv-wall-type-width-quantity",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#555:Pset_SlabCommon:FireRating",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "1378ec3c-2a11-56aa-a5d3-627e2a37eb14",
+      "message": "candidate ifc-step:bs-ifc2x3-building-architecture.ifc/#555 does not satisfy comparison",
+      "object_id": {
+        "local_id": "#555",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pc-slab-type-defined",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#606:Pset_SlabCommon:FireRating",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "5d7fa6b2-c668-5a36-8c64-551492743ec5",
+      "message": "candidate ifc-step:bs-ifc2x3-building-architecture.ifc/#606 does not satisfy comparison",
+      "object_id": {
+        "local_id": "#606",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pc-slab-type-defined",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#319:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#36:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#370:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#415:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#468:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:relationship-scan:IfcRelContainedInSpatialStructure:3",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:relationship:#58",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "026ac44e-911e-5414-b013-782e36b3eebd",
+      "message": "[00 groundfloor] no candidate satisfies comparison",
+      "object_id": {
+        "local_id": "#36",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pc-storey-wall-names",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:occurrence:#326/#323",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:occurrence:#326/#324",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "fbfeca3f-c477-566b-baa9-62cc418532d2",
+      "message": "candidate ifc-step:bs-ifc2x3-building-architecture.ifc/#319 does not satisfy comparison (within tolerance 0.01)",
+      "object_id": {
+        "local_id": "#319",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pc-wall-length-width",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:occurrence:#475/#472",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "539fb912-1d65-59de-bd09-ef7cfb94049b",
+      "message": "candidate ifc-step:bs-ifc2x3-building-architecture.ifc/#468 does not satisfy comparison",
+      "object_id": {
+        "local_id": "#468",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pc-wall-width",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#44:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:occurrence:#49/#47",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "49b60396-b18a-5692-9280-20c61ce11cd7",
+      "message": "[slab on grade] wrong value: axioval:parity.public.judges.slab-common.axioval:parity.public.judges.fire-rating is `REI30` on 1 object; required one of `F30`, `F60`, `F90` (requirement row 0)",
+      "object_id": {
+        "local_id": "#44",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pr-slabs",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#555:Pset_SlabCommon:FireRating",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#606:Pset_SlabCommon:FireRating",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#555:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#606:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:enumeration:#555:Pset_SlabCommon:*",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:enumeration:#606:Pset_SlabCommon:*",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "a2d5efba-3d72-523e-a689-19d4fec196a4",
+      "message": "[roof] missing property set: axioval:parity.public.judges.slab-common is absent on 2 objects (requirement row 0)",
+      "object_id": {
+        "local_id": "#555",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#606",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "pr-slabs",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#319:Pset_WallCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:enumeration:#319:Pset_WallCommon:*",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "f5978a6c-3528-56d3-8114-bb6c1cab894e",
+      "message": "missing property set: axioval:parity.public.judges.wall-common is absent (requirement row 1)",
+      "object_id": {
+        "local_id": "#319",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pr-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#319:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "f00c8979-f5e2-5de4-998f-bf0f70ff6a9b",
+      "message": "wrong value: axioval:attributes.axioval:parity.public.judges.name is `house - outer wall - house right front`; required like `Basic Wall*` (requirement row 5)",
+      "object_id": {
+        "local_id": "#319",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pr-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#370:Pset_WallCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:enumeration:#370:Pset_WallCommon:*",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "d84c0f5d-bce9-5e33-bc3d-73b3da3ca1a3",
+      "message": "missing property set: axioval:parity.public.judges.wall-common is absent (requirement row 1)",
+      "object_id": {
+        "local_id": "#370",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pr-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#370:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "ec83ba6e-44ab-51a7-8670-5d5f8f337adc",
+      "message": "wrong value: axioval:attributes.axioval:parity.public.judges.name is `house - outer wall - house right back`; required like `Basic Wall*` (requirement row 5)",
+      "object_id": {
+        "local_id": "#370",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pr-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#415:Pset_WallCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:enumeration:#415:Pset_WallCommon:*",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "31c4f6fc-3d9e-53e6-a461-e7ffa7a54066",
+      "message": "missing property set: axioval:parity.public.judges.wall-common is absent (requirement row 1)",
+      "object_id": {
+        "local_id": "#415",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pr-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#415:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "27af1bca-0f7f-5212-acca-a68deaf1ca28",
+      "message": "wrong value: axioval:attributes.axioval:parity.public.judges.name is `house - outer wall - house left`; required like `Basic Wall*` (requirement row 5)",
+      "object_id": {
+        "local_id": "#415",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pr-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#468:Pset_WallCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:enumeration:#468:Pset_WallCommon:*",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "4b6036fd-1357-5d71-aa1e-826e7f641ab9",
+      "message": "missing property set: axioval:parity.public.judges.wall-common is absent (requirement row 1)",
+      "object_id": {
+        "local_id": "#468",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pr-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#468:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "21787024-80f8-542a-8bdd-45da554c583c",
+      "message": "wrong value: axioval:attributes.axioval:parity.public.judges.name is `plumbing wall`; required like `Basic Wall*` (requirement row 5)",
+      "object_id": {
+        "local_id": "#468",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pr-walls",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:enumeration:#44:/Pset_[^\\n\\r]*Common/:/[^\\n\\r]*Rating/",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:occurrence:#49/#48",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "215ada77-b958-50fe-9f2c-f61456d3fd6b",
+      "message": "property Pset_SlabCommon.AcousticRating is IFCLABEL, not IFCIDENTIFIER",
+      "object_id": {
+        "local_id": "#44",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pv-ratings",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:enumeration:#44:/Pset_[^\\n\\r]*Common/:/[^\\n\\r]*Rating/",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:occurrence:#49/#47",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "b61cc662-2824-5716-972a-444fc2e528cb",
+      "message": "property Pset_SlabCommon.FireRating is IFCLABEL, not IFCIDENTIFIER",
+      "object_id": {
+        "local_id": "#44",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pv-ratings",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:enumeration:#319:/Pset_[^\\n\\r]*Common/:/FireRating/",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "9b88904d-2c70-5d02-9e17-af03d80f191d",
+      "message": "missing required property /Pset_.*Common/./FireRating/: no property matches",
+      "object_id": {
+        "local_id": "#319",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pv-required-ratings",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:enumeration:#370:/Pset_[^\\n\\r]*Common/:/FireRating/",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "c647f4e8-8203-5358-a9ea-1ea0560ce384",
+      "message": "missing required property /Pset_.*Common/./FireRating/: no property matches",
+      "object_id": {
+        "local_id": "#370",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pv-required-ratings",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:enumeration:#415:/Pset_[^\\n\\r]*Common/:/FireRating/",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "aad93671-74dd-538b-a84b-77958ee6e65a",
+      "message": "missing required property /Pset_.*Common/./FireRating/: no property matches",
+      "object_id": {
+        "local_id": "#415",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pv-required-ratings",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:enumeration:#468:/Pset_[^\\n\\r]*Common/:/FireRating/",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "18d95b3f-ecdf-54b6-9999-b2d5ac78abba",
+      "message": "missing required property /Pset_.*Common/./FireRating/: no property matches",
+      "object_id": {
+        "local_id": "#468",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pv-required-ratings",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:enumeration:#555:/Pset_[^\\n\\r]*Common/:/FireRating/",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "6051a817-7147-5259-b42d-257fe915303f",
+      "message": "missing required property /Pset_.*Common/./FireRating/: no property matches",
+      "object_id": {
+        "local_id": "#555",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pv-required-ratings",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:enumeration:#606:/Pset_[^\\n\\r]*Common/:/FireRating/",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "8346eadb-20e9-50b9-ae27-6fd9c18c0075",
+      "message": "missing required property /Pset_.*Common/./FireRating/: no property matches",
+      "object_id": {
+        "local_id": "#606",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pv-required-ratings",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:occurrence:#49/#45",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "b6d1cf44-df68-52fb-8074-69139d7c8e85",
+      "message": "property axioval:parity.public.judges.is-external is true, not one of the required values",
+      "object_id": {
+        "local_id": "#44",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pv-slab-external",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#555:Pset_SlabCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "7b56b275-b0d0-56d5-a371-5c0c093376df",
+      "message": "missing required property axioval:parity.public.judges.is-external",
+      "object_id": {
+        "local_id": "#555",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pv-slab-external",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#606:Pset_SlabCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "7d803b1c-d82c-56da-8fd1-58d91fce6803",
+      "message": "missing required property axioval:parity.public.judges.is-external",
+      "object_id": {
+        "local_id": "#606",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pv-slab-external",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#319:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "6161c702-43b0-5a5d-882a-8662e1e87fe5",
+      "message": "property axioval:parity.public.judges.name is \"house - outer wall - house right front\", which matches no required pattern",
+      "object_id": {
+        "local_id": "#319",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pv-wall-name",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#370:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "1bee62cc-18cf-5326-b82a-806bdf10af85",
+      "message": "property axioval:parity.public.judges.name is \"house - outer wall - house right back\", which matches no required pattern",
+      "object_id": {
+        "local_id": "#370",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pv-wall-name",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#415:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "b08c8e9e-f8bb-5b8d-a58a-5fd29e4e9787",
+      "message": "property axioval:parity.public.judges.name is \"house - outer wall - house left\", which matches no required pattern",
+      "object_id": {
+        "local_id": "#415",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pv-wall-name",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#468:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "770a76ef-1ff6-57cb-a403-c48a7de09182",
+      "message": "property axioval:parity.public.judges.name is \"plumbing wall\", which matches no required pattern",
+      "object_id": {
+        "local_id": "#468",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pv-wall-name",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:occurrence:#475/#472",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "fcd221fe-6186-54b7-b0cd-42fce707ac9f",
+      "message": "property axioval:parity.public.judges.width is 0.024, not >= 0.1",
+      "object_id": {
+        "local_id": "#468",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "pv-wall-width-range",
+      "severity": "error"
+    },
+    {
+      "evidence": [],
+      "id": "4eeedd4e-2f14-50fc-b8e5-b7f1b9ee92b7",
+      "message": "0 provided and 4 required object(s) in the same source; required 0/1 greater 4/1",
+      "object_id": {
+        "local_id": "#25",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#319",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#370",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#415",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#468",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "rc-source-ratio",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:relationship-scan:IfcRelAggregates:5",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:relationship:#184",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "397239b9-db38-5776-8fce-4e420f38840e",
+      "message": "0 provided and 2 required object(s) via IfcRelAggregates; required 0 at_least 1 for fewer than 3 required",
+      "object_id": {
+        "local_id": "#36",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#183",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#296",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "rc-storey-ratio",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#319:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#370:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#415:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "a7a41786-8b48-5b54-9b5e-7af79eb47b12",
+      "message": "group axioval:attributes.axioval:parity.public.judges.object-type `solidwall`: 3 required object(s) and no provided object; the group is present only in the required set",
+      "object_id": {
+        "local_id": "#319",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#370",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "local_id": "#415",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "rc-type-groups",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#468:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "d505df88-c50e-5f77-a031-43d336c509bb",
+      "message": "group axioval:attributes.axioval:parity.public.judges.object-type `plumbingwall`: 1 required object(s) and no provided object; the group is present only in the required set",
+      "object_id": {
+        "local_id": "#468",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "rc-type-groups",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#682:axioval:attributes:Description",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "67a953dd-113a-5b81-b85a-d7123e32c387",
+      "message": "axioval:attributes.axioval:parity.public.judges.description has no value to compare with the agreed list",
+      "object_id": {
+        "local_id": "#682",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "sc-every-object",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#684:axioval:attributes:Description",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "6bae4b33-7e94-55f6-b3de-8b5fc468c192",
+      "message": "axioval:attributes.axioval:parity.public.judges.description has no value to compare with the agreed list",
+      "object_id": {
+        "local_id": "#684",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "sc-every-object",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:occurrence:#49/#45",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "03f60b34-a452-544b-852b-7bb1ab0cf216",
+      "message": "is not agreed: axioval:parity.public.judges.slab-common.axioval:parity.public.judges.is-external true",
+      "object_id": {
+        "local_id": "#44",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "sc-slab-external",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#555:Pset_SlabCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "71ee9ab6-2469-5776-926a-2945d11993d9",
+      "message": "axioval:parity.public.judges.slab-common.axioval:parity.public.judges.is-external has no value to compare with the agreed list",
+      "object_id": {
+        "local_id": "#555",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "sc-slab-external",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#606:Pset_SlabCommon:IsExternal",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "409bb6e4-ab94-58d8-94d6-720a68b3f173",
+      "message": "axioval:parity.public.judges.slab-common.axioval:parity.public.judges.is-external has no value to compare with the agreed list",
+      "object_id": {
+        "local_id": "#606",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "sc-slab-external",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#183:axioval:attributes:LongName",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#183:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "db5d866f-1ea5-5435-9c16-d7daa7e41493",
+      "message": "does not match any agreed combination of values: axioval:attributes.axioval:parity.public.judges.name `living room`, axioval:attributes.axioval:parity.public.judges.long-name absent",
+      "object_id": {
+        "local_id": "#183",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "sc-space-names",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:absence:#296:axioval:attributes:LongName",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#296:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "b47ed627-e6af-5699-8fd6-27e26dd63b29",
+      "message": "does not match any agreed combination of values: axioval:attributes.axioval:parity.public.judges.name `entry hall`, axioval:attributes.axioval:parity.public.judges.long-name absent",
+      "object_id": {
+        "local_id": "#296",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "sc-space-names",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#319:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#319:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "6ce873b6-92d5-5a19-ae1e-1f1e95e1ba50",
+      "message": "does not match any agreed combination of values: axioval:attributes.axioval:parity.public.judges.object-type `solidwall`, axioval:attributes.axioval:parity.public.judges.name `house - outer wall - house right front`",
+      "object_id": {
+        "local_id": "#319",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "sc-wall-types",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#370:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#370:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "2ef149eb-3a06-585c-843e-440d2dddb04a",
+      "message": "does not match any agreed combination of values: axioval:attributes.axioval:parity.public.judges.object-type `solidwall`, axioval:attributes.axioval:parity.public.judges.name `house - outer wall - house right back`",
+      "object_id": {
+        "local_id": "#370",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "sc-wall-types",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#415:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#415:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "c864f9a7-11bd-56aa-bb0a-5761614ae347",
+      "message": "does not match any agreed combination of values: axioval:attributes.axioval:parity.public.judges.object-type `solidwall`, axioval:attributes.axioval:parity.public.judges.name `house - outer wall - house left`",
+      "object_id": {
+        "local_id": "#415",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "sc-wall-types",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#468:Name",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:c4db65ba847f6b369a95d6c54fa11f4750cbe6d59f021934e8923d8d578e5885:attribute:#468:ObjectType",
+          "source": {
+            "document": "bs-ifc2x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "c76d12a7-97ea-52fe-9c50-5b1778c8f2dc",
+      "message": "does not match any agreed combination of values: axioval:attributes.axioval:parity.public.judges.object-type `plumbingwall`, axioval:attributes.axioval:parity.public.judges.name `plumbing wall`",
+      "object_id": {
+        "local_id": "#468",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "sc-wall-types",
+      "severity": "error"
+    }
+  ],
+  "not_evaluated": [
+    {
+      "message": "property axioval:parity.public.judges.width: comparing a quantity needs its unit; declare `si_units` to read literals in SI",
+      "object_id": {
+        "local_id": "#319",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "pv-wall-width-unitless"
+    },
+    {
+      "message": "property axioval:parity.public.judges.width: comparing a quantity needs its unit; declare `si_units` to read literals in SI",
+      "object_id": {
+        "local_id": "#370",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "pv-wall-width-unitless"
+    },
+    {
+      "message": "property axioval:parity.public.judges.width: comparing a quantity needs its unit; declare `si_units` to read literals in SI",
+      "object_id": {
+        "local_id": "#415",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "pv-wall-width-unitless"
+    },
+    {
+      "message": "property axioval:parity.public.judges.width: comparing a quantity needs its unit; declare `si_units` to read literals in SI",
+      "object_id": {
+        "local_id": "#468",
+        "source": {
+          "document": "bs-ifc2x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "pv-wall-width-unitless"
+    }
+  ],
+  "rules": [
+    {
+      "checked": 36,
+      "failed": 22,
+      "not_evaluated": 0,
+      "rule_id": "cv-names-across",
+      "status": "failed"
+    },
+    {
+      "checked": 3,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "cv-slab-type-depth",
+      "status": "passed"
+    },
+    {
+      "checked": 3,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "cv-slab-type-rating",
+      "status": "passed"
+    },
+    {
+      "checked": 4,
+      "failed": 3,
+      "not_evaluated": 0,
+      "rule_id": "cv-storey-wall-types",
+      "status": "failed"
+    },
+    {
+      "checked": 4,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "cv-wall-type-width",
+      "status": "failed"
+    },
+    {
+      "checked": 4,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "cv-wall-type-width-quantity",
+      "status": "failed"
+    },
+    {
+      "checked": 3,
+      "failed": 2,
+      "not_evaluated": 0,
+      "rule_id": "pc-slab-type-defined",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pc-storey-wall-count",
+      "status": "passed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "pc-storey-wall-names",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pc-storey-wall-volume",
+      "status": "passed"
+    },
+    {
+      "checked": 4,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "pc-wall-length-width",
+      "status": "failed"
+    },
+    {
+      "checked": 4,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "pc-wall-width",
+      "status": "failed"
+    },
+    {
+      "checked": 3,
+      "failed": 2,
+      "not_evaluated": 0,
+      "rule_id": "pr-slabs",
+      "status": "failed"
+    },
+    {
+      "checked": 4,
+      "failed": 4,
+      "not_evaluated": 0,
+      "rule_id": "pr-walls",
+      "status": "failed"
+    },
+    {
+      "checked": 7,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "pv-ratings",
+      "status": "failed"
+    },
+    {
+      "checked": 7,
+      "failed": 6,
+      "not_evaluated": 0,
+      "rule_id": "pv-required-ratings",
+      "status": "failed"
+    },
+    {
+      "checked": 3,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pv-slab-depth-digits",
+      "status": "passed"
+    },
+    {
+      "checked": 3,
+      "failed": 3,
+      "not_evaluated": 0,
+      "rule_id": "pv-slab-external",
+      "status": "failed"
+    },
+    {
+      "checked": 4,
+      "failed": 4,
+      "not_evaluated": 0,
+      "rule_id": "pv-wall-name",
+      "status": "failed"
+    },
+    {
+      "checked": 4,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "pv-wall-width-range",
+      "status": "failed"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 4,
+      "rule_id": "pv-wall-width-unitless",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "rc-source-ratio",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "rc-storey-ratio",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "rc-storey-table",
+      "status": "passed"
+    },
+    {
+      "checked": 7,
+      "failed": 2,
+      "not_evaluated": 0,
+      "rule_id": "rc-type-groups",
+      "status": "failed"
+    },
+    {
+      "checked": 36,
+      "failed": 2,
+      "not_evaluated": 0,
+      "rule_id": "sc-every-object",
+      "status": "failed"
+    },
+    {
+      "checked": 3,
+      "failed": 3,
+      "not_evaluated": 0,
+      "rule_id": "sc-slab-external",
+      "status": "failed"
+    },
+    {
+      "checked": 2,
+      "failed": 2,
+      "not_evaluated": 0,
+      "rule_id": "sc-space-names",
+      "status": "failed"
+    },
+    {
+      "checked": 4,
+      "failed": 4,
+      "not_evaluated": 0,
+      "rule_id": "sc-wall-types",
+      "status": "failed"
+    }
+  ]
+}

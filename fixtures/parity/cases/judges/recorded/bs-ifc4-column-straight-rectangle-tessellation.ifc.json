@@ -1,0 +1,279 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:58bb9b2cae96edf2c368de95f526650f3f282e4e7fc37c0065c501bdbeed00a1:absence:#37:axioval:attributes:Description",
+          "source": {
+            "document": "bs-ifc4-column-straight-rectangle-tessellation.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "d476daea-2373-5ea1-97da-01a5980cb989",
+      "message": "axioval:attributes.axioval:parity.public.judges.description has no value to compare with the agreed list",
+      "object_id": {
+        "local_id": "#37",
+        "source": {
+          "document": "bs-ifc4-column-straight-rectangle-tessellation.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "sc-every-object",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:58bb9b2cae96edf2c368de95f526650f3f282e4e7fc37c0065c501bdbeed00a1:absence:#44:axioval:attributes:Description",
+          "source": {
+            "document": "bs-ifc4-column-straight-rectangle-tessellation.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "b63e2569-b715-5030-a543-df80e5ed19e8",
+      "message": "axioval:attributes.axioval:parity.public.judges.description has no value to compare with the agreed list",
+      "object_id": {
+        "local_id": "#44",
+        "source": {
+          "document": "bs-ifc4-column-straight-rectangle-tessellation.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "sc-every-object",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:58bb9b2cae96edf2c368de95f526650f3f282e4e7fc37c0065c501bdbeed00a1:absence:#71:axioval:attributes:Description",
+          "source": {
+            "document": "bs-ifc4-column-straight-rectangle-tessellation.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "1d83ec34-b75b-5d18-b96a-94d540da1c66",
+      "message": "axioval:attributes.axioval:parity.public.judges.description has no value to compare with the agreed list",
+      "object_id": {
+        "local_id": "#71",
+        "source": {
+          "document": "bs-ifc4-column-straight-rectangle-tessellation.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "sc-every-object",
+      "severity": "error"
+    }
+  ],
+  "not_evaluated": [],
+  "rules": [
+    {
+      "checked": 3,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "cv-names-across",
+      "status": "passed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "cv-slab-type-depth",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "cv-slab-type-rating",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "cv-storey-wall-types",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "cv-wall-type-width",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "cv-wall-type-width-quantity",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pc-slab-type-defined",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pc-storey-wall-count",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pc-storey-wall-names",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pc-storey-wall-volume",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pc-wall-length-width",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pc-wall-width",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pr-slabs",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pr-walls",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pv-ratings",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pv-required-ratings",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pv-slab-depth-digits",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pv-slab-external",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pv-wall-name",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pv-wall-width-range",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "pv-wall-width-unitless",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "rc-source-ratio",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "rc-storey-ratio",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "rc-storey-table",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "rc-type-groups",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 3,
+      "failed": 3,
+      "not_evaluated": 0,
+      "rule_id": "sc-every-object",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "sc-slab-external",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "sc-space-names",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "sc-wall-types",
+      "status": "nothing_selected"
+    }
+  ]
+}

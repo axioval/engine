@@ -1,0 +1,1370 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:parity.public.judges",
+    "name": {
+      "default": "Public parity ruleset, judges",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "The remaining generic judges, recorded before they became templates.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "definitionPackages": [
+    "axioval:parity.public.judges.definitions"
+  ],
+  "root": {
+    "id": "root",
+    "name": {
+      "default": "Judges",
+      "translations": {}
+    },
+    "rules": [
+      {
+        "id": "cv-wall-type-width",
+        "definitionId": "axioval:parity.public.judges.consistent-value",
+        "name": {
+          "default": "cv-wall-type-width",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.judges.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "key": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.judges.slab-common",
+            "property": "axioval:parity.public.judges.is-external"
+          },
+          "value": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.judges.wall-quantities",
+            "property": "axioval:parity.public.judges.width"
+          },
+          "tolerance": {
+            "type": "number",
+            "value": 0.01
+          }
+        }
+      },
+      {
+        "id": "cv-wall-type-width-quantity",
+        "definitionId": "axioval:parity.public.judges.consistent-value",
+        "name": {
+          "default": "cv-wall-type-width-quantity",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.judges.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "key": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.judges.slab-common",
+            "property": "axioval:parity.public.judges.is-external"
+          },
+          "value": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.judges.wall-quantities",
+            "property": "axioval:parity.public.judges.width"
+          },
+          "tolerance_quantity": {
+            "type": "quantity",
+            "value": 150.0,
+            "unit": "mm"
+          }
+        }
+      },
+      {
+        "id": "cv-slab-type-depth",
+        "definitionId": "axioval:parity.public.judges.consistent-value",
+        "name": {
+          "default": "cv-slab-type-depth",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.judges.slab",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "key": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.judges.object-type"
+          },
+          "value": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.judges.slab-quantities",
+            "property": "axioval:parity.public.judges.depth"
+          }
+        }
+      },
+      {
+        "id": "cv-slab-type-rating",
+        "definitionId": "axioval:parity.public.judges.consistent-value",
+        "name": {
+          "default": "cv-slab-type-rating",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.judges.slab",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "key": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.judges.slab-common",
+            "property": "axioval:parity.public.judges.is-external"
+          },
+          "value": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.judges.object-type"
+          },
+          "case_sensitive": {
+            "type": "boolean",
+            "value": true
+          }
+        }
+      },
+      {
+        "id": "cv-names-across",
+        "definitionId": "axioval:parity.public.judges.consistent-value",
+        "name": {
+          "default": "cv-names-across",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "all"
+        },
+        "parameters": {
+          "key": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.judges.name"
+          },
+          "value": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.judges.object-type"
+          },
+          "same_kind": {
+            "type": "boolean",
+            "value": false
+          },
+          "across_sources": {
+            "type": "boolean",
+            "value": true
+          }
+        }
+      },
+      {
+        "id": "cv-storey-wall-types",
+        "definitionId": "axioval:parity.public.judges.consistent-value",
+        "name": {
+          "default": "cv-storey-wall-types",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.judges.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "key": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.judges.object-type"
+          },
+          "value": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.judges.name"
+          },
+          "relationship": {
+            "type": "string",
+            "value": "IfcRelContainedInSpatialStructure"
+          },
+          "direction": {
+            "type": "string",
+            "value": "backward"
+          }
+        }
+      },
+      {
+        "id": "sc-wall-types",
+        "definitionId": "axioval:parity.public.judges.selector-conformance",
+        "name": {
+          "default": "sc-wall-types",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.judges.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "requirement": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "property",
+                  "propertySet": "axioval:attributes",
+                  "property": "axioval:parity.public.judges.object-type",
+                  "operator": "like",
+                  "value": {
+                    "type": "string",
+                    "value": "*Wall*"
+                  }
+                },
+                {
+                  "kind": "property",
+                  "propertySet": "axioval:attributes",
+                  "property": "axioval:parity.public.judges.name",
+                  "operator": "matches",
+                  "value": {
+                    "type": "string",
+                    "value": "Basic Wall:.*"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "sc-slab-external",
+        "definitionId": "axioval:parity.public.judges.selector-conformance",
+        "name": {
+          "default": "sc-slab-external",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.judges.slab",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "requirement": {
+            "type": "selector",
+            "value": {
+              "kind": "property",
+              "propertySet": "axioval:parity.public.judges.slab-common",
+              "property": "axioval:parity.public.judges.is-external",
+              "operator": "equals",
+              "value": {
+                "type": "boolean",
+                "value": false
+              }
+            }
+          },
+          "message": {
+            "type": "string",
+            "value": "is not agreed"
+          }
+        }
+      },
+      {
+        "id": "sc-space-names",
+        "definitionId": "axioval:parity.public.judges.selector-conformance",
+        "name": {
+          "default": "sc-space-names",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.judges.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "requirement": {
+            "type": "selector",
+            "value": {
+              "kind": "allOf",
+              "operands": [
+                {
+                  "kind": "property",
+                  "propertySet": "axioval:attributes",
+                  "property": "axioval:parity.public.judges.name",
+                  "operator": "oneOf",
+                  "value": {
+                    "type": "stringList",
+                    "value": [
+                      "1",
+                      "2",
+                      "3"
+                    ]
+                  }
+                },
+                {
+                  "kind": "property",
+                  "propertySet": "axioval:attributes",
+                  "property": "axioval:parity.public.judges.long-name",
+                  "operator": "exists"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "sc-every-object",
+        "definitionId": "axioval:parity.public.judges.selector-conformance",
+        "name": {
+          "default": "sc-every-object",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "all"
+        },
+        "parameters": {
+          "requirement": {
+            "type": "selector",
+            "value": {
+              "kind": "property",
+              "propertySet": "axioval:attributes",
+              "property": "axioval:parity.public.judges.description",
+              "operator": "exists"
+            }
+          }
+        }
+      },
+      {
+        "id": "rc-storey-ratio",
+        "definitionId": "axioval:parity.public.judges.relative-count",
+        "name": {
+          "default": "rc-storey-ratio",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.judges.storey",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "provided_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.judges.window",
+              "includeSubtypes": true
+            }
+          },
+          "required_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.judges.space",
+              "includeSubtypes": true
+            }
+          },
+          "provided_unit": {
+            "type": "integer",
+            "value": 1
+          },
+          "required_unit": {
+            "type": "integer",
+            "value": 2
+          },
+          "operator": {
+            "type": "string",
+            "value": "at_least"
+          },
+          "small_required_below": {
+            "type": "integer",
+            "value": 3
+          },
+          "small_provided": {
+            "type": "integer",
+            "value": 1
+          },
+          "relationship": {
+            "type": "string",
+            "value": "IfcRelAggregates"
+          }
+        }
+      },
+      {
+        "id": "rc-storey-table",
+        "definitionId": "axioval:parity.public.judges.relative-count",
+        "name": {
+          "default": "rc-storey-table",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.judges.storey",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "provided_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.judges.slab",
+              "includeSubtypes": true
+            }
+          },
+          "required_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.judges.wall",
+              "includeSubtypes": true
+            }
+          },
+          "table": {
+            "type": "stringList",
+            "value": [
+              "1:1",
+              "5:2"
+            ]
+          },
+          "additional_required": {
+            "type": "integer",
+            "value": 4
+          },
+          "additional_provided": {
+            "type": "integer",
+            "value": 1
+          },
+          "relationship": {
+            "type": "string",
+            "value": "IfcRelContainedInSpatialStructure"
+          }
+        }
+      },
+      {
+        "id": "rc-source-ratio",
+        "definitionId": "axioval:parity.public.judges.relative-count",
+        "name": {
+          "default": "rc-source-ratio",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.judges.building",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "provided_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.judges.window",
+              "includeSubtypes": true
+            }
+          },
+          "required_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.judges.wall",
+              "includeSubtypes": true
+            }
+          },
+          "provided_unit": {
+            "type": "integer",
+            "value": 1
+          },
+          "required_unit": {
+            "type": "integer",
+            "value": 1
+          },
+          "operator": {
+            "type": "string",
+            "value": "greater"
+          }
+        }
+      },
+      {
+        "id": "rc-type-groups",
+        "definitionId": "axioval:parity.public.judges.relative-count",
+        "name": {
+          "default": "rc-type-groups",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "anyOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.judges.wall",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.judges.slab",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.judges.beam",
+              "includeSubtypes": true
+            }
+          ]
+        },
+        "parameters": {
+          "provided_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.judges.slab",
+              "includeSubtypes": true
+            }
+          },
+          "required_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.judges.wall",
+              "includeSubtypes": true
+            }
+          },
+          "provided_unit": {
+            "type": "integer",
+            "value": 1
+          },
+          "required_unit": {
+            "type": "integer",
+            "value": 3
+          },
+          "operator": {
+            "type": "string",
+            "value": "at_least"
+          },
+          "group_property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.judges.object-type"
+          }
+        }
+      },
+      {
+        "id": "pv-wall-width-range",
+        "definitionId": "axioval:parity.public.judges.property-value",
+        "name": {
+          "default": "pv-wall-width-range",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.judges.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.judges.wall-quantities",
+            "property": "axioval:parity.public.judges.width"
+          },
+          "min_inclusive": {
+            "type": "string",
+            "value": "0.1"
+          },
+          "max_exclusive": {
+            "type": "string",
+            "value": "0.3"
+          },
+          "si_units": {
+            "type": "boolean",
+            "value": true
+          }
+        }
+      },
+      {
+        "id": "pv-wall-width-unitless",
+        "definitionId": "axioval:parity.public.judges.property-value",
+        "name": {
+          "default": "pv-wall-width-unitless",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.judges.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.judges.wall-quantities",
+            "property": "axioval:parity.public.judges.width"
+          },
+          "values": {
+            "type": "stringList",
+            "value": [
+              "0.2"
+            ]
+          }
+        }
+      },
+      {
+        "id": "pv-slab-external",
+        "definitionId": "axioval:parity.public.judges.property-value",
+        "name": {
+          "default": "pv-slab-external",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.judges.slab",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.judges.slab-common",
+            "property": "axioval:parity.public.judges.is-external"
+          },
+          "values": {
+            "type": "stringList",
+            "value": [
+              "false"
+            ]
+          },
+          "data_type": {
+            "type": "string",
+            "value": "IFCBOOLEAN"
+          }
+        }
+      },
+      {
+        "id": "pv-wall-name",
+        "definitionId": "axioval:parity.public.judges.property-value",
+        "name": {
+          "default": "pv-wall-name",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.judges.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.judges.name"
+          },
+          "patterns": {
+            "type": "stringList",
+            "value": [
+              "Basic Wall:.*"
+            ]
+          },
+          "min_length": {
+            "type": "integer",
+            "value": 3
+          }
+        }
+      },
+      {
+        "id": "pv-ratings",
+        "definitionId": "axioval:parity.public.judges.property-value",
+        "name": {
+          "default": "pv-ratings",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "anyOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.judges.wall",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.judges.slab",
+              "includeSubtypes": true
+            }
+          ]
+        },
+        "parameters": {
+          "property_set_pattern": {
+            "type": "string",
+            "value": "Pset_.*Common"
+          },
+          "property_pattern": {
+            "type": "string",
+            "value": ".*Rating"
+          },
+          "data_type": {
+            "type": "string",
+            "value": "IFCIDENTIFIER"
+          },
+          "optional": {
+            "type": "boolean",
+            "value": true
+          }
+        }
+      },
+      {
+        "id": "pv-required-ratings",
+        "definitionId": "axioval:parity.public.judges.property-value",
+        "name": {
+          "default": "pv-required-ratings",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "anyOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.judges.wall",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.judges.slab",
+              "includeSubtypes": true
+            }
+          ]
+        },
+        "parameters": {
+          "property_set_pattern": {
+            "type": "string",
+            "value": "Pset_.*Common"
+          },
+          "property_pattern": {
+            "type": "string",
+            "value": "FireRating"
+          },
+          "min_length": {
+            "type": "integer",
+            "value": 1
+          }
+        }
+      },
+      {
+        "id": "pv-slab-depth-digits",
+        "definitionId": "axioval:parity.public.judges.property-value",
+        "name": {
+          "default": "pv-slab-depth-digits",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.judges.slab",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.judges.slab-quantities",
+            "property": "axioval:parity.public.judges.depth"
+          },
+          "total_digits": {
+            "type": "integer",
+            "value": 2
+          },
+          "si_units": {
+            "type": "boolean",
+            "value": true
+          }
+        }
+      },
+      {
+        "id": "pr-walls",
+        "definitionId": "axioval:parity.public.judges.property-requirements",
+        "name": {
+          "default": "pr-walls",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.judges.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "requirements": {
+            "type": "table",
+            "value": [
+              {
+                "property_set": {
+                  "type": "string",
+                  "value": "axioval:parity.public.judges.wall-quantities"
+                },
+                "property": {
+                  "type": "string",
+                  "value": "axioval:parity.public.judges.width"
+                },
+                "requirement": {
+                  "type": "string",
+                  "value": "required"
+                }
+              },
+              {
+                "property_set": {
+                  "type": "string",
+                  "value": "axioval:parity.public.judges.wall-common"
+                },
+                "property": {
+                  "type": "string",
+                  "value": "axioval:parity.public.judges.is-external"
+                },
+                "requirement": {
+                  "type": "string",
+                  "value": "required"
+                }
+              },
+              {
+                "property_set": {
+                  "type": "string",
+                  "value": "axioval:parity.public.judges.wall-quantities"
+                },
+                "property": {
+                  "type": "string",
+                  "value": "axioval:parity.public.judges.length"
+                },
+                "state": {
+                  "type": "string",
+                  "value": "include"
+                },
+                "minimum": {
+                  "type": "number",
+                  "value": 1.0
+                },
+                "maximum": {
+                  "type": "number",
+                  "value": 8.0
+                },
+                "unit": {
+                  "type": "string",
+                  "value": "m"
+                }
+              },
+              {
+                "property_set_pattern": {
+                  "type": "string",
+                  "value": "Qto_.*"
+                },
+                "property_pattern": {
+                  "type": "string",
+                  "value": "Net.*"
+                },
+                "state": {
+                  "type": "string",
+                  "value": "include"
+                },
+                "presence": {
+                  "type": "string",
+                  "value": "defined"
+                }
+              },
+              {
+                "property_set": {
+                  "type": "string",
+                  "value": "axioval:parity.public.judges.wall-common"
+                },
+                "property": {
+                  "type": "string",
+                  "value": "axioval:parity.public.judges.fire-rating"
+                },
+                "requirement": {
+                  "type": "string",
+                  "value": "forbidden"
+                }
+              },
+              {
+                "property_set": {
+                  "type": "string",
+                  "value": "axioval:attributes"
+                },
+                "property": {
+                  "type": "string",
+                  "value": "axioval:parity.public.judges.name"
+                },
+                "state": {
+                  "type": "string",
+                  "value": "include"
+                },
+                "value_like": {
+                  "type": "string",
+                  "value": "Basic Wall*"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "pr-slabs",
+        "definitionId": "axioval:parity.public.judges.property-requirements",
+        "name": {
+          "default": "pr-slabs",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "anyOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.judges.slab",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.judges.beam",
+              "includeSubtypes": true
+            }
+          ]
+        },
+        "parameters": {
+          "requirements": {
+            "type": "table",
+            "value": [
+              {
+                "applies_to": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.judges.slab",
+                    "includeSubtypes": true
+                  }
+                },
+                "property_set": {
+                  "type": "string",
+                  "value": "axioval:parity.public.judges.slab-common"
+                },
+                "property": {
+                  "type": "string",
+                  "value": "axioval:parity.public.judges.fire-rating"
+                },
+                "state": {
+                  "type": "string",
+                  "value": "include"
+                },
+                "one_of": {
+                  "type": "string",
+                  "value": "F30|F60|F90"
+                }
+              },
+              {
+                "property_set": {
+                  "type": "string",
+                  "value": "axioval:parity.public.judges.slab-common"
+                },
+                "property": {
+                  "type": "string",
+                  "value": "axioval:parity.public.judges.load-bearing"
+                },
+                "requirement": {
+                  "type": "string",
+                  "value": "optional"
+                }
+              },
+              {
+                "property_set": {
+                  "type": "string",
+                  "value": "axioval:parity.public.judges.slab-quantities"
+                },
+                "property": {
+                  "type": "string",
+                  "value": "axioval:parity.public.judges.depth"
+                },
+                "state": {
+                  "type": "string",
+                  "value": "include"
+                },
+                "minimum": {
+                  "type": "number",
+                  "value": 200.0
+                },
+                "unit": {
+                  "type": "string",
+                  "value": "mm"
+                },
+                "decimals": {
+                  "type": "integer",
+                  "value": 0
+                }
+              },
+              {
+                "property_set": {
+                  "type": "string",
+                  "value": "axioval:parity.public.judges.beam-quantities"
+                },
+                "property": {
+                  "type": "string",
+                  "value": "axioval:parity.public.judges.length"
+                },
+                "state": {
+                  "type": "string",
+                  "value": "exclude"
+                },
+                "minimum": {
+                  "type": "number",
+                  "value": 5.0
+                },
+                "unit": {
+                  "type": "string",
+                  "value": "m"
+                }
+              }
+            ]
+          },
+          "group_by_value": {
+            "type": "boolean",
+            "value": true
+          },
+          "category_property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.judges.object-type"
+          }
+        }
+      },
+      {
+        "id": "pc-wall-width",
+        "definitionId": "axioval:parity.public.judges.property-comparison",
+        "name": {
+          "default": "pc-wall-width",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.judges.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "compared_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.judges.wall",
+              "includeSubtypes": true
+            }
+          },
+          "compared_property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.judges.wall-quantities",
+            "property": "axioval:parity.public.judges.width"
+          },
+          "target_quantity": {
+            "type": "quantity",
+            "value": 0.2,
+            "unit": "m"
+          },
+          "operator": {
+            "type": "string",
+            "value": "greater_or_equal"
+          },
+          "factor": {
+            "type": "number",
+            "value": 1.0
+          },
+          "component_mode": {
+            "type": "string",
+            "value": "checked"
+          },
+          "quantifier": {
+            "type": "string",
+            "value": "each"
+          }
+        }
+      },
+      {
+        "id": "pc-wall-length-width",
+        "definitionId": "axioval:parity.public.judges.property-comparison",
+        "name": {
+          "default": "pc-wall-length-width",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.judges.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "compared_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.judges.wall",
+              "includeSubtypes": true
+            }
+          },
+          "compared_property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.judges.wall-quantities",
+            "property": "axioval:parity.public.judges.length"
+          },
+          "target_property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.judges.wall-quantities",
+            "property": "axioval:parity.public.judges.width"
+          },
+          "operator": {
+            "type": "string",
+            "value": "greater"
+          },
+          "factor": {
+            "type": "number",
+            "value": 10.0
+          },
+          "component_mode": {
+            "type": "string",
+            "value": "checked"
+          },
+          "quantifier": {
+            "type": "string",
+            "value": "each"
+          },
+          "tolerance": {
+            "type": "number",
+            "value": 0.01
+          }
+        }
+      },
+      {
+        "id": "pc-storey-wall-count",
+        "definitionId": "axioval:parity.public.judges.property-comparison",
+        "name": {
+          "default": "pc-storey-wall-count",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.judges.storey",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "compared_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.judges.wall",
+              "includeSubtypes": true
+            }
+          },
+          "target_number": {
+            "type": "number",
+            "value": 2.0
+          },
+          "operator": {
+            "type": "string",
+            "value": "greater_or_equal"
+          },
+          "factor": {
+            "type": "number",
+            "value": 1.0
+          },
+          "component_mode": {
+            "type": "string",
+            "value": "related"
+          },
+          "relationship": {
+            "type": "string",
+            "value": "IfcRelContainedInSpatialStructure"
+          },
+          "quantifier": {
+            "type": "string",
+            "value": "count"
+          }
+        }
+      },
+      {
+        "id": "pc-storey-wall-volume",
+        "definitionId": "axioval:parity.public.judges.property-comparison",
+        "name": {
+          "default": "pc-storey-wall-volume",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.judges.storey",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "compared_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.judges.wall",
+              "includeSubtypes": true
+            }
+          },
+          "compared_property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.judges.wall-quantities",
+            "property": "axioval:parity.public.judges.net-volume"
+          },
+          "target_quantity": {
+            "type": "quantity",
+            "value": 10.0,
+            "unit": "m3"
+          },
+          "operator": {
+            "type": "string",
+            "value": "less"
+          },
+          "factor": {
+            "type": "number",
+            "value": 1.0
+          },
+          "component_mode": {
+            "type": "string",
+            "value": "related"
+          },
+          "relationship": {
+            "type": "string",
+            "value": "IfcRelContainedInSpatialStructure"
+          },
+          "quantifier": {
+            "type": "string",
+            "value": "sum"
+          }
+        }
+      },
+      {
+        "id": "pc-storey-wall-names",
+        "definitionId": "axioval:parity.public.judges.property-comparison",
+        "name": {
+          "default": "pc-storey-wall-names",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.judges.storey",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "compared_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.judges.wall",
+              "includeSubtypes": true
+            }
+          },
+          "compared_property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.judges.name"
+          },
+          "target_texts": {
+            "type": "stringList",
+            "value": [
+              "*Exterior*",
+              "*Interior*"
+            ]
+          },
+          "operator": {
+            "type": "string",
+            "value": "like"
+          },
+          "case_sensitive": {
+            "type": "boolean",
+            "value": false
+          },
+          "factor": {
+            "type": "number",
+            "value": 1.0
+          },
+          "component_mode": {
+            "type": "string",
+            "value": "related"
+          },
+          "relationship": {
+            "type": "string",
+            "value": "IfcRelContainedInSpatialStructure"
+          },
+          "quantifier": {
+            "type": "string",
+            "value": "at_least_one"
+          },
+          "category_property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.judges.name"
+          }
+        }
+      },
+      {
+        "id": "pc-slab-type-defined",
+        "definitionId": "axioval:parity.public.judges.property-comparison",
+        "name": {
+          "default": "pc-slab-type-defined",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.judges.slab",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "compared_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.judges.slab",
+              "includeSubtypes": true
+            }
+          },
+          "compared_property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.judges.slab-common",
+            "property": "axioval:parity.public.judges.fire-rating"
+          },
+          "operator": {
+            "type": "string",
+            "value": "is_defined"
+          },
+          "factor": {
+            "type": "number",
+            "value": 1.0
+          },
+          "component_mode": {
+            "type": "string",
+            "value": "checked"
+          },
+          "quantifier": {
+            "type": "string",
+            "value": "each"
+          }
+        }
+      }
+    ]
+  }
+}

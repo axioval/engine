@@ -56,7 +56,14 @@ impl PlanSpanService for Recesses {
             .get(object)
             .ok_or_else(|| PlanSpanError::UnknownObject(object.clone()))?
             .clone()
-            .map_err(PlanSpanError::Unavailable)?;
+            .map_err(|why| {
+                // A footprint the service measures only approximately.
+                if why == "inexact" {
+                    PlanSpanError::InexactEvidence
+                } else {
+                    PlanSpanError::Unavailable(why)
+                }
+            })?;
         let recesses = found
             .into_iter()
             .enumerate()
@@ -98,6 +105,10 @@ fn table() -> ParameterValue {
     }
 }
 
+/// `recess-width` as it runs, held to the implementation it replaced on
+/// every evaluation.
+static HELD: common::Held = common::Held(&RecessWidth, &axioval_rules::reference::RecessWidth);
+
 fn evaluate(
     recesses: Vec<(&str, Found)>,
     requirements: ParameterValue,
@@ -106,16 +117,16 @@ fn evaluate(
     for (local, _) in &recesses {
         model = model.object(local, "space");
     }
-    let service = Recesses(
+    let service = Arc::new(Recesses(
         recesses
             .into_iter()
             .map(|(local, found)| (id(local), found))
             .collect(),
-    );
+    ));
     let rule = rule(ID, kind("space"), vec![("requirements", requirements)]);
-    model.evaluate_with(&RecessWidth, &rule, move |services| {
+    model.evaluate_measured(&HELD, &rule, move |services| {
         services
-            .register(PlanSpanServiceHandle::new(Arc::new(service)))
+            .register(PlanSpanServiceHandle::new(service.clone()))
             .unwrap();
     })
 }
@@ -143,19 +154,22 @@ fn each_recess_is_judged_by_the_row_its_depth_selects() {
         ],
         table(),
     );
-    let found = findings(&outcome);
-    assert_eq!(found.len(), 2, "{found:?}");
-    assert_eq!(found[0].0, "a");
-    assert!(
-        found[0]
-            .1
-            .ends_with("is 0.9 m wide and 0.8 m deep; row 0 requires at least 1 m"),
-        "{found:?}"
-    );
-    assert_eq!(found[1].0, "b");
-    assert!(
-        found[1].1.ends_with("row 1 requires at least 2 m"),
-        "{found:?}"
+    assert_eq!(
+        findings(&outcome),
+        vec![
+            (
+                "a".to_owned(),
+                "recess at (1.000, 0.000)-(1.900, 0.000) is 0.9 m wide and 0.8 m deep; row 0 \
+                 requires at least 1 m"
+                    .to_owned()
+            ),
+            (
+                "b".to_owned(),
+                "recess at (1.000, 0.000)-(2.500, 0.000) is 1.5 m wide and 2 m deep; row 1 \
+                 requires at least 2 m"
+                    .to_owned()
+            ),
+        ]
     );
     assert!(outcome.not_evaluated_outcomes().is_empty());
 }
@@ -192,22 +206,63 @@ fn straddling_intervals_decide_nothing() {
             ("b".to_owned(), NotEvaluatedReason::IncompleteEvidence),
         ]
     );
+    assert_eq!(
+        messages(&outcome),
+        vec![
+            "recess at (0.000, 0.000)-(5.000, 0.000) is 5 m wide and between 0.9 m and 1.1 m \
+             deep; which row applies is undecided",
+            "recess at (0.000, 0.000)-(0.900, 0.000) is between 0.9 m and 1.1 m wide and \
+             0.5 m deep; row 0 requires at least 1 m, undecided",
+        ]
+    );
+}
+
+fn messages(outcome: &axioval_engine::CapabilityEvaluation) -> Vec<String> {
+    outcome
+        .not_evaluated_outcomes()
+        .iter()
+        .map(|outcome| outcome.message().to_owned())
+        .collect()
 }
 
 #[test]
 fn an_unmeasured_space_or_a_missing_service_is_not_evaluated() {
-    let outcome = evaluate(vec![("a", Err("tessellated".into()))], table());
+    let outcome = evaluate(
+        vec![
+            ("a", Err("tessellated".into())),
+            ("b", Err("inexact".into())),
+        ],
+        table(),
+    );
     assert_eq!(
         unevaluated(&outcome),
-        vec![("a".to_owned(), NotEvaluatedReason::IncompleteEvidence)]
+        vec![
+            ("a".to_owned(), NotEvaluatedReason::IncompleteEvidence),
+            ("b".to_owned(), NotEvaluatedReason::InvalidEvidence),
+        ]
+    );
+    assert_eq!(
+        messages(&outcome),
+        vec![
+            "the recesses of test:model/a cannot be measured: plan span unavailable: tessellated"
+                .to_owned(),
+            format!(
+                "the recesses of test:model/b cannot be measured: {}",
+                PlanSpanError::InexactEvidence
+            ),
+        ]
     );
     let rule = rule(ID, kind("space"), vec![("requirements", table())]);
     let outcome = Model::default()
         .object("a", "space")
-        .evaluate(&RecessWidth, &rule);
+        .evaluate_measured(&HELD, &rule, |_| {});
     assert_eq!(
         unevaluated(&outcome),
         vec![("a".to_owned(), NotEvaluatedReason::MissingService)]
+    );
+    assert_eq!(
+        messages(&outcome),
+        vec!["plan-span service is not registered".to_owned()]
     );
 }
 
@@ -231,6 +286,36 @@ fn a_row_without_a_width_or_with_an_empty_range_is_invalid() {
             &NotEvaluatedReason::InvalidDeclaration
         );
     }
+    let refused = |bad: TableRow| {
+        let outcome = evaluate(
+            vec![("a", Ok(Vec::new()))],
+            ParameterValue::Table { value: vec![bad] },
+        );
+        messages(&outcome)
+    };
+    assert_eq!(
+        refused(row(&[("maximum_depth_metres", 1.0)])),
+        vec![
+            "recess-width: row 0 needs `minimum_width_metres`, `minimum_width_per_depth` or \
+             both"
+                .to_owned()
+        ]
+    );
+    assert_eq!(
+        refused(row(&[
+            ("minimum_depth_metres", 2.0),
+            ("maximum_depth_metres", 1.0),
+            ("minimum_width_metres", 1.0),
+        ])),
+        vec![
+            "recess-width: row 0: `minimum_depth_metres` must be below `maximum_depth_metres`"
+                .to_owned()
+        ]
+    );
+    assert_eq!(
+        refused(row(&[("minimum_width_metres", -1.0)])),
+        vec!["recess-width: row 0: `minimum_width_metres` must not be negative".to_owned()]
+    );
 }
 
 /// Each fixture's recesses judged by an expression over the measured
@@ -341,6 +426,82 @@ fn the_rows_as_an_expression_over_recesses_reach_the_verdicts() {
             );
         } else {
             assert!(parity.holds(), "case {index}:\n{}", parity.diff());
+        }
+    }
+}
+
+/// Generated spaces of random recesses (exact and inexact widths and
+/// depths, some spaces unmeasured) under random requirement rows, each
+/// held to the implementation the template replaced.
+mod generated {
+    use proptest::collection::vec;
+    use proptest::prelude::*;
+
+    use super::{Found, ParameterValue, evaluate, row};
+
+    /// A length in centimetres, exact or widened by a few.
+    fn interval() -> impl Strategy<Value = (f64, f64)> {
+        (0u32..400, 0u32..3).prop_map(|(low, slack)| {
+            let low = f64::from(low) / 100.0;
+            (low, low + f64::from(slack) / 100.0)
+        })
+    }
+
+    fn found() -> impl Strategy<Value = Found> {
+        prop_oneof![
+            8 => vec((interval(), interval()), 0..4).prop_map(Ok),
+            1 => Just(Err("tessellated".to_owned())),
+            1 => Just(Err("inexact".to_owned())),
+        ]
+    }
+
+    /// One row: an optional depth range and the width it requires.
+    fn requirement() -> impl Strategy<Value = Vec<(&'static str, f64)>> {
+        (
+            proptest::option::of(0u32..300),
+            proptest::option::of(1u32..300),
+            proptest::option::of(0u32..300),
+            proptest::option::of(0u32..30),
+        )
+            .prop_filter_map("a row requires a width", |(low, high, width, per)| {
+                if width.is_none() && per.is_none() {
+                    return None;
+                }
+                let mut cells = Vec::new();
+                if let Some(low) = low {
+                    cells.push(("minimum_depth_metres", f64::from(low) / 100.0));
+                }
+                if let Some(high) = high {
+                    if low.is_some_and(|low| low >= high) {
+                        return None;
+                    }
+                    cells.push(("maximum_depth_metres", f64::from(high) / 100.0));
+                }
+                if let Some(width) = width {
+                    cells.push(("minimum_width_metres", f64::from(width) / 100.0));
+                }
+                if let Some(per) = per {
+                    cells.push(("minimum_width_per_depth", f64::from(per) / 10.0));
+                }
+                Some(cells)
+            })
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(96))]
+
+        #[test]
+        fn generated_recesses_hold_parity(
+            spaces in vec(found(), 1..4),
+            rows in vec(requirement(), 1..4),
+        ) {
+            let names = ["a", "b", "c"];
+            let recesses = names.iter().copied().zip(spaces).collect();
+            let table = ParameterValue::Table {
+                value: rows.iter().map(|cells| row(cells)).collect(),
+            };
+            // `evaluate` holds the template to the reference.
+            evaluate(recesses, table);
         }
     }
 }

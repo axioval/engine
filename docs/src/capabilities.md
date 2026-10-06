@@ -1839,7 +1839,7 @@ Three envelope checks, each a rule of its own.
 | `minimum_width_metres` | number, optional | the width required |
 | `minimum_width_per_depth` | number, optional | the width required per metre of depth; with both, the larger applies |
 
-The first row holding a recess's depth applies; a recess no row holds has no requirement. A depth straddling a row's bound, or a width straddling the requirement, is not evaluated. A tessellated footprint is not measured: chords make and hide pockets.
+The first row holding a recess's depth applies; a recess no row holds has no requirement. A depth straddling a row's bound, or a width straddling the requirement, is not evaluated. A tessellated footprint is not measured: chords make and hide pockets. It runs as a template ([Capability templates](./templates.md#recess-width)): the measured `recesses`, handed the rows, judged item by item.
 
 **`light-well`** checks vertically stacked light-well spaces. Each selected object is a well whose spaces `member_path` reaches (with IFC, a zone's spaces through `IfcRelAssignsToGroup:forward`):
 

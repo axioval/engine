@@ -301,3 +301,8 @@ fixture the highest. Its values measure the stacks once per run, keyed by
 the rule's selection, which the run's own selection supplies
 (`@selection`); a value read again by several checks keeps what was read
 ahead, and a rule selecting nothing reads nothing ahead.
+
+`recess-width` runs the `spans` case's two rules: 1.01 to 1.03× its
+reference's run time and 1.01 to 1.15× its peak heap, the generated
+fixture the highest. Its list measures each footprint's recesses once per
+object, as the capability did, and reads the rule's rows once per call.

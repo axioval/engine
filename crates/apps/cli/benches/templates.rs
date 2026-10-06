@@ -182,6 +182,11 @@ const PAIRS: &[Pair] = &[
         case: "coverage",
         reference: |registry| registry.replace(axioval::rules::reference::EffectiveCoverage),
     },
+    Pair {
+        capability: "axioval:capability.recess-width",
+        case: "spans",
+        reference: |registry| registry.replace(axioval::rules::reference::RecessWidth),
+    },
 ];
 
 /// Warm-up runs per side before measuring.

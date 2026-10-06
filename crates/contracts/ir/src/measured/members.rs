@@ -1146,11 +1146,32 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
     MemberDescriptor {
         list: MeasuredDescriptor {
             name: "recesses",
-            parameters: &[],
+            parameters: &[MeasuredParameter {
+                key: "requirements",
+                kind: MeasuredParameterKind::Table,
+                required: false,
+                default: None,
+                help: &en_de(
+                    "Rows of an optional depth range (`minimum_depth_metres` exclusive, \
+                     `maximum_depth_metres` inclusive) and the width they require \
+                     (`minimum_width_metres`, `minimum_width_per_depth` times the depth, \
+                     the larger): the first row whose range holds a recess's depth is its \
+                     row.",
+                    "Zeilen aus einem optionalen Tiefenbereich (`minimum_depth_metres` \
+                     ausschließlich, `maximum_depth_metres` einschließlich) und der \
+                     verlangten Breite (`minimum_width_metres`, `minimum_width_per_depth` \
+                     mal die Tiefe, die größere): die erste Zeile, deren Bereich die Tiefe \
+                     eines Rücksprungs hält, ist seine Zeile.",
+                ),
+            }],
             dimension: None,
             services: &["plan-span"],
             exactness: MeasuredExactness::Measured,
-            not_evaluated: &["the plan-span service does not measure the recesses"],
+            not_evaluated: &[
+                "the plan-span service does not measure the recesses",
+                "a recess's depth straddles a row's bound: its row and required width are \
+                 undecided",
+            ],
             label: &en_de("Recesses", "Rücksprünge"),
             help: &en_de(
                 "The pockets between a footprint's outer boundary and its convex hull.",
@@ -1159,6 +1180,39 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             ),
         },
         fields: &[
+            field(
+                "place",
+                MemberFieldKind::Text,
+                &en_de("Place", "Lage"),
+                &en_de(
+                    "Where the recess's mouth lies: `recess at (x, y)-(x, y)`, in metres.",
+                    "Wo die Öffnung des Rücksprungs liegt: `recess at (x, y)-(x, y)`, in \
+                     Metern.",
+                ),
+            ),
+            field(
+                "row",
+                RATIO,
+                &en_de("Row", "Zeile"),
+                &en_de(
+                    "The index of the first `requirements` row whose depth range holds the \
+                     recess, from 0; `null` where none does or no rows are given.",
+                    "Der Index der ersten Zeile von `requirements`, deren Tiefenbereich den \
+                     Rücksprung hält, ab 0; `null`, wo keine es tut oder keine Zeilen \
+                     angegeben sind.",
+                ),
+            ),
+            field(
+                "required",
+                LENGTH,
+                &en_de("Required width", "Verlangte Breite"),
+                &en_de(
+                    "The width the recess's row requires for its depth; `null` without a \
+                     row.",
+                    "Die Breite, die die Zeile des Rücksprungs für seine Tiefe verlangt; \
+                     `null` ohne Zeile.",
+                ),
+            ),
             field(
                 "width",
                 LENGTH,

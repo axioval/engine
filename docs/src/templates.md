@@ -37,7 +37,11 @@ of their own ([#280](https://github.com/axioval/engine/issues/280)); `slab-conta
 to leave objects unjudged, `counterpart-coverage` the first graded by
 thresholds the rule states, and `effective-coverage` the first deciding by
 a value without an upper bound
-([#282](https://github.com/axioval/engine/issues/282)).
+([#282](https://github.com/axioval/engine/issues/282)); `recess-width` is
+the first of the plan-span capabilities
+([#283](https://github.com/axioval/engine/issues/283)), judging the items
+of a measured list against a row its provider selects from the rule's
+table.
 
 ## The outside contract
 
@@ -992,6 +996,29 @@ a consistency finding `… which differs from the prevailing
 the rule (`servicesPerObject`), in the capability's order and words; the
 services missing leave each slab open.
 
+### `recess-width`
+
+| Form | When | Values | Checks |
+| --- | --- | --- | --- |
+| one | always | `judged` = 1 | `Items` over `recesses;requirements=@requirements`: each recess's `width` at least its `required` width |
+
+The measured `recesses`, handed the rule's rows, state each recess's
+place, width and depth, the first row whose depth range holds it (`row`,
+`null` where none does, undecided where its depth straddles a row's bound)
+and the width that row requires (`required`, an interval over the depth).
+A guard on `row` passes a recess no row holds and leaves one whose row is
+undecided open (`{place} is {width:length} wide and {depth:length} deep;
+which row applies is undecided`); the test judges the width against the
+required interval, failing where it misses the interval's lower end and
+passing where it reaches the upper (`…; row {row:count} requires at least
+{required}`, and `…, undecided` where it straddles). The declaration is
+`requirements` stated and every row read as the capability read it (the
+list's argument check, `row 0 needs …`), refused once for the rule; the
+plan-span service missing leaves each object open
+(`servicesPerObject`), and a footprint the service cannot measure leaves
+it open for the service's reason (`the recesses of … cannot be
+measured: …`).
+
 ## Binding and running a rule
 
 The rules crate's `templates` module runs a template
@@ -1381,6 +1408,16 @@ capacity declaration; by the `effective-coverage` rules of the `coverage`
 case, recorded before the switch; and its fork, which requires `reaching`
 stated and the share at least the minimum and reaches its verdicts. A rule
 declaring a capacity is never forked (D27).
+
+`recess-width` is held to `recess_width/reference.rs`
+(`axioval_rules::reference::RecessWidth`, which reads and selects rows as
+the measured recesses do) through `common::Held` on every fixture of
+`tests/recess_width.rs`, its messages asserted literally; by generated
+spaces of random recesses (exact and inexact widths and depths, some
+spaces unmeasured or measured only approximately) under random rows; and
+by the `recess-width` rules of the `spans` case, recorded before the
+switch. It is never forked. The capability's undecided row (D3) is kept:
+a recess whose depth straddles a row's bound is open, whatever its width.
 
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the

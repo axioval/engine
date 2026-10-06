@@ -199,6 +199,7 @@ pub mod reference {
     pub use crate::property_predicate::reference::PropertyPredicate;
     pub use crate::property_requirements::reference::PropertyRequirements;
     pub use crate::property_value::reference::PropertyValueConstraint;
+    pub use crate::recess_width::reference::RecessWidth;
     pub use crate::related_count::reference::RelatedCount;
     pub use crate::relative_count::reference::RelativeCount;
     pub use crate::shelf_capacity::reference::ShelfCapacity;

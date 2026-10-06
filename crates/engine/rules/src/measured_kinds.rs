@@ -23,6 +23,7 @@ pub(crate) fn argument_check(name: &str) -> Option<ArgumentCheck> {
         | "effective_capacity" | "effective_unread" | "effective_missing" => {
             Some(crate::effective_coverage::check_arguments)
         }
+        "recesses" => Some(crate::recess_width::check_arguments),
         _ => None,
     }
 }

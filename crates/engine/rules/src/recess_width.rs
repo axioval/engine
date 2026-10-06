@@ -16,17 +16,22 @@
 //! row's bound leaves the recess not evaluated, and so does a width interval
 //! straddling the requirement.
 
+use std::sync::LazyLock;
+
+use axioval_engine::template::Template;
 use axioval_engine::{
     CapabilityEvaluation, ColumnKind, CompiledRule, NotEvaluatedReason, ParameterDescriptor,
-    ParameterType, PlanRecess, PlanSpanError, PlanSpanServiceHandle, RuleCapability, RuleContext,
-    TableColumn,
+    PlanRecess, PlanSpanError, RuleCapability, RuleContext, TableColumn,
 };
 use axioval_ir::ObjectId;
+use axioval_ir::contract::{ParameterValue, TableRow};
 
-use crate::level_spacing::shown;
-use crate::selection::select_objects;
-use crate::support::table::{Matched, Row, RowSelection, RowTest, match_rows};
-use crate::support::{Parameters, Unavailable, finding, invalid};
+#[cfg(feature = "parity-reference")]
+pub(crate) mod reference;
+mod template;
+
+use crate::support::table::{Row, RowTest};
+use crate::support::{Unavailable, invalid};
 
 const COLUMNS: &[TableColumn] = &[
     TableColumn::optional("minimum_depth_metres", ColumnKind::Number),
@@ -37,10 +42,37 @@ const COLUMNS: &[TableColumn] = &[
 
 /// Requires every recess of a selected object's footprint to be wide enough
 /// for its depth.
+///
+/// It runs as a template ([`axioval_engine::template`]): the items of the
+/// measured `recesses` list, each with the row its depth selects and the
+/// width that row requires, judged by their width.
 pub struct RecessWidth;
 
+static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
+
+/// The plans of the rules bound to it, kept across runs.
+static PLANS: crate::templates::Plans = crate::templates::Plans::new();
+
+impl RuleCapability for RecessWidth {
+    fn id(&self) -> &'static str {
+        template::ID
+    }
+
+    fn parameters(&self) -> Vec<ParameterDescriptor> {
+        TEMPLATE.parameters.clone()
+    }
+
+    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
+        crate::templates::run((&TEMPLATE, &PLANS), context, rule)
+    }
+
+    fn template(&self) -> Option<&Template> {
+        Some(&TEMPLATE)
+    }
+}
+
 /// One row of the requirement table.
-struct Requirement {
+pub(crate) struct Requirement {
     deeper_than: Option<f64>,
     at_most: Option<f64>,
     width: f64,
@@ -82,7 +114,7 @@ impl Requirement {
     }
 
     /// Whether a depth in `[low, high]` falls in this row's range.
-    fn holds(&self, low: f64, high: f64) -> RowTest {
+    pub(crate) fn holds(&self, low: f64, high: f64) -> RowTest {
         let above = self.deeper_than.map_or(RowTest::Match(0), |bound| {
             if low > bound {
                 RowTest::Match(0)
@@ -105,7 +137,7 @@ impl Requirement {
     }
 
     /// The width required for a depth in `[low, high]`, as an interval.
-    fn required(&self, low: f64, high: f64) -> (f64, f64) {
+    pub(crate) fn required(&self, low: f64, high: f64) -> (f64, f64) {
         (
             self.width.max(self.per_depth * low),
             self.width.max(self.per_depth * high),
@@ -113,17 +145,30 @@ impl Requirement {
     }
 }
 
-fn requirements(rule: &CompiledRule) -> Result<Vec<Requirement>, Unavailable> {
-    let rows = Parameters(rule)
-        .table("requirements")?
-        .ok_or_else(|| invalid("parameter `requirements` is required"))?;
-    rows.into_iter()
+/// The rows of a requirement table, each read and refused as the
+/// capability always read them.
+pub(crate) fn rows(table: &[TableRow]) -> Result<Vec<Requirement>, Unavailable> {
+    table
+        .iter()
         .enumerate()
-        .map(|(index, row)| Requirement::read(row, index))
+        .map(|(index, row)| Requirement::read(Row(row), index))
         .collect()
 }
 
-fn unavailable(object: &ObjectId, error: &PlanSpanError) -> Unavailable {
+/// Checks the rows the measured `recesses` are handed (`requirements`), as
+/// the rule states them: a row refused in the capability's words.
+pub(crate) fn check_arguments(
+    arguments: &std::collections::BTreeMap<String, ParameterValue>,
+) -> Result<(), Unavailable> {
+    match arguments.get("requirements") {
+        Some(ParameterValue::Table { value }) => rows(value).map(|_| ()),
+        Some(_) => Err(invalid("table column `requirements` has the wrong type")),
+        None => Ok(()),
+    }
+}
+
+/// Why the recesses of `object` cannot be measured.
+pub(crate) fn unavailable(object: &ObjectId, error: &PlanSpanError) -> Unavailable {
     let reason = match error {
         PlanSpanError::UnknownObject(_) | PlanSpanError::Unavailable(_) => {
             NotEvaluatedReason::IncompleteEvidence
@@ -138,111 +183,11 @@ fn unavailable(object: &ObjectId, error: &PlanSpanError) -> Unavailable {
     )
 }
 
-fn located(recess: &PlanRecess) -> String {
+/// Where a recess's mouth lies, as findings name it.
+pub(crate) fn located(recess: &PlanRecess) -> String {
     let [a, b] = recess.mouth();
     format!(
         "recess at ({:.3}, {:.3})-({:.3}, {:.3})",
         a[0], a[1], b[0], b[1]
     )
-}
-
-impl RuleCapability for RecessWidth {
-    fn id(&self) -> &'static str {
-        "axioval:capability.recess-width"
-    }
-
-    fn parameters(&self) -> Vec<ParameterDescriptor> {
-        vec![ParameterDescriptor::required(
-            "requirements",
-            ParameterType::Table(COLUMNS),
-        )]
-    }
-
-    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let rows = match requirements(rule) {
-            Ok(rows) => rows,
-            Err((reason, message)) => {
-                return CapabilityEvaluation::not_evaluated(
-                    reason,
-                    format!("recess-width: {message}"),
-                );
-            }
-        };
-        let (selected, mut evaluation) = select_objects(context, &rule.selector);
-        let Some(spans) = context.services.get::<PlanSpanServiceHandle>() else {
-            for object in selected {
-                evaluation.push_object_not_evaluated(
-                    object.id.clone(),
-                    NotEvaluatedReason::MissingService,
-                    "plan-span service is not registered",
-                );
-            }
-            return evaluation;
-        };
-        for object in selected {
-            let found = match spans.measure_recesses(&object.id) {
-                Ok(found) => found,
-                Err(error) => {
-                    let (reason, message) = unavailable(&object.id, &error);
-                    evaluation.push_object_not_evaluated(object.id.clone(), reason, message);
-                    continue;
-                }
-            };
-            for recess in found.recesses() {
-                let (depth_low, depth_high) =
-                    (recess.depth().lower_metres(), recess.depth().upper_metres());
-                let (width_low, width_high) =
-                    (recess.width().lower_metres(), recess.width().upper_metres());
-                let described = format!(
-                    "{} is {} wide and {} deep",
-                    located(recess),
-                    shown(width_low, width_high),
-                    shown(depth_low, depth_high)
-                );
-                let (index, row) = match match_rows(&rows, RowSelection::First, |row| {
-                    row.holds(depth_low, depth_high)
-                }) {
-                    Matched::Rows(rows) => match rows.first() {
-                        Some((index, row)) => (*index, *row),
-                        None => continue,
-                    },
-                    Matched::Undecided | Matched::Ambiguous(_) => {
-                        evaluation.push_object_not_evaluated(
-                            object.id.clone(),
-                            NotEvaluatedReason::IncompleteEvidence,
-                            format!("{described}; which row applies is undecided"),
-                        );
-                        continue;
-                    }
-                };
-                let (needed_low, needed_high) = row.required(depth_low, depth_high);
-                if width_low >= needed_high {
-                    continue;
-                }
-                let needed = shown(needed_low, needed_high);
-                if width_high < needed_low {
-                    let mut evidence = vec![
-                        found.evidence().clone(),
-                        recess.width().evidence().clone(),
-                        recess.depth().evidence().clone(),
-                    ];
-                    evidence.dedup();
-                    evaluation.push_finding(finding(
-                        rule,
-                        &object.id,
-                        format!("{described}; row {index} requires at least {needed}"),
-                        evidence,
-                        Vec::new(),
-                    ));
-                } else {
-                    evaluation.push_object_not_evaluated(
-                        object.id.clone(),
-                        NotEvaluatedReason::IncompleteEvidence,
-                        format!("{described}; row {index} requires at least {needed}, undecided"),
-                    );
-                }
-            }
-        }
-        evaluation
-    }
 }

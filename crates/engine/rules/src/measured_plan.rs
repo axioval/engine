@@ -267,13 +267,23 @@ impl PlanMeasures {
         }
     }
 
+    /// The recesses of the footprint, each with the first row of the
+    /// `requirements` handed in whose depth range holds it and the width
+    /// that row requires: `null` where no row holds it (or none is handed
+    /// in), undecided where its depth straddles a row's bound.
     fn recesses(
+        call: &MeasuredCall,
         object: &ObjectId,
         context: &RuleContext<'_>,
     ) -> Result<Vec<MeasuredMember>, Unavailable> {
+        use crate::support::table::{Matched, RowSelection, match_rows};
+        let rows = match call.argument("requirements") {
+            Some(MeasuredArgument::Table(rows)) => Some(crate::recess_width::rows(rows)?),
+            _ => None,
+        };
         let found = spans(context)?
             .measure_recesses(object)
-            .map_err(|error| span_error(&error))?;
+            .map_err(|error| crate::recess_width::unavailable(object, &error))?;
         let total = found.recesses().len();
         Ok(found
             .recesses()
@@ -281,18 +291,62 @@ impl PlanMeasures {
             .enumerate()
             .map(|(index, recess)| {
                 let at = |field: &str| format!("recesses:{object}#{}/{total}:{field}", index + 1);
+                let (depth, width) = (recess.depth(), recess.width());
+                let exact =
+                    found.evidence().exact && depth.evidence().exact && width.evidence().exact;
+                let absent = |field: &str| {
+                    MemberValue::Measured(Measurement::Absent {
+                        locator: format!("{}: no row holds the recess", at(field)),
+                    })
+                };
+                let (row, required) = match rows.as_ref().map(|rows| {
+                    match_rows(rows, RowSelection::First, |row| {
+                        row.holds(depth.lower_metres(), depth.upper_metres())
+                    })
+                }) {
+                    Some(Matched::Rows(matched)) => match matched.first() {
+                        Some((number, row)) => {
+                            #[allow(clippy::cast_precision_loss)]
+                            let number = *number as f64;
+                            (
+                                MemberValue::Measured(value(
+                                    (number, number),
+                                    None,
+                                    true,
+                                    at("row"),
+                                )),
+                                MemberValue::Measured(value(
+                                    row.required(depth.lower_metres(), depth.upper_metres()),
+                                    LENGTH,
+                                    depth.evidence().exact,
+                                    at("required"),
+                                )),
+                            )
+                        }
+                        None => (absent("row"), absent("required")),
+                    },
+                    Some(Matched::Undecided | Matched::Ambiguous(_)) => {
+                        let undecided = || MemberValue::Undecided {
+                            why: "which row applies is undecided".into(),
+                        };
+                        (undecided(), undecided())
+                    }
+                    None => (absent("row"), absent("required")),
+                };
                 MeasuredMember {
                     certain: true,
-                    exact: found.evidence().exact,
+                    exact,
                     fields: BTreeMap::from([
                         (
-                            "width",
-                            MemberValue::Measured(plan(recess.width(), at("width"))),
+                            "place",
+                            MemberValue::Text {
+                                text: crate::recess_width::located(recess),
+                            },
                         ),
-                        (
-                            "depth",
-                            MemberValue::Measured(plan(recess.depth(), at("depth"))),
-                        ),
+                        ("width", MemberValue::Measured(plan(width, at("width")))),
+                        ("depth", MemberValue::Measured(plan(depth, at("depth")))),
+                        ("row", row),
+                        ("required", required),
                     ]),
                 }
             })
@@ -446,7 +500,7 @@ impl MeasuredProvider for PlanMeasures {
         context: &RuleContext<'_>,
     ) -> Result<Vec<MeasuredMember>, PropertyResolutionError> {
         match call.name() {
-            "recesses" => Self::recesses(object, context),
+            "recesses" => Self::recesses(call, object, context),
             "end_walls" => Self::end_walls(call, object, context),
             _ => Self::exit_pairs(call, object, context),
         }

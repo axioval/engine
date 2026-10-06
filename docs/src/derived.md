@@ -1085,7 +1085,7 @@ and declare their parameters and typed fields:
 | `runs` (`landing`) | a ramp's sloped runs, lowest first | `run`, `slope`, `length`, `rise`, `width`, and with `landing` `bottom_landing`, `top_landing` and their `_depth` and `_width` |
 | `handrails` (`rails`, `reach_across`, `reach_above`, `level_over`, `from`, `of`) | each rail along a flight or each run of a ramp | `run`, `left`, `right`, `height_lowest`, `height_highest`, `extension_bottom`, `extension_top`, `bottom_rise`, `top_rise`, `first_on_side`, `last_on_side`, `gap_after` |
 | `face_pieces` (`face`, `direction`, `tolerance`) | the planar or smooth pieces of a face of the body, as the vertical-extent service lists them; with `face=facing`, a piece whose facing is undecided is a possible member | `slope`, `area`, `gradient_direction` |
-| `recesses` | the pockets between a footprint's boundary and its convex hull | `width`, `depth` |
+| `recesses` (`requirements`) | the pockets between a footprint's boundary and its convex hull | `place`, `width`, `depth`, and with `requirements` the first row whose depth range holds the recess (`row`, `null` for none, undecided where the depth straddles a row's bound) and the width it requires (`required`) |
 | `end_walls` (`corridor`, `kinds`) | the walls the ends of the corridors an opening faces run into | `gap`, `facing` |
 | `exit_pairs` (`exits`, `kinds`, `between`) | every pair of a space's exits | `separation` |
 | `free_placements` (`shape`, `diameter`, `width`, `length`, `height`, `obstacles`, `band_from`, `band_to`, `merge`, `swings`, `entrance_width`, `access`, `doors`, `openings`) | a placement of the shape on a space's free floor: one found, none possible, or one undecided | none |

@@ -33683,7 +33683,247 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "recess-width",
+        "refusals": "servicesPerObject",
+        "declaration": [
+          {
+            "kind": "required",
+            "parameter": "requirements"
+          },
+          {
+            "kind": "arguments",
+            "when": [
+              "requirements"
+            ],
+            "value": "recesses;requirements=@requirements"
+          }
+        ],
+        "services": {
+          "needs": [
+            "plan-span"
+          ],
+          "message": "plan-span service is not registered"
+        },
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "judged",
+                "expression": {
+                  "kind": "literal",
+                  "value": {
+                    "type": "integer",
+                    "value": 1
+                  },
+                  "label": "the recesses are judged"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "judged",
+              "rounding": []
+            },
+            "fail": "",
+            "undecided": "",
+            "checks": [
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {},
+                  "list": "recesses;requirements=@requirements",
+                  "refused": "{why}",
+                  "checks": [
+                    {
+                      "kind": "group",
+                      "guards": [
+                        {
+                          "field": "row",
+                          "undecided": "{place} is {width:length} wide and {depth:length} deep; which row applies is undecided",
+                          "null": {
+                            "kind": "skip"
+                          }
+                        }
+                      ],
+                      "checks": [
+                        {
+                          "kind": "test",
+                          "judge": {
+                            "kind": "range",
+                            "value": "width",
+                            "unit": "length",
+                            "atLeast": [
+                              {
+                                "name": "required",
+                                "options": [
+                                  {
+                                    "bound": {
+                                      "kind": "operand",
+                                      "value": {
+                                        "kind": "value",
+                                        "name": "required"
+                                      }
+                                    }
+                                  }
+                                ],
+                                "words": ""
+                              }
+                            ],
+                            "allowance": {
+                              "kind": "none"
+                            },
+                            "grade": false,
+                            "null": {
+                              "kind": "judge"
+                            }
+                          },
+                          "fail": "{place} is {width:length} wide and {depth:length} deep; row {row:count} requires at least {required}",
+                          "undecided": "{place} is {width:length} wide and {depth:length} deep; row {row:count} requires at least {required}, undecided"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "fail": "",
+                "undecided": ""
+              }
+            ]
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "aggregate",
+                  "function": "none",
+                  "over": {
+                    "kind": "measured",
+                    "name": "recesses;requirements=@requirements"
+                  },
+                  "value": {
+                    "kind": "not",
+                    "operand": {
+                      "kind": "and",
+                      "operands": [
+                        {
+                          "kind": "compare",
+                          "operator": "greaterThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "width"
+                          },
+                          "right": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "required"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "label": "no item fails"
+                },
+                {
+                  "kind": "literal",
+                  "value": {
+                    "type": "boolean",
+                    "value": true
+                  },
+                  "label": "read"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.aggregate",
+                      "label": "no item fails",
+                      "fields": {
+                        "function": "none"
+                      },
+                      "inputs": {
+                        "over": {
+                          "block": {
+                            "type": "members.recesses",
+                            "fields": {
+                              "requirements": "@requirements"
+                            }
+                          }
+                        },
+                        "value": {
+                          "block": {
+                            "type": "expression.not",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.and",
+                                  "inputs": {
+                                    "operands": {
+                                      "blocks": [
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "greaterThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "width",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "required",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.literal",
+                      "label": "read",
+                      "fields": {
+                        "value": {
+                          "type": "boolean",
+                          "value": true
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.related-count",
@@ -71363,13 +71603,33 @@
     },
     {
       "name": "recesses",
-      "parameters": [],
+      "parameters": [
+        {
+          "key": "requirements",
+          "kind": {
+            "type": "table"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Rows of an optional depth range (`minimum_depth_metres` exclusive, `maximum_depth_metres` inclusive) and the width they require (`minimum_width_metres`, `minimum_width_per_depth` times the depth, the larger): the first row whose range holds a recess's depth is its row."
+            },
+            {
+              "language": "de",
+              "text": "Zeilen aus einem optionalen Tiefenbereich (`minimum_depth_metres` ausschließlich, `maximum_depth_metres` einschließlich) und der verlangten Breite (`minimum_width_metres`, `minimum_width_per_depth` mal die Tiefe, die größere): die erste Zeile, deren Bereich die Tiefe eines Rücksprungs hält, ist seine Zeile."
+            }
+          ],
+          "references": "table"
+        }
+      ],
       "services": [
         "plan-span"
       ],
       "exactness": "measured",
       "notEvaluated": [
-        "the plan-span service does not measure the recesses"
+        "the plan-span service does not measure the recesses",
+        "a recess's depth straddles a row's bound: its row and required width are undecided"
       ],
       "label": [
         {
@@ -71392,6 +71652,85 @@
         }
       ],
       "fields": [
+        {
+          "name": "place",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Place"
+            },
+            {
+              "language": "de",
+              "text": "Lage"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Where the recess's mouth lies: `recess at (x, y)-(x, y)`, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Wo die Öffnung des Rücksprungs liegt: `recess at (x, y)-(x, y)`, in Metern."
+            }
+          ]
+        },
+        {
+          "name": "row",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Row"
+            },
+            {
+              "language": "de",
+              "text": "Zeile"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The index of the first `requirements` row whose depth range holds the recess, from 0; `null` where none does or no rows are given."
+            },
+            {
+              "language": "de",
+              "text": "Der Index der ersten Zeile von `requirements`, deren Tiefenbereich den Rücksprung hält, ab 0; `null`, wo keine es tut oder keine Zeilen angegeben sind."
+            }
+          ]
+        },
+        {
+          "name": "required",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Required width"
+            },
+            {
+              "language": "de",
+              "text": "Verlangte Breite"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The width the recess's row requires for its depth; `null` without a row."
+            },
+            {
+              "language": "de",
+              "text": "Die Breite, die die Zeile des Rücksprungs für seine Tiefe verlangt; `null` ohne Zeile."
+            }
+          ]
+        },
         {
           "name": "width",
           "kind": {

@@ -24,7 +24,7 @@ use crate::counts::{Population, relation_text, tally};
 use crate::expression_leaves::ObjectLeaves;
 use crate::level_spacing::prevailing;
 use crate::plan_area::Verdict;
-use crate::selection::{object_by_id, select_objects};
+use crate::selection::{object_by_id, select_shared};
 use crate::support::{Parameters, Traversal, finding};
 
 /// An interval of a value read or derived.
@@ -453,7 +453,7 @@ pub(super) fn run(
     context: &RuleContext<'_>,
     rule: &CompiledRule,
 ) -> CapabilityEvaluation {
-    let (anchors, mut evaluation) = select_objects(context, &rule.selector);
+    let (anchors, mut evaluation) = select_shared(context, &rule.selector);
     let mut table = each.table.as_ref().and_then(|table| {
         ReportTable::new(
             rule.id.clone(),

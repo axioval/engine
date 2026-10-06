@@ -13,7 +13,7 @@ use super::{Constant, Outcome, Plan, Read, bound, judge_checks_in, push, read_va
 use crate::counts::Population;
 use crate::expression_leaves::ObjectLeaves;
 use crate::measured_arguments::Arguments;
-use crate::selection::{object_by_id, select_objects};
+use crate::selection::{object_by_id, select_shared};
 use crate::support::Traversal;
 
 /// Each check's values, bound.
@@ -96,7 +96,7 @@ pub(super) fn run(
         .map(|step| bound(&step.expression, &plan.constants))
         .collect();
     let part_checks = bound_checks(plan, &parts.checks);
-    let (selected, mut evaluation) = select_objects(context, &rule.selector);
+    let (selected, mut evaluation) = select_shared(context, &rule.selector);
     let mut reported = BTreeSet::new();
     for anchor in selected {
         let reached = match traversal.related(context, &anchor.id, &everything) {

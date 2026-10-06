@@ -7,8 +7,9 @@
 //! value was measured against.
 
 use axioval_engine::{
-    Citation, LinearInterval, LinearQuantityServiceHandle, MeasuredMemo, MeasuredProvider,
-    Measurement, NotEvaluatedReason, PropertyResolutionError, RuleContext, ShelfGeometry,
+    ArgumentsKey, Citation, LinearInterval, LinearQuantityServiceHandle, MeasuredMemo,
+    MeasuredProvider, Measurement, NotEvaluatedReason, PropertyResolutionError, RuleContext,
+    ShelfGeometry,
 };
 use axioval_ir::measured::{MeasuredArgument, MeasuredCall, MeasuredSelection};
 use axioval_ir::{ObjectId, QuantityDimension};
@@ -72,20 +73,10 @@ fn geometry(call: &MeasuredCall) -> Result<ShelfGeometry, Unavailable> {
     .map_err(|_| refused())
 }
 
-/// The bound arguments `keys` of `call`, as a memo keys them.
-fn arguments(call: &MeasuredCall, keys: &[&str]) -> String {
-    use std::fmt::Write as _;
-    let mut key = String::new();
-    for name in keys {
-        let _ = write!(key, "{name}={:?};", call.argument(name));
-    }
-    key
-}
-
 /// The access index the call's path, elements and spaces declare, built
 /// once per run for those arguments.
 fn index(call: &MeasuredCall, context: &RuleContext<'_>) -> Result<Arc<AccessIndex>, Unavailable> {
-    let key = arguments(call, &["access", "doors", "openings", "spaces"]);
+    let key = ArgumentsKey::of_keys(call, &["access", "doors", "openings", "spaces"]);
     MeasuredMemo::of(context.services, key, || {
         let picked = Picked::of(call, context).map_err(crate::selection::property_error)?;
         let Some(MeasuredArgument::Path(steps)) = call.argument("access") else {
@@ -105,30 +96,15 @@ fn index(call: &MeasuredCall, context: &RuleContext<'_>) -> Result<Arc<AccessInd
 }
 
 /// The shelving of the space `object`, measured once per run for the call's
-/// arguments: `shelf_length` and `shelf_clear_height` read one request.
+/// `arguments` (every argument of it, [`ArgumentsKey::of`]): `shelf_length`
+/// and `shelf_clear_height` read one request.
 fn shelving(
     call: &MeasuredCall,
+    arguments: &ArgumentsKey,
     object: &ObjectId,
     context: &RuleContext<'_>,
-) -> Result<Shelving, Unavailable> {
-    let key = (
-        object.clone(),
-        arguments(
-            call,
-            &[
-                "depth",
-                "horizontal",
-                "vertical",
-                "bottom",
-                "top",
-                "clearance",
-                "access",
-                "doors",
-                "openings",
-                "spaces",
-            ],
-        ),
-    );
+) -> Result<Arc<Shelving>, Unavailable> {
+    let key = (object.clone(), arguments.clone());
     MeasuredMemo::of(context.services, key, || {
         let geometry = geometry(call)?;
         // The arguments are checked before the service, as the capability
@@ -143,7 +119,7 @@ fn shelving(
                     "linear-quantity service is not registered".to_owned(),
                 )
             })?;
-        measure(service, &index, geometry, object)
+        measure(service, &index, geometry, object).map(Arc::new)
     })
 }
 
@@ -151,10 +127,12 @@ fn shelving(
 /// openings it was measured with.
 fn measured(
     call: &MeasuredCall,
+    arguments: &ArgumentsKey,
     object: &ObjectId,
     context: &RuleContext<'_>,
 ) -> Result<(Measurement, Citation), PropertyResolutionError> {
-    let shelving = shelving(call, object, context).map_err(refused(call.name(), object))?;
+    let shelving =
+        shelving(call, arguments, object, context).map_err(refused(call.name(), object))?;
     let exact = shelving.evidence.iter().all(|evidence| evidence.exact);
     let locator = shelving.measured.evidence().locator.clone();
     // What the length was measured against: the doors and openings sent,
@@ -199,6 +177,12 @@ impl MeasuredProvider for ShelfMeasures {
         object: &ObjectId,
         context: &RuleContext<'_>,
     ) -> Result<(Measurement, Citation), PropertyResolutionError> {
-        measured(call, object, context)
+        measured(call, &ArgumentsKey::of(call), object, context)
+    }
+
+    // Each value reads the space's shelving, kept for the run by its
+    // arguments.
+    fn memoizes(&self) -> bool {
+        true
     }
 }

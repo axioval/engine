@@ -266,7 +266,7 @@ fn judge(
                 read.bounds = Some((judged.minimum, judged.maximum));
                 read.evidence = tally.evidence;
                 straddled = matches!(judged.verdict, crate::plan_area::Verdict::Undecided(_));
-                ranged(plan, read, &judged, tally.sure)
+                ranged(plan, &mut read, &judged, tally.sure)
             }
             None => Outcome::Open(
                 NotEvaluatedReason::InvalidEvidence,

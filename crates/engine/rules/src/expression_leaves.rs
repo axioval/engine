@@ -49,8 +49,9 @@ pub(crate) type Prefetched = (
     Result<MeasuredRead, (NotEvaluatedReason, String)>,
 );
 
-/// An object's values read ahead, kept inline: a form reads a handful.
-pub(crate) type Prefetch = smallvec::SmallVec<[Prefetched; 4]>;
+/// An object's values read ahead, on the heap: the object's leaves and
+/// judgement move them several times, which an inline list would copy.
+pub(crate) type Prefetch = Vec<Prefetched>;
 
 /// A measured value naming the rule's parameters, read ahead with its
 /// arguments bound, by its name as written.
@@ -62,6 +63,8 @@ pub(crate) type BoundPrefetched = (
 /// Answers an expression's leaves for one selected object.
 pub(crate) struct ObjectLeaves<'a> {
     context: &'a RuleContext<'a>,
+    /// The run's evaluation budget, looked up once for the object.
+    budget: Option<&'a Arc<EvaluationBudget>>,
     object: &'a Object,
     /// The rule's checked object: `object`, except in an aggregate's
     /// member scope.
@@ -110,6 +113,7 @@ impl<'a> ObjectLeaves<'a> {
     ) -> Self {
         Self {
             context,
+            budget: context.services.get::<Arc<EvaluationBudget>>(),
             object,
             subject: object,
             parameters,
@@ -139,6 +143,7 @@ impl<'a> ObjectLeaves<'a> {
     fn member(&self, member: &'a Object) -> Self {
         Self {
             context: self.context,
+            budget: self.budget,
             object: member,
             subject: self.subject,
             parameters: self.parameters,
@@ -160,6 +165,7 @@ impl<'a> ObjectLeaves<'a> {
     fn measured_member(&self, member: &'a MeasuredMember) -> Self {
         Self {
             context: self.context,
+            budget: self.budget,
             object: self.object,
             subject: self.subject,
             parameters: self.parameters,
@@ -711,11 +717,7 @@ impl<'a> ObjectLeaves<'a> {
 
 impl ExpressionContext for ObjectLeaves<'_> {
     fn spend(&mut self) -> bool {
-        let spent = self
-            .context
-            .services
-            .get::<std::sync::Arc<EvaluationBudget>>()
-            .is_none_or(|budget| budget.spend());
+        let spent = self.budget.is_none_or(|budget| budget.spend());
         if !spent {
             self.reasons
                 .borrow_mut()

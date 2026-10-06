@@ -63,25 +63,27 @@ struct Body {
 fn measured(
     axis: Axis,
     object: &ObjectId,
-    context: &RuleContext<'_>,
+    (context, memo): (&RuleContext<'_>, Option<&MeasuredMemo>),
 ) -> Result<Extent, Unavailable> {
-    let Some(memo) = context.services.get::<MeasuredMemo>() else {
+    let Some(memo) = memo else {
         return take(axis, None, object, context).1;
     };
     let index = axis.index();
-    let known = memo.get_with(object, |body: &Body| {
-        (body.extents[index].clone(), body.frame.clone())
+    // The extent along the axis, or else the frame measured for another.
+    let known = memo.get_with(object, |body: &Body| match &body.extents[index] {
+        Some(extent) => Ok(extent.clone()),
+        None => Err(body.frame.clone()),
     });
     let frame = match known {
-        Some((Some(extent), _)) => return extent,
-        Some((None, frame)) => frame,
+        Some(Ok(extent)) => return extent,
+        Some(Err(frame)) => frame,
         None => None,
     };
     let (frame, extent) = take(axis, frame, object, context);
-    let mut body: Body = memo.get(object).unwrap_or_default();
-    body.frame = frame;
-    body.extents[index] = Some(extent.clone());
-    memo.insert(object.clone(), body);
+    memo.update(object.clone(), |body: &mut Body| {
+        body.frame = frame;
+        body.extents[index] = Some(extent.clone());
+    });
     extent
 }
 
@@ -167,9 +169,9 @@ impl<'c> Read<'c> {
     fn measure(
         self,
         object: &ObjectId,
-        context: &RuleContext<'_>,
+        within: (&RuleContext<'_>, Option<&MeasuredMemo>),
     ) -> Result<Measurement, Unavailable> {
-        let extent = measured(self.axis, object, context)?;
+        let extent = measured(self.axis, object, within)?;
         let range = match self.value {
             Value::Length => extent.length,
             Value::End(Some("low")) => extent.low,
@@ -195,7 +197,7 @@ fn along(
     object: &ObjectId,
     context: &RuleContext<'_>,
 ) -> Result<Measurement, Unavailable> {
-    Read::of(call)?.measure(object, context)
+    Read::of(call)?.measure(object, (context, context.services.get::<MeasuredMemo>()))
 }
 
 impl MeasuredProvider for ExtentMeasures {
@@ -218,13 +220,15 @@ impl MeasuredProvider for ExtentMeasures {
         objects: &[&ObjectId],
         context: &RuleContext<'_>,
     ) -> Vec<Result<Measurement, PropertyResolutionError>> {
-        // The call's axis and end once for every object.
+        // The call's axis and end, and the run's memo, once for every
+        // object.
         let read = Read::of(call);
+        let memo = context.services.get::<MeasuredMemo>();
         objects
             .iter()
             .map(|object| {
                 read.clone()
-                    .and_then(|read| read.measure(object, context))
+                    .and_then(|read| read.measure(object, (context, memo)))
                     .map_err(refused(call.name(), object))
             })
             .collect()

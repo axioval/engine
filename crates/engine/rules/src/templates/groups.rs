@@ -14,7 +14,7 @@ use axioval_ir::{
 
 use super::{Constant, Outcome, Plan, Read, read_values, render};
 use crate::expression_leaves::ObjectLeaves;
-use crate::selection::{Selection, select_objects, selector_matches};
+use crate::selection::{Selection, select_shared, selector_matches};
 use crate::support::{
     Parameters, PropertyRef, display, finding, resolve, scope_key, undefined, value_key,
 };
@@ -67,7 +67,7 @@ pub(super) fn run(
     // Checked by the declaration (`Check::Tolerance`).
     let tolerance = Parameters(rule).tolerance().unwrap_or_default();
     let traversal = Parameters(rule).traversal().ok().flatten();
-    let (selected, mut evaluation) = select_objects(context, &rule.selector);
+    let (selected, mut evaluation) = select_shared(context, &rule.selector);
     // (group, value) -> objects holding it.
     let mut holders: BTreeMap<(String, String), Vec<Holder<'_>>> = BTreeMap::new();
     // (group, domain) -> numbers compared pair by pair under a tolerance.
@@ -355,7 +355,7 @@ pub(super) fn consistent(
     let spread = Spread::of(plan, consistent);
     // Checked by the declaration (`Check::Traversal`).
     let traversal = Parameters(rule).traversal().ok().flatten();
-    let (selected, mut evaluation) = select_objects(context, &rule.selector);
+    let (selected, mut evaluation) = select_shared(context, &rule.selector);
     let mut groups: BTreeMap<(String, String, String), Group<'_>> = BTreeMap::new();
     for object in selected {
         let mut leaves = ObjectLeaves::new(context, object, Some(&rule.parameters));
@@ -678,7 +678,7 @@ pub(super) fn conforms(
     };
     let mut consulted = Vec::new();
     consulted_properties(requirement, &mut consulted);
-    let (selected, mut evaluation) = select_objects(context, &rule.selector);
+    let (selected, mut evaluation) = select_shared(context, &rule.selector);
     let mut rejected: BTreeMap<Vec<String>, Combination> = BTreeMap::new();
     for object in selected {
         let mut evidence = Vec::new();

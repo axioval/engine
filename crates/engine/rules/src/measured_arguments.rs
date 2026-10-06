@@ -3,7 +3,7 @@
 //! object the rule checks ([`axioval_ir::measured`]).
 //!
 //! A selector parameter binds to the objects it picks, surely or not, read
-//! once per rule through the run's one selection ([`select_objects`]) and
+//! once per rule through the run's one selection ([`select_shared`], shared between its rules) and
 //! sorted by source-qualified identity; a length, path, text, property
 //! reference or table binds to the value the parameter states, checked
 //! against the measured parameter's kind. A reference that cannot be bound (a parameter the rule does not
@@ -22,7 +22,7 @@ use axioval_ir::measured::{
     MeasuredArgument, MeasuredCall, MeasuredParameterKind, MeasuredSelection,
 };
 
-use crate::selection::select_objects;
+use crate::selection::select_shared;
 use crate::support::{Unavailable, invalid, si_quantity};
 
 /// What one rule's measured values bind, read once per rule: the objects
@@ -44,7 +44,7 @@ fn selection(
     parameter: &str,
     selector: &Selector,
 ) -> Result<MeasuredSelection, Unavailable> {
-    let (matched, outcomes) = select_objects(context, selector);
+    let (matched, outcomes) = select_shared(context, selector);
     let mut undecided = BTreeSet::new();
     let mut first_undecided = None;
     for outcome in outcomes.not_evaluated_outcomes() {
@@ -198,7 +198,8 @@ fn bound(
     parameter: &str,
     value: &ParameterValue,
 ) -> Result<MeasuredArgument, Unavailable> {
-    let reference = format!("`@{parameter}`");
+    // Worded only when a refusal needs it.
+    let reference = Reference(parameter);
     let not = |what: &str| invalid(format!("{reference} is not {what}"));
     Ok(match (kind, value) {
         (MeasuredParameterKind::Objects, ParameterValue::Selector { value: selector }) => {
@@ -357,6 +358,15 @@ pub(crate) fn bind(
             .map_err(|error| (NotEvaluatedReason::InvalidDeclaration, error.to_string()))?;
     }
     Ok(())
+}
+
+/// A reference as a refusal words it, `` `@name` ``.
+struct Reference<'a>(&'a str);
+
+impl std::fmt::Display for Reference<'_> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "`@{}`", self.0)
+    }
 }
 
 #[cfg(test)]

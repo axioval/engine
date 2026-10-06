@@ -1,5 +1,8 @@
 //! Deterministic, fail-closed selector evaluation.
 
+use std::sync::Arc;
+
+use axioval_engine::MeasuredMemo;
 use axioval_engine::comparison::{self as shared, Order, Pattern, Tolerance, Undecided};
 use axioval_engine::{
     BindingError, CapabilityEvaluation, ClassificationAssignment, ClassificationError,
@@ -22,13 +25,68 @@ pub(crate) use axioval_engine::comparison::TextOptions;
 
 use crate::support::{Traversal, exact_f64, si_quantity, undefined};
 
+/// What a run's shared selections are kept by: the selector, as written.
+#[derive(Clone, Hash, PartialEq, Eq)]
+struct SharedSelector(String);
+
+/// A shared selection: the positions in its population of the objects
+/// selected, in order, and the outcomes of the objects and sources it could
+/// not decide.
+type Shared = Arc<(Vec<usize>, CapabilityEvaluation)>;
+
+/// [`select_objects`], selected once per run for every rule and template
+/// selecting the same objects: a selector that reads no rule's outcomes
+/// and evaluates no expression (whose evaluation spends the run's budget)
+/// selects the same objects whichever rule reads it. Any other selector is
+/// selected now.
+pub(crate) fn select_shared<'a>(
+    context: &RuleContext<'a>,
+    selector: &Selector,
+) -> (Vec<&'a Object>, CapabilityEvaluation) {
+    let written = (selector.rule_references().is_empty() && selector.expressions().is_empty())
+        .then(|| serde_json::to_string(selector).ok())
+        .flatten();
+    let (Some(written), Some(memo)) = (written, context.services.get::<MeasuredMemo>()) else {
+        return select_objects(context, selector);
+    };
+    // The population is the same for every rule of the run, so a position
+    // in it names the same object.
+    let (population, unreadable) = population(context, selector);
+    let population: Vec<&'a Object> = population.collect();
+    let shared: Shared = memo.get_or_measure(SharedSelector(written), || {
+        Arc::new(select_in(context, selector, &population, unreadable))
+    });
+    let selected = shared.0.iter().map(|index| population[*index]).collect();
+    (selected, shared.1.clone())
+}
+
 pub(crate) fn select_objects<'a>(
     context: &RuleContext<'a>,
     selector: &Selector,
 ) -> (Vec<&'a Object>, CapabilityEvaluation) {
+    let (population, unreadable) = population(context, selector);
+    let population: Vec<&'a Object> = population.collect();
+    let (selected, evaluation) = select_in(context, selector, &population, unreadable);
+    (
+        selected
+            .into_iter()
+            .map(|index| population[index])
+            .collect(),
+        evaluation,
+    )
+}
+
+/// The positions in `population` of the objects `selector` selects, in
+/// order, and the outcomes of those it cannot decide and of the sources
+/// whose resource objects are `unreadable`.
+fn select_in(
+    context: &RuleContext<'_>,
+    selector: &Selector,
+    population: &[&Object],
+    unreadable: Vec<(SourceId, String)>,
+) -> (Vec<usize>, CapabilityEvaluation) {
     let mut selected = Vec::new();
     let mut evaluation = CapabilityEvaluation::default();
-    let (population, unreadable) = population(context, selector);
     for (source, why) in unreadable {
         evaluation.push_source_not_evaluated(
             source,
@@ -36,9 +94,34 @@ pub(crate) fn select_objects<'a>(
             format!("its resource objects cannot be listed: {why}"),
         );
     }
-    for object in population {
-        match selector_matches(context, selector, object, &mut Vec::new()) {
-            Selection::Match => selected.push(object),
+    // An entity type selects by the object's source and kind alone: each
+    // pair is decided once, however many objects share it.
+    let mut kinds: Vec<(&SourceId, &str, Selection)> = Vec::new();
+    for (index, object) in population.iter().copied().enumerate() {
+        let selection = match selector {
+            Selector::EntityType {
+                object_type,
+                include_subtypes,
+            } => {
+                let (source, kind) = (&object.id.source, object.kind());
+                let decided = kinds
+                    .iter()
+                    .find(|(decided, decided_kind, _)| {
+                        *decided_kind == kind
+                            && (std::ptr::eq(*decided, source) || *decided == source)
+                    })
+                    .map(|(_, _, selection)| selection.clone());
+                decided.unwrap_or_else(|| {
+                    let selection =
+                        entity_type_matches(context, object, object_type, *include_subtypes);
+                    kinds.push((source, kind, selection.clone()));
+                    selection
+                })
+            }
+            _ => selector_matches(context, selector, object, &mut Vec::new()),
+        };
+        match selection {
+            Selection::Match => selected.push(index),
             Selection::NoMatch => {}
             Selection::NotEvaluated(reason, message) => {
                 evaluation.push_object_not_evaluated(object.id.clone(), reason, message);

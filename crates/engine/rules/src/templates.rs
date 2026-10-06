@@ -48,7 +48,7 @@ use crate::expression_requirement::reason_of;
 use crate::level_spacing::{metres, shown};
 use crate::measured_arguments::Arguments;
 use crate::plan_area::{Verdict, deviation, judge};
-use crate::selection::{bound_property_request, property_error, select_objects};
+use crate::selection::{bound_property_request, property_error, select_shared};
 use crate::support::{Parameters, Traversal, Unavailable, display, finding, invalid};
 
 /// A built-in capability run as its template.
@@ -2188,7 +2188,7 @@ fn judge_checks_in(
         outcomes.push(graded(
             ranged_as(
                 plan,
-                checked,
+                &mut checked,
                 &judged,
                 related,
                 (check.fail, check.undecided),
@@ -2687,7 +2687,7 @@ fn judge_object(
         }
         Verdict::Pass => None,
     };
-    let outcome = graded(ranged(plan, read, &judged, related), severity);
+    let outcome = graded(ranged(plan, &mut read, &judged, related), severity);
     Judgement {
         outcome,
         row,
@@ -2698,7 +2698,7 @@ fn judge_object(
 /// What a range judge's verdict comes to, worded with the form's
 /// messages: a finding relating `related` (graded where the template
 /// grades), or the object open naming the bound it straddles.
-fn ranged(plan: &Plan<'_>, read: Read, judged: &Judged, related: Vec<ObjectId>) -> Outcome {
+fn ranged(plan: &Plan<'_>, read: &mut Read, judged: &Judged, related: Vec<ObjectId>) -> Outcome {
     ranged_as(
         plan,
         read,
@@ -2709,9 +2709,12 @@ fn ranged(plan: &Plan<'_>, read: Read, judged: &Judged, related: Vec<ObjectId>) 
 }
 
 /// [`ranged`], worded with `fail` and `undecided`.
+///
+/// It takes what it words from `read` (its evidence), leaving the rest:
+/// a read is kept in place rather than copied into each verdict.
 fn ranged_as(
     plan: &Plan<'_>,
-    mut read: Read,
+    read: &mut Read,
     judged: &Judged,
     related: Vec<ObjectId>,
     (fail, undecided): (&str, &str),
@@ -2721,8 +2724,8 @@ fn ranged_as(
         Verdict::Fail(bound) => {
             read.bound = Some(bound.clone());
             Outcome::Finding {
-                message: render(plan, &read, fail),
-                evidence: read.evidence,
+                message: render(plan, read, fail),
+                evidence: std::mem::take(&mut read.evidence),
                 related,
                 deviation: if plan.template.grades {
                     deviation(judged.lower, judged.upper, judged.minimum, judged.maximum)
@@ -2736,7 +2739,7 @@ fn ranged_as(
             read.bound = Some(bound.clone());
             Outcome::Open(
                 NotEvaluatedReason::IncompleteEvidence,
-                render(plan, &read, undecided),
+                render(plan, read, undecided),
             )
         }
     }
@@ -2773,7 +2776,7 @@ fn refused(
     match template.refusals {
         Refusals::Rule | Refusals::Worded => CapabilityEvaluation::not_evaluated(reason, message),
         Refusals::Objects | Refusals::Prefixed { .. } | Refusals::ServicesPerObject => {
-            let (selected, mut evaluation) = select_objects(context, &rule.selector);
+            let (selected, mut evaluation) = select_shared(context, &rule.selector);
             for object in selected {
                 evaluation.push_object_not_evaluated(
                     object.id.clone(),
@@ -2874,7 +2877,7 @@ pub(crate) fn run(
     };
     let decision = effective(&plan);
     let mut table = report_table(&plan, rule);
-    let (selected, mut evaluation) = select_objects(context, &rule.selector);
+    let (selected, mut evaluation) = select_shared(context, &rule.selector);
     // `@selection` is the selection just made.
     let arguments = Arguments::of_rule(rule).selected(&selected, &evaluation);
     let (batched, bound) = read_ahead(&plan, context, &arguments, selected.first().copied());

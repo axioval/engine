@@ -19,7 +19,7 @@ use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Finding, Object, ObjectId, PropertyValue, Severity, TemporalPrecision};
 
 use crate::levels::Levels;
-use crate::selection::select_objects;
+use crate::selection::select_shared;
 use axioval_engine::comparison::{self as shared, Order, Pattern, TextOptions, Undecided};
 use regex::Regex;
 
@@ -46,8 +46,8 @@ pub(super) fn run(
     let Ok(config) = Config::parse(rule, names) else {
         return CapabilityEvaluation::default();
     };
-    let (checked, mut evaluation) = select_objects(context, &rule.selector);
-    let (universe, universe_outcomes) = select_objects(context, config.selector);
+    let (checked, mut evaluation) = select_shared(context, &rule.selector);
+    let (universe, universe_outcomes) = select_shared(context, config.selector);
     if !universe_outcomes.not_evaluated_outcomes().is_empty() {
         for object in checked {
             evaluation.push_object_not_evaluated(
@@ -60,7 +60,7 @@ pub(super) fn run(
     }
     let containers = match &config.mode {
         Mode::SameContainer { containers, .. } => {
-            let (selected, outcomes) = select_objects(context, containers);
+            let (selected, outcomes) = select_shared(context, containers);
             if !outcomes.not_evaluated_outcomes().is_empty() {
                 // An undecided object may be the space two elements share.
                 for object in checked {

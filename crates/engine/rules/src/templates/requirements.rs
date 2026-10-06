@@ -18,7 +18,7 @@ use axioval_ir::{
 
 use crate::plan_area::{Bound, Verdict, body_volume, face_area, footprint, judge_bounds, shown};
 use crate::selection::{
-    NameSpec, Selection, enumerate, select_objects, selector_matches, sets_without_match,
+    NameSpec, Selection, enumerate, select_shared, selector_matches, sets_without_match,
     xsd_name_pattern,
 };
 use crate::support::table::{Matched, Row, RowSelection, RowTest, TextPattern, match_rows};
@@ -43,7 +43,7 @@ pub(super) fn run(
     let Ok(declared) = parse(&Parameters(rule), names) else {
         return CapabilityEvaluation::default();
     };
-    let (subjects, mut evaluation) = select_objects(context, &rule.selector);
+    let (subjects, mut evaluation) = select_shared(context, &rule.selector);
     let mut groups = declared.group_by_value.then(BTreeMap::new);
     for subject in subjects {
         check(

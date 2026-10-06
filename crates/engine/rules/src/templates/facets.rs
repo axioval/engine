@@ -35,8 +35,8 @@ use crate::support::{Tolerance, Unavailable, invalid as refused, temporal_order}
 use axioval_engine::comparison::{self as shared, Order};
 
 use crate::selection::{
-    NameSpec, bound_property_request, enumerate, property_error, select_objects,
-    sets_without_match, xsd_name_pattern,
+    NameSpec, bound_property_request, enumerate, property_error, select_shared, sets_without_match,
+    xsd_name_pattern,
 };
 use crate::xsd_pattern;
 
@@ -61,7 +61,7 @@ pub(super) fn run(
     else {
         return CapabilityEvaluation::default();
     };
-    let (selected, mut evaluation) = select_objects(context, &rule.selector);
+    let (selected, mut evaluation) = select_shared(context, &rule.selector);
     let Some(service) = context.services.get::<PropertyResolutionServiceHandle>() else {
         for object in selected {
             evaluation.push_object_not_evaluated(

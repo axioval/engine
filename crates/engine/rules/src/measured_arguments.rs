@@ -242,6 +242,34 @@ impl Arguments {
     }
 }
 
+/// A number of SI units or a quantity of `dimension`, at least `minimum`,
+/// as `reference` binds it: `plain` and `quantity` name what it must be,
+/// and `unit` its unit.
+fn measure(
+    reference: &Reference<'_>,
+    value: &ParameterValue,
+    (dimension, minimum): (QuantityDimension, f64),
+    (plain, quantity, unit): (&str, &str, &str),
+) -> Result<f64, Unavailable> {
+    let not = |what: &str| invalid(format!("{reference} is not {what}"));
+    #[allow(clippy::cast_precision_loss)]
+    let measured = match value {
+        ParameterValue::Number { value } => *value,
+        ParameterValue::Integer { value } => *value as f64,
+        ParameterValue::Quantity { value, unit } => match si_quantity(*value, unit) {
+            Ok((measured, stated)) if stated == dimension => measured,
+            _ => return Err(not(quantity)),
+        },
+        _ => return Err(not(plain)),
+    };
+    if !(measured.is_finite() && measured >= minimum) {
+        return Err(invalid(format!(
+            "{reference} is {measured} {unit}, not {quantity} of at least {minimum} {unit}"
+        )));
+    }
+    Ok(measured)
+}
+
 /// The value the rule's parameter `parameter` binds for a measured
 /// parameter of `kind`.
 #[allow(clippy::too_many_lines)]
@@ -263,24 +291,12 @@ fn bound(
             })
         }
         (MeasuredParameterKind::Objects, _) => return Err(not("a selector")),
-        (MeasuredParameterKind::Length { minimum }, value) => {
-            #[allow(clippy::cast_precision_loss)]
-            let metres = match value {
-                ParameterValue::Number { value } => *value,
-                ParameterValue::Integer { value } => *value as f64,
-                ParameterValue::Quantity { value, unit } => match si_quantity(*value, unit) {
-                    Ok((metres, QuantityDimension::Length)) => metres,
-                    _ => return Err(not("a length")),
-                },
-                _ => return Err(not("a number of metres or a length")),
-            };
-            if !(metres.is_finite() && metres >= minimum) {
-                return Err(invalid(format!(
-                    "{reference} is {metres} m, not a length of at least {minimum} m"
-                )));
-            }
-            MeasuredArgument::Length(metres)
-        }
+        (MeasuredParameterKind::Length { minimum }, value) => MeasuredArgument::Length(measure(
+            &reference,
+            value,
+            (QuantityDimension::Length, minimum),
+            ("a number of metres or a length", "a length", "m"),
+        )?),
         (MeasuredParameterKind::Path, ParameterValue::StringList { value: steps }) => {
             if steps.is_empty() || steps.iter().any(|step| step.trim().is_empty()) {
                 return Err(invalid(format!("{reference} holds an empty step")));
@@ -338,6 +354,12 @@ fn bound(
             MeasuredArgument::Table(rows.clone())
         }
         (MeasuredParameterKind::Table, _) => return Err(not("a table")),
+        (MeasuredParameterKind::Area { minimum }, value) => MeasuredArgument::Number(measure(
+            &reference,
+            value,
+            (QuantityDimension::Area, minimum),
+            ("a number of square metres or an area", "an area", "m²"),
+        )?),
         (MeasuredParameterKind::Number { minimum }, value) => {
             #[allow(clippy::cast_precision_loss)]
             let number = match value {

@@ -85,7 +85,7 @@ rules crate (`body_extent/template.rs`):
 A `Form` holds:
 
 - `values`: `TemplateValue`s, each a named expression, read in order for
-  each selected object. A value may `expect` a kind (`length`), and words
+  each selected object. A value may `expect` a kind (`length`, `area`), and words
   a stated absence (`absent`) and a value of the wrong kind (`mismatch`);
   one expected `optional` that is stated absent passes the form, or the
   check, it belongs to without a finding (no slab above to measure to); one
@@ -352,6 +352,22 @@ another kind fail every operator but a presence test (which reads blank
 text as undefined), a quantity against a unit-less target (or the
 reverse) is not evaluated.
 
+`Decision::Holds` is the truth judge: the value it names is a truth the
+form's values compose with the evaluator's operators (`implies`, `and`,
+comparisons, arithmetic over measured and stated values), and it holds.
+`false` is a finding, `null` (Kleene's unknown, such as a comparison with
+a value stated absent) leaves the object open with `undecided`. The values
+read before the truth may be `null`: a stated absence is not a finding
+there, since the truth decides what it means (`implies` over `isDefined`),
+while a value stated `null` where a kind is expected (`expect`: `length`
+or `area`) is of the wrong kind. The values after the truth are read only
+where it fails, to word the finding, so a value only a failure needs is
+never measured for a pass. A comparison in a truth is the evaluator's,
+sound interval arithmetic: it decides as a capability's plain binary
+comparison did except within a unit in the last place of a bound, which
+it leaves open. Its expression form is the truth itself, so a rule forks
+into it.
+
 `Decision::Unique` is the generic group decision: each selected object's
 stated value `value` compared with those of the other objects of its
 group, a finding on every object sharing its value with another, relating
@@ -532,6 +548,8 @@ The declaration checks such a capability needs are `nonNegativeLength`
 none), `among` (a string among options, `{value}` the stated one),
 `declares` (one declared: stated, a boolean true, a table with a row) and
 `falseRequires` (a boolean stated false needs one of some parameters).
+The opening templates add `nonNegativeQuantity` (a quantity of a
+dimension, at least zero: an area tolerance).
 
 **Items of a measured list.** A form's check may decide
 `Decision::Items` (`Items`): the items of a measured member list, the
@@ -1354,7 +1372,9 @@ format (`{extent:length}`: `0.3 m`, or `between 0.48 m and 0.52 m`;
 capabilities showed areas; `{target:stated}`: the value as the source
 states it; `{minimum:fixed3}`: a constant, or a value known as one point,
 with three decimals; `{length:upper3}`: a value's upper end, or a
-constant, with three decimals), `{bound}` (the bound a `Within` failed or straddled, a length:
+constant, with three decimals; `{voided:m2}`: square metres to six decimals, a
+value's midpoint or a constant, `15 m²`; `{count:cited_ids}`: the local ids of
+the objects a value's measured reads cite, `o1, o2`), `{bound}` (the bound a `Within` failed or straddled, a length:
 `at least 0.26 m`), `{bound:plain}` (the bound as declared: `at least 6`),
 `{why}`, an anchor's `{undecided}` and `{relation}`, and a value's lower
 end to two decimals (`{numerator:least2}`: `0.66`), a share's upper

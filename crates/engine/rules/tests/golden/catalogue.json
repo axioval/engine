@@ -66212,7 +66212,7 @@
         {
           "key": "minimum",
           "kind": {
-            "type": "length",
+            "type": "area",
             "minimum": 0.0
           },
           "required": false,
@@ -66226,7 +66226,25 @@
               "text": "Öffnungen kleiner als so viele Quadratmeter werden nicht gezählt."
             }
           ],
-          "references": "length"
+          "references": "area"
+        },
+        {
+          "key": "openings",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The openings: their source kinds, `,`-separated, or `@` a selector parameter of the rule; without it, every object the path reaches."
+            },
+            {
+              "language": "de",
+              "text": "Die Öffnungen: ihre Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel; ohne sie jedes Objekt, das der Pfad erreicht."
+            }
+          ],
+          "references": "selector"
         }
       ],
       "dimension": "area",
@@ -66334,7 +66352,7 @@
         {
           "key": "minimum",
           "kind": {
-            "type": "length",
+            "type": "area",
             "minimum": 0.0
           },
           "required": false,
@@ -66348,7 +66366,25 @@
               "text": "Öffnungen kleiner als so viele Quadratmeter werden nicht gezählt."
             }
           ],
-          "references": "length"
+          "references": "area"
+        },
+        {
+          "key": "openings",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The openings: their source kinds, `,`-separated, or `@` a selector parameter of the rule; without it, every object the path reaches."
+            },
+            {
+              "language": "de",
+              "text": "Die Öffnungen: ihre Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel; ohne sie jedes Objekt, das der Pfad erreicht."
+            }
+          ],
+          "references": "selector"
         }
       ],
       "services": [
@@ -75524,7 +75560,7 @@
         {
           "key": "minimum",
           "kind": {
-            "type": "length",
+            "type": "area",
             "minimum": 0.0
           },
           "required": false,
@@ -75538,7 +75574,7 @@
               "text": "Öffnungen kleiner als so viele Quadratmeter werden nicht gezählt."
             }
           ],
-          "references": "length"
+          "references": "area"
         }
       ],
       "services": [

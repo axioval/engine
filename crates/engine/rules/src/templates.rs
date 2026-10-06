@@ -428,6 +428,16 @@ fn check(check: &Check, rule: &CompiledRule, template: &Template) -> Result<(), 
                 Some(_) => Err(invalid(*message)),
             }
         }
+        Check::NonNegativeQuantity {
+            parameter,
+            dimension,
+            message,
+        } => match Parameters(rule).quantity(parameter)? {
+            Some((value, stated)) if stated != *dimension || value.is_nan() || value < 0.0 => {
+                Err(invalid(*message))
+            }
+            _ => Ok(()),
+        },
         Check::Together {
             parameters,
             message,
@@ -1440,6 +1450,9 @@ struct Read {
     /// The sources each value's measured reads were measured against (a
     /// reference source), as their providers cite them.
     sources: Vec<(&'static str, Vec<axioval_ir::SourceId>)>,
+    /// Whether a stated absence is read as `null` rather than found: the
+    /// decision judges it (a truth judge).
+    keep_null: bool,
 }
 
 /// The few values of one object a form names, in reading order: a list
@@ -1595,20 +1608,22 @@ fn near_judged(
 /// Whether a value is of the kind `expect` names, judged on what the
 /// source states where it was read as stated.
 fn expected(expect: Expect, value: &Value, stated: Option<&Option<PropertyValue>>) -> bool {
-    match expect {
-        Expect::Optional | Expect::Words => true,
-        Expect::Length => match stated {
-            Some(Some(PropertyValue::Quantity {
-                value,
-                dimension: QuantityDimension::Length,
-            })) => value.is_finite(),
-            Some(Some(_)) => false,
-            _ => matches!(
-                value,
-                Value::Number { unit, .. }
-                    if *unit == axioval_engine::expression::Unit::of(Some(QuantityDimension::Length))
-            ),
-        },
+    let dimension = match expect {
+        Expect::Length => QuantityDimension::Length,
+        Expect::Area => QuantityDimension::Area,
+        Expect::Optional | Expect::Words => return true,
+    };
+    match stated {
+        Some(Some(PropertyValue::Quantity {
+            value,
+            dimension: stated,
+        })) => *stated == dimension && value.is_finite(),
+        Some(Some(_)) => false,
+        _ => matches!(
+            value,
+            Value::Number { unit, .. }
+                if *unit == axioval_engine::expression::Unit::of(Some(dimension))
+        ),
     }
 }
 
@@ -1633,6 +1648,32 @@ fn measured_read(expression: &Expression) -> Option<&str> {
     }
 }
 
+/// The names of the measured values `expression` reads anywhere in it.
+fn measured_names(expression: &Expression) -> Vec<String> {
+    fn walk(json: &Json, names: &mut Vec<String>) {
+        match json {
+            Json::Object(map) => {
+                if map.get("propertySet").and_then(Json::as_str) == Some(axioval_ir::MEASURED_SET)
+                    && let Some(call) = map.get("property").and_then(Json::as_str)
+                {
+                    let name = call.split(';').next().unwrap_or(call).to_owned();
+                    if !names.contains(&name) {
+                        names.push(name);
+                    }
+                }
+                map.values().for_each(|value| walk(value, names));
+            }
+            Json::Array(items) => items.iter().for_each(|value| walk(value, names)),
+            _ => {}
+        }
+    }
+    let mut names = Vec::new();
+    if let Ok(json) = serde_json::to_value(expression) {
+        walk(&json, &mut names);
+    }
+    names
+}
+
 /// The property a value step reads, when it reads one stated property.
 fn property_read(expression: &Expression) -> Option<(Option<&str>, &str)> {
     match expression {
@@ -1651,7 +1692,22 @@ fn property_read(expression: &Expression) -> Option<(Option<&str>, &str)> {
 /// (the object itself, or the member of an aggregate whose value it is).
 fn refusal(message: &str, expression: &Expression, object: &Object) -> String {
     let Some(name) = measured_read(expression) else {
-        return message.to_owned();
+        // A composition: worded as the first measured value it reads that
+        // refused it words it.
+        return measured_names(expression)
+            .iter()
+            .find_map(|name| {
+                let message = message
+                    .strip_prefix("property evidence conflicts: ")
+                    .unwrap_or(message);
+                let message = message
+                    .strip_prefix(&format!("`{}` value ", axioval_ir::MEASURED_SET))
+                    .unwrap_or(message);
+                message
+                    .strip_prefix(&format!("`{name}` of {}: ", object.id))
+                    .map(ToOwned::to_owned)
+            })
+            .unwrap_or_else(|| message.to_owned());
     };
     let message = message
         .strip_prefix("property evidence conflicts: ")
@@ -1880,6 +1936,14 @@ fn placeholder(plan: &Plan<'_>, read: &Read, key: &str) -> Option<String> {
                     .map(|value| format!("{value:.places$}")),
             }
         }
+        // The objects a value's measured reads cite, by their local ids.
+        "cited_ids" => Some(
+            cited(read, name)
+                .iter()
+                .map(|object| object.local_id.as_str())
+                .collect::<Vec<_>>()
+                .join(", "),
+        ),
         "stated" => read
             .stated
             .get(name)
@@ -2677,6 +2741,7 @@ fn candidates<'a>(
 /// Reads the plan's values for `object` with `leaves`, in order, into
 /// `read`: the outcome where one leaves the object decided or open
 /// before the decision.
+#[allow(clippy::too_many_lines)]
 fn read_values<'v>(
     plan: &Plan<'_>,
     values: impl IntoIterator<Item = (&'v TemplateValue, &'v Expression)>,
@@ -2742,6 +2807,18 @@ fn read_values<'v>(
             // Nothing to judge.
             Ok(Value::Null) if step.expect == Some(Expect::Optional) => {
                 return Some(Outcome::Passed);
+            }
+            // A value stated `null` where a kind is expected is of the wrong
+            // kind; an absence is `null` the decision judges.
+            Ok(Value::Null) if read.keep_null => {
+                let mismatched = step.expect.is_some_and(|expect| {
+                    matches!(&stated, Some(Some(_)))
+                        && !expected(expect, &Value::Null, stated.as_ref())
+                });
+                read.values.insert(step.name, Value::Null);
+                if mismatched {
+                    return Some(mismatch(plan, read, step));
+                }
             }
             Ok(Value::Null) => {
                 let message = step.absent.map_or_else(
@@ -2958,7 +3035,24 @@ fn judge_object(
             Err((reason, message)) => return Outcome::Open(reason, message).into(),
         }
     }
+    // A truth judge decides what a stated absence means itself.
+    let truth = match decision {
+        Decision::Holds { value } => {
+            read.keep_null = true;
+            Some(*value)
+        }
+        _ => None,
+    };
     for (index, value) in plan.values().enumerate() {
+        // The values after a truth only word its failure.
+        if let Some(truth) = truth
+            && plan.form.values[..index]
+                .iter()
+                .any(|step| step.name == truth)
+            && !matches!(read.values.get(truth), Some(Value::Boolean(false)))
+        {
+            break;
+        }
         // Members judged on their own before this value, where a check
         // says so; an anchor with a member found is open once it is read.
         let found = match (scope, populations.first()) {
@@ -3078,6 +3172,34 @@ fn judge_object(
     if let Decision::Joined(joined) = decision {
         return Judgement {
             outcome: joined::judge(plan, joined, &mut read, &leaves),
+            row,
+            checks,
+        };
+    }
+    if let Decision::Holds { value } = decision {
+        let outcome = match read.values.get(value) {
+            Some(Value::Boolean(true)) => Outcome::Passed,
+            Some(Value::Boolean(false)) => Outcome::Finding {
+                message: render(plan, &read, plan.form.fail),
+                evidence: read.evidence,
+                related,
+                deviation: None,
+                severity: None,
+            },
+            Some(Value::Null) => Outcome::Open(
+                NotEvaluatedReason::IncompleteEvidence,
+                render(plan, &read, plan.form.undecided),
+            ),
+            _ => Outcome::Open(
+                NotEvaluatedReason::InvalidEvidence,
+                format!(
+                    "{}: the value the decision reads is no truth",
+                    plan.template.name
+                ),
+            ),
+        };
+        return Judgement {
+            outcome,
             row,
             checks,
         };

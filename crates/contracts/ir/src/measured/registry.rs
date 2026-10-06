@@ -1530,7 +1530,7 @@ const OPENINGS_PATH: MeasuredParameter = MeasuredParameter {
 
 pub(super) const OPENINGS_MINIMUM: MeasuredParameter = MeasuredParameter {
     key: "minimum",
-    kind: MeasuredParameterKind::Length { minimum: 0.0 },
+    kind: MeasuredParameterKind::Area { minimum: 0.0 },
     required: false,
     default: None,
     help: &en_de(
@@ -1539,10 +1539,28 @@ pub(super) const OPENINGS_MINIMUM: MeasuredParameter = MeasuredParameter {
     ),
 };
 
+/// The openings a host's path may reach: an opening reached that they
+/// cannot decide leaves the host not evaluated.
+const OPENINGS_PICKED: MeasuredParameter = selected(
+    "openings",
+    false,
+    &en_de(
+        "The openings: their source kinds, `,`-separated, or `@` a selector parameter \
+         of the rule; without it, every object the path reaches.",
+        "Die Öffnungen: ihre Quellarten, durch `,` getrennt, oder mit `@` ein \
+         Selektorparameter der Regel; ohne sie jedes Objekt, das der Pfad erreicht.",
+    ),
+);
+
 /// A host's openings and the face they void, as `opening-area` and
 /// `empty-host` read them.
-const HOST_OPENINGS: &[MeasuredParameter] =
-    &[OPENINGS_PATH, FACE_AXES[0], FACE_AXES[1], OPENINGS_MINIMUM];
+const HOST_OPENINGS: &[MeasuredParameter] = &[
+    OPENINGS_PATH,
+    FACE_AXES[0],
+    FACE_AXES[1],
+    OPENINGS_MINIMUM,
+    OPENINGS_PICKED,
+];
 
 const ALIGNMENT: MeasuredParameter = MeasuredParameter {
     key: "alignment",

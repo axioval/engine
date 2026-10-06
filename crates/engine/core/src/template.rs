@@ -258,6 +258,14 @@ pub enum Check {
         parameter: &'static str,
         message: &'static str,
     },
+    /// A quantity parameter, where stated, is of `dimension` and at least
+    /// zero: otherwise `message` (a wrong type refused as the reader words
+    /// it). An area tolerance, a minimum area.
+    NonNegativeQuantity {
+        parameter: &'static str,
+        dimension: axioval_ir::QuantityDimension,
+        message: &'static str,
+    },
     /// The parameters are stated all together or not at all.
     Together {
         parameters: &'static [&'static str],
@@ -1125,6 +1133,8 @@ pub enum Expect {
     /// its share): its evidence is not cited, the value the decision reads
     /// citing the measurement both come from.
     Words,
+    /// A finite area: a stated property must state an area quantity.
+    Area,
 }
 
 /// How a form's values decide.
@@ -1216,6 +1226,14 @@ pub enum Decision {
     /// source), each a difference found, absent or undecided, judged in one
     /// outcome whose message joins their words ([`Joined`]).
     Joined(Joined),
+    /// The truth judge: the value `value` is a truth the form's
+    /// expressions compose, and it holds. `false` is a finding (`fail`),
+    /// `null` (Kleene's unknown) leaves the object open (`undecided`).
+    /// The values read before it may be `null`, a stated absence the truth
+    /// itself judges (a value stated `null` where a kind is expected is
+    /// still of the wrong kind); the values after it are read only where
+    /// it fails, to word the finding.
+    Holds { value: &'static str },
 }
 
 /// One outcome over the items of a measured member list, read for the
@@ -2264,6 +2282,8 @@ impl Decision {
             },
             // Each part is judged by its checks, which the form's
             // requirement does not inline: what the anchor's checks require.
+            // The truth itself, as the form composes it.
+            Self::Holds { value: subject } => value(subject),
             Self::Parts(_) => Expression::Literal {
                 value: ScalarValue::Boolean { value: true },
                 label: Some("each part judged".into()),

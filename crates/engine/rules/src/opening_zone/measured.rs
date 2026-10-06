@@ -69,7 +69,7 @@ fn declaration(
             },
         );
     }
-    if let Some(MeasuredArgument::Length(minimum)) = call.argument("minimum") {
+    if let Some(MeasuredArgument::Number(minimum)) = call.argument("minimum") {
         parameters.insert(
             "minimum_opening_area".to_owned(),
             ParameterValue::Quantity {

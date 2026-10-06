@@ -154,6 +154,15 @@ fn references(name: &str, parameters: &BTreeMap<String, ParameterValue>) -> Resu
             ParameterReference::Boolean => {
                 (matches!(value, ParameterValue::Boolean { .. }), "a boolean")
             }
+            ParameterReference::Area => (
+                match value {
+                    ParameterValue::Number { .. } | ParameterValue::Integer { .. } => true,
+                    ParameterValue::Quantity { unit, .. } => parse_unit(unit)
+                        .is_ok_and(|(_, unit)| unit == Unit::of(Some(QuantityDimension::Area))),
+                    _ => false,
+                },
+                "a number of square metres or an area",
+            ),
         };
         if !fits {
             return Err(format!("{}, which is not {what}", stated()));

@@ -396,9 +396,9 @@ ignoring ASCII case):
 | `effective_reaching`, `effective_area`, `effective_covered`, `effective_share`, `effective_capacity`, `effective_unread` `;sources=<objects>[;blockers=<objects>][;mode=grown\|touching\|travel\|visible];range=<m>[;touch_tolerance=<m>][;area_property=<set/name>][;access_path=<steps>;door_selector=…;opening_selector=…;space_selector=…][;capacity_property=<set/name>;capacity_multiplier=<n>\|capacity_multiplier_property=<set/name>]` | as `effective-coverage` measures an element: how many sources reach it (stated absent where it states no area under `area_property`), the area the cover is a share of, the part covered and its share (citing the sources surely contributing, noting why it may be covered more), the summed capacity over the contributions read and how many cannot be read | built in, over `PlanAreaService::measure_coverage` and `ProximityService` |
 | `effective_missing` (members, the same arguments) | each surely contributing source stating no capacity or multiplier: its `source`, the `property` and `missing` | the same |
 | `counterpart_infill` (the same arguments) | in the elevation, whether the frame's infill covers: 1, 0, or between where undecided; it cites the frame's members | the same |
-| `opening_area;path=<steps>[;length_axis=…;height_axis=…][;minimum=<m²>]` | the summed section areas of a host's openings on its middle plane | built in, over the body facts |
+| `opening_area;path=<steps>[;length_axis=…;height_axis=…][;minimum=<m²>][;openings=<kinds>\|@selector]` | the summed section areas of a host's openings on its middle plane (among `openings`, every object where unstated; one reached that they cannot decide leaves it not evaluated), citing every opening reached | built in, over the body facts |
 | `opening_section_area;host_path=<steps>[;length_axis=…;height_axis=…]` | one opening's section area on its host's middle plane | built in, over the body facts |
-| `opening_count;path=<steps>[;length_axis=…;height_axis=…][;minimum=<m²>]`, `middle_face_area[;length_axis=…;height_axis=…]` | how many openings take area from a host's middle plane, and that face's area, as `empty-host` compares them | built in, over the body facts |
+| `opening_count;path=<steps>[;length_axis=…;height_axis=…][;minimum=<m²>][;openings=…]`, `middle_face_area[;length_axis=…;height_axis=…]` | how many openings take area from a host's middle plane (citing them), and that face's area, as `empty-host` compares them; both opening values place a host's openings once per run | built in, over the body facts |
 | `door_clear_width[;stated=<set/name>][;from_leaves=passage\|widest-leaf][;overall=<set/name>;deduction=<m>]`, `door_clear_height[;stated=…][;overall=…][;lining=…][;threshold=…]` | a door's clear width or height, as `keyed-limit` reads it | built in, over the door's properties and leaves |
 | `sill_height;floor_path=<steps>[;measure=greatest\|least]`, `threshold_step;floor_path=<steps>[;threshold=<set/name>][;ramps=<kinds>;ramp_reach=<m>][;measure=…]` | above the floors a path reaches | built in, over `VerticalExtentService` (and `ProximityService` for ramps) |
 | `leaf_count`, `leaf_width[;measure=widest\|narrowest\|total]`, `swing_area`, `swings_into;path=<steps>` | a door's or window's leaves and swing | built in, over `ObjectFrameService::leaves` and `FreeSpaceService` |
@@ -467,6 +467,7 @@ parameter's `references`):
 | `property` | a `propertyReference` |
 | `table` | a `table`, its rows as stated; a `table` parameter is written only as a reference |
 | `number` | a `number` or `integer`, at least the parameter's minimum |
+| `area` | a `number` or `integer` of square metres, or a `quantity` of area, at least the parameter's minimum |
 | `truth` | a `boolean` |
 
 A `vector` or `polygon` takes none, and only an `objects`

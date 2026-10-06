@@ -191,6 +191,8 @@ pub enum ParameterReference {
     Boolean,
     /// A `quantity` of plane angle, bound in degrees.
     Angle,
+    /// A `number` or `integer` of square metres, or a `quantity` of area.
+    Area,
 }
 
 /// What a measured parameter's value is.
@@ -235,6 +237,9 @@ pub enum MeasuredParameterKind {
     /// plain number; a rule's plane-angle quantity binds converted to
     /// degrees. It is bound as a [`MeasuredArgument::Number`].
     Angle { below: f64 },
+    /// An area in square metres, at least `minimum`, bound as a plain
+    /// number.
+    Area { minimum: f64 },
 }
 
 impl MeasuredParameterKind {
@@ -252,6 +257,7 @@ impl MeasuredParameterKind {
             Self::Number { .. } => Some(ParameterReference::Number),
             Self::Truth => Some(ParameterReference::Boolean),
             Self::Angle { .. } => Some(ParameterReference::Angle),
+            Self::Area { .. } => Some(ParameterReference::Area),
             Self::Vector | Self::Polygon => None,
         }
     }
@@ -407,7 +413,9 @@ impl MeasuredCall {
                 )
                 | (MeasuredParameterKind::Table, MeasuredArgument::Table(_))
                 | (
-                    MeasuredParameterKind::Number { .. } | MeasuredParameterKind::Angle { .. },
+                    MeasuredParameterKind::Number { .. }
+                        | MeasuredParameterKind::Angle { .. }
+                        | MeasuredParameterKind::Area { .. },
                     MeasuredArgument::Number(_)
                 )
                 | (MeasuredParameterKind::Truth, MeasuredArgument::Truth(_))
@@ -779,6 +787,13 @@ fn plain(kind: MeasuredParameterKind, value: &str) -> Result<MeasuredArgument, S
                     format!("`{value}` is no angle of at least 0 and below {below} degrees")
                 })?,
         )),
+        MeasuredParameterKind::Area { minimum } => Ok(MeasuredArgument::Number(
+            value
+                .parse::<f64>()
+                .ok()
+                .filter(|area| area.is_finite() && *area >= minimum)
+                .ok_or_else(|| format!("`{value}` is no area of at least {minimum} m²"))?,
+        )),
         _ => match value.to_ascii_lowercase().as_str() {
             "true" => Ok(MeasuredArgument::Truth(true)),
             "false" => Ok(MeasuredArgument::Truth(false)),
@@ -878,6 +893,7 @@ fn argument(kind: MeasuredParameterKind, value: &str) -> Result<MeasuredArgument
         }
         MeasuredParameterKind::Number { .. }
         | MeasuredParameterKind::Angle { .. }
+        | MeasuredParameterKind::Area { .. }
         | MeasuredParameterKind::Truth => {
             return plain(kind, value);
         }

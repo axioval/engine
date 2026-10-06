@@ -3,21 +3,28 @@
 //! as `opening-area` measures them, so `gross_area − net_area` against it
 //! is that capability's comparison; and, as `empty-host` compares them, how
 //! many openings it counts and the area of the face they void.
+//!
+//! The openings of a host are placed once per run for each way a value
+//! names them, so `opening_area` and `opening_count` share one placement.
 
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
+use std::sync::Arc;
 
 use axioval_engine::{
-    CompiledRule, MeasuredProvider, Measurement, PropertyResolutionError, RuleContext,
+    Citation, CompiledRule, MeasuredMemo, MeasuredProvider, Measurement, PropertyResolutionError,
+    RuleContext,
 };
 use axioval_ir::contract::{ParameterValue, Selector, Severity};
 use axioval_ir::measured::{MeasuredArgument, MeasuredCall};
-use axioval_ir::{ObjectId, QuantityDimension, RuleId};
+use axioval_ir::{Evidence, ObjectId, QuantityDimension, RuleId};
 
 use crate::counts::Population;
 use crate::empty_host::face_area;
+use crate::measured_kinds::{refused, selection};
 use crate::opening_area::{Openings, voided};
 use crate::opening_zone::face::{FaceAxes, read_host};
-use crate::support::Parameters;
+use crate::support::{Parameters, Unavailable};
 
 /// The name measured.
 pub(crate) const OPENING_AREA: &str = "opening_area";
@@ -37,7 +44,7 @@ fn middle_face(
     call: &MeasuredCall,
     context: &RuleContext<'_>,
     host: &ObjectId,
-) -> Result<Measurement, crate::support::Unavailable> {
+) -> Result<Measurement, Unavailable> {
     let axes = FaceAxes::parse(
         call.choice("length_axis").unwrap_or("extrusion"),
         call.choice("height_axis").unwrap_or("profile-y"),
@@ -54,7 +61,7 @@ fn middle_face(
 
 /// Whether every evidence a value was measured from is exact: the body
 /// facts are stated, so this holds unless a source cites an estimate.
-fn exact(evidence: &[axioval_ir::Evidence]) -> bool {
+fn exact(evidence: &[Evidence]) -> bool {
     evidence.iter().all(|evidence| evidence.exact)
 }
 
@@ -70,6 +77,139 @@ fn summed(sum: f64, terms: usize) -> (f64, f64) {
         (sum - margin).next_down().max(0.0),
         (sum + margin).next_up(),
     )
+}
+
+/// The openings `call` names as `opening-area` reads them: its path, axes
+/// and minimum, as a rule of that capability would state them.
+fn openings_rule(call: &MeasuredCall, path_key: &str) -> Result<CompiledRule, Unavailable> {
+    let text = |value: &str| ParameterValue::String {
+        value: value.to_owned(),
+    };
+    let Some(MeasuredArgument::Path(steps)) = call.argument(path_key) else {
+        return Err(crate::support::invalid(format!("`{path_key}` is required")));
+    };
+    let mut parameters = BTreeMap::from([
+        (
+            "opening_path".to_owned(),
+            ParameterValue::StringList {
+                value: steps.clone(),
+            },
+        ),
+        (
+            "length_axis".to_owned(),
+            text(call.choice("length_axis").unwrap_or("extrusion")),
+        ),
+        (
+            "height_axis".to_owned(),
+            text(call.choice("height_axis").unwrap_or("profile-y")),
+        ),
+    ]);
+    if let Some(MeasuredArgument::Number(minimum)) = call.argument("minimum") {
+        parameters.insert(
+            "minimum_opening_area".to_owned(),
+            ParameterValue::Quantity {
+                value: *minimum,
+                unit: "m2".into(),
+            },
+        );
+    }
+    Ok(CompiledRule {
+        id: RuleId::new("axioval-measured-opening-area").expect("a valid rule id"),
+        capability: "axioval:capability.opening-area".into(),
+        severity: Severity::Info,
+        selector: Selector::All,
+        parameters,
+    })
+}
+
+/// The declaration of a host's openings a rule hands `opening_area` and
+/// `opening_count` (`length_axis=@length_axis;…;minimum=@minimum_opening_area`),
+/// checked as `opening-area` and `empty-host` checked theirs: the face's two
+/// axes, then the minimum opening area, worded by the rule parameters'
+/// names.
+pub(crate) fn check_arguments(
+    stated: &BTreeMap<String, ParameterValue>,
+) -> Result<(), Unavailable> {
+    // Unstated, an axis takes the value's default.
+    let axis = |key: &str, default| match stated.get(key) {
+        Some(ParameterValue::String { value }) => value.as_str(),
+        _ => default,
+    };
+    FaceAxes::parse(
+        axis("length_axis", "extrusion"),
+        axis("height_axis", "profile-y"),
+    )?;
+    let rule = CompiledRule {
+        id: RuleId::new("axioval-measured-opening-area").expect("a valid rule id"),
+        capability: "axioval:capability.opening-area".into(),
+        severity: Severity::Info,
+        selector: Selector::All,
+        parameters: stated
+            .get("minimum")
+            .map(|minimum| ("minimum_opening_area".to_owned(), minimum.clone()))
+            .into_iter()
+            .collect(),
+    };
+    crate::opening_area::minimum_area(&Parameters(&rule)).map(|_| ())
+}
+
+/// What placing a host's openings found: their summed area on its middle
+/// plane, the openings reached and those taking area, and the evidence.
+struct Voids {
+    sum: f64,
+    reached: Vec<ObjectId>,
+    counted: Vec<ObjectId>,
+    evidence: Vec<Evidence>,
+}
+
+/// The key of a host's placed openings in the run's memo.
+#[derive(Hash, PartialEq, Eq)]
+struct VoidsKey(ObjectId, String);
+
+/// The key of every object as candidate openings in the run's memo.
+#[derive(Hash, PartialEq, Eq)]
+struct EveryObject;
+
+/// The openings of `host` the call names, placed once per run.
+fn voids(
+    call: &MeasuredCall,
+    host: &ObjectId,
+    context: &RuleContext<'_>,
+) -> Result<Arc<Voids>, Unavailable> {
+    let mut key = String::new();
+    for name in ["path", "length_axis", "height_axis", "minimum", "openings"] {
+        let _ = write!(key, "{name}={:?};", call.argument(name));
+    }
+    MeasuredMemo::of(context.services, VoidsKey(host.clone(), key), || {
+        let rule = openings_rule(call, "path")?;
+        let openings = Openings::parse(&Parameters(&rule))?;
+        let population = match selection(context, call, "openings", None) {
+            Ok(Some(selection)) => Arc::new(Population {
+                matched: selection.matched,
+                undecided: selection.undecided,
+                first: None,
+            }),
+            Ok(None) => MeasuredMemo::of(context.services, EveryObject, || {
+                Arc::new(Population::of(context, &Selector::All))
+            }),
+            Err(error) => {
+                return Err((
+                    axioval_engine::NotEvaluatedReason::IncompleteEvidence,
+                    error.to_string(),
+                ));
+            }
+        };
+        let subject = crate::selection::object_by_id(context, host)
+            .ok_or_else(|| crate::support::invalid(format!("{host} is not in the project")))?;
+        let mut evidence = Vec::new();
+        let placed = voided(context, &openings, &population, subject, &mut evidence)?;
+        Ok(Arc::new(Voids {
+            sum: placed.sum,
+            reached: placed.reached,
+            counted: placed.counted,
+            evidence,
+        }))
+    })
 }
 
 impl MeasuredProvider for OpeningMeasures {
@@ -88,102 +228,80 @@ impl MeasuredProvider for OpeningMeasures {
         object: &ObjectId,
         context: &RuleContext<'_>,
     ) -> Result<Measurement, PropertyResolutionError> {
-        let unavailable = |why: String| {
-            PropertyResolutionError::Unavailable(format!("`{OPENING_AREA}` of {object}: {why}"))
-        };
-        if call.name() == MIDDLE_FACE_AREA {
-            return middle_face(call, context, object).map_err(|(reason, why)| {
-                crate::measured_kinds::resolution_error((
-                    reason,
-                    format!("`{MIDDLE_FACE_AREA}` of {object}: {why}"),
+        self.measure_cited(call, object, context)
+            .map(|(measurement, _)| measurement)
+    }
+
+    /// An opening area cites every opening its host reaches; an opening
+    /// count, the openings taking area from the middle plane.
+    fn measure_cited(
+        &self,
+        call: &MeasuredCall,
+        object: &ObjectId,
+        context: &RuleContext<'_>,
+    ) -> Result<(Measurement, Citation), PropertyResolutionError> {
+        let refused = refused(call.name(), object);
+        match call.name() {
+            MIDDLE_FACE_AREA => middle_face(call, context, object)
+                .map(|measurement| (measurement, Citation::default()))
+                .map_err(refused),
+            OPENING_SECTION_AREA => {
+                let rule = openings_rule(call, "host_path").map_err(&refused)?;
+                let openings = Openings::parse(&Parameters(&rule)).map_err(&refused)?;
+                let subject = context.project.object(object).ok_or_else(|| {
+                    PropertyResolutionError::Unavailable(format!(
+                        "`{OPENING_AREA}` of {object}: it is not in the project"
+                    ))
+                })?;
+                section(context, &openings, subject)
+                    .map(|measurement| (measurement, Citation::default()))
+                    .map_err(refused)
+            }
+            name => {
+                let placed = voids(call, object, context).map_err(refused)?;
+                let exact = exact(&placed.evidence);
+                if name == OPENING_COUNT {
+                    #[allow(clippy::cast_precision_loss)]
+                    let counted = placed.counted.len() as f64;
+                    return Ok((
+                        crate::measured_kinds::interval(
+                            (counted, counted),
+                            None,
+                            exact,
+                            format!("{OPENING_COUNT}:{object}"),
+                        ),
+                        Citation {
+                            related: placed.counted.clone(),
+                            evidence: Vec::new(),
+                            notes: Vec::new(),
+                            ..Citation::default()
+                        },
+                    ));
+                }
+                Ok((
+                    crate::measured_kinds::interval(
+                        summed(placed.sum, placed.counted.len()),
+                        Some(QuantityDimension::Area),
+                        exact,
+                        format!(
+                            "{OPENING_AREA}:{object}:{}",
+                            placed
+                                .evidence
+                                .iter()
+                                .map(|evidence| evidence.locator.as_str())
+                                .collect::<Vec<_>>()
+                                .join("; ")
+                        ),
+                    ),
+                    Citation {
+                        related: placed.reached.clone(),
+                        evidence: Vec::new(),
+                        notes: Vec::new(),
+                        ..Citation::default()
+                    },
                 ))
-            });
+            }
         }
-        let text = |value: &str| ParameterValue::String {
-            value: value.to_owned(),
-        };
-        let key = if call.name() == OPENING_SECTION_AREA {
-            "host_path"
-        } else {
-            "path"
-        };
-        let Some(MeasuredArgument::Path(steps)) = call.argument(key) else {
-            return Err(PropertyResolutionError::InvalidRequest);
-        };
-        let mut parameters = BTreeMap::from([
-            (
-                "opening_path".to_owned(),
-                ParameterValue::StringList {
-                    value: steps.clone(),
-                },
-            ),
-            (
-                "length_axis".to_owned(),
-                text(call.choice("length_axis").unwrap_or("extrusion")),
-            ),
-            (
-                "height_axis".to_owned(),
-                text(call.choice("height_axis").unwrap_or("profile-y")),
-            ),
-        ]);
-        if let Some(MeasuredArgument::Length(minimum)) = call.argument("minimum") {
-            parameters.insert(
-                "minimum_opening_area".to_owned(),
-                ParameterValue::Quantity {
-                    value: *minimum,
-                    unit: "m2".into(),
-                },
-            );
-        }
-        let rule = CompiledRule {
-            id: RuleId::new("axioval-measured-opening-area").expect("a valid rule id"),
-            capability: "axioval:capability.opening-area".into(),
-            severity: Severity::Info,
-            selector: Selector::All,
-            parameters,
-        };
-        let refused = |(reason, why): crate::support::Unavailable| {
-            crate::measured_kinds::resolution_error((
-                reason,
-                format!("`{OPENING_AREA}` of {object}: {why}"),
-            ))
-        };
-        let openings = Openings::parse(&Parameters(&rule)).map_err(refused)?;
-        let subject = context
-            .project
-            .object(object)
-            .ok_or_else(|| unavailable("it is not in the project".into()))?;
-        if call.name() == OPENING_SECTION_AREA {
-            return section(context, &openings, subject).map_err(refused);
-        }
-        let host = subject;
-        let population = Population::of(context, openings.selector);
-        let mut evidence = Vec::new();
-        let voided =
-            voided(context, &openings, &population, host, &mut evidence).map_err(refused)?;
-        if call.name() == OPENING_COUNT {
-            #[allow(clippy::cast_precision_loss)]
-            let counted = voided.counted.len() as f64;
-            return Ok(crate::measured_kinds::interval(
-                (counted, counted),
-                None,
-                exact(&evidence),
-                format!("{OPENING_COUNT}:{object}"),
-            ));
-        }
-        Ok(crate::measured_kinds::interval(
-            summed(voided.sum, voided.counted.len()),
-            Some(QuantityDimension::Area),
-            exact(&evidence),
-            format!(
-                "{OPENING_AREA}:{object}:{}",
-                evidence
-                    .iter()
-                    .map(|evidence| evidence.locator.as_str())
-                    .collect::<Vec<_>>()
-                    .join("; ")
-            ),
-        ))
     }
 }
 
@@ -193,7 +311,7 @@ fn section(
     context: &RuleContext<'_>,
     openings: &Openings<'_>,
     opening: &axioval_ir::Object,
-) -> Result<Measurement, crate::support::Unavailable> {
+) -> Result<Measurement, Unavailable> {
     let everything: Vec<&axioval_ir::Object> = context.project.objects().collect();
     let (hosts, _) = openings.path().related(context, &opening.id, &everything)?;
     let [host] = &hosts[..] else {

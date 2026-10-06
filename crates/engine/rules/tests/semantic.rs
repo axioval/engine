@@ -46,6 +46,13 @@ mod conformance {
 
     const ID: &str = "axioval:capability.selector-conformance";
 
+    /// `selector-conformance` runs as a template, held on every fixture to
+    /// the implementation it replaced.
+    const CONFORMANCE: common::Held = common::Held(
+        &SelectorConformance,
+        &axioval_rules::reference::SelectorConformance,
+    );
+
     /// Agreed rows: offices numbered `1xx`, corridors with any number.
     fn agreed() -> ParameterValue {
         selector(Selector::AnyOf {
@@ -76,7 +83,7 @@ mod conformance {
     #[test]
     fn an_object_passes_when_one_agreed_row_matches_it_whole() {
         let evaluation = spaces().evaluate(
-            &SelectorConformance,
+            &CONFORMANCE,
             &rule(ID, kind("space"), vec![("requirement", agreed())]),
         );
         assert_eq!(flagged(&evaluation), ["s2", "s4"]);
@@ -94,7 +101,7 @@ mod conformance {
     #[test]
     fn an_undecidable_requirement_is_not_a_violation() {
         let evaluation = spaces().unreadable("s4").evaluate(
-            &SelectorConformance,
+            &CONFORMANCE,
             &rule(
                 ID,
                 kind("space"),
@@ -128,7 +135,7 @@ mod conformance {
             .text("s6", ATTR, "LongName", " ")
             .text("s7", ATTR, "LongName", "kitchen");
         let evaluation = model.evaluate(
-            &SelectorConformance,
+            &CONFORMANCE,
             &rule(ID, kind("space"), vec![("requirement", agreed())]),
         );
         assert_eq!(
@@ -164,6 +171,131 @@ mod conformance {
         let kitchen = &evaluation.findings()[1];
         assert_eq!(kitchen.related.len(), 1);
         assert_eq!(kitchen.related[0].local_id, "s5");
+    }
+
+    #[test]
+    fn a_requirement_naming_no_property_reports_each_object_alone() {
+        let evaluation = spaces().evaluate(
+            &CONFORMANCE,
+            &rule(
+                ID,
+                kind("space"),
+                vec![("requirement", selector(kind("door")))],
+            ),
+        );
+        assert_eq!(
+            findings(&evaluation),
+            ["s1", "s2", "s3", "s4"].map(|space| (
+                space.to_owned(),
+                "does not match any agreed combination of values".to_owned()
+            ))
+        );
+        let evaluation = spaces().evaluate(&CONFORMANCE, &rule(ID, kind("space"), vec![]));
+        assert_eq!(
+            evaluation.not_evaluated_outcomes()[0].message(),
+            "selector-conformance: parameter `requirement` is required"
+        );
+        let evaluation = spaces().evaluate(
+            &CONFORMANCE,
+            &rule(
+                ID,
+                kind("space"),
+                vec![("requirement", agreed()), ("message", boolean(true))],
+            ),
+        );
+        assert_eq!(
+            unevaluated(&evaluation),
+            [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
+        );
+    }
+
+    /// Generated spaces stating names and long names of every agreed and
+    /// unknown kind, blank, `null` or something unreadable, judged against
+    /// agreed lists of rows, negations, related selectors and expressions,
+    /// with and without a message. The template is held to the
+    /// implementation it replaced on each.
+    mod generated {
+        use super::*;
+        use proptest::prelude::*;
+
+        fn text(kind: u8) -> Option<PropertyValue> {
+            Some(match kind {
+                0 => PropertyValue::String("Office".into()),
+                1 => PropertyValue::String("office".into()),
+                2 => PropertyValue::String("Corridor".into()),
+                3 => PropertyValue::String("Kitchen".into()),
+                4 => PropertyValue::String("101".into()),
+                5 => PropertyValue::String("201".into()),
+                6 => PropertyValue::String(" ".into()),
+                7 => PropertyValue::Null,
+                8 => PropertyValue::Integer(101),
+                _ => return None,
+            })
+        }
+
+        fn requirement(which: u8) -> ParameterValue {
+            match which {
+                0 => agreed(),
+                1 => selector(Selector::Not {
+                    operand: Box::new(matches(ATTR, "LongName", "^(?i)kitchen$")),
+                }),
+                2 => selector(all_of(vec![
+                    matches(ATTR, "Name", "^\\d+$"),
+                    Selector::Related {
+                        path: vec!["aggregates:backward".into()],
+                        quantifier: axioval_ir::contract::RelatedQuantifier::Any,
+                        selector: Box::new(kind("storey")),
+                    },
+                ])),
+                _ => selector(Selector::Expression {
+                    expression: Box::new(
+                        serde_json::from_value(serde_json::json!({
+                            "kind": "compare",
+                            "operator": "equals",
+                            "left": {"kind": "property", "propertySet": ATTR, "property": "LongName"},
+                            "right": {"kind": "property", "propertySet": ATTR, "property": "Name"},
+                        }))
+                        .unwrap(),
+                    ),
+                }),
+            }
+        }
+
+        proptest! {
+            #![proptest_config(ProptestConfig::with_cases(256))]
+
+            #[test]
+            fn generated_spaces_hold_parity(
+                spaces in proptest::collection::vec(
+                    (0u8..11, 0u8..11, any::<bool>()),
+                    0..8,
+                ),
+                agreed in 0u8..4,
+                message in any::<bool>(),
+            ) {
+                let mut model = Model::default().object("st", "storey");
+                for (index, (long, name, contained)) in spaces.iter().enumerate() {
+                    let local = format!("s{index}");
+                    model = model.object(&local, "space");
+                    if *contained {
+                        model = model.edge("aggregates", "st", &local);
+                    }
+                    if let Some(value) = text(*long) {
+                        model = model.value(&local, ATTR, "LongName", value);
+                    }
+                    model = match text(*name) {
+                        Some(value) => model.value(&local, ATTR, "Name", value),
+                        None if *name == 10 => model.unreadable(&local),
+                        None => model,
+                    };
+                }
+                let mut parameters = vec![("requirement", requirement(agreed))];
+                if message {
+                    parameters.push(("message", string("not agreed")));
+                }
+                model.evaluate(&CONFORMANCE, &rule(ID, kind("space"), parameters));
+            }
+        }
     }
 }
 

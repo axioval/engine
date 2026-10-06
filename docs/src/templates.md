@@ -26,7 +26,7 @@ first whose values take the rule's selectors
 ([#289](https://github.com/axioval/engine/issues/289)); `area-ratio` is the
 first over two populations and a derived ratio
 ([#290](https://github.com/axioval/engine/issues/290)); `consistent-value`
-follows `unique-value` as a group decision (#287).
+and `selector-conformance` follow `unique-value` as group decisions (#287).
 
 ## The outside contract
 
@@ -395,6 +395,19 @@ objects without {key} have {others}`, and under a tolerance `{value} is
 {value:stated}, farther than the tolerance {spread} from the median
 {median} of the {objects}` or `…, at an end of the range {range} of
 {value} over the {objects}, which exceeds the tolerance {spread}`.
+
+### `selector-conformance`
+
+| Form | When | Values | Decision |
+| --- | --- | --- | --- |
+| one | always | none | `Conforms`: each object by `requirement` |
+
+The declaration checks `requirement` and the kind of `message`, which
+defaults to `does not match any agreed combination of values`. Its
+findings read `{message}: {values}` for a combination of values,
+`{properties} has no value to compare with the agreed list` for an object
+stating none, and `{message}` alone where the selector consults no
+property.
 
 ### `level-spacing`
 
@@ -790,6 +803,16 @@ lengths, areas, numbers, measured intervals, nothing, `null` or something
 unreadable, under every combination of strictness, scope, kind and
 tolerance; and by the `consistent-value` rules of the `judges` case,
 recorded before the switch. It is never forked.
+
+`selector-conformance` is held to `conformance/reference.rs`
+(`axioval_rules::reference::SelectorConformance`) through `common::Held`
+on every fixture of its module in `tests/semantic.rs`; by generated
+spaces stating agreed, unknown, folded, blank, `null`, integer or
+unreadable names and long names, against an agreed list, a negation, a
+related selector and an expression, with and without a message; and by
+the `selector-conformance` rules of the `judges` case, recorded before the
+switch. The IDS conformance corpus, whose facets it checks, reports the
+same verdicts word for word. It is never forked.
 
 `shelf-capacity` is held so too: every fixture of `shelf_capacity.rs`
 and generated spaces of random doors, heights and minimums against

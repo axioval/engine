@@ -28988,7 +28988,61 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "selector-conformance",
+        "defaults": [
+          {
+            "parameter": "message",
+            "value": {
+              "type": "string",
+              "value": "does not match any agreed combination of values"
+            }
+          }
+        ],
+        "declaration": [
+          {
+            "kind": "required",
+            "parameter": "requirement"
+          },
+          {
+            "kind": "kind",
+            "parameter": "message"
+          }
+        ],
+        "forms": [
+          {
+            "when": [],
+            "values": [],
+            "decision": {
+              "kind": "conforms",
+              "requirement": "requirement",
+              "alone": "{message}",
+              "noValue": "{properties} has no value to compare with the agreed list",
+              "unknown": "{message}: {values}"
+            },
+            "fail": "",
+            "undecided": ""
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "derived",
+              "name": "`requirement` holds",
+              "label": "the requirement selector holds"
+            },
+            "blocks": {
+              "type": "expression.derived",
+              "label": "the requirement selector holds",
+              "fields": {
+                "name": "`requirement` holds"
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.shelf-capacity",

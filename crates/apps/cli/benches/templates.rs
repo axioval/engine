@@ -127,6 +127,11 @@ const PAIRS: &[Pair] = &[
         case: "judges",
         reference: |registry| registry.replace(axioval::rules::reference::ConsistentValue),
     },
+    Pair {
+        capability: "axioval:capability.selector-conformance",
+        case: "judges",
+        reference: |registry| registry.replace(axioval::rules::reference::SelectorConformance),
+    },
 ];
 
 /// Warm-up runs per side before measuring.

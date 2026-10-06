@@ -353,3 +353,36 @@ judged with the other small inputs (1.23 to 1.29× each, within budget
 together). Its values name the rule's own selection (`@selection`), so the
 surfaces are measured in one request for the run, read once for the rule
 (`once`) and then by each surface's edges.
+
+
+The door, window and opening templates of
+[#281](https://github.com/axioval/engine/issues/281) run the `openings`
+case's rules of their capability (`empty-host` eleven, `opening-area`
+seven, `door-swing` four, `corridor-end-openings` two), measured by the
+same gate:
+
+| input | objects | empty-host | opening-area | door-swing | corridor-end-openings |
+| --- | ---: | --- | --- | --- | --- |
+| generated fixture, 400 walls | 421 | 1.03× / 1.11× | 1.21× / 1.00× | 2.00× / 1.01× | 0.73× / 1.00× |
+| building architecture (IFC4) | 38 | 1.06× / 1.03× | 0.86× / 1.09× | 1.26× / 1.07× | 1.11× / 1.09× |
+| building structural (IFC4) | 33 | 1.08× / 1.03× | 0.86× / 1.10× | 1.24× / 1.04× | 0.57× / 1.00× |
+| building HVAC (IFC4) | 18 | 0.40× / 0.91× | 0.54× / 0.94× | 0.93× / 1.00× | 0.60× / 1.00× |
+| infra road (IFC4) | 116 | 0.96× / 1.05× | 0.47× / 0.89× | 0.97× / 1.00× | 0.47× / 1.00× |
+| building architecture (IFC2x3) | 36 | 1.08× / 1.02× | 0.95× / 1.09× | 1.26× / 1.07× | 1.12× / 1.09× |
+| building structural (IFC2x3) | 30 | 1.10× / 1.03× | 0.95× / 1.10× | 1.27× / 1.04× | 0.58× / 1.00× |
+| building architecture (IFC4x3) | 37 | 1.06× / 1.02× | 0.87× / 1.09× | 1.24× / 1.07× | 1.12× / 1.09× |
+| building structural (IFC4x3) | 33 | 1.07× / 1.03× | 0.87× / 1.10× | 1.24× / 1.04× | 0.56× / 1.00× |
+| wall with opening and window | 9 | 1.24× / 0.94× | 0.85× / 1.10× | 1.58× / 1.11× | 0.69× / 0.99× |
+| tessellated column | 3 | 0.69× / 1.00× | 0.81× / 1.03× | 1.02× / 1.00× | 0.82× / 1.04× |
+
+`door-swing`'s public models run under the floor and hold together. On
+the generated fixture its walls rule selects 400 walls, none a door: the
+reference refuses each at its leaves, while the template binds its list,
+measures it (refused at the same leaves) and words the refusal through the
+item list, a fixed cost per object the gate does not yet admit.
+`opening_area` and `middle_face_area` opt out of the run's memo: kept
+for every host and rule of the eleven `empty-host` rules, the values held
+3.4× the reference's peak heap on the fixture, while placing a host's
+openings again costs less than that; an object's leaves keep a value they
+measured, so a truth composing it and the value worded share one
+placement.

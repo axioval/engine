@@ -1,0 +1,308 @@
+{
+  "description": "The door, window and opening capabilities over every public model, meshed, recorded before they became templates (#281).",
+  "models": "*",
+  "pairs": [],
+  "recorded": [
+    {
+      "rule": "oa-net-twice",
+      "comparison": "contract",
+      "reason": "opening-area becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "oa-one-side",
+      "comparison": "contract",
+      "reason": "opening-area becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "oa-not-area",
+      "comparison": "contract",
+      "reason": "opening-area becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "oa-small",
+      "comparison": "contract",
+      "reason": "opening-area becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "oa-axes",
+      "comparison": "contract",
+      "reason": "opening-area becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "oa-bad-axis",
+      "comparison": "contract",
+      "reason": "opening-area becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "eh-walls",
+      "comparison": "contract",
+      "reason": "empty-host becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "eh-tolerance",
+      "comparison": "contract",
+      "reason": "empty-host becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "eh-small",
+      "comparison": "contract",
+      "reason": "empty-host becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "eh-axes",
+      "comparison": "contract",
+      "reason": "empty-host becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "eh-profile-x-profile-y",
+      "comparison": "contract",
+      "reason": "empty-host becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "eh-profile-y-extrusion",
+      "comparison": "contract",
+      "reason": "empty-host becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "eh-extrusion-profile-x",
+      "comparison": "contract",
+      "reason": "empty-host becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "eh-profile-y-profile-x",
+      "comparison": "contract",
+      "reason": "empty-host becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "eh-flat",
+      "comparison": "contract",
+      "reason": "empty-host becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "eh-flat-small",
+      "comparison": "contract",
+      "reason": "empty-host becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "eh-slabs",
+      "comparison": "contract",
+      "reason": "empty-host becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "oa-flat",
+      "comparison": "contract",
+      "reason": "opening-area becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "oz-margins",
+      "comparison": "contract",
+      "reason": "opening-zone becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "oz-far",
+      "comparison": "contract",
+      "reason": "opening-zone becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "oz-zones",
+      "comparison": "contract",
+      "reason": "opening-zone becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "oz-dimensions",
+      "comparison": "contract",
+      "reason": "opening-zone becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "oz-supports",
+      "comparison": "contract",
+      "reason": "opening-zone becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "oz-flat-margins",
+      "comparison": "contract",
+      "reason": "opening-zone becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "oz-flat-far",
+      "comparison": "contract",
+      "reason": "opening-zone becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "oz-flat-zones",
+      "comparison": "contract",
+      "reason": "opening-zone becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "oz-flat-dimensions",
+      "comparison": "contract",
+      "reason": "opening-zone becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "oz-beams",
+      "comparison": "contract",
+      "reason": "opening-zone becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "kl-space-area",
+      "comparison": "contract",
+      "reason": "keyed-limit becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "kl-space-long-name",
+      "comparison": "contract",
+      "reason": "keyed-limit becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "kl-wall-width",
+      "comparison": "contract",
+      "reason": "keyed-limit becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "kl-wall-measured",
+      "comparison": "contract",
+      "reason": "keyed-limit becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "kl-storey-spaces",
+      "comparison": "contract",
+      "reason": "keyed-limit becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "kl-window-sill",
+      "comparison": "contract",
+      "reason": "keyed-limit becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "kl-window-sill-spaces",
+      "comparison": "contract",
+      "reason": "keyed-limit becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "kl-window-width",
+      "comparison": "contract",
+      "reason": "keyed-limit becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "kl-window-width-stated",
+      "comparison": "contract",
+      "reason": "keyed-limit becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "kl-window-height",
+      "comparison": "contract",
+      "reason": "keyed-limit becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "kl-window-height-defaults",
+      "comparison": "contract",
+      "reason": "keyed-limit becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "kl-window-glazing",
+      "comparison": "contract",
+      "reason": "keyed-limit becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "kl-window-glazing-default",
+      "comparison": "contract",
+      "reason": "keyed-limit becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "kl-window-threshold",
+      "comparison": "contract",
+      "reason": "keyed-limit becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "kl-window-pair",
+      "comparison": "contract",
+      "reason": "keyed-limit becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "kl-wall-pair",
+      "comparison": "contract",
+      "reason": "keyed-limit becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "kl-no-row",
+      "comparison": "contract",
+      "reason": "keyed-limit becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "kl-bad",
+      "comparison": "contract",
+      "reason": "keyed-limit becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "ds-windows-into",
+      "comparison": "contract",
+      "reason": "door-swing becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "ds-windows-not-into",
+      "comparison": "contract",
+      "reason": "door-swing becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "ds-walls-both",
+      "comparison": "contract",
+      "reason": "door-swing becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "ds-bad",
+      "comparison": "contract",
+      "reason": "door-swing becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "os-windows",
+      "comparison": "contract",
+      "reason": "opening-spaces becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "os-openings",
+      "comparison": "contract",
+      "reason": "opening-spaces becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "os-stated",
+      "comparison": "contract",
+      "reason": "opening-spaces becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "os-walls",
+      "comparison": "contract",
+      "reason": "opening-spaces becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "sc-required",
+      "comparison": "contract",
+      "reason": "space-connection becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "sc-forbidden",
+      "comparison": "contract",
+      "reason": "space-connection becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "sc-exit-forbidden",
+      "comparison": "contract",
+      "reason": "space-connection becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "sc-stated",
+      "comparison": "contract",
+      "reason": "space-connection becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "ce-defaults",
+      "comparison": "contract",
+      "reason": "corridor-end-openings becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "ce-walls",
+      "comparison": "contract",
+      "reason": "corridor-end-openings becomes a template (#281); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    }
+  ],
+  "divergences": []
+}

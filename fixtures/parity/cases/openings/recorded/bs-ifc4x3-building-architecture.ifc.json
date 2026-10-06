@@ -1,0 +1,1895 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:attribute:#261:ObjectType",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "5b22e37f-afb2-526f-b985-7067c6a157b1",
+      "message": "no limit defined for axioval:attributes.axioval:parity.public.openings.object-type `roof`",
+      "object_id": {
+        "local_id": "#261",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "kl-no-row",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:attribute:#285:ObjectType",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "489f9b1d-6d3c-516f-9c42-9778eb4ff6eb",
+      "message": "no limit defined for axioval:attributes.axioval:parity.public.openings.object-type `roof`",
+      "object_id": {
+        "local_id": "#285",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "kl-no-row",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:attribute:#53:ObjectType",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "102e6281-9afc-5ba7-a4c2-ad126bdcb16f",
+      "message": "no limit defined for axioval:attributes.axioval:parity.public.openings.object-type `slab on grade`",
+      "object_id": {
+        "local_id": "#53",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "kl-no-row",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "axioval:measured/body_extent;axis=up: directional-extent:ifc-step:bs-ifc4x3-building-architecture.ifc/#158:[0.000000000000000000000000000003668379928205197,0.0000000000000032836943041225645,1]",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:attribute:#158:Name",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "8ab8f42b-6762-56e4-917c-3289e0f32f87",
+      "message": "body_extent;axis=up is 3.6257 m; required at most 3.5 m (limit row 0: axioval:attributes.axioval:parity.public.openings.name `house - outer wall - house right front`)",
+      "object_id": {
+        "local_id": "#158",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "kl-wall-measured",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axioval:measured/body_extent;axis=up: directional-extent:ifc-step:bs-ifc4x3-building-architecture.ifc/#182:[0,0,1]",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:attribute:#182:Name",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "7d3767f5-80e2-5bfe-92c9-54853efab008",
+      "message": "body_extent;axis=up is 2.2257 m; required at least 2.5 m (limit row 0: axioval:attributes.axioval:parity.public.openings.name `house - outer wall - house right back`)",
+      "object_id": {
+        "local_id": "#182",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "kl-wall-measured",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axioval:measured/body_extent;axis=up: directional-extent:ifc-step:bs-ifc4x3-building-architecture.ifc/#201:[0,0,1]",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:attribute:#201:Name",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "a2abdebe-97d7-5008-adc9-bd0491302bf9",
+      "message": "body_extent;axis=up is 3.6257 m; required at most 3.5 m (limit row 0: axioval:attributes.axioval:parity.public.openings.name `house - outer wall - house left`)",
+      "object_id": {
+        "local_id": "#201",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "kl-wall-measured",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axioval:measured/body_extent;axis=up: directional-extent:ifc-step:bs-ifc4x3-building-architecture.ifc/#228:[0,0,1]",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        },
+        {
+          "exact": true,
+          "locator": "ifc:sha256:96e7103812b15b65eb1fd7802d36b9962833485dce5ead4f440bbf529530881d:attribute:#228:Name",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "e63ed0b0-694c-5bc6-939f-fade356897ac",
+      "message": "body_extent;axis=up is 2.2257 m; required at least 2.5 m (limit row 0: axioval:attributes.axioval:parity.public.openings.name `plumbing wall`)",
+      "object_id": {
+        "local_id": "#228",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "kl-wall-measured",
+      "severity": "warning"
+    },
+    {
+      "evidence": [],
+      "id": "76ef578a-0e8c-56fe-b581-310c91903438",
+      "message": "has no opening directly to the outside, which row 0 requires",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "sc-exit-forbidden",
+      "severity": "warning"
+    },
+    {
+      "evidence": [],
+      "id": "18dedd7a-ec9f-5d1a-850f-dc4be6c42fc0",
+      "message": "has no opening directly to the outside, which row 0 requires",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "sc-exit-forbidden",
+      "severity": "warning"
+    },
+    {
+      "evidence": [],
+      "id": "671bbeaf-b345-555c-8b0c-89a492777ff8",
+      "message": "has no door or opening directly to the outside, which row 1 (exit) requires",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "sc-forbidden",
+      "severity": "warning"
+    },
+    {
+      "evidence": [],
+      "id": "fccdddb7-a607-5b25-bf7a-671430d8f301",
+      "message": "has no door or opening directly to the outside, which row 1 (exit) requires",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "sc-forbidden",
+      "severity": "warning"
+    },
+    {
+      "evidence": [],
+      "id": "045f9165-1cdf-5dbd-99d8-8ab800b552d9",
+      "message": "has no direct access through a door or opening to a space row 0 (rooms) requires (via axioval:derived.adjacent-space)",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "sc-required",
+      "severity": "warning"
+    },
+    {
+      "evidence": [],
+      "id": "7925f0a9-843f-5718-9d13-5648c269c90f",
+      "message": "has no direct access through a door or opening to a space row 0 (rooms) requires (via axioval:derived.adjacent-space)",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "sc-required",
+      "severity": "warning"
+    },
+    {
+      "evidence": [],
+      "id": "248d67d0-68d8-539b-8a71-43ca59eb6edc",
+      "message": "has no direct access through a door or opening to a space row 0 requires (via IfcRelSpaceBoundary)",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "sc-stated",
+      "severity": "warning"
+    },
+    {
+      "evidence": [],
+      "id": "b862522d-5037-59dc-9893-b484cbc06136",
+      "message": "has no direct access through a door or opening to a space row 0 requires (via IfcRelSpaceBoundary)",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "sc-stated",
+      "severity": "warning"
+    }
+  ],
+  "not_evaluated": [
+    {
+      "message": "axioval:derived.adjacent-across;tolerance=0.05;overlap=0.3: ifc-step:bs-ifc4x3-building-architecture.ifc/#158 reaches below the headroom band but is not a closed solid, so what it occupies in the band is undecided",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "ce-defaults"
+    },
+    {
+      "message": "axioval:derived.adjacent-across;tolerance=0.05;overlap=0.3: ifc-step:bs-ifc4x3-building-architecture.ifc/#158 reaches below the headroom band but is not a closed solid, so what it occupies in the band is undecided",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "ce-defaults"
+    },
+    {
+      "message": "axioval:derived.adjacent-across;tolerance=0.05;overlap=0.3: ifc-step:bs-ifc4x3-building-architecture.ifc/#158 reaches below the headroom band but is not a closed solid, so what it occupies in the band is undecided",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "ce-walls"
+    },
+    {
+      "message": "axioval:derived.adjacent-across;tolerance=0.05;overlap=0.3: ifc-step:bs-ifc4x3-building-architecture.ifc/#158 reaches below the headroom band but is not a closed solid, so what it occupies in the band is undecided",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "ce-walls"
+    },
+    {
+      "message": "door-swing: declare `swing_into`, `swing_not_into` or both",
+      "object_id": null,
+      "reason": "invalid_declaration",
+      "rule_id": "ds-bad"
+    },
+    {
+      "message": "door-swing: the leaves of ifc-step:bs-ifc4x3-building-architecture.ifc/#158 are unknown: `ifc-step:bs-ifc4x3-building-architecture.ifc/#158` is not a door or window",
+      "object_id": {
+        "local_id": "#158",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ds-walls-both"
+    },
+    {
+      "message": "door-swing: the leaves of ifc-step:bs-ifc4x3-building-architecture.ifc/#182 are unknown: `ifc-step:bs-ifc4x3-building-architecture.ifc/#182` is not a door or window",
+      "object_id": {
+        "local_id": "#182",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ds-walls-both"
+    },
+    {
+      "message": "door-swing: the leaves of ifc-step:bs-ifc4x3-building-architecture.ifc/#201 are unknown: `ifc-step:bs-ifc4x3-building-architecture.ifc/#201` is not a door or window",
+      "object_id": {
+        "local_id": "#201",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ds-walls-both"
+    },
+    {
+      "message": "door-swing: the leaves of ifc-step:bs-ifc4x3-building-architecture.ifc/#228 are unknown: `ifc-step:bs-ifc4x3-building-architecture.ifc/#228` is not a door or window",
+      "object_id": {
+        "local_id": "#228",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "ds-walls-both"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#158: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#158",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-axes"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#182: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#182",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-axes"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#201: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#201",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-axes"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#228: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#228",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-axes"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#158: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#158",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-extrusion-profile-x"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#182: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#182",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-extrusion-profile-x"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#201: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#201",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-extrusion-profile-x"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#228: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#228",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-extrusion-profile-x"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#158: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#158",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-flat"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#182: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#182",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-flat"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#201: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#201",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-flat"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#228: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#228",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-flat"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#158: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#158",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-flat-small"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#182: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#182",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-flat-small"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#201: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#201",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-flat-small"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#228: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#228",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-flat-small"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#158: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#158",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-profile-x-profile-y"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#182: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#182",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-profile-x-profile-y"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#201: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#201",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-profile-x-profile-y"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#228: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#228",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-profile-x-profile-y"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#158: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#158",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-profile-y-extrusion"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#182: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#182",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-profile-y-extrusion"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#201: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#201",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-profile-y-extrusion"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#228: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#228",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-profile-y-extrusion"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#158: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#158",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-profile-y-profile-x"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#182: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#182",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-profile-y-profile-x"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#201: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#201",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-profile-y-profile-x"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#228: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#228",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-profile-y-profile-x"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#261: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#261",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-slabs"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#285: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#285",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-slabs"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#53: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#53",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-slabs"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#158: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#158",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-small"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#182: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#182",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-small"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#201: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#201",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-small"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#228: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#228",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-small"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#158: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#158",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-tolerance"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#182: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#182",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-tolerance"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#201: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#201",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-tolerance"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#228: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#228",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-tolerance"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#158: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#158",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-walls"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#182: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#182",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-walls"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#201: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#201",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-walls"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#228: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#228",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "eh-walls"
+    },
+    {
+      "message": "keyed-limit: `quantity` `sill-height` needs `floor_path`",
+      "object_id": null,
+      "reason": "invalid_declaration",
+      "rule_id": "kl-bad"
+    },
+    {
+      "message": "plan area unavailable: the footprint of ifc-step:bs-ifc4x3-building-architecture.ifc/#135 cannot be computed",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "kl-space-area"
+    },
+    {
+      "message": "plan area unavailable: the footprint of ifc-step:bs-ifc4x3-building-architecture.ifc/#85 cannot be computed",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "kl-space-area"
+    },
+    {
+      "message": "the applicable limit row cannot be decided: axioval:attributes.axioval:parity.public.openings.long-name of ifc-step:bs-ifc4x3-building-architecture.ifc/#135 is absent",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "kl-space-long-name"
+    },
+    {
+      "message": "the applicable limit row cannot be decided: axioval:attributes.axioval:parity.public.openings.long-name of ifc-step:bs-ifc4x3-building-architecture.ifc/#85 is absent",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "kl-space-long-name"
+    },
+    {
+      "message": "plan area unavailable: the footprint of ifc-step:bs-ifc4x3-building-architecture.ifc/#135 cannot be computed",
+      "object_id": {
+        "local_id": "#45",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "backend_unavailable",
+      "rule_id": "kl-storey-spaces"
+    },
+    {
+      "message": "the applicable limit row cannot be decided: the adjacency evidence of ifc-step:bs-ifc4x3-building-architecture.ifc/#158 records neither a space nor the outside on its + face; the adjacency evidence of ifc-step:bs-ifc4x3-building-architecture.ifc/#158 records neither a space nor the outside on its - face",
+      "object_id": {
+        "local_id": "#158",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "kl-wall-pair"
+    },
+    {
+      "message": "the applicable limit row cannot be decided: the adjacency evidence of ifc-step:bs-ifc4x3-building-architecture.ifc/#182 records neither a space nor the outside on its + face; the adjacency evidence of ifc-step:bs-ifc4x3-building-architecture.ifc/#182 records neither a space nor the outside on its - face",
+      "object_id": {
+        "local_id": "#182",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "kl-wall-pair"
+    },
+    {
+      "message": "the applicable limit row cannot be decided: the adjacency evidence of ifc-step:bs-ifc4x3-building-architecture.ifc/#201 records neither a space nor the outside on its + face; the adjacency evidence of ifc-step:bs-ifc4x3-building-architecture.ifc/#201 records neither a space nor the outside on its - face",
+      "object_id": {
+        "local_id": "#201",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "kl-wall-pair"
+    },
+    {
+      "message": "the applicable limit row cannot be decided: the adjacency evidence of ifc-step:bs-ifc4x3-building-architecture.ifc/#228 records neither a space nor the outside on its + face; the adjacency evidence of ifc-step:bs-ifc4x3-building-architecture.ifc/#228 records neither a space nor the outside on its - face",
+      "object_id": {
+        "local_id": "#228",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "kl-wall-pair"
+    },
+    {
+      "message": "the applicable limit row cannot be decided: axioval:parity.public.openings.wall-common.axioval:parity.public.openings.is-external of ifc-step:bs-ifc4x3-building-architecture.ifc/#158 is absent",
+      "object_id": {
+        "local_id": "#158",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "kl-wall-width"
+    },
+    {
+      "message": "the applicable limit row cannot be decided: axioval:parity.public.openings.wall-common.axioval:parity.public.openings.is-external of ifc-step:bs-ifc4x3-building-architecture.ifc/#182 is absent",
+      "object_id": {
+        "local_id": "#182",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "kl-wall-width"
+    },
+    {
+      "message": "the applicable limit row cannot be decided: axioval:parity.public.openings.wall-common.axioval:parity.public.openings.is-external of ifc-step:bs-ifc4x3-building-architecture.ifc/#201 is absent",
+      "object_id": {
+        "local_id": "#201",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "kl-wall-width"
+    },
+    {
+      "message": "the applicable limit row cannot be decided: axioval:parity.public.openings.wall-common.axioval:parity.public.openings.is-external of ifc-step:bs-ifc4x3-building-architecture.ifc/#228 is absent",
+      "object_id": {
+        "local_id": "#228",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "kl-wall-width"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#158: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#158",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "oa-axes"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#182: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#182",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "oa-axes"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#201: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#201",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "oa-axes"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#228: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#228",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "oa-axes"
+    },
+    {
+      "message": "opening-area: `length_axis` `sideways` is unsupported; use `extrusion`, `profile-x` or `profile-y`",
+      "object_id": null,
+      "reason": "invalid_declaration",
+      "rule_id": "oa-bad-axis"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#158: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#158",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "oa-flat"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#182: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#182",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "oa-flat"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#201: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#201",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "oa-flat"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#228: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#228",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "oa-flat"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#158: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#158",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "oa-net-twice"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#182: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#182",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "oa-net-twice"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#201: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#201",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "oa-net-twice"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#228: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#228",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "oa-net-twice"
+    },
+    {
+      "message": "`axioval:parity.public.openings.wall-quantities.axioval:parity.public.openings.width` is 0.2 m, not an area",
+      "object_id": {
+        "local_id": "#158",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "oa-not-area"
+    },
+    {
+      "message": "`axioval:parity.public.openings.wall-quantities.axioval:parity.public.openings.width` is 0.2 m, not an area",
+      "object_id": {
+        "local_id": "#182",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "oa-not-area"
+    },
+    {
+      "message": "`axioval:parity.public.openings.wall-quantities.axioval:parity.public.openings.width` is 0.2 m, not an area",
+      "object_id": {
+        "local_id": "#201",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "oa-not-area"
+    },
+    {
+      "message": "`axioval:parity.public.openings.wall-quantities.axioval:parity.public.openings.width` is 0.024 m, not an area",
+      "object_id": {
+        "local_id": "#228",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "oa-not-area"
+    },
+    {
+      "message": "it states only one of `axioval:parity.public.openings.wall-quantities.axioval:parity.public.openings.gross-side-area` and `axioval:parity.public.openings.wall-quantities.axioval:parity.public.openings.net-side-area`",
+      "object_id": {
+        "local_id": "#158",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "oa-one-side"
+    },
+    {
+      "message": "it states only one of `axioval:parity.public.openings.wall-quantities.axioval:parity.public.openings.gross-side-area` and `axioval:parity.public.openings.wall-quantities.axioval:parity.public.openings.net-side-area`",
+      "object_id": {
+        "local_id": "#182",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "oa-one-side"
+    },
+    {
+      "message": "it states only one of `axioval:parity.public.openings.wall-quantities.axioval:parity.public.openings.gross-side-area` and `axioval:parity.public.openings.wall-quantities.axioval:parity.public.openings.net-side-area`",
+      "object_id": {
+        "local_id": "#201",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "oa-one-side"
+    },
+    {
+      "message": "it states only one of `axioval:parity.public.openings.wall-quantities.axioval:parity.public.openings.gross-side-area` and `axioval:parity.public.openings.wall-quantities.axioval:parity.public.openings.net-side-area`",
+      "object_id": {
+        "local_id": "#228",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "oa-one-side"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#158: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#158",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "oa-small"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#182: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#182",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "oa-small"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#201: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#201",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "oa-small"
+    },
+    {
+      "message": "host ifc-step:bs-ifc4x3-building-architecture.ifc/#228: the host's body is a `tessellation`, not a straight extrusion",
+      "object_id": {
+        "local_id": "#228",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "oa-small"
+    },
+    {
+      "message": "opening-spaces: no wall in source `ifc-step:bs-ifc4x3-building-architecture.ifc` is declared external, but 4 wall(s) do not declare `axioval:parity.public.openings.wall-common.axioval:parity.public.openings.is-external` and 0 more may be walls",
+      "object_id": null,
+      "reason": "incomplete_evidence",
+      "rule_id": "os-openings",
+      "source": {
+        "document": "bs-ifc4x3-building-architecture.ifc",
+        "system": "ifc-step"
+      }
+    },
+    {
+      "message": "opening-spaces: no wall in source `ifc-step:bs-ifc4x3-building-architecture.ifc` is declared external, but 4 wall(s) do not declare `axioval:parity.public.openings.wall-common.axioval:parity.public.openings.is-external` and 0 more may be walls",
+      "object_id": null,
+      "reason": "incomplete_evidence",
+      "rule_id": "os-stated",
+      "source": {
+        "document": "bs-ifc4x3-building-architecture.ifc",
+        "system": "ifc-step"
+      }
+    },
+    {
+      "message": "opening-spaces: no wall in source `ifc-step:bs-ifc4x3-building-architecture.ifc` is declared external, but 4 wall(s) do not declare `axioval:parity.public.openings.wall-common.axioval:parity.public.openings.is-external` and 0 more may be walls",
+      "object_id": null,
+      "reason": "incomplete_evidence",
+      "rule_id": "os-walls",
+      "source": {
+        "document": "bs-ifc4x3-building-architecture.ifc",
+        "system": "ifc-step"
+      }
+    },
+    {
+      "message": "no host wall is reached via IfcRelConnectsPathElements, so the spaces it needs are unknown",
+      "object_id": {
+        "local_id": "#158",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "os-walls"
+    },
+    {
+      "message": "no host wall is reached via IfcRelConnectsPathElements, so the spaces it needs are unknown",
+      "object_id": {
+        "local_id": "#182",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "os-walls"
+    },
+    {
+      "message": "no host wall is reached via IfcRelConnectsPathElements, so the spaces it needs are unknown",
+      "object_id": {
+        "local_id": "#201",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "os-walls"
+    },
+    {
+      "message": "no host wall is reached via IfcRelConnectsPathElements, so the spaces it needs are unknown",
+      "object_id": {
+        "local_id": "#228",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "os-walls"
+    },
+    {
+      "message": "opening-spaces: no wall in source `ifc-step:bs-ifc4x3-building-architecture.ifc` is declared external, but 4 wall(s) do not declare `axioval:parity.public.openings.wall-common.axioval:parity.public.openings.is-external` and 0 more may be walls",
+      "object_id": null,
+      "reason": "incomplete_evidence",
+      "rule_id": "os-windows",
+      "source": {
+        "document": "bs-ifc4x3-building-architecture.ifc",
+        "system": "ifc-step"
+      }
+    }
+  ],
+  "rules": [
+    {
+      "checked": 2,
+      "failed": 0,
+      "not_evaluated": 2,
+      "rule_id": "ce-defaults",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 2,
+      "failed": 0,
+      "not_evaluated": 2,
+      "rule_id": "ce-walls",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "ds-bad",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 4,
+      "rule_id": "ds-walls-both",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "ds-windows-into",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "ds-windows-not-into",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 4,
+      "rule_id": "eh-axes",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 4,
+      "rule_id": "eh-extrusion-profile-x",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 4,
+      "rule_id": "eh-flat",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 4,
+      "rule_id": "eh-flat-small",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 4,
+      "rule_id": "eh-profile-x-profile-y",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 4,
+      "rule_id": "eh-profile-y-extrusion",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 4,
+      "rule_id": "eh-profile-y-profile-x",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 3,
+      "failed": 0,
+      "not_evaluated": 3,
+      "rule_id": "eh-slabs",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 4,
+      "rule_id": "eh-small",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 4,
+      "rule_id": "eh-tolerance",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 4,
+      "rule_id": "eh-walls",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 3,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "kl-bad",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 3,
+      "failed": 3,
+      "not_evaluated": 0,
+      "rule_id": "kl-no-row",
+      "status": "failed"
+    },
+    {
+      "checked": 2,
+      "failed": 0,
+      "not_evaluated": 2,
+      "rule_id": "kl-space-area",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 2,
+      "failed": 0,
+      "not_evaluated": 2,
+      "rule_id": "kl-space-long-name",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 1,
+      "rule_id": "kl-storey-spaces",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 4,
+      "failed": 4,
+      "not_evaluated": 0,
+      "rule_id": "kl-wall-measured",
+      "status": "failed"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 4,
+      "rule_id": "kl-wall-pair",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 4,
+      "rule_id": "kl-wall-width",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "kl-window-glazing",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "kl-window-glazing-default",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "kl-window-height",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "kl-window-height-defaults",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "kl-window-pair",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "kl-window-sill",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "kl-window-sill-spaces",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "kl-window-threshold",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "kl-window-width",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "kl-window-width-stated",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 4,
+      "rule_id": "oa-axes",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "oa-bad-axis",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 4,
+      "rule_id": "oa-flat",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 4,
+      "rule_id": "oa-net-twice",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 4,
+      "rule_id": "oa-not-area",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 4,
+      "rule_id": "oa-one-side",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 4,
+      "rule_id": "oa-small",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "os-openings",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "os-stated",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 4,
+      "failed": 0,
+      "not_evaluated": 4,
+      "rule_id": "os-walls",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "os-windows",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "oz-beams",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "oz-dimensions",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "oz-far",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "oz-flat-dimensions",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "oz-flat-far",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "oz-flat-margins",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "oz-flat-zones",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "oz-margins",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "oz-supports",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "oz-zones",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 2,
+      "failed": 2,
+      "not_evaluated": 0,
+      "rule_id": "sc-exit-forbidden",
+      "status": "failed"
+    },
+    {
+      "checked": 2,
+      "failed": 2,
+      "not_evaluated": 0,
+      "rule_id": "sc-forbidden",
+      "status": "failed"
+    },
+    {
+      "checked": 2,
+      "failed": 2,
+      "not_evaluated": 0,
+      "rule_id": "sc-required",
+      "status": "failed"
+    },
+    {
+      "checked": 2,
+      "failed": 2,
+      "not_evaluated": 0,
+      "rule_id": "sc-stated",
+      "status": "failed"
+    }
+  ]
+}

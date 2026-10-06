@@ -235,6 +235,20 @@ building, spaces of a storey ordered by placement where they state no
 elevation, elements along a relationship) and `numbering-consistency`
 (per source, across sources and per storey).
 
+The case `openings` records the door,
+window and opening capabilities over every public model before they are
+rebuilt as templates (#281): `opening-area` and `empty-host` on walls (both
+side areas stated, one, one of another kind, a minimum opening area and
+each face), `opening-zone` on the openings (margins, edges, zones,
+dimensions, supports) and on beams through the derived intersections,
+`keyed-limit` with each of its quantities (plan and member areas, stated
+and measured values, sill heights, clear widths and heights, glazing
+ratios, threshold steps, keys along the derived adjacency and pairs of
+them, no row and a refused declaration), `door-swing`, `opening-spaces`,
+`space-connection` and `corridor-end-openings`; the public models hold
+one wall with an opening and a window and no door, so most door rules
+record the object-frame and adjacency services' refusals.
+
 Each pair's evidence prints as one JSON line. That line is what the
 migration ledger records as a proof item, tagged `"kind": "parity"`; the
 ledger check (`scripts/migration.py`) rejects a parity proof that does not

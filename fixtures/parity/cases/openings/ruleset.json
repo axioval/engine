@@ -1,0 +1,3133 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:parity.public.openings",
+    "name": {
+      "default": "Public parity ruleset, openings",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "keyed-limit, door-swing, opening-area, empty-host, opening-zone, opening-spaces, space-connection and corridor-end-openings, recorded before they became templates.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "definitionPackages": [
+    "axioval:parity.public.openings.definitions"
+  ],
+  "root": {
+    "id": "root",
+    "name": {
+      "default": "Openings",
+      "translations": {}
+    },
+    "rules": [
+      {
+        "id": "oa-net-twice",
+        "definitionId": "axioval:parity.public.openings.opening-area",
+        "name": {
+          "default": "oa-net-twice",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "opening_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelVoidsElement:forward"
+            ]
+          },
+          "length_axis": {
+            "type": "string",
+            "value": "profile-x"
+          },
+          "height_axis": {
+            "type": "string",
+            "value": "extrusion"
+          },
+          "area_tolerance": {
+            "type": "quantity",
+            "value": 0.01,
+            "unit": "m2"
+          },
+          "gross_area": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.openings.wall-quantities",
+            "property": "axioval:parity.public.openings.net-side-area"
+          },
+          "net_area": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.openings.wall-quantities",
+            "property": "axioval:parity.public.openings.net-side-area"
+          }
+        }
+      },
+      {
+        "id": "oa-one-side",
+        "definitionId": "axioval:parity.public.openings.opening-area",
+        "name": {
+          "default": "oa-one-side",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "opening_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelVoidsElement:forward"
+            ]
+          },
+          "length_axis": {
+            "type": "string",
+            "value": "profile-x"
+          },
+          "height_axis": {
+            "type": "string",
+            "value": "extrusion"
+          },
+          "area_tolerance": {
+            "type": "quantity",
+            "value": 0.01,
+            "unit": "m2"
+          },
+          "gross_area": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.openings.wall-quantities",
+            "property": "axioval:parity.public.openings.gross-side-area"
+          },
+          "net_area": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.openings.wall-quantities",
+            "property": "axioval:parity.public.openings.net-side-area"
+          }
+        }
+      },
+      {
+        "id": "oa-not-area",
+        "definitionId": "axioval:parity.public.openings.opening-area",
+        "name": {
+          "default": "oa-not-area",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "opening_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelVoidsElement:forward"
+            ]
+          },
+          "length_axis": {
+            "type": "string",
+            "value": "profile-x"
+          },
+          "height_axis": {
+            "type": "string",
+            "value": "extrusion"
+          },
+          "area_tolerance": {
+            "type": "quantity",
+            "value": 0.01,
+            "unit": "m2"
+          },
+          "gross_area": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.openings.wall-quantities",
+            "property": "axioval:parity.public.openings.width"
+          },
+          "net_area": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.openings.wall-quantities",
+            "property": "axioval:parity.public.openings.net-side-area"
+          }
+        }
+      },
+      {
+        "id": "oa-small",
+        "definitionId": "axioval:parity.public.openings.opening-area",
+        "name": {
+          "default": "oa-small",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "opening_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelVoidsElement:forward"
+            ]
+          },
+          "length_axis": {
+            "type": "string",
+            "value": "profile-x"
+          },
+          "height_axis": {
+            "type": "string",
+            "value": "extrusion"
+          },
+          "area_tolerance": {
+            "type": "quantity",
+            "value": 0.01,
+            "unit": "m2"
+          },
+          "gross_area": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.openings.wall-quantities",
+            "property": "axioval:parity.public.openings.net-side-area"
+          },
+          "net_area": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.openings.wall-quantities",
+            "property": "axioval:parity.public.openings.net-side-area"
+          },
+          "minimum_opening_area": {
+            "type": "quantity",
+            "value": 0.5,
+            "unit": "m2"
+          },
+          "opening_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.openings.opening",
+              "includeSubtypes": true
+            }
+          }
+        }
+      },
+      {
+        "id": "oa-axes",
+        "definitionId": "axioval:parity.public.openings.opening-area",
+        "name": {
+          "default": "oa-axes",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "opening_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelVoidsElement:forward"
+            ]
+          },
+          "length_axis": {
+            "type": "string",
+            "value": "extrusion"
+          },
+          "height_axis": {
+            "type": "string",
+            "value": "profile-y"
+          },
+          "area_tolerance": {
+            "type": "quantity",
+            "value": 0.01,
+            "unit": "m2"
+          },
+          "gross_area": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.openings.wall-quantities",
+            "property": "axioval:parity.public.openings.net-side-area"
+          },
+          "net_area": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.openings.wall-quantities",
+            "property": "axioval:parity.public.openings.net-side-area"
+          }
+        }
+      },
+      {
+        "id": "oa-bad-axis",
+        "definitionId": "axioval:parity.public.openings.opening-area",
+        "name": {
+          "default": "oa-bad-axis",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "opening_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelVoidsElement:forward"
+            ]
+          },
+          "length_axis": {
+            "type": "string",
+            "value": "sideways"
+          },
+          "height_axis": {
+            "type": "string",
+            "value": "extrusion"
+          },
+          "area_tolerance": {
+            "type": "quantity",
+            "value": 0.01,
+            "unit": "m2"
+          },
+          "gross_area": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.openings.wall-quantities",
+            "property": "axioval:parity.public.openings.net-side-area"
+          },
+          "net_area": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.openings.wall-quantities",
+            "property": "axioval:parity.public.openings.net-side-area"
+          }
+        }
+      },
+      {
+        "id": "eh-walls",
+        "definitionId": "axioval:parity.public.openings.empty-host",
+        "name": {
+          "default": "eh-walls",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "opening_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelVoidsElement:forward"
+            ]
+          },
+          "length_axis": {
+            "type": "string",
+            "value": "profile-x"
+          },
+          "height_axis": {
+            "type": "string",
+            "value": "extrusion"
+          }
+        }
+      },
+      {
+        "id": "eh-tolerance",
+        "definitionId": "axioval:parity.public.openings.empty-host",
+        "name": {
+          "default": "eh-tolerance",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "opening_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelVoidsElement:forward"
+            ]
+          },
+          "length_axis": {
+            "type": "string",
+            "value": "profile-x"
+          },
+          "height_axis": {
+            "type": "string",
+            "value": "extrusion"
+          },
+          "area_tolerance": {
+            "type": "quantity",
+            "value": 100.0,
+            "unit": "m2"
+          }
+        }
+      },
+      {
+        "id": "eh-small",
+        "definitionId": "axioval:parity.public.openings.empty-host",
+        "name": {
+          "default": "eh-small",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "opening_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelVoidsElement:forward"
+            ]
+          },
+          "length_axis": {
+            "type": "string",
+            "value": "profile-x"
+          },
+          "height_axis": {
+            "type": "string",
+            "value": "extrusion"
+          },
+          "minimum_opening_area": {
+            "type": "quantity",
+            "value": 0.5,
+            "unit": "m2"
+          },
+          "opening_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.openings.opening",
+              "includeSubtypes": true
+            }
+          },
+          "area_tolerance": {
+            "type": "quantity",
+            "value": 100.0,
+            "unit": "m2"
+          }
+        }
+      },
+      {
+        "id": "eh-axes",
+        "definitionId": "axioval:parity.public.openings.empty-host",
+        "name": {
+          "default": "eh-axes",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "opening_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelVoidsElement:forward"
+            ]
+          },
+          "length_axis": {
+            "type": "string",
+            "value": "extrusion"
+          },
+          "height_axis": {
+            "type": "string",
+            "value": "profile-y"
+          },
+          "area_tolerance": {
+            "type": "quantity",
+            "value": 100.0,
+            "unit": "m2"
+          }
+        }
+      },
+      {
+        "id": "eh-profile-x-profile-y",
+        "definitionId": "axioval:parity.public.openings.empty-host",
+        "name": {
+          "default": "eh-profile-x-profile-y",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "opening_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelVoidsElement:forward"
+            ]
+          },
+          "length_axis": {
+            "type": "string",
+            "value": "profile-x"
+          },
+          "height_axis": {
+            "type": "string",
+            "value": "profile-y"
+          },
+          "area_tolerance": {
+            "type": "quantity",
+            "value": 100.0,
+            "unit": "m2"
+          }
+        }
+      },
+      {
+        "id": "eh-profile-y-extrusion",
+        "definitionId": "axioval:parity.public.openings.empty-host",
+        "name": {
+          "default": "eh-profile-y-extrusion",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "opening_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelVoidsElement:forward"
+            ]
+          },
+          "length_axis": {
+            "type": "string",
+            "value": "profile-y"
+          },
+          "height_axis": {
+            "type": "string",
+            "value": "extrusion"
+          },
+          "area_tolerance": {
+            "type": "quantity",
+            "value": 100.0,
+            "unit": "m2"
+          }
+        }
+      },
+      {
+        "id": "eh-extrusion-profile-x",
+        "definitionId": "axioval:parity.public.openings.empty-host",
+        "name": {
+          "default": "eh-extrusion-profile-x",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "opening_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelVoidsElement:forward"
+            ]
+          },
+          "length_axis": {
+            "type": "string",
+            "value": "extrusion"
+          },
+          "height_axis": {
+            "type": "string",
+            "value": "profile-x"
+          },
+          "area_tolerance": {
+            "type": "quantity",
+            "value": 100.0,
+            "unit": "m2"
+          }
+        }
+      },
+      {
+        "id": "eh-profile-y-profile-x",
+        "definitionId": "axioval:parity.public.openings.empty-host",
+        "name": {
+          "default": "eh-profile-y-profile-x",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "opening_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelVoidsElement:forward"
+            ]
+          },
+          "length_axis": {
+            "type": "string",
+            "value": "profile-y"
+          },
+          "height_axis": {
+            "type": "string",
+            "value": "profile-x"
+          },
+          "area_tolerance": {
+            "type": "quantity",
+            "value": 100.0,
+            "unit": "m2"
+          }
+        }
+      },
+      {
+        "id": "eh-flat",
+        "definitionId": "axioval:parity.public.openings.empty-host",
+        "name": {
+          "default": "eh-flat",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "opening_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelVoidsElement:forward"
+            ]
+          },
+          "length_axis": {
+            "type": "string",
+            "value": "profile-x"
+          },
+          "height_axis": {
+            "type": "string",
+            "value": "profile-y"
+          }
+        }
+      },
+      {
+        "id": "eh-flat-small",
+        "definitionId": "axioval:parity.public.openings.empty-host",
+        "name": {
+          "default": "eh-flat-small",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "opening_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelVoidsElement:forward"
+            ]
+          },
+          "length_axis": {
+            "type": "string",
+            "value": "profile-x"
+          },
+          "height_axis": {
+            "type": "string",
+            "value": "profile-y"
+          },
+          "minimum_opening_area": {
+            "type": "quantity",
+            "value": 0.5,
+            "unit": "m2"
+          },
+          "area_tolerance": {
+            "type": "quantity",
+            "value": 100.0,
+            "unit": "m2"
+          }
+        }
+      },
+      {
+        "id": "eh-slabs",
+        "definitionId": "axioval:parity.public.openings.empty-host",
+        "name": {
+          "default": "eh-slabs",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.slab",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "opening_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelVoidsElement:forward"
+            ]
+          },
+          "length_axis": {
+            "type": "string",
+            "value": "profile-x"
+          },
+          "height_axis": {
+            "type": "string",
+            "value": "extrusion"
+          },
+          "area_tolerance": {
+            "type": "quantity",
+            "value": 1000.0,
+            "unit": "m2"
+          }
+        }
+      },
+      {
+        "id": "oa-flat",
+        "definitionId": "axioval:parity.public.openings.opening-area",
+        "name": {
+          "default": "oa-flat",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "opening_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelVoidsElement:forward"
+            ]
+          },
+          "length_axis": {
+            "type": "string",
+            "value": "profile-x"
+          },
+          "height_axis": {
+            "type": "string",
+            "value": "profile-y"
+          },
+          "area_tolerance": {
+            "type": "quantity",
+            "value": 0.01,
+            "unit": "m2"
+          },
+          "gross_area": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.openings.wall-quantities",
+            "property": "axioval:parity.public.openings.net-side-area"
+          },
+          "net_area": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.openings.wall-quantities",
+            "property": "axioval:parity.public.openings.net-side-area"
+          }
+        }
+      },
+      {
+        "id": "oz-margins",
+        "definitionId": "axioval:parity.public.openings.opening-zone",
+        "name": {
+          "default": "oz-margins",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.opening",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "host_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelVoidsElement:backward"
+            ]
+          },
+          "host_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.openings.wall",
+              "includeSubtypes": true
+            }
+          },
+          "length_axis": {
+            "type": "string",
+            "value": "profile-x"
+          },
+          "height_axis": {
+            "type": "string",
+            "value": "extrusion"
+          },
+          "end_distance": {
+            "type": "quantity",
+            "value": 0.3,
+            "unit": "m"
+          },
+          "edge_distance": {
+            "type": "quantity",
+            "value": 0.6,
+            "unit": "m"
+          }
+        }
+      },
+      {
+        "id": "oz-far",
+        "definitionId": "axioval:parity.public.openings.opening-zone",
+        "name": {
+          "default": "oz-far",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.opening",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "host_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelVoidsElement:backward"
+            ]
+          },
+          "host_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.openings.wall",
+              "includeSubtypes": true
+            }
+          },
+          "length_axis": {
+            "type": "string",
+            "value": "profile-x"
+          },
+          "height_axis": {
+            "type": "string",
+            "value": "extrusion"
+          },
+          "end_distance": {
+            "type": "quantity",
+            "value": 5.0,
+            "unit": "m"
+          },
+          "edge_distance": {
+            "type": "quantity",
+            "value": 2.0,
+            "unit": "m"
+          },
+          "edge_distance_maximum": {
+            "type": "quantity",
+            "value": 0.1,
+            "unit": "m"
+          },
+          "maximum_edges": {
+            "type": "string",
+            "value": "bottom"
+          }
+        }
+      },
+      {
+        "id": "oz-zones",
+        "definitionId": "axioval:parity.public.openings.opening-zone",
+        "name": {
+          "default": "oz-zones",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.opening",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "host_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelVoidsElement:backward"
+            ]
+          },
+          "host_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.openings.wall",
+              "includeSubtypes": true
+            }
+          },
+          "length_axis": {
+            "type": "string",
+            "value": "profile-x"
+          },
+          "height_axis": {
+            "type": "string",
+            "value": "extrusion"
+          },
+          "zones": {
+            "type": "table",
+            "value": [
+              {
+                "name": {
+                  "type": "string",
+                  "value": "middle"
+                },
+                "end_fraction": {
+                  "type": "number",
+                  "value": 0.45
+                },
+                "end_minimum": {
+                  "type": "quantity",
+                  "value": 0.3,
+                  "unit": "m"
+                },
+                "top_fraction": {
+                  "type": "number",
+                  "value": 0.1
+                },
+                "bottom_fraction": {
+                  "type": "number",
+                  "value": 0.4
+                }
+              },
+              {
+                "name": {
+                  "type": "string",
+                  "value": "low"
+                },
+                "end_minimum": {
+                  "type": "quantity",
+                  "value": 0.1,
+                  "unit": "m"
+                },
+                "top_minimum": {
+                  "type": "quantity",
+                  "value": 2.5,
+                  "unit": "m"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "oz-dimensions",
+        "definitionId": "axioval:parity.public.openings.opening-zone",
+        "name": {
+          "default": "oz-dimensions",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.opening",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "host_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelVoidsElement:backward"
+            ]
+          },
+          "host_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.openings.wall",
+              "includeSubtypes": true
+            }
+          },
+          "length_axis": {
+            "type": "string",
+            "value": "profile-x"
+          },
+          "height_axis": {
+            "type": "string",
+            "value": "extrusion"
+          },
+          "opening_spacing": {
+            "type": "quantity",
+            "value": 0.5,
+            "unit": "m"
+          },
+          "minimum_opening_area": {
+            "type": "quantity",
+            "value": 0.01,
+            "unit": "m2"
+          },
+          "dimensions": {
+            "type": "table",
+            "value": [
+              {
+                "name": {
+                  "type": "string",
+                  "value": "sill"
+                },
+                "source": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.openings.opening",
+                    "includeSubtypes": true
+                  }
+                },
+                "edge": {
+                  "type": "string",
+                  "value": "bottom"
+                },
+                "minimum": {
+                  "type": "quantity",
+                  "value": 0.5,
+                  "unit": "m"
+                },
+                "maximum": {
+                  "type": "quantity",
+                  "value": 1.5,
+                  "unit": "m"
+                }
+              },
+              {
+                "name": {
+                  "type": "string",
+                  "value": "neighbour"
+                },
+                "source": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.openings.opening",
+                    "includeSubtypes": true
+                  }
+                },
+                "target": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.openings.opening",
+                    "includeSubtypes": true
+                  }
+                },
+                "direction": {
+                  "type": "string",
+                  "value": "length"
+                },
+                "minimum": {
+                  "type": "quantity",
+                  "value": 0.4,
+                  "unit": "m"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "oz-supports",
+        "definitionId": "axioval:parity.public.openings.opening-zone",
+        "name": {
+          "default": "oz-supports",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.opening",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "host_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelVoidsElement:backward"
+            ]
+          },
+          "host_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.openings.wall",
+              "includeSubtypes": true
+            }
+          },
+          "length_axis": {
+            "type": "string",
+            "value": "profile-x"
+          },
+          "height_axis": {
+            "type": "string",
+            "value": "extrusion"
+          },
+          "support_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.openings.slab",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.openings.beam",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.openings.window",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "support_gap": {
+            "type": "quantity",
+            "value": 5.0,
+            "unit": "m"
+          },
+          "support_distance": {
+            "type": "quantity",
+            "value": 3.0,
+            "unit": "m"
+          },
+          "support_clearance": {
+            "type": "quantity",
+            "value": 1.0,
+            "unit": "m"
+          },
+          "support_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelConnectsElements:either"
+            ]
+          }
+        }
+      },
+      {
+        "id": "oz-flat-margins",
+        "definitionId": "axioval:parity.public.openings.opening-zone",
+        "name": {
+          "default": "oz-flat-margins",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.opening",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "host_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelVoidsElement:backward"
+            ]
+          },
+          "host_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.openings.wall",
+              "includeSubtypes": true
+            }
+          },
+          "length_axis": {
+            "type": "string",
+            "value": "profile-x"
+          },
+          "height_axis": {
+            "type": "string",
+            "value": "profile-y"
+          },
+          "end_distance": {
+            "type": "quantity",
+            "value": 0.3,
+            "unit": "m"
+          },
+          "edge_distance": {
+            "type": "quantity",
+            "value": 0.2,
+            "unit": "m"
+          }
+        }
+      },
+      {
+        "id": "oz-flat-far",
+        "definitionId": "axioval:parity.public.openings.opening-zone",
+        "name": {
+          "default": "oz-flat-far",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.opening",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "host_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelVoidsElement:backward"
+            ]
+          },
+          "host_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.openings.wall",
+              "includeSubtypes": true
+            }
+          },
+          "length_axis": {
+            "type": "string",
+            "value": "profile-x"
+          },
+          "height_axis": {
+            "type": "string",
+            "value": "profile-y"
+          },
+          "end_distance": {
+            "type": "quantity",
+            "value": 5.0,
+            "unit": "m"
+          },
+          "edge_distance_maximum": {
+            "type": "quantity",
+            "value": 0.1,
+            "unit": "m"
+          }
+        }
+      },
+      {
+        "id": "oz-flat-zones",
+        "definitionId": "axioval:parity.public.openings.opening-zone",
+        "name": {
+          "default": "oz-flat-zones",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.opening",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "host_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelVoidsElement:backward"
+            ]
+          },
+          "host_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.openings.wall",
+              "includeSubtypes": true
+            }
+          },
+          "length_axis": {
+            "type": "string",
+            "value": "profile-x"
+          },
+          "height_axis": {
+            "type": "string",
+            "value": "profile-y"
+          },
+          "zones": {
+            "type": "table",
+            "value": [
+              {
+                "name": {
+                  "type": "string",
+                  "value": "middle"
+                },
+                "end_fraction": {
+                  "type": "number",
+                  "value": 0.2
+                },
+                "end_minimum": {
+                  "type": "quantity",
+                  "value": 0.3,
+                  "unit": "m"
+                },
+                "top_fraction": {
+                  "type": "number",
+                  "value": 0.1
+                },
+                "bottom_fraction": {
+                  "type": "number",
+                  "value": 0.1
+                }
+              },
+              {
+                "name": {
+                  "type": "string",
+                  "value": "low"
+                },
+                "end_minimum": {
+                  "type": "quantity",
+                  "value": 0.1,
+                  "unit": "m"
+                },
+                "top_minimum": {
+                  "type": "quantity",
+                  "value": 1.5,
+                  "unit": "m"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "oz-flat-dimensions",
+        "definitionId": "axioval:parity.public.openings.opening-zone",
+        "name": {
+          "default": "oz-flat-dimensions",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.opening",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "host_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelVoidsElement:backward"
+            ]
+          },
+          "host_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.openings.wall",
+              "includeSubtypes": true
+            }
+          },
+          "length_axis": {
+            "type": "string",
+            "value": "profile-x"
+          },
+          "height_axis": {
+            "type": "string",
+            "value": "profile-y"
+          },
+          "opening_spacing": {
+            "type": "quantity",
+            "value": 0.5,
+            "unit": "m"
+          },
+          "minimum_opening_area": {
+            "type": "quantity",
+            "value": 0.01,
+            "unit": "m2"
+          },
+          "dimensions": {
+            "type": "table",
+            "value": [
+              {
+                "name": {
+                  "type": "string",
+                  "value": "sill"
+                },
+                "source": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.openings.opening",
+                    "includeSubtypes": true
+                  }
+                },
+                "edge": {
+                  "type": "string",
+                  "value": "bottom"
+                },
+                "minimum": {
+                  "type": "quantity",
+                  "value": 0.5,
+                  "unit": "m"
+                },
+                "maximum": {
+                  "type": "quantity",
+                  "value": 1.5,
+                  "unit": "m"
+                }
+              },
+              {
+                "name": {
+                  "type": "string",
+                  "value": "end"
+                },
+                "source": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.openings.opening",
+                    "includeSubtypes": true
+                  }
+                },
+                "edge": {
+                  "type": "string",
+                  "value": "side"
+                },
+                "minimum": {
+                  "type": "quantity",
+                  "value": 2.0,
+                  "unit": "m"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "oz-beams",
+        "definitionId": "axioval:parity.public.openings.opening-zone",
+        "name": {
+          "default": "oz-beams",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.beam",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "host_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.intersects"
+            ]
+          },
+          "host_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.openings.wall",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.openings.slab",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "length_axis": {
+            "type": "string",
+            "value": "profile-x"
+          },
+          "height_axis": {
+            "type": "string",
+            "value": "extrusion"
+          },
+          "end_distance": {
+            "type": "quantity",
+            "value": 0.2,
+            "unit": "m"
+          }
+        }
+      },
+      {
+        "id": "kl-space-area",
+        "definitionId": "axioval:parity.public.openings.keyed-limit",
+        "name": {
+          "default": "kl-space-area",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "quantity": {
+            "type": "string",
+            "value": "plan-area"
+          },
+          "key_1": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.openings.name"
+          },
+          "limits": {
+            "type": "table",
+            "value": [
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "*"
+                },
+                "minimum": {
+                  "type": "number",
+                  "value": 5.0
+                },
+                "maximum": {
+                  "type": "number",
+                  "value": 30.0
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "kl-space-long-name",
+        "definitionId": "axioval:parity.public.openings.keyed-limit",
+        "name": {
+          "default": "kl-space-long-name",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "quantity": {
+            "type": "string",
+            "value": "plan-area"
+          },
+          "key_1": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.openings.long-name"
+          },
+          "limits": {
+            "type": "table",
+            "value": [
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "K*"
+                },
+                "minimum": {
+                  "type": "number",
+                  "value": 50.0
+                }
+              },
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "*"
+                },
+                "maximum": {
+                  "type": "number",
+                  "value": 10.0
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "kl-wall-width",
+        "definitionId": "axioval:parity.public.openings.keyed-limit",
+        "name": {
+          "default": "kl-wall-width",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "quantity": {
+            "type": "string",
+            "value": "property"
+          },
+          "quantity_property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.openings.wall-quantities",
+            "property": "axioval:parity.public.openings.width"
+          },
+          "key_1": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.openings.wall-common",
+            "property": "axioval:parity.public.openings.is-external"
+          },
+          "limits": {
+            "type": "table",
+            "value": [
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "true"
+                },
+                "minimum": {
+                  "type": "number",
+                  "value": 0.3
+                }
+              },
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "false"
+                },
+                "minimum": {
+                  "type": "number",
+                  "value": 0.1
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "kl-wall-measured",
+        "definitionId": "axioval:parity.public.openings.keyed-limit",
+        "name": {
+          "default": "kl-wall-measured",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "quantity": {
+            "type": "string",
+            "value": "measured"
+          },
+          "measured_value": {
+            "type": "string",
+            "value": "body_extent;axis=up"
+          },
+          "key_1": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.openings.name"
+          },
+          "limits": {
+            "type": "table",
+            "value": [
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "*"
+                },
+                "minimum": {
+                  "type": "number",
+                  "value": 2.5
+                },
+                "maximum": {
+                  "type": "number",
+                  "value": 3.5
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "kl-storey-spaces",
+        "definitionId": "axioval:parity.public.openings.keyed-limit",
+        "name": {
+          "default": "kl-storey-spaces",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.storey",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "quantity": {
+            "type": "string",
+            "value": "member-plan-area"
+          },
+          "member_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.openings.space",
+              "includeSubtypes": true
+            }
+          },
+          "relationship": {
+            "type": "string",
+            "value": "IfcRelAggregates"
+          },
+          "direction": {
+            "type": "string",
+            "value": "forward"
+          },
+          "key_1": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.openings.name"
+          },
+          "limits": {
+            "type": "table",
+            "value": [
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "*"
+                },
+                "minimum": {
+                  "type": "number",
+                  "value": 20.0
+                },
+                "maximum": {
+                  "type": "number",
+                  "value": 200.0
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "kl-window-sill",
+        "definitionId": "axioval:parity.public.openings.keyed-limit",
+        "name": {
+          "default": "kl-window-sill",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.window",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "quantity": {
+            "type": "string",
+            "value": "sill-height"
+          },
+          "floor_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelFillsElement:backward",
+              "IfcRelVoidsElement:backward"
+            ]
+          },
+          "key_1": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.openings.name"
+          },
+          "limits": {
+            "type": "table",
+            "value": [
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "*"
+                },
+                "minimum": {
+                  "type": "number",
+                  "value": 0.8
+                },
+                "maximum": {
+                  "type": "number",
+                  "value": 1.2
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "kl-window-sill-spaces",
+        "definitionId": "axioval:parity.public.openings.keyed-limit",
+        "name": {
+          "default": "kl-window-sill-spaces",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.window",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "quantity": {
+            "type": "string",
+            "value": "sill-height"
+          },
+          "floor_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.adjacent-space"
+            ]
+          },
+          "key_1": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.openings.long-name"
+          },
+          "key_1_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.adjacent-space"
+            ]
+          },
+          "limits": {
+            "type": "table",
+            "value": [
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "*"
+                },
+                "minimum": {
+                  "type": "number",
+                  "value": 0.8
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "kl-window-width",
+        "definitionId": "axioval:parity.public.openings.keyed-limit",
+        "name": {
+          "default": "kl-window-width",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.window",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "quantity": {
+            "type": "string",
+            "value": "clear-width"
+          },
+          "overall_width": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.openings.overall-width"
+          },
+          "width_deduction": {
+            "type": "quantity",
+            "value": 0.1,
+            "unit": "m"
+          },
+          "key_1": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.openings.name"
+          },
+          "limits": {
+            "type": "table",
+            "value": [
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "*"
+                },
+                "minimum": {
+                  "type": "number",
+                  "value": 0.95
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "kl-window-width-stated",
+        "definitionId": "axioval:parity.public.openings.keyed-limit",
+        "name": {
+          "default": "kl-window-width-stated",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.window",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "quantity": {
+            "type": "string",
+            "value": "clear-width"
+          },
+          "quantity_property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.openings.door-common",
+            "property": "axioval:parity.public.openings.clear-width"
+          },
+          "clear_width_from_leaves": {
+            "type": "string",
+            "value": "passage"
+          },
+          "overall_width": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.openings.overall-width"
+          },
+          "width_deduction": {
+            "type": "quantity",
+            "value": 0.2,
+            "unit": "m"
+          },
+          "key_1": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.openings.name"
+          },
+          "limits": {
+            "type": "table",
+            "value": [
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "*"
+                },
+                "minimum": {
+                  "type": "number",
+                  "value": 0.9
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "kl-window-height",
+        "definitionId": "axioval:parity.public.openings.keyed-limit",
+        "name": {
+          "default": "kl-window-height",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.window",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "quantity": {
+            "type": "string",
+            "value": "clear-height"
+          },
+          "overall_height": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.openings.overall-height"
+          },
+          "lining_thickness": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.openings.lining",
+            "property": "axioval:parity.public.openings.lining-thickness"
+          },
+          "threshold_thickness": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.openings.lining",
+            "property": "axioval:parity.public.openings.threshold-thickness"
+          },
+          "key_1": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.openings.name"
+          },
+          "limits": {
+            "type": "table",
+            "value": [
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "*"
+                },
+                "minimum": {
+                  "type": "number",
+                  "value": 0.9
+                },
+                "maximum": {
+                  "type": "number",
+                  "value": 2.0
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "kl-window-height-defaults",
+        "definitionId": "axioval:parity.public.openings.keyed-limit",
+        "name": {
+          "default": "kl-window-height-defaults",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.window",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "quantity": {
+            "type": "string",
+            "value": "clear-height"
+          },
+          "overall_height": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.openings.overall-height"
+          },
+          "lining_thickness": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.openings.lining",
+            "property": "axioval:parity.public.openings.lining-thickness"
+          },
+          "door_type_defaults": {
+            "type": "table",
+            "value": [
+              {
+                "operation": {
+                  "type": "string",
+                  "value": "*"
+                },
+                "height_deduction": {
+                  "type": "quantity",
+                  "value": 0.05,
+                  "unit": "m"
+                }
+              }
+            ]
+          },
+          "key_1": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.openings.name"
+          },
+          "limits": {
+            "type": "table",
+            "value": [
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "*"
+                },
+                "minimum": {
+                  "type": "number",
+                  "value": 0.9
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "kl-window-glazing",
+        "definitionId": "axioval:parity.public.openings.keyed-limit",
+        "name": {
+          "default": "kl-window-glazing",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.window",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "quantity": {
+            "type": "string",
+            "value": "glazing-ratio"
+          },
+          "quantity_property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.openings.window-common",
+            "property": "axioval:parity.public.openings.glazing-fraction"
+          },
+          "door_type_defaults": {
+            "type": "table",
+            "value": [
+              {
+                "operation": {
+                  "type": "string",
+                  "value": "*"
+                },
+                "glazing_ratio": {
+                  "type": "number",
+                  "value": 0.6
+                }
+              }
+            ]
+          },
+          "key_1": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.openings.name"
+          },
+          "limits": {
+            "type": "table",
+            "value": [
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "*"
+                },
+                "minimum": {
+                  "type": "number",
+                  "value": 0.75
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "kl-window-glazing-default",
+        "definitionId": "axioval:parity.public.openings.keyed-limit",
+        "name": {
+          "default": "kl-window-glazing-default",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.window",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "quantity": {
+            "type": "string",
+            "value": "glazing-ratio"
+          },
+          "quantity_property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.openings.door-common",
+            "property": "axioval:parity.public.openings.glazing-fraction"
+          },
+          "door_type_defaults": {
+            "type": "table",
+            "value": [
+              {
+                "operation": {
+                  "type": "string",
+                  "value": "*"
+                },
+                "glazing_ratio": {
+                  "type": "number",
+                  "value": 0.6
+                }
+              }
+            ]
+          },
+          "key_1": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.openings.name"
+          },
+          "limits": {
+            "type": "table",
+            "value": [
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "*"
+                },
+                "minimum": {
+                  "type": "number",
+                  "value": 0.5
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "kl-window-threshold",
+        "definitionId": "axioval:parity.public.openings.keyed-limit",
+        "name": {
+          "default": "kl-window-threshold",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.window",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "quantity": {
+            "type": "string",
+            "value": "threshold-step"
+          },
+          "floor_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelFillsElement:backward",
+              "IfcRelVoidsElement:backward"
+            ]
+          },
+          "key_1": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.openings.name"
+          },
+          "limits": {
+            "type": "table",
+            "value": [
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "*"
+                },
+                "maximum": {
+                  "type": "number",
+                  "value": 0.02
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "kl-window-pair",
+        "definitionId": "axioval:parity.public.openings.keyed-limit",
+        "name": {
+          "default": "kl-window-pair",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.window",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "quantity": {
+            "type": "string",
+            "value": "sill-height"
+          },
+          "floor_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.adjacent-space"
+            ]
+          },
+          "key_1": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.openings.long-name"
+          },
+          "key_1_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.adjacent-space"
+            ]
+          },
+          "pair_key": {
+            "type": "string",
+            "value": "key_1"
+          },
+          "limits": {
+            "type": "table",
+            "value": [
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "*"
+                },
+                "other_side": {
+                  "type": "string",
+                  "value": "exterior"
+                },
+                "minimum": {
+                  "type": "number",
+                  "value": 0.9
+                }
+              },
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "*"
+                },
+                "minimum": {
+                  "type": "number",
+                  "value": 0.5
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "kl-wall-pair",
+        "definitionId": "axioval:parity.public.openings.keyed-limit",
+        "name": {
+          "default": "kl-wall-pair",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "quantity": {
+            "type": "string",
+            "value": "plan-area"
+          },
+          "key_1": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.openings.long-name"
+          },
+          "key_1_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.adjacent-space"
+            ]
+          },
+          "pair_key": {
+            "type": "string",
+            "value": "key_1"
+          },
+          "limits": {
+            "type": "table",
+            "value": [
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "*"
+                },
+                "maximum": {
+                  "type": "number",
+                  "value": 5.0
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "kl-no-row",
+        "definitionId": "axioval:parity.public.openings.keyed-limit",
+        "name": {
+          "default": "kl-no-row",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.slab",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "quantity": {
+            "type": "string",
+            "value": "plan-area"
+          },
+          "key_1": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.openings.object-type"
+          },
+          "limits": {
+            "type": "table",
+            "value": [
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "nothing-matches"
+                },
+                "maximum": {
+                  "type": "number",
+                  "value": 5.0
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "kl-bad",
+        "definitionId": "axioval:parity.public.openings.keyed-limit",
+        "name": {
+          "default": "kl-bad",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.slab",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "quantity": {
+            "type": "string",
+            "value": "sill-height"
+          },
+          "key_1": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.openings.name"
+          },
+          "limits": {
+            "type": "table",
+            "value": [
+              {
+                "key_1": {
+                  "type": "string",
+                  "value": "*"
+                },
+                "maximum": {
+                  "type": "number",
+                  "value": 5.0
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "ds-windows-into",
+        "definitionId": "axioval:parity.public.openings.door-swing",
+        "name": {
+          "default": "ds-windows-into",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.window",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "space_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.adjacent-space"
+            ]
+          },
+          "swing_into": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.openings.space",
+              "includeSubtypes": true
+            }
+          }
+        }
+      },
+      {
+        "id": "ds-windows-not-into",
+        "definitionId": "axioval:parity.public.openings.door-swing",
+        "name": {
+          "default": "ds-windows-not-into",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.window",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "space_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.adjacent-space"
+            ]
+          },
+          "swing_not_into": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.openings.space",
+              "includeSubtypes": true
+            }
+          }
+        }
+      },
+      {
+        "id": "ds-walls-both",
+        "definitionId": "axioval:parity.public.openings.door-swing",
+        "name": {
+          "default": "ds-walls-both",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "space_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.adjacent-space"
+            ]
+          },
+          "swing_into": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.openings.space",
+              "includeSubtypes": true
+            }
+          },
+          "swing_not_into": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.openings.space",
+              "includeSubtypes": true
+            }
+          }
+        }
+      },
+      {
+        "id": "ds-bad",
+        "definitionId": "axioval:parity.public.openings.door-swing",
+        "name": {
+          "default": "ds-bad",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "space_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.adjacent-space"
+            ]
+          }
+        }
+      },
+      {
+        "id": "os-windows",
+        "definitionId": "axioval:parity.public.openings.opening-spaces",
+        "name": {
+          "default": "os-windows",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.window",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "host_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.openings.wall",
+              "includeSubtypes": true
+            }
+          },
+          "external_property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.openings.wall-common",
+            "property": "axioval:parity.public.openings.is-external"
+          },
+          "space_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.adjacent-space"
+            ]
+          },
+          "host_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelFillsElement:backward",
+              "IfcRelVoidsElement:backward"
+            ]
+          }
+        }
+      },
+      {
+        "id": "os-openings",
+        "definitionId": "axioval:parity.public.openings.opening-spaces",
+        "name": {
+          "default": "os-openings",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.opening",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "host_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.openings.wall",
+              "includeSubtypes": true
+            }
+          },
+          "external_property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.openings.wall-common",
+            "property": "axioval:parity.public.openings.is-external"
+          },
+          "space_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.adjacent-space"
+            ]
+          },
+          "host_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelVoidsElement:backward"
+            ]
+          }
+        }
+      },
+      {
+        "id": "os-stated",
+        "definitionId": "axioval:parity.public.openings.opening-spaces",
+        "name": {
+          "default": "os-stated",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.window",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "host_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.openings.wall",
+              "includeSubtypes": true
+            }
+          },
+          "external_property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.openings.wall-common",
+            "property": "axioval:parity.public.openings.is-external"
+          },
+          "space_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelSpaceBoundary:backward"
+            ]
+          },
+          "host_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelFillsElement:backward",
+              "IfcRelVoidsElement:backward"
+            ]
+          },
+          "space_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.openings.space",
+              "includeSubtypes": true
+            }
+          }
+        }
+      },
+      {
+        "id": "os-walls",
+        "definitionId": "axioval:parity.public.openings.opening-spaces",
+        "name": {
+          "default": "os-walls",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.wall",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "host_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.openings.wall",
+              "includeSubtypes": true
+            }
+          },
+          "external_property": {
+            "type": "propertyReference",
+            "propertySet": "axioval:parity.public.openings.wall-common",
+            "property": "axioval:parity.public.openings.is-external"
+          },
+          "space_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.adjacent-space"
+            ]
+          },
+          "host_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelConnectsPathElements:either"
+            ]
+          },
+          "space_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.openings.space",
+              "includeSubtypes": true
+            }
+          }
+        }
+      },
+      {
+        "id": "sc-required",
+        "definitionId": "axioval:parity.public.openings.space-connection",
+        "name": {
+          "default": "sc-required",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "access_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.adjacent-space"
+            ]
+          },
+          "door_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.openings.door",
+              "includeSubtypes": true
+            }
+          },
+          "opening_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.openings.window",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.openings.opening",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "connections": {
+            "type": "table",
+            "value": [
+              {
+                "label": {
+                  "type": "string",
+                  "value": "rooms"
+                },
+                "from": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.openings.space",
+                    "includeSubtypes": true
+                  }
+                },
+                "to": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.openings.space",
+                    "includeSubtypes": true
+                  }
+                },
+                "access": {
+                  "type": "string",
+                  "value": "required"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "sc-forbidden",
+        "definitionId": "axioval:parity.public.openings.space-connection",
+        "name": {
+          "default": "sc-forbidden",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "access_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.adjacent-space"
+            ]
+          },
+          "door_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.openings.door",
+              "includeSubtypes": true
+            }
+          },
+          "opening_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.openings.window",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.openings.opening",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "connections": {
+            "type": "table",
+            "value": [
+              {
+                "from": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.openings.space",
+                    "includeSubtypes": true
+                  }
+                },
+                "to": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.openings.space",
+                    "includeSubtypes": true
+                  }
+                },
+                "access": {
+                  "type": "string",
+                  "value": "forbidden"
+                },
+                "access_type": {
+                  "type": "string",
+                  "value": "doors"
+                }
+              },
+              {
+                "label": {
+                  "type": "string",
+                  "value": "exit"
+                },
+                "from": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.openings.space",
+                    "includeSubtypes": true
+                  }
+                },
+                "exit": {
+                  "type": "string",
+                  "value": "required"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "sc-exit-forbidden",
+        "definitionId": "axioval:parity.public.openings.space-connection",
+        "name": {
+          "default": "sc-exit-forbidden",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "access_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.adjacent-space"
+            ]
+          },
+          "door_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.openings.door",
+              "includeSubtypes": true
+            }
+          },
+          "opening_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.openings.window",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.openings.opening",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "connections": {
+            "type": "table",
+            "value": [
+              {
+                "from": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.openings.space",
+                    "includeSubtypes": true
+                  }
+                },
+                "exit": {
+                  "type": "string",
+                  "value": "required"
+                },
+                "access_type": {
+                  "type": "string",
+                  "value": "openings"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "sc-stated",
+        "definitionId": "axioval:parity.public.openings.space-connection",
+        "name": {
+          "default": "sc-stated",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "access_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelSpaceBoundary:forward"
+            ]
+          },
+          "door_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.openings.door",
+              "includeSubtypes": true
+            }
+          },
+          "opening_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.openings.window",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.openings.opening",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "connections": {
+            "type": "table",
+            "value": [
+              {
+                "from": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.openings.space",
+                    "includeSubtypes": true
+                  }
+                },
+                "to": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.openings.space",
+                    "includeSubtypes": true
+                  }
+                },
+                "access": {
+                  "type": "string",
+                  "value": "required"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "ce-defaults",
+        "definitionId": "axioval:parity.public.openings.corridor-end-openings",
+        "name": {
+          "default": "ce-defaults",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "opening_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.adjacent-across:backward"
+            ]
+          },
+          "opening_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.openings.wall",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.openings.window",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.openings.door",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "ce-walls",
+        "definitionId": "axioval:parity.public.openings.corridor-end-openings",
+        "name": {
+          "default": "ce-walls",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.openings.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "opening_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.adjacent-across:backward"
+            ]
+          },
+          "opening_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.openings.wall",
+              "includeSubtypes": true
+            }
+          },
+          "wall_depth": {
+            "type": "number",
+            "value": 0.6
+          },
+          "facing": {
+            "type": "number",
+            "value": 0.05
+          }
+        }
+      }
+    ]
+  }
+}

@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 mod compare;
+mod compared;
 mod each;
 pub(crate) mod facets;
 mod groups;
@@ -890,6 +891,16 @@ fn bind(template: &Template, rule: &CompiledRule) -> Result<Bound, Unavailable> 
     for each in &template.declaration {
         check(each, rule, template)?;
     }
+    // A judge checking its own declaration refuses it first, as the
+    // capability did, before any parameter is read as a constant.
+    for form in &template.forms {
+        match &form.decision {
+            Decision::Facets(names) => facets::check(rule, names)?,
+            Decision::Requirements(names) => requirements::bind(rule, names)?,
+            Decision::Compared(names) => compared::bind(rule, names)?,
+            _ => {}
+        }
+    }
     let mut constants = BTreeMap::new();
     for descriptor in &template.parameters {
         if let Some(constant) = constant(rule, descriptor)? {
@@ -920,12 +931,6 @@ fn bind(template: &Template, rule: &CompiledRule) -> Result<Bound, Unavailable> 
         .iter()
         .map(|step| bound(&step.expression, &constants))
         .collect();
-    if let Decision::Facets(names) = &form.decision {
-        facets::check(rule, names)?;
-    }
-    if let Decision::Requirements(names) = &form.decision {
-        requirements::bind(rule, names)?;
-    }
     let proportion = match &form.decision {
         Decision::Proportion(decided) => Some(proportion::parse(rule, &decided.parameters)?),
         _ => None,
@@ -2364,6 +2369,7 @@ fn run_apart(
         } => groups::consistent(plan, (key, value), consistent, context, rule),
         Decision::Facets(names) => facets::run(names, context, rule),
         Decision::Requirements(names) => requirements::run(names, context, rule),
+        Decision::Compared(names) => compared::run(names, context, rule),
         Decision::Conforms(conformance) => groups::conforms(plan, conformance, context, rule),
         Decision::Proportion(decided) if decided.groups.is_some() => {
             let groups = decided.groups.as_ref()?;
@@ -2719,6 +2725,7 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
             | Decision::Conforms(_)
             | Decision::Facets(_)
             | Decision::Requirements(_)
+            | Decision::Compared(_)
     ) {
         return Err(ForkError::Inexpressible(
             "an expression rule judges each object on its own, not against the values of its group"

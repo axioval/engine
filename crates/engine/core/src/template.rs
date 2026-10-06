@@ -744,6 +744,10 @@ pub enum Decision {
     /// not carry, and the values they may hold, one finding per failing
     /// row.
     Requirements(Box<RequirementParameters>),
+    /// A property of the candidates each checked object reaches compared
+    /// with a target of the checked object ([`ComparedParameters`]): each
+    /// candidate, at least one, their count or their sum.
+    Compared(Box<ComparedParameters>),
     /// The anchor's members ([`Form::members`]) read and judged one by
     /// one, against their neighbours, a reference prevailing among them,
     /// and their own nested members ([`Each`]). Findings are on the
@@ -1130,6 +1134,53 @@ pub struct RequirementParameters {
     pub volume_property: &'static str,
     pub group_by_value: &'static str,
     pub category_property: &'static str,
+}
+
+/// What [`Decision::Compared`] reads of the rule.
+///
+/// The candidates are the objects `compared_selector` picks that
+/// `component_mode` relates to the checked object: itself (`checked`), the
+/// members of a group it shares (`shared`, along the rule's
+/// `relationship`), the objects the rule's traversal reaches (`related`),
+/// or those sharing its nearest `container_selector` container
+/// (`same_space`, `same_building`; across sources by
+/// `container_relationship` and `level_property`). Their
+/// `compared_property` stands in `operator` to exactly one target: a
+/// property of the checked object (`target_property`), a constant
+/// (`target_number`, `target_quantity`, `target_text`, `target_boolean`,
+/// `target_date`, `target_date_time`), a text list (`target_texts`) or a
+/// range of `minimum_*` and `maximum_*` bounds; the target scaled by
+/// `factor`, under the rule's tolerance and `precision`, text folded unless
+/// `case_sensitive`. `quantifier` judges `each` candidate, `at_least_one`,
+/// their `count` or their `sum`. Binding refuses a declaration in the
+/// capability's words after `refusal` ([`Refusals::Worded`]); findings are
+/// prefixed by the checked object's category where `category_property`
+/// names one.
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ComparedParameters {
+    pub compared_selector: &'static str,
+    pub compared_property: &'static str,
+    pub operator: &'static str,
+    pub factor: &'static str,
+    pub quantifier: &'static str,
+    pub component_mode: &'static str,
+    pub container_selector: &'static str,
+    pub container_relationship: &'static str,
+    pub level_property: &'static str,
+    pub case_sensitive: &'static str,
+    pub category_property: &'static str,
+    pub target_property: &'static str,
+    pub target_number: &'static str,
+    pub target_quantity: &'static str,
+    pub target_text: &'static str,
+    pub target_texts: &'static str,
+    pub target_boolean: &'static str,
+    pub target_date: &'static str,
+    pub target_date_time: &'static str,
+    pub minimum: &'static str,
+    pub maximum: &'static str,
+    pub refusal: &'static str,
 }
 
 /// The parameters stating a [`Proportion`].
@@ -1733,6 +1784,15 @@ impl Decision {
                     requirements.requirements
                 ),
                 label: Some("the requirements table holds".into()),
+            },
+            // Candidates reached by modes no aggregate states (shared
+            // groups, nearest containers): the catalogue names the test.
+            Self::Compared(compared) => Expression::Derived {
+                name: format!(
+                    "`{}` of the candidates stands in `{}` to the target",
+                    compared.compared_property, compared.operator
+                ),
+                label: Some("the candidates satisfy the comparison".into()),
             },
             // The selector holds of the checked object: an expression has
             // no operator applying a selector to the object in scope, so the

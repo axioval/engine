@@ -344,6 +344,20 @@ row's findings of one value merged with `group_by_value`. Divisors are
 measured through the plan-area readers every area capability shares. Its
 expression form names the test; a rule is never forked from it.
 
+`Decision::Compared` is the candidate comparison judge
+(`ComparedParameters`): a property of the candidates each checked object
+reaches (itself, the members of a group it shares, the objects the rule's
+traversal reaches, or those sharing its nearest container, across sources
+by level) compared with one target of the checked object, a property, a
+constant, a text list or a range, scaled by a factor, under the rule's
+tolerance and precision, through the one comparison; each candidate, at
+least one, their count or their sum. Binding refuses a declaration in the
+capability's words after `refusal` (`Refusals::Worded`). A judge checking
+its own declaration (`Facets`, `Requirements`, `Compared`) is bound before
+any parameter is read as a constant, so its refusal comes first, as the
+capability's did. Its expression form names the test; a rule is never
+forked from it.
+
 `Decision::Each` judges an anchor's members one by one (`Each`), with
 three relations no aggregate states:
 

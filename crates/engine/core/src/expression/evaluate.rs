@@ -494,6 +494,25 @@ pub trait ExpressionContext {
         Err("aggregates cannot be listed here".into())
     }
 
+    /// [`Self::members`] for an aggregate that a member whose value cannot
+    /// be read leaves unreadable as a whole (a sum, a minimum, a maximum, a
+    /// mean): a context may stop listing after the first such member, which
+    /// decides the aggregate as listing every member would. By default
+    /// every member is listed.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::members`].
+    fn members_until_unreadable(
+        &mut self,
+        over: &AggregateSource,
+        filter: Option<&Selector>,
+        value: Option<&Expression>,
+        path: &str,
+    ) -> Result<Vec<Member>, String> {
+        self.members(over, filter, value, path)
+    }
+
     /// The types the compiled ruleset declares, which type a sum over no
     /// member as the compiler did; none outside a run.
     fn declared_types(&self) -> Option<&super::DeclaredTypes> {
@@ -987,9 +1006,23 @@ impl Evaluator<'_> {
                 ..
             } => {
                 let value_path = format!("{path}.aggregate.value");
-                let members =
-                    self.context
-                        .members(over, filter.as_deref(), value.as_deref(), &value_path);
+                // A numeric aggregate is unreadable at its first unreadable
+                // member, so the members after it need not be read.
+                let members = match function {
+                    AggregateFunction::Sum
+                    | AggregateFunction::Min
+                    | AggregateFunction::Max
+                    | AggregateFunction::Average => self.context.members_until_unreadable(
+                        over,
+                        filter.as_deref(),
+                        value.as_deref(),
+                        &value_path,
+                    ),
+                    _ => {
+                        self.context
+                            .members(over, filter.as_deref(), value.as_deref(), &value_path)
+                    }
+                };
                 let mut evidence = self.context.listing_evidence();
                 evidence.extend(
                     members

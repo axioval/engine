@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use axioval_engine::expression::{
     EvaluationBudget, ExpressionContext, Interval, Leaf, Member, RuleRead, Unit, Value,
-    derived_value, evaluate,
+    derived_value, evaluate, evaluate_untraced,
 };
 use axioval_engine::{
     MeasuredMember, MeasuredRead, Measurement, MemberValue, ObjectVerdict, RuleContext,
@@ -385,7 +385,7 @@ impl<'a> ObjectLeaves<'a> {
                 None => (Ok(Value::Null), Vec::new()),
                 Some(value) => {
                     let mut leaves = self.measured_member(member);
-                    let evaluation = evaluate(value, path, &mut leaves);
+                    let evaluation = evaluate_untraced(value, path, &mut leaves);
                     self.adopt_reason(&leaves, &evaluation.outcome);
                     (
                         evaluation.outcome,
@@ -686,6 +686,52 @@ impl ExpressionContext for ObjectLeaves<'_> {
         value: Option<&Expression>,
         path: &str,
     ) -> Result<Vec<Member>, String> {
+        self.listed_members(over, filter, value, path, false)
+    }
+
+    fn members_until_unreadable(
+        &mut self,
+        over: &AggregateSource,
+        filter: Option<&Selector>,
+        value: Option<&Expression>,
+        path: &str,
+    ) -> Result<Vec<Member>, String> {
+        self.listed_members(over, filter, value, path, true)
+    }
+
+    fn declared_types(&self) -> Option<&axioval_engine::expression::DeclaredTypes> {
+        self.context
+            .services
+            .get::<std::sync::Arc<axioval_engine::expression::DeclaredTypes>>()
+            .map(AsRef::as_ref)
+    }
+
+    fn listing_evidence(&mut self) -> Vec<Evidence> {
+        std::mem::take(&mut self.listed)
+    }
+
+    fn lookup(&mut self, table: &str, keys: &BTreeMap<String, Value>, column: &str) -> Leaf {
+        let Some(ParameterValue::Table { value: rows }) =
+            self.parameters.and_then(|parameters| parameters.get(table))
+        else {
+            return Leaf::unreadable(format!("the rule has no table `{table}`"));
+        };
+        lookup(rows, keys, column).map_or_else(Leaf::unreadable, Leaf::stated)
+    }
+}
+
+impl ObjectLeaves<'_> {
+    /// The members `over` lists, each with `value` evaluated with it in
+    /// scope; with `until_unreadable`, none after the first whose value
+    /// cannot be read.
+    fn listed_members(
+        &mut self,
+        over: &AggregateSource,
+        filter: Option<&Selector>,
+        value: Option<&Expression>,
+        path: &str,
+        until_unreadable: bool,
+    ) -> Result<Vec<Member>, String> {
         if let AggregateSource::Measured { name } = over {
             return self.measured_members(name, value, path);
         }
@@ -713,33 +759,17 @@ impl ExpressionContext for ObjectLeaves<'_> {
                     evaluation.outcome
                 }
             };
+            let unreadable = value.is_err();
             members.push(Member {
                 certain,
                 value,
                 evidence,
             });
+            if until_unreadable && unreadable {
+                break;
+            }
         }
         Ok(members)
-    }
-
-    fn declared_types(&self) -> Option<&axioval_engine::expression::DeclaredTypes> {
-        self.context
-            .services
-            .get::<std::sync::Arc<axioval_engine::expression::DeclaredTypes>>()
-            .map(AsRef::as_ref)
-    }
-
-    fn listing_evidence(&mut self) -> Vec<Evidence> {
-        std::mem::take(&mut self.listed)
-    }
-
-    fn lookup(&mut self, table: &str, keys: &BTreeMap<String, Value>, column: &str) -> Leaf {
-        let Some(ParameterValue::Table { value: rows }) =
-            self.parameters.and_then(|parameters| parameters.get(table))
-        else {
-            return Leaf::unreadable(format!("the rule has no table `{table}`"));
-        };
-        lookup(rows, keys, column).map_or_else(Leaf::unreadable, Leaf::stated)
     }
 }
 

@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 mod compare;
+mod groups;
 mod scopes;
 
 use axioval_engine::expression::{
@@ -361,6 +362,20 @@ fn check(check: &Check, rule: &CompiledRule, template: &Template) -> Result<(), 
                 Ok(())
             }
         }
+        Check::Tolerance => Parameters(rule).tolerance().map(|_| ()),
+        Check::Required { parameter } => {
+            let descriptor = template
+                .parameters
+                .iter()
+                .find(|descriptor| descriptor.name == *parameter);
+            match descriptor
+                .map(|descriptor| constant(rule, descriptor))
+                .transpose()?
+            {
+                Some(Some(_)) => Ok(()),
+                _ => Err(invalid(format!("parameter `{parameter}` is required"))),
+            }
+        }
         Check::Path { parameter } => Parameters(rule)
             .strings(parameter)?
             .map(Traversal::path)
@@ -651,7 +666,7 @@ fn bind(template: &Template, rule: &CompiledRule) -> Result<Bound, Unavailable> 
         .collect();
     let comparison = match &form.decision {
         Decision::Compare { comparison, .. } => Some(compare::bind(rule, comparison)?),
-        Decision::Within { .. } => None,
+        Decision::Within { .. } | Decision::Unique { .. } => None,
     };
     Ok(Bound {
         form: index,
@@ -691,7 +706,7 @@ fn effective(plan: &Plan<'_>) -> Decision {
                     .collect(),
             }
         }
-        decision @ Decision::Compare { .. } => decision.clone(),
+        decision @ (Decision::Compare { .. } | Decision::Unique { .. }) => decision.clone(),
     }
 }
 
@@ -964,10 +979,13 @@ fn placeholder(plan: &Plan<'_>, read: &Read, key: &str) -> Option<String> {
         }
     }
     if let ("tolerance", "suffix") = (name, format) {
+        // A comparison's declared tolerance, or the one a group decision
+        // read.
         return plan
             .comparison
             .as_ref()
-            .map(compare::Bound::tolerance_suffix);
+            .map(compare::Bound::tolerance_suffix)
+            .or_else(|| read.named.get("tolerance:suffix").cloned());
     }
     match format {
         // The bound as the judge words it, its number as declared.
@@ -1302,7 +1320,7 @@ fn read_values(
 /// Whether `decision` judges the value `name` as the source states it,
 /// rather than as the evaluator reads it.
 fn judges_stated(decision: &Decision, name: &str) -> bool {
-    matches!(decision, Decision::Compare { value, .. } if *value == name)
+    matches!(decision, Decision::Compare { value, .. } | Decision::Unique { value, .. } if *value == name)
 }
 
 /// Reads the plan's values for `object` and decides.
@@ -1474,6 +1492,9 @@ pub(crate) fn run(
             NotEvaluatedReason::MissingService,
             services.message,
         );
+    }
+    if let Decision::Unique { value, unique } = &plan.form.decision {
+        return groups::run(&plan, value, unique, context, rule);
     }
     if let Some(scopes) = &plan.form.scope {
         return scopes::run(&plan, &effective(&plan), scopes, context, rule);
@@ -1743,6 +1764,12 @@ pub fn fork(capability: &dyn RuleCapability, rule: &CompiledRule) -> Result<Fork
         form: &template.forms[binding.form],
         bound: Arc::new(binding),
     };
+    if matches!(plan.form.decision, Decision::Unique { .. }) {
+        return Err(ForkError::Inexpressible(
+            "an expression rule judges each object on its own, not against the values of its group"
+                .to_owned(),
+        ));
+    }
     if plan.form.scope.is_some() {
         return Err(ForkError::Inexpressible(
             "an expression rule judges objects, not a source or the project as a whole".to_owned(),

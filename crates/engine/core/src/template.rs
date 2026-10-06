@@ -157,6 +157,13 @@ pub enum Check {
     /// (the step grammar every path shares), refused as the path reader
     /// words it.
     Path { parameter: &'static str },
+    /// The rule's tolerance parameters (`tolerance`, `relative_tolerance`,
+    /// `decimals`) are valid together, refused as the tolerance reader
+    /// words it.
+    Tolerance,
+    /// The parameter is stated, and of its descriptor's kind: otherwise
+    /// `` parameter `<parameter>` is required `` or the reader's refusal.
+    Required { parameter: &'static str },
 }
 
 /// The host services a template's values need, and the message leaving
@@ -465,6 +472,34 @@ pub enum Decision {
         value: &'static str,
         comparison: Comparison,
     },
+    /// A group decision: the stated value `value` of each selected object
+    /// compared with those of the other objects of its group, a finding on
+    /// every object sharing it with another, relating them ([`Unique`]).
+    Unique { value: &'static str, unique: Unique },
+}
+
+/// What [`Decision::Unique`] reads of the rule.
+///
+/// Objects are grouped per source, or across the project where the
+/// boolean parameter `across` is true, and narrowed by the rule's
+/// traversal to the objects reaching the same related objects (the spaces
+/// of one storey). Within a group, text is compared trimmed (`trim`) and
+/// folded (unless `case_sensitive`), and, where the rule declares a
+/// tolerance (`tolerance`, `relative_tolerance`, `decimals`), numbers and
+/// quantities of one dimension pair by pair within it, or by their
+/// rounding. Each object sharing its value gets one finding relating the
+/// others (`{others}` their count, `{value:stated}` the value,
+/// `{tolerance:suffix}` the tolerance). A value the source states absent,
+/// `null` or blank is a finding worded `missing` where the boolean
+/// parameter `require` holds, and is not compared otherwise.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Unique {
+    pub across: &'static str,
+    pub trim: &'static str,
+    pub case_sensitive: &'static str,
+    pub require: &'static str,
+    pub missing: &'static str,
 }
 
 /// A comparison a rule states as an operator word and at most one target
@@ -794,6 +829,49 @@ impl Decision {
                 value: subject,
                 comparison,
             } => comparison.expression(&value(subject)),
+            Self::Unique { value: subject, .. } => {
+                // No other object the rule selects in the scope states the
+                // checked object's value: at most one, itself, does.
+                let member = value(subject);
+                let own = match member.clone() {
+                    Expression::Property {
+                        property_set,
+                        property,
+                        label,
+                        ..
+                    } => Expression::Property {
+                        property_set,
+                        property,
+                        of: Some(axioval_ir::contract::PropertyScope::Subject),
+                        label,
+                    },
+                    other => other,
+                };
+                Expression::Compare {
+                    operator: ExpressionComparison::LessThanOrEquals,
+                    left: boxed(Expression::Aggregate {
+                        function: axioval_ir::contract::AggregateFunction::Count,
+                        over: Scopes::source(),
+                        filter: Some(Box::new(axioval_ir::contract::Selector::Expression {
+                            expression: boxed(Expression::Compare {
+                                operator: ExpressionComparison::Equals,
+                                left: boxed(member),
+                                right: boxed(own),
+                                case_sensitive: false,
+                                label: None,
+                            }),
+                        })),
+                        value: None,
+                        label: Some("objects stating the same value".into()),
+                    }),
+                    right: boxed(Expression::Literal {
+                        value: ScalarValue::Integer { value: 1 },
+                        label: None,
+                    }),
+                    case_sensitive: true,
+                    label: None,
+                }
+            }
         }
     }
 }

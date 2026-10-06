@@ -49,7 +49,7 @@ rules crate (`body_extent/template.rs`):
 | `grades` | Whether findings are graded (the descriptor's `grades_deviation`): each states how far its value misses the bound it fails, measured from the declared bound, never the widened one, for the runtime's severity bands. |
 | `name` | How rule-scoped messages name the capability (`body-extent: …`). |
 | `defaults` | Values optional parameters take when unstated (`tolerance` 0 m). |
-| `declaration` | `Check`s over the rule's parameters, in order: `choice` (a string among options), `length` (a non-negative length), `count` (an integer of at least zero, stated where the descriptor requires it), `kind` (a parameter of its descriptor's kind, placed where the capability read it so refusals keep their order), `nonNegative` (numbers of at least zero), `traversal` (a valid `relationship` or `path`, declared only with one of the named parameters, or anywhere where it names none), `exclusive`, `anyOf`, `requires`, `ordered` (numbers, integers or quantities, as the descriptor types them), `disciplines` (a non-empty list of valid disciplines). The first failing check leaves the rule not evaluated as an invalid declaration, worded as the capability worded it. |
+| `declaration` | `Check`s over the rule's parameters, in order: `choice` (a string among options), `length` (a non-negative length), `count` (an integer of at least zero, stated where the descriptor requires it), `kind` (a parameter of its descriptor's kind, placed where the capability read it so refusals keep their order), `nonNegative` (numbers of at least zero), `traversal` (a valid `relationship` or `path`, declared only with one of the named parameters, or anywhere where it names none), `exclusive`, `anyOf`, `requires`, `ordered` (numbers, integers or quantities, as the descriptor types them), `disciplines` (a non-empty list of valid disciplines), `path` (a valid relationship path), `tolerance` (the rule's tolerance parameters valid together), `required` (a parameter stated, of its kind). The first failing check leaves the rule not evaluated as an invalid declaration, worded as the capability worded it. |
 | `services` | The host services the values need (`Service`: `object-frame`, `vertical-extent`, `triangle-count`), and the message leaving the whole rule open without them, before anything is selected. |
 | `texts` | Named message parts, optionally conditional: `Condition::Positive` (a parameter above zero), `Condition::Inexact` (a value read from evidence that is not exact, such as a count of a tessellation), `Condition::Equals` (a string parameter or its default is a value), `Condition::Zero` (a value's lower end is zero: nothing surely counted). Several texts may share a name, each under its own condition: the first that holds is rendered (`plan area` or `facade area` by `measure`). |
 | `forms` | The compositions. The first form whose `when` parameters are all stated applies. |
@@ -156,6 +156,25 @@ states, through the one comparison: an absence, `null` and a value of
 another kind fail every operator but a presence test (which reads blank
 text as undefined), a quantity against a unit-less target (or the
 reverse) is not evaluated.
+
+`Decision::Unique` is the generic group decision: each selected object's
+stated value `value` compared with those of the other objects of its
+group, a finding on every object sharing its value with another, relating
+them. Groups are each source, or the project where the boolean parameter
+`Unique::across` holds, narrowed by the rule's traversal to the objects
+reaching the same related objects (`support::scope_key`: the spaces of
+one storey). Text is compared trimmed (`Unique::trim`) and folded unless
+`Unique::case_sensitive` holds (`support::value_key`); where the rule
+declares a tolerance (`Check::Tolerance`), numbers and quantities of one
+dimension are compared pair by pair within it, never transitively, or by
+their rounding to `decimals`. A value stated absent, `null` or blank is a
+finding worded `Unique::missing` where the boolean parameter
+`Unique::require` holds, and is left out otherwise; one that cannot be
+read leaves its object open as the property resolution refuses it. Its
+finding reads `{others}` (how many objects share the value),
+`{value:stated}` and `{tolerance:suffix}`. Its expression form, for the
+catalogue, is that at most one object of the scope's `selection` states
+the checked object's value; a rule is never forked from it.
 
 ### `object-count`
 
@@ -453,7 +472,7 @@ addition data the runner interprets, never code per capability:
 
 - **Decisions.** `Decision` is an enum: add a variant for a judge a
   family shares (a truth `Requirement` expression over the values, worded
-  by which labelled operand failed; counts; consistency), with its
+  by which labelled operand failed; consistency; `Unique` is built), with its
   expression form for expand and fork. Decide every comparison through
   `axioval_engine::comparison`, the one implementation the evaluator, the
   selectors, the judges and `Within` share (#287); `Compare` is the

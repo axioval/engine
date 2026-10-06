@@ -1,0 +1,81 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:space",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "bb70012e-2e64-57b4-9468-b339d890521d",
+      "message": "unallocated_area: 100.000% of the storey's gross floor area (0.900 m2 of 0.900 m2) belongs to no space; required at most 5%",
+      "object_id": {
+        "local_id": "#38",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#45",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "valid-spaces",
+      "severity": "warning"
+    }
+  ],
+  "not_evaluated": [],
+  "rules": [
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "bounded-spaces",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "bounded-spaces-on-planes",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "guarded-slabs",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "guarded-slabs-by-role",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "valid-spaces",
+      "status": "failed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "valid-spaces-selected",
+      "status": "nothing_selected"
+    }
+  ]
+}

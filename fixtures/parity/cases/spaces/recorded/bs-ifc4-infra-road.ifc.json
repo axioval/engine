@@ -1,0 +1,61 @@
+{
+  "findings": [],
+  "not_evaluated": [
+    {
+      "message": "guard measurement is unavailable",
+      "object_id": null,
+      "reason": "incomplete_evidence",
+      "rule_id": "guarded-slabs"
+    },
+    {
+      "message": "guard measurement is unavailable",
+      "object_id": null,
+      "reason": "incomplete_evidence",
+      "rule_id": "guarded-slabs-by-role"
+    }
+  ],
+  "rules": [
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "bounded-spaces",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "bounded-spaces-on-planes",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 32,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "guarded-slabs",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 32,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "guarded-slabs-by-role",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "valid-spaces",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "valid-spaces-selected",
+      "status": "nothing_selected"
+    }
+  ]
+}

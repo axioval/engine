@@ -1,0 +1,562 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "axiolid:boundary-coverage:ifc-step:bs-ifc4x3-building-architecture.ifc/#135",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "5482d540-36bb-55e7-8d51-04d73277ceec",
+      "message": "declared boundaries cover 0% of the between 35.919971 m² and 35.920029 m² surface, leaving between 35.919971 m² and 35.920029 m² uncovered; at least 90% required",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "bounded-spaces",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "axiolid:boundary-coverage:ifc-step:bs-ifc4x3-building-architecture.ifc/#135",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "6678e4db-4d8f-5d15-95ed-2f2c69f91a40",
+      "message": "declared boundaries leave between 35.919971 m² and 35.920029 m² of the between 35.919971 m² and 35.920029 m² surface uncovered; at most 1 m² allowed",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "bounded-spaces",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "axiolid:boundary-coverage:ifc-step:bs-ifc4x3-building-architecture.ifc/#85",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "6a497c6a-8297-5dc0-9a0e-777a9c454b86",
+      "message": "declared boundaries cover 0% of the between 77.469939 m² and 77.470061 m² surface, leaving between 77.469939 m² and 77.470061 m² uncovered; at least 90% required",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "bounded-spaces",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "axiolid:boundary-coverage:ifc-step:bs-ifc4x3-building-architecture.ifc/#85",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "12318ea8-a1ed-536b-a242-d42d1932bcd3",
+      "message": "declared boundaries leave between 77.469939 m² and 77.470061 m² of the between 77.469939 m² and 77.470061 m² surface uncovered; at most 1 m² allowed",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "bounded-spaces",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "axiolid:boundary-coverage:ifc-step:bs-ifc4x3-building-architecture.ifc/#135",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "5527c19d-9cc4-598b-8de4-55de7b3874fa",
+      "message": "declared boundaries cover 0% of the between 35.919971 m² and 35.920029 m² surface, leaving between 35.919971 m² and 35.920029 m² uncovered; at least 50% required",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "bounded-spaces-on-planes",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": false,
+          "locator": "axiolid:boundary-coverage:ifc-step:bs-ifc4x3-building-architecture.ifc/#85",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "3e37b6f6-1292-5fcb-bdc2-b2504e01623c",
+      "message": "declared boundaries cover 0% of the between 77.469939 m² and 77.470061 m² surface, leaving between 77.469939 m² and 77.470061 m² uncovered; at least 50% required",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "bounded-spaces-on-planes",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:space",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "a074325f-e207-5942-8ae7-098127760277",
+      "message": "insufficient_height: clear height 2.200 below required 2.400",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "valid-spaces",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:space",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "d5e18a5b-fdae-5c59-adf0-211ba382cd6f",
+      "message": "insufficient_height: clear height 2.200 below required 2.400",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "valid-spaces",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:space",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "57a57c9f-b6d1-59e5-9d7c-eaa23c42b09d",
+      "message": "insufficient_height: clear height 2.200 below required 2.500",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "valid-spaces-selected",
+      "severity": "warning"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:space",
+          "source": {
+            "document": "bs-ifc4x3-building-architecture.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "25d9a766-3f08-5ac6-9d83-b3bd411c4ce0",
+      "message": "insufficient_height: clear height 2.200 below required 2.500",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "rule_id": "valid-spaces-selected",
+      "severity": "warning"
+    }
+  ],
+  "not_evaluated": [
+    {
+      "message": "declared boundaries overlap over between 0 m² and 0.000029 m² of the surface, which straddles the allowed 0 m²",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "bounded-spaces-on-planes"
+    },
+    {
+      "message": "declared boundaries overlap over between 0 m² and 0.000061 m² of the surface, which straddles the allowed 0 m²",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "bounded-spaces-on-planes"
+    },
+    {
+      "message": "guard measurement is unavailable",
+      "object_id": null,
+      "reason": "incomplete_evidence",
+      "rule_id": "guarded-slabs"
+    },
+    {
+      "message": "guard measurement is unavailable",
+      "object_id": null,
+      "reason": "incomplete_evidence",
+      "rule_id": "guarded-slabs-by-role"
+    },
+    {
+      "message": "space unallocated regions is unavailable: 1 unmeasured object(s) could change it (ifc-step:bs-ifc4x3-building-architecture.ifc/#220)",
+      "object_id": null,
+      "reason": "incomplete_evidence",
+      "rule_id": "valid-spaces"
+    },
+    {
+      "message": "space boundary gaps is unavailable: 1 unmeasured object(s) could change it (ifc-step:bs-ifc4x3-building-architecture.ifc/#220)",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "valid-spaces"
+    },
+    {
+      "message": "space measurement is unavailable for the requested aspect",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "valid-spaces"
+    },
+    {
+      "message": "space overlaps is unavailable: 1 unmeasured object(s) could change it (ifc-step:bs-ifc4x3-building-architecture.ifc/#220)",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "valid-spaces"
+    },
+    {
+      "message": "space quantities must be finite and non-negative",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "valid-spaces"
+    },
+    {
+      "message": "space quantities must be finite and non-negative",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "valid-spaces"
+    },
+    {
+      "message": "space boundary gaps is unavailable: 1 unmeasured object(s) could change it (ifc-step:bs-ifc4x3-building-architecture.ifc/#220)",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "valid-spaces"
+    },
+    {
+      "message": "space measurement is unavailable for the requested aspect",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "valid-spaces"
+    },
+    {
+      "message": "space overlaps is unavailable: 1 unmeasured object(s) could change it (ifc-step:bs-ifc4x3-building-architecture.ifc/#220)",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "valid-spaces"
+    },
+    {
+      "message": "space quantities must be finite and non-negative",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "valid-spaces"
+    },
+    {
+      "message": "space quantities must be finite and non-negative",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "valid-spaces"
+    },
+    {
+      "message": "space measurement is unavailable for the requested aspect",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "valid-spaces-selected"
+    },
+    {
+      "message": "space measurement is unavailable for the requested aspect",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "valid-spaces-selected"
+    },
+    {
+      "message": "space measurement is unavailable for the requested aspect",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "valid-spaces-selected"
+    },
+    {
+      "message": "space quantities must be finite and non-negative",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "valid-spaces-selected"
+    },
+    {
+      "message": "space quantities must be finite and non-negative",
+      "object_id": {
+        "local_id": "#135",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "valid-spaces-selected"
+    },
+    {
+      "message": "space measurement is unavailable for the requested aspect",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "valid-spaces-selected"
+    },
+    {
+      "message": "space measurement is unavailable for the requested aspect",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "valid-spaces-selected"
+    },
+    {
+      "message": "space measurement is unavailable for the requested aspect",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "valid-spaces-selected"
+    },
+    {
+      "message": "space quantities must be finite and non-negative",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "valid-spaces-selected"
+    },
+    {
+      "message": "space quantities must be finite and non-negative",
+      "object_id": {
+        "local_id": "#85",
+        "source": {
+          "document": "bs-ifc4x3-building-architecture.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "invalid_evidence",
+      "rule_id": "valid-spaces-selected"
+    }
+  ],
+  "rules": [
+    {
+      "checked": 2,
+      "failed": 2,
+      "not_evaluated": 0,
+      "rule_id": "bounded-spaces",
+      "status": "failed"
+    },
+    {
+      "checked": 2,
+      "failed": 2,
+      "not_evaluated": 2,
+      "rule_id": "bounded-spaces-on-planes",
+      "status": "failed"
+    },
+    {
+      "checked": 3,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "guarded-slabs",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 3,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "guarded-slabs-by-role",
+      "status": "not_evaluated"
+    },
+    {
+      "checked": 2,
+      "failed": 2,
+      "not_evaluated": 2,
+      "rule_id": "valid-spaces",
+      "status": "failed"
+    },
+    {
+      "checked": 2,
+      "failed": 2,
+      "not_evaluated": 2,
+      "rule_id": "valid-spaces-selected",
+      "status": "failed"
+    }
+  ]
+}

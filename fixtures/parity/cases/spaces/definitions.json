@@ -1,0 +1,523 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:parity.public.spaces.definitions",
+    "name": {
+      "default": "Public parity definitions, spaces",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "Terms for holding the guard and space capabilities to the outcomes recorded before they became templates.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "objectTypes": {
+    "axioval:parity.public.spaces.space": {
+      "id": "axioval:parity.public.spaces.space",
+      "name": {
+        "default": "space",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcSpace"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcSpace"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcSpace"
+        }
+      ]
+    },
+    "axioval:parity.public.spaces.storey": {
+      "id": "axioval:parity.public.spaces.storey",
+      "name": {
+        "default": "storey",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcBuildingStorey"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcBuildingStorey"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcBuildingStorey"
+        }
+      ]
+    },
+    "axioval:parity.public.spaces.slab": {
+      "id": "axioval:parity.public.spaces.slab",
+      "name": {
+        "default": "slab",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcSlab"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcSlab"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcSlab"
+        }
+      ]
+    },
+    "axioval:parity.public.spaces.roof": {
+      "id": "axioval:parity.public.spaces.roof",
+      "name": {
+        "default": "roof",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcRoof"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcRoof"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcRoof"
+        }
+      ]
+    },
+    "axioval:parity.public.spaces.wall": {
+      "id": "axioval:parity.public.spaces.wall",
+      "name": {
+        "default": "wall",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcWall"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcWall"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcWall"
+        }
+      ]
+    },
+    "axioval:parity.public.spaces.column": {
+      "id": "axioval:parity.public.spaces.column",
+      "name": {
+        "default": "column",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcColumn"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcColumn"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcColumn"
+        }
+      ]
+    },
+    "axioval:parity.public.spaces.beam": {
+      "id": "axioval:parity.public.spaces.beam",
+      "name": {
+        "default": "beam",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcBeam"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcBeam"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcBeam"
+        }
+      ]
+    },
+    "axioval:parity.public.spaces.railing": {
+      "id": "axioval:parity.public.spaces.railing",
+      "name": {
+        "default": "railing",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcRailing"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcRailing"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcRailing"
+        }
+      ]
+    },
+    "axioval:parity.public.spaces.furniture": {
+      "id": "axioval:parity.public.spaces.furniture",
+      "name": {
+        "default": "furniture",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcFurnishingElement"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcFurnishingElement"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcFurnishingElement"
+        }
+      ]
+    },
+    "axioval:parity.public.spaces.stair": {
+      "id": "axioval:parity.public.spaces.stair",
+      "name": {
+        "default": "stair",
+        "translations": {}
+      },
+      "externalNames": [
+        {
+          "typeSystem": "https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/TC1/HTML/",
+          "name": "IfcStair"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4",
+          "name": "IfcStair"
+        },
+        {
+          "typeSystem": "https://identifier.buildingsmart.org/uri/buildingsmart/ifc/4.3",
+          "name": "IfcStair"
+        }
+      ]
+    }
+  },
+  "properties": {},
+  "propertySets": {},
+  "definitions": {
+    "axioval:parity.public.spaces.horizontal-guard": {
+      "id": "axioval:parity.public.spaces.horizontal-guard",
+      "name": {
+        "default": "horizontal-guard",
+        "translations": {}
+      },
+      "capability": "axioval:capability.horizontal-guard",
+      "parameters": {
+        "minimum_barrier_height_metres": {
+          "id": "minimum_barrier_height_metres",
+          "name": {
+            "default": "minimum_barrier_height_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": true
+        },
+        "maximum_barrier_gap_metres": {
+          "id": "maximum_barrier_gap_metres",
+          "name": {
+            "default": "maximum_barrier_gap_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": true
+        },
+        "maximum_platform_gap_metres": {
+          "id": "maximum_platform_gap_metres",
+          "name": {
+            "default": "maximum_platform_gap_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": true
+        },
+        "maximum_landing_gap_metres": {
+          "id": "maximum_landing_gap_metres",
+          "name": {
+            "default": "maximum_landing_gap_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": true
+        },
+        "maximum_fall_height_metres": {
+          "id": "maximum_fall_height_metres",
+          "name": {
+            "default": "maximum_fall_height_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": true
+        },
+        "minimum_landing_width_metres": {
+          "id": "minimum_landing_width_metres",
+          "name": {
+            "default": "minimum_landing_width_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": true
+        },
+        "climbable_barrier_distance_metres": {
+          "id": "climbable_barrier_distance_metres",
+          "name": {
+            "default": "climbable_barrier_distance_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": true
+        },
+        "maximum_climbable_height_metres": {
+          "id": "maximum_climbable_height_metres",
+          "name": {
+            "default": "maximum_climbable_height_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": true
+        },
+        "minimum_climbable_side_length_metres": {
+          "id": "minimum_climbable_side_length_metres",
+          "name": {
+            "default": "minimum_climbable_side_length_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": true
+        },
+        "measure_barrier_from_curb": {
+          "id": "measure_barrier_from_curb",
+          "name": {
+            "default": "measure_barrier_from_curb",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": true
+        },
+        "barrier_selector": {
+          "id": "barrier_selector",
+          "name": {
+            "default": "barrier_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "landing_selector": {
+          "id": "landing_selector",
+          "name": {
+            "default": "landing_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "climbable_selector": {
+          "id": "climbable_selector",
+          "name": {
+            "default": "climbable_selector",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        }
+      }
+    },
+    "axioval:parity.public.spaces.space-validation": {
+      "id": "axioval:parity.public.spaces.space-validation",
+      "name": {
+        "default": "space-validation",
+        "translations": {}
+      },
+      "capability": "axioval:capability.space-validation",
+      "parameters": {
+        "required_height_metres": {
+          "id": "required_height_metres",
+          "name": {
+            "default": "required_height_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": true
+        },
+        "uncovered_segment_length_metres": {
+          "id": "uncovered_segment_length_metres",
+          "name": {
+            "default": "uncovered_segment_length_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": true
+        },
+        "check_top_cap": {
+          "id": "check_top_cap",
+          "name": {
+            "default": "check_top_cap",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": true
+        },
+        "check_bottom_cap": {
+          "id": "check_bottom_cap",
+          "name": {
+            "default": "check_bottom_cap",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": true
+        },
+        "check_unallocated_area": {
+          "id": "check_unallocated_area",
+          "name": {
+            "default": "check_unallocated_area",
+            "translations": {}
+          },
+          "kind": "boolean",
+          "required": true
+        },
+        "maximum_unallocated_area_square_metres": {
+          "id": "maximum_unallocated_area_square_metres",
+          "name": {
+            "default": "maximum_unallocated_area_square_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": true
+        },
+        "tolerance_metres": {
+          "id": "tolerance_metres",
+          "name": {
+            "default": "tolerance_metres",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": false
+        },
+        "maximum_unallocated_share": {
+          "id": "maximum_unallocated_share",
+          "name": {
+            "default": "maximum_unallocated_share",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": false
+        },
+        "top_cap_elements": {
+          "id": "top_cap_elements",
+          "name": {
+            "default": "top_cap_elements",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "bottom_cap_elements": {
+          "id": "bottom_cap_elements",
+          "name": {
+            "default": "bottom_cap_elements",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "boundary_elements": {
+          "id": "boundary_elements",
+          "name": {
+            "default": "boundary_elements",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        },
+        "intersection_elements": {
+          "id": "intersection_elements",
+          "name": {
+            "default": "intersection_elements",
+            "translations": {}
+          },
+          "kind": "selector",
+          "required": false
+        }
+      }
+    },
+    "axioval:parity.public.spaces.space-boundary-coverage": {
+      "id": "axioval:parity.public.spaces.space-boundary-coverage",
+      "name": {
+        "default": "space-boundary-coverage",
+        "translations": {}
+      },
+      "capability": "axioval:capability.space-boundary-coverage",
+      "parameters": {
+        "minimum_covered_share": {
+          "id": "minimum_covered_share",
+          "name": {
+            "default": "minimum_covered_share",
+            "translations": {}
+          },
+          "kind": "number",
+          "required": false
+        },
+        "maximum_uncovered_area": {
+          "id": "maximum_uncovered_area",
+          "name": {
+            "default": "maximum_uncovered_area",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "maximum_overlap_area": {
+          "id": "maximum_overlap_area",
+          "name": {
+            "default": "maximum_overlap_area",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        },
+        "plane_tolerance": {
+          "id": "plane_tolerance",
+          "name": {
+            "default": "plane_tolerance",
+            "translations": {}
+          },
+          "kind": "quantity",
+          "required": false
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,409 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:parity.public.spaces",
+    "name": {
+      "default": "Public parity ruleset, spaces",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "Guard and space capabilities, recorded before they became templates.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "definitionPackages": [
+    "axioval:parity.public.spaces.definitions"
+  ],
+  "root": {
+    "id": "root",
+    "name": {
+      "default": "Spaces",
+      "translations": {}
+    },
+    "rules": [
+      {
+        "id": "guarded-slabs",
+        "definitionId": "axioval:parity.public.spaces.horizontal-guard",
+        "name": {
+          "default": "guarded-slabs",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.spaces.slab",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "minimum_barrier_height_metres": {
+            "type": "number",
+            "value": 1.0
+          },
+          "maximum_barrier_gap_metres": {
+            "type": "number",
+            "value": 0.1
+          },
+          "maximum_platform_gap_metres": {
+            "type": "number",
+            "value": 0.2
+          },
+          "maximum_landing_gap_metres": {
+            "type": "number",
+            "value": 0.3
+          },
+          "maximum_fall_height_metres": {
+            "type": "number",
+            "value": 0.5
+          },
+          "minimum_landing_width_metres": {
+            "type": "number",
+            "value": 0.6
+          },
+          "climbable_barrier_distance_metres": {
+            "type": "number",
+            "value": 0.3
+          },
+          "maximum_climbable_height_metres": {
+            "type": "number",
+            "value": 0.7
+          },
+          "minimum_climbable_side_length_metres": {
+            "type": "number",
+            "value": 0.2
+          },
+          "measure_barrier_from_curb": {
+            "type": "boolean",
+            "value": false
+          }
+        }
+      },
+      {
+        "id": "guarded-slabs-by-role",
+        "definitionId": "axioval:parity.public.spaces.horizontal-guard",
+        "name": {
+          "default": "guarded-slabs-by-role",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.spaces.slab",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "minimum_barrier_height_metres": {
+            "type": "number",
+            "value": 1.1
+          },
+          "maximum_barrier_gap_metres": {
+            "type": "number",
+            "value": 0.1
+          },
+          "maximum_platform_gap_metres": {
+            "type": "number",
+            "value": 0.2
+          },
+          "maximum_landing_gap_metres": {
+            "type": "number",
+            "value": 0.3
+          },
+          "maximum_fall_height_metres": {
+            "type": "number",
+            "value": 0.5
+          },
+          "minimum_landing_width_metres": {
+            "type": "number",
+            "value": 0.6
+          },
+          "climbable_barrier_distance_metres": {
+            "type": "number",
+            "value": 0.3
+          },
+          "maximum_climbable_height_metres": {
+            "type": "number",
+            "value": 0.7
+          },
+          "minimum_climbable_side_length_metres": {
+            "type": "number",
+            "value": 0.2
+          },
+          "measure_barrier_from_curb": {
+            "type": "boolean",
+            "value": true
+          },
+          "barrier_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spaces.railing",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spaces.wall",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "landing_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spaces.slab",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spaces.stair",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "climbable_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spaces.furniture",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "valid-spaces",
+        "definitionId": "axioval:parity.public.spaces.space-validation",
+        "name": {
+          "default": "valid-spaces",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.spaces.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "required_height_metres": {
+            "type": "number",
+            "value": 2.4
+          },
+          "uncovered_segment_length_metres": {
+            "type": "number",
+            "value": 0.5
+          },
+          "check_top_cap": {
+            "type": "boolean",
+            "value": true
+          },
+          "check_bottom_cap": {
+            "type": "boolean",
+            "value": true
+          },
+          "check_unallocated_area": {
+            "type": "boolean",
+            "value": true
+          },
+          "maximum_unallocated_area_square_metres": {
+            "type": "number",
+            "value": 1.0
+          },
+          "maximum_unallocated_share": {
+            "type": "number",
+            "value": 0.05
+          }
+        }
+      },
+      {
+        "id": "valid-spaces-selected",
+        "definitionId": "axioval:parity.public.spaces.space-validation",
+        "name": {
+          "default": "valid-spaces-selected",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.spaces.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "required_height_metres": {
+            "type": "number",
+            "value": 2.5
+          },
+          "uncovered_segment_length_metres": {
+            "type": "number",
+            "value": 0.2
+          },
+          "check_top_cap": {
+            "type": "boolean",
+            "value": true
+          },
+          "check_bottom_cap": {
+            "type": "boolean",
+            "value": true
+          },
+          "check_unallocated_area": {
+            "type": "boolean",
+            "value": false
+          },
+          "maximum_unallocated_area_square_metres": {
+            "type": "number",
+            "value": 0.5
+          },
+          "tolerance_metres": {
+            "type": "number",
+            "value": 0.01
+          },
+          "top_cap_elements": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spaces.slab",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spaces.roof",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "bottom_cap_elements": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.spaces.slab",
+              "includeSubtypes": true
+            }
+          },
+          "boundary_elements": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spaces.wall",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spaces.column",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "intersection_elements": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spaces.wall",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spaces.slab",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spaces.column",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.spaces.beam",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "bounded-spaces",
+        "definitionId": "axioval:parity.public.spaces.space-boundary-coverage",
+        "name": {
+          "default": "bounded-spaces",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.spaces.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "minimum_covered_share": {
+            "type": "number",
+            "value": 0.9
+          },
+          "maximum_uncovered_area": {
+            "type": "quantity",
+            "value": 1.0,
+            "unit": "m2"
+          },
+          "maximum_overlap_area": {
+            "type": "quantity",
+            "value": 0.1,
+            "unit": "m2"
+          }
+        }
+      },
+      {
+        "id": "bounded-spaces-on-planes",
+        "definitionId": "axioval:parity.public.spaces.space-boundary-coverage",
+        "name": {
+          "default": "bounded-spaces-on-planes",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.spaces.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "maximum_overlap_area": {
+            "type": "quantity",
+            "value": 0.0,
+            "unit": "m2"
+          },
+          "plane_tolerance": {
+            "type": "quantity",
+            "value": 0.01,
+            "unit": "m"
+          },
+          "minimum_covered_share": {
+            "type": "number",
+            "value": 0.5
+          }
+        }
+      }
+    ]
+  }
+}

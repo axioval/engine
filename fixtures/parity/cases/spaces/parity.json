@@ -1,0 +1,38 @@
+{
+  "description": "Guard and space checks over every public model, meshed, recorded before their capabilities become templates (#284).",
+  "models": "*",
+  "pairs": [],
+  "recorded": [
+    {
+      "rule": "guarded-slabs",
+      "comparison": "contract",
+      "reason": "horizontal-guard becomes a template (#284); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "guarded-slabs-by-role",
+      "comparison": "contract",
+      "reason": "horizontal-guard becomes a template (#284); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "valid-spaces",
+      "comparison": "contract",
+      "reason": "space-validation becomes a template (#284); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "valid-spaces-selected",
+      "comparison": "contract",
+      "reason": "space-validation becomes a template (#284); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "bounded-spaces",
+      "comparison": "contract",
+      "reason": "space-boundary-coverage becomes a template (#284); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "bounded-spaces-on-planes",
+      "comparison": "contract",
+      "reason": "space-boundary-coverage becomes a template (#284); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    }
+  ],
+  "divergences": []
+}

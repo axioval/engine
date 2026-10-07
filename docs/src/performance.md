@@ -485,12 +485,28 @@ before on the integration head, after with it):
 | opening-zone | building structural (IFC2x3) | 0.85× / 1.72× | 0.76× / 1.73× |
 | containment | generated fixture, 400 walls | 1.38× / 1.65× | 1.17× / 1.65× |
 
-Still over the budget: `door-swing` on the fixture, `keyed-limit` and
-`opening-zone` on the wall model and `space-validation` on one
-architecture model by a few hundredths of run time (each measurement
-varies by about as much); `opening-zone`'s heap on the structural model,
-which holds a whole rule's checks, about 2 KiB an item, until its
-openings read them; `containment`'s heap, a count list per wall; and the
-small models under the floor (`distance`, `containment`), whose rules
-select almost nothing and leave the runner's fixed cost per rule alone.
+A member list one check alone reads is handed to it and each item dropped
+once judged (`ObjectLeaves::members_once`), a list naming a selection is
+bound once per rule and shared uncopied, and a shared selection's key is
+written once per selector. With them, measured by the same gate:
 
+| capability | input | time / heap |
+| --- | --- | --- |
+| containment | generated fixture, 400 walls | 1.15× / 1.27× (was 1.17× / 1.65×) |
+| keyed-limit | wall with opening and window | 1.24× / 1.04× |
+| space-validation | building architecture (IFC4, IFC2x3, IFC4x3) | 1.22 to 1.27× / 1.35× |
+| door-swing | generated fixture, 400 walls | 1.26× / 1.02× |
+| opening-zone | wall with opening and window | 1.35× / 1.20× |
+| opening-zone | building structural (IFC2x3) | 0.76× / 1.69× |
+
+Still over the budget: `door-swing` on the fixture and `space-validation`
+on one architecture model by a hundredth or two of run time (each
+measurement varies by about as much); `opening-zone` on the wall model,
+and its heap on the structural model, whose provider measures a whole
+rule's checks (about 2 KiB an item) before its openings read them, its
+judge holding state that cannot be kept between reads; and the small
+models under the floor (`distance`, `containment`, `clash`,
+`clash-matrix` on the three-object column), whose rules select almost
+nothing and leave a few microseconds of the runner's cost per rule:
+binding the rule's selections into `MeasuredSelection`s and its lists,
+and a provider's reading of the rule.

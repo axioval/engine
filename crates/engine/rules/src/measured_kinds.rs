@@ -33,6 +33,7 @@ pub(crate) fn argument_check(name: &str) -> Option<ArgumentCheck> {
         "numbering" => Some(crate::numbering_consistency::check_arguments),
         "wall_spacing" => Some(crate::wall_spacing::check_arguments),
         "parking_bay" => Some(crate::parking_bay::check_arguments),
+        "distance_items" => Some(crate::distance::check_arguments),
         "well_requirements" => Some(crate::light_well::check_arguments),
         "opening_area" | "opening_count" => Some(crate::measured_openings::check_arguments),
         _ => None,
@@ -385,4 +386,45 @@ impl axioval_engine::MeasuredProvider for SelectionMeasures {
             locator: format!("{UNDECIDED_COUNT}:{object}:{}", counted.parameter),
         })
     }
+}
+
+/// What one rule reads once for all its objects, kept until the next
+/// rule's: a memo of one entry per provider (`marker`), its entry the
+/// latest call's, compared by the call's arguments (a bound selection by
+/// identity first). A run keeps one rule's reading at a time, as a
+/// capability kept its own only while it ran; the previous one is dropped
+/// before the next is read.
+pub(crate) fn latest<M, T>(
+    context: &axioval_engine::RuleContext<'_>,
+    marker: M,
+    call: &MeasuredCall,
+    read: impl FnOnce() -> T,
+) -> std::sync::Arc<T>
+where
+    M: std::hash::Hash + Eq + Send + 'static,
+    T: Send + Sync + 'static,
+{
+    type Slot<T> = std::sync::Arc<
+        std::sync::Mutex<
+            Option<(
+                std::collections::BTreeMap<&'static str, MeasuredArgument>,
+                std::sync::Arc<T>,
+            )>,
+        >,
+    >;
+    let slot: Slot<T> = axioval_engine::MeasuredMemo::of(context.services, marker, || {
+        std::sync::Arc::new(std::sync::Mutex::new(None))
+    });
+    let mut held = slot
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some((arguments, value)) = held.as_ref()
+        && *arguments == call.arguments
+    {
+        return value.clone();
+    }
+    *held = None;
+    let value = std::sync::Arc::new(read());
+    *held = Some((call.arguments.clone(), value.clone()));
+    value
 }

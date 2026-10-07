@@ -248,7 +248,7 @@
         "bottom"
       ]
     },
-    "distance::prepare::bounds": {
+    "distance::among::bounds": {
       "count": 1,
       "searchOnly": "candidate-filter",
       "reason": "the bounding boxes only propose the objects near enough to measure"
@@ -557,7 +557,7 @@
         "skew"
       ]
     },
-    "pairs::prepare::bounds": {
+    "pairs::prepare_among::bounds": {
       "count": 1,
       "searchOnly": "candidate-filter",
       "reason": "the bounding boxes only propose the objects near enough to measure"

@@ -11881,7 +11881,499 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "grades": true,
+        "name": "distance",
+        "refusals": "objects",
+        "declaration": [
+          {
+            "kind": "arguments",
+            "when": [],
+            "value": "distance_items;counterparts=@counterparts;minimum_metres=@minimum_metres;maximum_metres=@maximum_metres;mode=@mode;count=@count;projection=@projection;footprint_offset_metres=@footprint_offset_metres;vertical_direction=@vertical_direction;subject_extent=@subject_extent;counterpart_extent=@counterpart_extent;subject_surface=@subject_surface;counterpart_surface=@counterpart_surface;elevation_overlap=@elevation_overlap;elevation_offset_metres=@elevation_offset_metres;container_selector=@container_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;selection=@selection"
+          }
+        ],
+        "services": {
+          "needs": [
+            "vertical-extent"
+          ],
+          "message": "`elevation_overlap` needs the vertical-extent service, which is not registered",
+          "only": [
+            "elevation_overlap",
+            "overlapping"
+          ],
+          "whole": true
+        },
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "judged",
+                "expression": {
+                  "kind": "literal",
+                  "value": {
+                    "type": "integer",
+                    "value": 1
+                  },
+                  "label": "the subject is judged"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "judged",
+              "rounding": []
+            },
+            "fail": "",
+            "undecided": "",
+            "checks": [
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {},
+                  "list": "distance_items;counterparts=@counterparts;minimum_metres=@minimum_metres;maximum_metres=@maximum_metres;mode=@mode;count=@count;projection=@projection;footprint_offset_metres=@footprint_offset_metres;vertical_direction=@vertical_direction;subject_extent=@subject_extent;counterpart_extent=@counterpart_extent;subject_surface=@subject_surface;counterpart_surface=@counterpart_surface;elevation_overlap=@elevation_overlap;elevation_offset_metres=@elevation_offset_metres;container_selector=@container_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;selection=@selection",
+                  "refused": "{why}",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "apart_checked",
+                          "value": true
+                        }
+                      ],
+                      "judge": {
+                        "kind": "range",
+                        "value": "apart",
+                        "unit": "length",
+                        "atLeast": [
+                          {
+                            "name": "minimum",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "parameter",
+                                    "name": "minimum_metres"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "none"
+                        },
+                        "grade": true,
+                        "null": {
+                          "kind": "skip"
+                        }
+                      },
+                      "fail": "{apart_words}",
+                      "undecided": "{why}",
+                      "related": "apart_related"
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "reach_checked",
+                          "value": true
+                        }
+                      ],
+                      "judge": {
+                        "kind": "range",
+                        "value": "reach",
+                        "unit": "length",
+                        "atMost": [
+                          {
+                            "name": "maximum",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "parameter",
+                                    "name": "maximum_metres"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "none"
+                        },
+                        "grade": true,
+                        "null": {
+                          "kind": "skip"
+                        }
+                      },
+                      "fail": "{reach_words}",
+                      "undecided": "{why}",
+                      "related": "reach_related"
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "reach_checked",
+                          "value": true
+                        }
+                      ],
+                      "judge": {
+                        "kind": "truth",
+                        "value": "none_within",
+                        "finding": true
+                      },
+                      "fail": "{reach_words}",
+                      "undecided": "{why}",
+                      "related": "reach_related"
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "count_checked",
+                          "value": true
+                        }
+                      ],
+                      "judge": {
+                        "kind": "range",
+                        "value": "count",
+                        "unit": "count",
+                        "atLeast": [
+                          {
+                            "name": "count",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "parameter",
+                                    "name": "count"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "none"
+                        },
+                        "grade": false,
+                        "null": {
+                          "kind": "skip"
+                        }
+                      },
+                      "fail": "{count_words}",
+                      "undecided": "{why}",
+                      "related": "count_related"
+                    }
+                  ],
+                  "reason": "reason",
+                  "joined": "; "
+                },
+                "fail": "",
+                "undecided": ""
+              }
+            ],
+            "project": [
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {},
+                  "list": "distance_open;counterparts=@counterparts;minimum_metres=@minimum_metres;maximum_metres=@maximum_metres;mode=@mode;count=@count;projection=@projection;footprint_offset_metres=@footprint_offset_metres;vertical_direction=@vertical_direction;subject_extent=@subject_extent;counterpart_extent=@counterpart_extent;subject_surface=@subject_surface;counterpart_surface=@counterpart_surface;elevation_overlap=@elevation_overlap;elevation_offset_metres=@elevation_offset_metres;container_selector=@container_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;selection=@selection",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "judge": {
+                        "kind": "truth",
+                        "value": "open",
+                        "finding": true
+                      },
+                      "fail": "",
+                      "undecided": "{why}"
+                    }
+                  ],
+                  "at": "object",
+                  "reason": "reason"
+                },
+                "fail": "",
+                "undecided": ""
+              }
+            ]
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "aggregate",
+                  "function": "none",
+                  "over": {
+                    "kind": "measured",
+                    "name": "distance_items;counterparts=@counterparts;minimum_metres=@minimum_metres;maximum_metres=@maximum_metres;mode=@mode;count=@count;projection=@projection;footprint_offset_metres=@footprint_offset_metres;vertical_direction=@vertical_direction;subject_extent=@subject_extent;counterpart_extent=@counterpart_extent;subject_surface=@subject_surface;counterpart_surface=@counterpart_surface;elevation_overlap=@elevation_overlap;elevation_offset_metres=@elevation_offset_metres;container_selector=@container_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;selection=@selection"
+                  },
+                  "value": {
+                    "kind": "not",
+                    "operand": {
+                      "kind": "and",
+                      "operands": [
+                        {
+                          "kind": "compare",
+                          "operator": "greaterThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "apart"
+                          },
+                          "right": {
+                            "kind": "parameter",
+                            "name": "minimum_metres"
+                          }
+                        },
+                        {
+                          "kind": "compare",
+                          "operator": "lessThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "reach"
+                          },
+                          "right": {
+                            "kind": "parameter",
+                            "name": "maximum_metres"
+                          }
+                        },
+                        {
+                          "kind": "not",
+                          "operand": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "none_within"
+                          }
+                        },
+                        {
+                          "kind": "compare",
+                          "operator": "greaterThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "count"
+                          },
+                          "right": {
+                            "kind": "parameter",
+                            "name": "count"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "label": "no item fails"
+                },
+                {
+                  "kind": "isDefined",
+                  "operand": {
+                    "kind": "literal",
+                    "value": {
+                      "type": "integer",
+                      "value": 1
+                    },
+                    "label": "the subject is judged"
+                  },
+                  "label": "read"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.aggregate",
+                      "label": "no item fails",
+                      "fields": {
+                        "function": "none"
+                      },
+                      "inputs": {
+                        "over": {
+                          "block": {
+                            "type": "members.distance_items",
+                            "fields": {
+                              "container_selector": "@container_selector",
+                              "count": "@count",
+                              "counterpart_extent": "@counterpart_extent",
+                              "counterpart_surface": "@counterpart_surface",
+                              "counterparts": "@counterparts",
+                              "direction": "@direction",
+                              "elevation_offset_metres": "@elevation_offset_metres",
+                              "elevation_overlap": "@elevation_overlap",
+                              "follow_chain": "@follow_chain",
+                              "footprint_offset_metres": "@footprint_offset_metres",
+                              "maximum_metres": "@maximum_metres",
+                              "minimum_metres": "@minimum_metres",
+                              "mode": "@mode",
+                              "path": "@path",
+                              "projection": "@projection",
+                              "relationship": "@relationship",
+                              "selection": "@selection",
+                              "skip_absent_relationship_ends": "@skip_absent_relationship_ends",
+                              "subject_extent": "@subject_extent",
+                              "subject_surface": "@subject_surface",
+                              "vertical_direction": "@vertical_direction"
+                            }
+                          }
+                        },
+                        "value": {
+                          "block": {
+                            "type": "expression.not",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.and",
+                                  "inputs": {
+                                    "operands": {
+                                      "blocks": [
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "greaterThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "apart",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.parameter",
+                                                "fields": {
+                                                  "name": "minimum_metres"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "lessThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "reach",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.parameter",
+                                                "fields": {
+                                                  "name": "maximum_metres"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.not",
+                                          "inputs": {
+                                            "operand": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "none_within",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "greaterThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "count",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.parameter",
+                                                "fields": {
+                                                  "name": "count"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.isDefined",
+                      "label": "read",
+                      "inputs": {
+                        "operand": {
+                          "block": {
+                            "type": "expression.literal",
+                            "label": "the subject is judged",
+                            "fields": {
+                              "value": {
+                                "type": "integer",
+                                "value": 1
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.door-swing",
@@ -78848,6 +79340,1292 @@
       "available": true
     },
     {
+      "name": "distance_items",
+      "parameters": [
+        {
+          "key": "counterparts",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The counterparts each subject keeps its distance from (`@counterparts`)."
+            },
+            {
+              "language": "de",
+              "text": "Die Gegenstücke, zu denen jedes Subjekt seinen Abstand hält (`@counterparts`)."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "minimum_metres",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "No counterpart may come closer, in metres, if stated."
+            },
+            {
+              "language": "de",
+              "text": "Kein Gegenstück darf näher kommen, in Metern, falls angegeben."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "maximum_metres",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "A counterpart must lie within it, in metres, if stated."
+            },
+            {
+              "language": "de",
+              "text": "Ein Gegenstück muss innerhalb liegen, in Metern, falls angegeben."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "mode",
+          "kind": {
+            "type": "pattern"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "`nearest`, `none_closer_than` or `at_least`, as the rule states it."
+            },
+            {
+              "language": "de",
+              "text": "`nearest`, `none_closer_than` oder `at_least`, wie die Regel es angibt."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "count",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How many counterparts `at_least` requires."
+            },
+            {
+              "language": "de",
+              "text": "Wie viele Gegenstücke `at_least` verlangt."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "projection",
+          "kind": {
+            "type": "pattern"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The projection distances are measured in, as the rule states it."
+            },
+            {
+              "language": "de",
+              "text": "Die Projektion, in der Abstände gemessen werden, wie die Regel sie angibt."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "footprint_offset_metres",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How far a vertical distance reaches beyond the footprint."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit ein vertikaler Abstand über die Grundfläche hinausreicht."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "vertical_direction",
+          "kind": {
+            "type": "pattern"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Which side a vertical distance counts, as the rule states it."
+            },
+            {
+              "language": "de",
+              "text": "Welche Seite ein vertikaler Abstand zählt, wie die Regel sie angibt."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "subject_extent",
+          "kind": {
+            "type": "pattern"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "What a subject is measured by, as the rule states it."
+            },
+            {
+              "language": "de",
+              "text": "Woran ein Subjekt gemessen wird, wie die Regel es angibt."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "counterpart_extent",
+          "kind": {
+            "type": "pattern"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "What a counterpart is measured by, as the rule states it."
+            },
+            {
+              "language": "de",
+              "text": "Woran ein Gegenstück gemessen wird, wie die Regel es angibt."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "subject_surface",
+          "kind": {
+            "type": "pattern"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The subject's surface a vertical distance runs from."
+            },
+            {
+              "language": "de",
+              "text": "Die Fläche des Subjekts, von der ein vertikaler Abstand ausgeht."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "counterpart_surface",
+          "kind": {
+            "type": "pattern"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The counterpart's surface a vertical distance runs to."
+            },
+            {
+              "language": "de",
+              "text": "Die Fläche des Gegenstücks, zu der ein vertikaler Abstand reicht."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "elevation_overlap",
+          "kind": {
+            "type": "pattern"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether only counterparts at the subject's heights count."
+            },
+            {
+              "language": "de",
+              "text": "Ob nur Gegenstücke auf der Höhe des Subjekts zählen."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "elevation_offset_metres",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The height gap a counterpart must stay under."
+            },
+            {
+              "language": "de",
+              "text": "Der Höhenabstand, unter dem ein Gegenstück bleiben muss."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "container_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The containers that count (`@container_selector`)."
+            },
+            {
+              "language": "de",
+              "text": "Die Behälter, die zählen (`@container_selector`)."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "relationship",
+          "kind": {
+            "type": "pattern"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship to the containers, as the rule states it."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehung zu den Behältern, wie die Regel sie angibt."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "direction",
+          "kind": {
+            "type": "pattern"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The direction the relationship is followed in."
+            },
+            {
+              "language": "de",
+              "text": "Die Richtung, in der der Beziehung gefolgt wird."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "follow_chain",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether chains of the relationship are followed."
+            },
+            {
+              "language": "de",
+              "text": "Ob Ketten der Beziehung verfolgt werden."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The path to the containers, step by step."
+            },
+            {
+              "language": "de",
+              "text": "Der Pfad zu den Behältern, Schritt für Schritt."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "skip_absent_relationship_ends",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether a relationship end that is absent is skipped."
+            },
+            {
+              "language": "de",
+              "text": "Ob ein fehlendes Beziehungsende übersprungen wird."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "selection",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's subjects (`@selection`)."
+            },
+            {
+              "language": "de",
+              "text": "Die Subjekte der Regel (`@selection`)."
+            }
+          ],
+          "references": "selector"
+        }
+      ],
+      "services": [
+        "proximity",
+        "object-frame",
+        "vertical-extent"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "a service is not registered",
+        "the subject's extent, heights or containers cannot be read"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Distance"
+        },
+        {
+          "language": "de",
+          "text": "Abstand"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "What `distance` judges of a subject: the nearest counterpart closer than the minimum, the nearest one beyond the maximum, or the counterparts within the range, with the capability's words."
+        },
+        {
+          "language": "de",
+          "text": "Was `distance` an einem Subjekt beurteilt: das nächste Gegenstück näher als das Minimum, das nächste jenseits des Maximums oder die Gegenstücke im Bereich, mit den Worten der Fähigkeit."
+        }
+      ],
+      "fields": [
+        {
+          "name": "apart_checked",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Apart"
+            },
+            {
+              "language": "de",
+              "text": "Abstand"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether no counterpart may come closer than the minimum."
+            },
+            {
+              "language": "de",
+              "text": "Ob kein Gegenstück näher als das Minimum kommen darf."
+            }
+          ]
+        },
+        {
+          "name": "apart",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Nearest closer"
+            },
+            {
+              "language": "de",
+              "text": "Nächstes näher"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The nearest counterpart closer than the minimum; `null` where none surely is; refused for why it is open."
+            },
+            {
+              "language": "de",
+              "text": "Das nächste Gegenstück näher als das Minimum; `null`, wo sicher keines ist; verweigert mit dem Grund, warum es offen ist."
+            }
+          ]
+        },
+        {
+          "name": "apart_words",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Words"
+            },
+            {
+              "language": "de",
+              "text": "Worte"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The finding of a counterpart too close, worded."
+            },
+            {
+              "language": "de",
+              "text": "Der Befund eines zu nahen Gegenstücks, in Worten."
+            }
+          ]
+        },
+        {
+          "name": "apart_related",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Too close"
+            },
+            {
+              "language": "de",
+              "text": "Zu nah"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The counterparts too close."
+            },
+            {
+              "language": "de",
+              "text": "Die zu nahen Gegenstücke."
+            }
+          ]
+        },
+        {
+          "name": "reach_checked",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Reach"
+            },
+            {
+              "language": "de",
+              "text": "Reichweite"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the nearest counterpart must lie within the maximum."
+            },
+            {
+              "language": "de",
+              "text": "Ob das nächste Gegenstück innerhalb des Maximums liegen muss."
+            }
+          ]
+        },
+        {
+          "name": "reach",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Nearest"
+            },
+            {
+              "language": "de",
+              "text": "Nächstes"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The nearest counterpart where none lies within the maximum; `null` where one does or none is near; refused for why it is open."
+            },
+            {
+              "language": "de",
+              "text": "Das nächste Gegenstück, wo keines innerhalb des Maximums liegt; `null`, wo eines es tut oder keines nahe ist; verweigert mit dem Grund, warum es offen ist."
+            }
+          ]
+        },
+        {
+          "name": "reach_words",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Words"
+            },
+            {
+              "language": "de",
+              "text": "Worte"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The finding of no counterpart within the maximum, worded."
+            },
+            {
+              "language": "de",
+              "text": "Der Befund, dass kein Gegenstück innerhalb des Maximums liegt, in Worten."
+            }
+          ]
+        },
+        {
+          "name": "reach_related",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Nearest"
+            },
+            {
+              "language": "de",
+              "text": "Nächstes"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The nearest counterpart named."
+            },
+            {
+              "language": "de",
+              "text": "Das genannte nächste Gegenstück."
+            }
+          ]
+        },
+        {
+          "name": "none_within",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "None within"
+            },
+            {
+              "language": "de",
+              "text": "Keines innerhalb"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether no counterpart lies near at all."
+            },
+            {
+              "language": "de",
+              "text": "Ob überhaupt kein Gegenstück nahe liegt."
+            }
+          ]
+        },
+        {
+          "name": "count_checked",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Count"
+            },
+            {
+              "language": "de",
+              "text": "Zählung"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether `count` counterparts must lie within the range."
+            },
+            {
+              "language": "de",
+              "text": "Ob `count` Gegenstücke im Bereich liegen müssen."
+            }
+          ]
+        },
+        {
+          "name": "count",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Counted"
+            },
+            {
+              "language": "de",
+              "text": "Gezählt"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "From the counterparts surely within the range to every one that may be; refused for why it is open."
+            },
+            {
+              "language": "de",
+              "text": "Von den sicher im Bereich liegenden Gegenstücken bis zu jedem, das es kann; verweigert mit dem Grund, warum es offen ist."
+            }
+          ]
+        },
+        {
+          "name": "count_words",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Words"
+            },
+            {
+              "language": "de",
+              "text": "Worte"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The finding of too few counterparts, worded."
+            },
+            {
+              "language": "de",
+              "text": "Der Befund zu weniger Gegenstücke, in Worten."
+            }
+          ]
+        },
+        {
+          "name": "count_related",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Counted"
+            },
+            {
+              "language": "de",
+              "text": "Gezählt"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The counterparts that may lie within the range."
+            },
+            {
+              "language": "de",
+              "text": "Die Gegenstücke, die im Bereich liegen können."
+            }
+          ]
+        },
+        {
+          "name": "reason",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Reason"
+            },
+            {
+              "language": "de",
+              "text": "Grund"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Why the item is undecided where not for incomplete evidence, as a report writes it (`missing_service`)."
+            },
+            {
+              "language": "de",
+              "text": "Warum das Element unentschieden ist, wo nicht wegen unvollständiger Belege, wie ein Bericht es schreibt (`missing_service`)."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "distance_open",
+      "parameters": [
+        {
+          "key": "counterparts",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The counterparts each subject keeps its distance from (`@counterparts`)."
+            },
+            {
+              "language": "de",
+              "text": "Die Gegenstücke, zu denen jedes Subjekt seinen Abstand hält (`@counterparts`)."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "minimum_metres",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "No counterpart may come closer, in metres, if stated."
+            },
+            {
+              "language": "de",
+              "text": "Kein Gegenstück darf näher kommen, in Metern, falls angegeben."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "maximum_metres",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "A counterpart must lie within it, in metres, if stated."
+            },
+            {
+              "language": "de",
+              "text": "Ein Gegenstück muss innerhalb liegen, in Metern, falls angegeben."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "mode",
+          "kind": {
+            "type": "pattern"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "`nearest`, `none_closer_than` or `at_least`, as the rule states it."
+            },
+            {
+              "language": "de",
+              "text": "`nearest`, `none_closer_than` oder `at_least`, wie die Regel es angibt."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "count",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How many counterparts `at_least` requires."
+            },
+            {
+              "language": "de",
+              "text": "Wie viele Gegenstücke `at_least` verlangt."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "projection",
+          "kind": {
+            "type": "pattern"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The projection distances are measured in, as the rule states it."
+            },
+            {
+              "language": "de",
+              "text": "Die Projektion, in der Abstände gemessen werden, wie die Regel sie angibt."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "footprint_offset_metres",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How far a vertical distance reaches beyond the footprint."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit ein vertikaler Abstand über die Grundfläche hinausreicht."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "vertical_direction",
+          "kind": {
+            "type": "pattern"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Which side a vertical distance counts, as the rule states it."
+            },
+            {
+              "language": "de",
+              "text": "Welche Seite ein vertikaler Abstand zählt, wie die Regel sie angibt."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "subject_extent",
+          "kind": {
+            "type": "pattern"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "What a subject is measured by, as the rule states it."
+            },
+            {
+              "language": "de",
+              "text": "Woran ein Subjekt gemessen wird, wie die Regel es angibt."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "counterpart_extent",
+          "kind": {
+            "type": "pattern"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "What a counterpart is measured by, as the rule states it."
+            },
+            {
+              "language": "de",
+              "text": "Woran ein Gegenstück gemessen wird, wie die Regel es angibt."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "subject_surface",
+          "kind": {
+            "type": "pattern"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The subject's surface a vertical distance runs from."
+            },
+            {
+              "language": "de",
+              "text": "Die Fläche des Subjekts, von der ein vertikaler Abstand ausgeht."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "counterpart_surface",
+          "kind": {
+            "type": "pattern"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The counterpart's surface a vertical distance runs to."
+            },
+            {
+              "language": "de",
+              "text": "Die Fläche des Gegenstücks, zu der ein vertikaler Abstand reicht."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "elevation_overlap",
+          "kind": {
+            "type": "pattern"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether only counterparts at the subject's heights count."
+            },
+            {
+              "language": "de",
+              "text": "Ob nur Gegenstücke auf der Höhe des Subjekts zählen."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "elevation_offset_metres",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The height gap a counterpart must stay under."
+            },
+            {
+              "language": "de",
+              "text": "Der Höhenabstand, unter dem ein Gegenstück bleiben muss."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "container_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The containers that count (`@container_selector`)."
+            },
+            {
+              "language": "de",
+              "text": "Die Behälter, die zählen (`@container_selector`)."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "relationship",
+          "kind": {
+            "type": "pattern"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship to the containers, as the rule states it."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehung zu den Behältern, wie die Regel sie angibt."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "direction",
+          "kind": {
+            "type": "pattern"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The direction the relationship is followed in."
+            },
+            {
+              "language": "de",
+              "text": "Die Richtung, in der der Beziehung gefolgt wird."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "follow_chain",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether chains of the relationship are followed."
+            },
+            {
+              "language": "de",
+              "text": "Ob Ketten der Beziehung verfolgt werden."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The path to the containers, step by step."
+            },
+            {
+              "language": "de",
+              "text": "Der Pfad zu den Behältern, Schritt für Schritt."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "skip_absent_relationship_ends",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether a relationship end that is absent is skipped."
+            },
+            {
+              "language": "de",
+              "text": "Ob ein fehlendes Beziehungsende übersprungen wird."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "selection",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's subjects (`@selection`)."
+            },
+            {
+              "language": "de",
+              "text": "Die Subjekte der Regel (`@selection`)."
+            }
+          ],
+          "references": "selector"
+        }
+      ],
+      "services": [
+        "proximity",
+        "object-frame",
+        "vertical-extent"
+      ],
+      "exactness": "stated",
+      "subject": "project",
+      "notEvaluated": [
+        "a service is not registered"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Distance open"
+        },
+        {
+          "language": "de",
+          "text": "Abstand offen"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The objects `distance` leaves open beyond its subjects: those its selections cannot decide and the counterparts whose extent cannot be read."
+        },
+        {
+          "language": "de",
+          "text": "Die Objekte, die `distance` über seine Subjekte hinaus offen lässt: die, die seine Auswahlen nicht entscheiden, und die Gegenstücke, deren Ausdehnung nicht gelesen werden kann."
+        }
+      ],
+      "fields": [
+        {
+          "name": "object",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Object"
+            },
+            {
+              "language": "de",
+              "text": "Objekt"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The object left open."
+            },
+            {
+              "language": "de",
+              "text": "Das offen gelassene Objekt."
+            }
+          ]
+        },
+        {
+          "name": "open",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Open"
+            },
+            {
+              "language": "de",
+              "text": "Offen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Refused for why the object is open."
+            },
+            {
+              "language": "de",
+              "text": "Verweigert mit dem Grund, warum das Objekt offen ist."
+            }
+          ]
+        },
+        {
+          "name": "reason",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Reason"
+            },
+            {
+              "language": "de",
+              "text": "Grund"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Why the item is undecided where not for incomplete evidence, as a report writes it (`missing_service`)."
+            },
+            {
+              "language": "de",
+              "text": "Warum das Element unentschieden ist, wo nicht wegen unvollständiger Belege, wie ein Bericht es schreibt (`missing_service`)."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
       "name": "effective_missing",
       "parameters": [
         {
@@ -85610,6 +87388,32 @@
               "text": "Die Objekte, gegen die sein Präfix oder Schritt beurteilt wird."
             }
           ]
+        },
+        {
+          "name": "reason",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Reason"
+            },
+            {
+              "language": "de",
+              "text": "Grund"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Why the item is undecided where not for incomplete evidence, as a report writes it (`missing_service`)."
+            },
+            {
+              "language": "de",
+              "text": "Warum das Element unentschieden ist, wo nicht wegen unvollständiger Belege, wie ein Bericht es schreibt (`missing_service`)."
+            }
+          ]
         }
       ],
       "available": true
@@ -86944,6 +88748,32 @@
             {
               "language": "de",
               "text": "Warum die Filter den Stellplatz auslassen können, nach `; `, wo sie es können."
+            }
+          ]
+        },
+        {
+          "name": "reason",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Reason"
+            },
+            {
+              "language": "de",
+              "text": "Grund"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Why the item is undecided where not for incomplete evidence, as a report writes it (`missing_service`)."
+            },
+            {
+              "language": "de",
+              "text": "Warum das Element unentschieden ist, wo nicht wegen unvollständiger Belege, wie ein Bericht es schreibt (`missing_service`)."
             }
           ]
         }
@@ -89896,32 +91726,6 @@
             {
               "language": "de",
               "text": "Die verbundenen Räume und Elemente, wo verbunden; sonst die Elemente, die den Raum erreichen."
-            }
-          ]
-        },
-        {
-          "name": "reason",
-          "kind": {
-            "type": "text"
-          },
-          "label": [
-            {
-              "language": "en",
-              "text": "Reason"
-            },
-            {
-              "language": "de",
-              "text": "Grund"
-            }
-          ],
-          "help": [
-            {
-              "language": "en",
-              "text": "Why the item is undecided where not for incomplete evidence, as a report writes it (`missing_service`)."
-            },
-            {
-              "language": "de",
-              "text": "Warum das Element unentschieden ist, wo nicht wegen unvollständiger Belege, wie ein Bericht es schreibt (`missing_service`)."
             }
           ]
         }
@@ -93704,32 +95508,6 @@
             {
               "language": "de",
               "text": "Worauf sich ein Befund zum Element bezieht: den Wirt und die Objekte, zu denen gemessen wurde."
-            }
-          ]
-        },
-        {
-          "name": "reason",
-          "kind": {
-            "type": "text"
-          },
-          "label": [
-            {
-              "language": "en",
-              "text": "Reason"
-            },
-            {
-              "language": "de",
-              "text": "Grund"
-            }
-          ],
-          "help": [
-            {
-              "language": "en",
-              "text": "Why the item is undecided where not for incomplete evidence, as a report writes it (`missing_service`)."
-            },
-            {
-              "language": "de",
-              "text": "Warum das Element unentschieden ist, wo nicht wegen unvollständiger Belege, wie ein Bericht es schreibt (`missing_service`)."
             }
           ]
         },

@@ -30,6 +30,10 @@ impl Unevaluated {
     pub(crate) fn push(&mut self, object: ObjectId, reason: NotEvaluatedReason, message: String) {
         self.0.insert((object, reason, message));
     }
+    /// Each outcome, by object, reason and message.
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &(ObjectId, NotEvaluatedReason, String)> {
+        self.0.iter()
+    }
     pub(crate) fn drain_into(self, evaluation: &mut CapabilityEvaluation) {
         for (object, reason, message) in self.0 {
             evaluation.push_object_not_evaluated(object, reason, message);
@@ -111,7 +115,6 @@ pub(crate) fn refuse_all(
 ///
 /// Returns the evaluation early, with every subject refused, when the
 /// declaration or the service is unusable.
-#[allow(clippy::too_many_lines)]
 pub(crate) fn prepare<'a>(
     context: &RuleContext<'a>,
     rule: &CompiledRule,
@@ -127,16 +130,15 @@ pub(crate) fn prepare<'a>(
             "pairwise declaration is missing or not physically realisable",
         ));
     };
-    let Some(service) = context.services.get::<ProximityServiceHandle>() else {
+    if context.services.get::<ProximityServiceHandle>().is_none() {
         return Err(refuse_all(
             &subjects,
             evaluation,
             &NotEvaluatedReason::MissingService,
             "proximity service is not registered",
         ));
-    };
+    }
     let (counterparts, counterpart_selection) = select_objects(context, selector);
-
     let mut unevaluated = Unevaluated::default();
     for outcome in evaluation
         .not_evaluated_outcomes()
@@ -151,10 +153,34 @@ pub(crate) fn prepare<'a>(
             );
         }
     }
+    prepare_among(
+        context,
+        (&subjects, &counterparts),
+        unevaluated,
+        (margin, projection),
+    )
+    .map_err(|(reason, message)| refuse_all(&subjects, evaluation, &reason, &message))
+}
 
+/// Reads the extent of every object of both groups, already selected
+/// (`unevaluated` the objects their selections left undecided), and runs
+/// the broad phase within `margin` in `projection`; why every subject is
+/// refused, when the service is unusable.
+pub(crate) fn prepare_among<'a>(
+    context: &RuleContext<'a>,
+    (subjects, counterparts): (&[&Object], &[&Object]),
+    mut unevaluated: Unevaluated,
+    (margin, projection): (f64, ProximityProjection),
+) -> Result<Prepared<'a>, (NotEvaluatedReason, String)> {
+    let Some(service) = context.services.get::<ProximityServiceHandle>() else {
+        return Err((
+            NotEvaluatedReason::MissingService,
+            "proximity service is not registered".to_owned(),
+        ));
+    };
     let mut bounds: BTreeMap<&ObjectId, ObjectBounds> = BTreeMap::new();
     let mut unmeasurable = BTreeSet::new();
-    for object in subjects.iter().chain(&counterparts) {
+    for object in subjects.iter().chain(counterparts) {
         if bounds.contains_key(&object.id) || unmeasurable.contains(&object.id) {
             continue;
         }
@@ -187,28 +213,20 @@ pub(crate) fn prepare<'a>(
             .filter_map(|object| bounds.get(&object.id).cloned())
             .collect()
     };
-    let pairs = match projected_candidate_pairs(
-        &group(&subjects),
-        &group(&counterparts),
-        projection,
-        margin,
-    ) {
-        // A whole measured through its parts and one of those parts are one
-        // piece of material, never a pair: leaving them in would report the
-        // whole clashing with, containing or touching itself.
-        Ok(mut pairs) => {
-            pairs.retain(|pair| !service.shares_body(pair.subject(), pair.counterpart()));
-            pairs
-        }
-        Err(error) => {
-            return Err(refuse_all(
-                &subjects,
-                evaluation,
-                &NotEvaluatedReason::InvalidEvidence,
-                &error.to_string(),
-            ));
-        }
-    };
+    let pairs =
+        match projected_candidate_pairs(&group(subjects), &group(counterparts), projection, margin)
+        {
+            // A whole measured through its parts and one of those parts are one
+            // piece of material, never a pair: leaving them in would report the
+            // whole clashing with, containing or touching itself.
+            Ok(mut pairs) => {
+                pairs.retain(|pair| !service.shares_body(pair.subject(), pair.counterpart()));
+                pairs
+            }
+            Err(error) => {
+                return Err((NotEvaluatedReason::InvalidEvidence, error.to_string()));
+            }
+        };
     Ok(Prepared {
         service,
         subjects: subjects

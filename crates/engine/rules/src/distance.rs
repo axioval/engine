@@ -44,56 +44,134 @@
 //! counted as unknown: a verdict is given only when they cannot change it.
 //! The broad phase is complete in every projection, so a counterpart it does
 //! not propose is proven beyond the search margin.
+//!
+//! It runs as a template ([`axioval_engine::template`]) over the measured
+//! `distance_items`: the capability's own reading of each subject (the
+//! broad phase once per rule, the counterparts in scope, measured, and
+//! what keeping apart and lying within come to), the template judging the
+//! nearest distances against the bounds and the counterparts counted
+//! against `count`; the objects the selections and the broad phase leave
+//! open are the measured `distance_open` of the project.
 
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::LazyLock;
 
+use axioval_engine::template::Template;
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, ConvexPlanRegion, CounterpartSurface, Deviation,
+    CandidatePair, CapabilityEvaluation, CompiledRule, ConvexPlanRegion, CounterpartSurface,
     GeometryFidelity, NotEvaluatedReason, ObjectFrameServiceHandle, ParameterDescriptor,
     ParameterType, ProjectedDistanceEvidence, ProximityProjection, ProximityRequest,
     ProximityServiceHandle, RegionDistanceRequest, RuleCapability, RuleContext, SubjectSurface,
     VerticalDirection, VerticalExtent, VerticalExtentServiceHandle, VerticalSurfaces,
 };
-use axioval_ir::contract::Selector;
+use axioval_ir::contract::{ParameterValue, Selector};
 use axioval_ir::{Evidence, Object, ObjectId};
 
 use crate::door_swing::{self, Footprint, box_gap};
-use crate::pairs::{
-    Prepared, Unevaluated, counterpart_selector, fidelity_note, prepare, reason, refuse_all,
-    refuse_declaration,
-};
+use crate::pairs::{Prepared, Unevaluated, fidelity_note, reason};
 use crate::selection::select_objects;
-use crate::support::{Parameters, Traversal, Unavailable, finding, invalid, traversal_parameters};
+use crate::support::{Parameters, Traversal, Unavailable, invalid, traversal_parameters};
 
+mod items;
 mod measured;
+#[cfg(feature = "parity-reference")]
+pub(crate) mod reference;
+mod template;
 
+pub(crate) use items::DistanceItems;
 pub(crate) use measured::DistanceMeasures;
 
 /// Requires counterparts to keep a declared distance from each subject.
+///
+/// It runs as a template ([`axioval_engine::template`]) over the measured
+/// `distance_items` of each subject and `distance_open` of the project.
 pub struct Distance;
 
+static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
+
+/// The plans of the rules bound to it, kept across runs.
+static PLANS: crate::templates::Plans = crate::templates::Plans::new();
+
+impl RuleCapability for Distance {
+    fn id(&self) -> &'static str {
+        template::ID
+    }
+
+    fn parameters(&self) -> Vec<ParameterDescriptor> {
+        TEMPLATE.parameters.clone()
+    }
+
+    fn grades_deviation(&self) -> bool {
+        TEMPLATE.grades
+    }
+
+    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
+        if crate::object_parameters::has_object_parameters(rule) {
+            return crate::object_parameters::per_object(self, context, rule);
+        }
+        crate::templates::run((&TEMPLATE, &PLANS), context, rule)
+    }
+
+    fn template(&self) -> Option<&Template> {
+        Some(&TEMPLATE)
+    }
+}
+
+/// The capability's parameters.
+pub(crate) fn parameters() -> Vec<ParameterDescriptor> {
+    let mut parameters = vec![
+        ParameterDescriptor::required("counterparts", ParameterType::Selector),
+        ParameterDescriptor::optional("minimum_metres", ParameterType::Number).per_object(),
+        ParameterDescriptor::optional("maximum_metres", ParameterType::Number).per_object(),
+        ParameterDescriptor::optional("mode", ParameterType::String),
+        ParameterDescriptor::optional("count", ParameterType::Integer),
+        ParameterDescriptor::optional("projection", ParameterType::String),
+        ParameterDescriptor::optional("footprint_offset_metres", ParameterType::Number),
+        ParameterDescriptor::optional("vertical_direction", ParameterType::String),
+        ParameterDescriptor::optional("subject_extent", ParameterType::String),
+        ParameterDescriptor::optional("counterpart_extent", ParameterType::String),
+        ParameterDescriptor::optional("subject_surface", ParameterType::String),
+        ParameterDescriptor::optional("counterpart_surface", ParameterType::String),
+        ParameterDescriptor::optional("elevation_overlap", ParameterType::String),
+        ParameterDescriptor::optional("elevation_offset_metres", ParameterType::Number),
+        ParameterDescriptor::optional("container_selector", ParameterType::Selector),
+    ];
+    parameters.extend(traversal_parameters());
+    parameters
+}
+
+/// Checks the rule parameters `distance_items` names, as the rule states
+/// them: what the capability refused of its declaration, in its order and
+/// words.
+pub(crate) fn check_arguments(
+    arguments: &BTreeMap<String, ParameterValue>,
+) -> Result<(), Unavailable> {
+    let rule = crate::light_area::synthesised(arguments.clone());
+    declaration(&rule).map(|_| ())
+}
+
 #[derive(Clone, Copy)]
-enum Mode {
+pub(crate) enum Mode {
     Nearest,
     NoneCloserThan,
     AtLeast(u64),
 }
 
-struct Declaration<'a> {
-    mode: Mode,
+pub(crate) struct Declaration {
+    pub(crate) mode: Mode,
     /// Whether the subjects and the counterparts are measured by their
     /// door swings rather than their bodies.
-    swings: (bool, bool),
-    minimum: Option<f64>,
-    maximum: Option<f64>,
-    projection: ProximityProjection,
-    scope: Option<Traversal>,
+    pub(crate) swings: (bool, bool),
+    pub(crate) minimum: Option<f64>,
+    pub(crate) maximum: Option<f64>,
+    pub(crate) projection: ProximityProjection,
+    pub(crate) scope: Option<Traversal>,
     /// Which reached objects count as containers; every one without it.
-    containers: Option<&'a Selector>,
+    pub(crate) containers: Option<Selector>,
     /// With `elevation_overlap` `overlapping`, the height gap a counterpart
     /// must stay under (zero: the heights overlap).
-    elevation: Option<f64>,
+    pub(crate) elevation: Option<f64>,
 }
 
 fn length(parameters: &Parameters<'_>, name: &str) -> Result<Option<f64>, Unavailable> {
@@ -147,7 +225,7 @@ fn mode(
     )
 }
 
-fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
+pub(crate) fn declaration(rule: &CompiledRule) -> Result<Declaration, Unavailable> {
     let parameters = Parameters(rule);
     let minimum = length(&parameters, "minimum_metres")?;
     let maximum = length(&parameters, "maximum_metres")?;
@@ -229,7 +307,7 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
         ));
     }
     let scope = parameters.traversal()?;
-    let containers = parameters.selector("container_selector")?;
+    let containers = parameters.selector("container_selector")?.cloned();
     if containers.is_some() && scope.is_none() {
         return Err(invalid(
             "`container_selector` picks among the containers `relationship` or `path` reaches; \
@@ -311,16 +389,16 @@ fn elevation(
     }
 }
 
-impl Declaration<'_> {
+impl Declaration {
     /// No counterpart may come closer than this.
-    fn keep_apart(&self) -> Option<f64> {
+    pub(crate) fn keep_apart(&self) -> Option<f64> {
         match self.mode {
             Mode::Nearest | Mode::NoneCloserThan => self.minimum,
             Mode::AtLeast(_) => None,
         }
     }
     /// At least this many counterparts must lie within `[lower, upper]`.
-    fn within(&self) -> Option<(u64, f64, f64)> {
+    pub(crate) fn within(&self) -> Option<(u64, f64, f64)> {
         match self.mode {
             Mode::Nearest => self.maximum.map(|maximum| (1, 0.0, maximum)),
             Mode::NoneCloserThan => None,
@@ -330,23 +408,23 @@ impl Declaration<'_> {
         }
     }
     /// The broad-phase margin: beyond it no counterpart matters.
-    fn margin(&self) -> f64 {
+    pub(crate) fn margin(&self) -> f64 {
         self.maximum.or(self.minimum).unwrap_or(0.0)
     }
 }
 
 /// What is known about one counterpart of one subject.
-struct Candidate {
-    counterpart: ObjectId,
+pub(crate) struct Candidate {
+    pub(crate) counterpart: ObjectId,
     /// Whether it shares a container with the subject and stands at its
     /// heights, as far as declared; why not, when undecided.
-    in_scope: Result<bool, String>,
-    measured: Result<Measured, Unavailable>,
+    pub(crate) in_scope: Result<bool, String>,
+    pub(crate) measured: Result<Measured, Unavailable>,
 }
 
 /// A measured distance as an interval, with what it measured and the
 /// evidence behind it.
-struct Measured {
+pub(crate) struct Measured {
     lower: f64,
     upper: f64,
     /// `horizontal distance`, `vertical distance`, ...
@@ -355,7 +433,7 @@ struct Measured {
     side: &'static str,
     /// Why the interval is not a point, for messages.
     note: String,
-    evidence: Vec<Evidence>,
+    pub(crate) evidence: Vec<Evidence>,
 }
 
 impl Measured {
@@ -398,19 +476,19 @@ impl Measured {
         }
     }
 
-    fn interval_metres(&self) -> (f64, f64) {
+    pub(crate) fn interval_metres(&self) -> (f64, f64) {
         (self.lower, self.upper)
     }
 }
 
 impl Candidate {
-    fn interval(&self) -> Option<(f64, f64)> {
+    pub(crate) fn interval(&self) -> Option<(f64, f64)> {
         self.measured.as_ref().ok().map(Measured::interval_metres)
     }
-    fn certainly_in_scope(&self) -> bool {
+    pub(crate) fn certainly_in_scope(&self) -> bool {
         self.in_scope == Ok(true)
     }
-    fn possibly_in_scope(&self) -> bool {
+    pub(crate) fn possibly_in_scope(&self) -> bool {
         self.in_scope != Ok(false)
     }
     /// Why this candidate leaves a check open.
@@ -446,18 +524,30 @@ fn describe(measured: &Measured) -> String {
     }
 }
 
+/// What a check judged: the distance named against its bound, the
+/// counterparts surely and possibly counted, or nothing measured.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum Judged {
+    /// The nearest counterpart's distance, which misses (or meets) the
+    /// bound.
+    Distance(f64, f64),
+    /// The counterparts surely and possibly within the range.
+    Count(u64, u64),
+    /// No distance and no count: nothing the bound is judged on.
+    Nothing,
+}
+
 /// The outcome of one check for one subject.
-enum Verdict {
+pub(crate) enum Verdict {
     Finding {
         message: String,
         related: Vec<ObjectId>,
         evidence: Vec<Evidence>,
-        /// How far the named distance misses its bound; `None` when no
-        /// distance was measured against one.
-        deviation: Option<Deviation>,
+        /// What the finding judged.
+        judged: Judged,
     },
     NotEvaluated(Unavailable),
-    Pass,
+    Pass(Judged),
 }
 
 /// No counterpart may come closer than `minimum`.
@@ -485,7 +575,7 @@ fn keep_apart(
                     .is_none_or(|(lower, _)| lower < minimum)
         }) {
             Some(open) => Verdict::NotEvaluated(open.undecided(&bound)),
-            None => Verdict::Pass,
+            None => Verdict::Pass(Judged::Nothing),
         };
     }
     violating.sort_by(|a, b| {
@@ -522,7 +612,7 @@ fn keep_apart(
     let (lower, upper) = measured.interval_metres();
     Verdict::Finding {
         message,
-        deviation: Some(Deviation::below(minimum, lower, upper)),
+        judged: Judged::Distance(lower, upper),
         related: shown.iter().map(|c| c.counterpart.clone()).collect(),
         evidence: shown
             .iter()
@@ -545,14 +635,18 @@ fn within(
         .iter()
         .filter(|c| c.certainly_in_scope() && c.interval().is_some_and(inside))
         .count();
-    if u64::try_from(certain).unwrap_or(u64::MAX) >= count {
-        return Verdict::Pass;
-    }
     let possible: Vec<&Candidate> = candidates
         .iter()
         .chain(unmeasurable)
         .filter(|c| c.possibly_in_scope() && c.interval().is_none_or(reaches))
         .collect();
+    let counted = Judged::Count(
+        u64::try_from(certain).unwrap_or(u64::MAX),
+        u64::try_from(possible.len()).unwrap_or(u64::MAX),
+    );
+    if u64::try_from(certain).unwrap_or(u64::MAX) >= count {
+        return Verdict::Pass(counted);
+    }
     let range = if lower > 0.0 {
         format!("between {lower:.4} and {upper:.4} m")
     } else {
@@ -595,12 +689,13 @@ fn within(
             possible.len()
         ),
     };
-    let deviation = match (nearest_mode, nearest) {
+    let judged = match (nearest_mode, nearest) {
         (true, Some((_, measured))) => {
             let (low, high) = measured.interval_metres();
-            Some(Deviation::above(upper, low, high))
+            Judged::Distance(low, high)
         }
-        _ => None,
+        (true, None) => Judged::Nothing,
+        (false, _) => counted,
     };
     let named: Vec<&Candidate> = if nearest_mode {
         nearest
@@ -612,7 +707,7 @@ fn within(
     };
     Verdict::Finding {
         message,
-        deviation,
+        judged,
         related: named.iter().map(|c| c.counterpart.clone()).collect(),
         evidence: named
             .iter()
@@ -638,13 +733,13 @@ fn both(first: Admission, second: Admission) -> Admission {
 }
 
 /// The objects `container_selector` picks, and those it cannot decide.
-struct Kinds {
-    sure: BTreeSet<ObjectId>,
-    undecided: BTreeSet<ObjectId>,
+pub(crate) struct Kinds {
+    pub(crate) sure: BTreeSet<ObjectId>,
+    pub(crate) undecided: BTreeSet<ObjectId>,
 }
 
 impl Kinds {
-    fn of(context: &RuleContext<'_>, selector: &Selector) -> Self {
+    pub(crate) fn of(context: &RuleContext<'_>, selector: &Selector) -> Self {
         let (matched, selection) = select_objects(context, selector);
         Self {
             sure: matched.iter().map(|object| object.id.clone()).collect(),
@@ -665,21 +760,85 @@ impl Kinds {
     }
 }
 
-/// Heights for `elevation_overlap`: the subject's extent and each
-/// counterpart's, cached.
-struct Heights<'r> {
-    service: &'r VerticalExtentServiceHandle,
-    offset: f64,
-    subject: Option<VerticalExtent>,
+/// What a rule's subjects share: the containers each object reaches and
+/// each counterpart's heights, read once.
+#[derive(Default)]
+pub(crate) struct Caches {
+    reached: BTreeMap<ObjectId, Containers>,
     extents: BTreeMap<ObjectId, Result<VerticalExtent, String>>,
 }
 
-impl Heights<'_> {
+/// Containers reached from objects through the declared traversal, and the
+/// heights a counterpart must stand at, around one subject.
+pub(crate) struct Scope<'r, 'c> {
+    traversal: Option<&'r Traversal>,
+    kinds: Option<&'r Kinds>,
+    /// The vertical-extent service and the height gap, with
+    /// `elevation_overlap` `overlapping`.
+    heights: Option<(&'r VerticalExtentServiceHandle, f64)>,
+    /// The subject's heights, read by [`Self::enter`].
+    subject: Option<VerticalExtent>,
+    context: &'r RuleContext<'c>,
+    everything: &'r [ObjectId],
+    caches: &'r mut Caches,
+}
+
+impl<'r, 'c> Scope<'r, 'c> {
+    pub(crate) fn new(
+        declared: &'r Declaration,
+        kinds: Option<&'r Kinds>,
+        (context, everything): (&'r RuleContext<'c>, &'r [ObjectId]),
+        caches: &'r mut Caches,
+    ) -> Self {
+        Self {
+            traversal: declared.scope.as_ref(),
+            kinds,
+            heights: context
+                .services
+                .get::<VerticalExtentServiceHandle>()
+                .zip(declared.elevation),
+            subject: None,
+            context,
+            everything,
+            caches,
+        }
+    }
+
+    /// Reads the subject's heights, when they are declared to matter.
+    fn enter(&mut self, subject: &ObjectId) -> Result<(), Unavailable> {
+        if let Some((service, _)) = self.heights {
+            let extent = service
+                .measure_vertical_extent(subject)
+                .map_err(|error| crate::orientation::extent_unavailable(&error))?;
+            self.subject = Some(extent);
+        }
+        Ok(())
+    }
+
+    fn containers(&mut self, object: &ObjectId) -> &Containers {
+        let Self {
+            traversal,
+            context,
+            everything,
+            caches,
+            ..
+        } = self;
+        caches.reached.entry(object.clone()).or_insert_with(|| {
+            let traversal = traversal.unwrap_or_else(|| unreachable!("scoped only when declared"));
+            traversal
+                .related_among(context, object, everything, everything)
+                .map(|(found, evidence)| (found.into_iter().collect(), evidence))
+        })
+    }
+
     /// Whether `counterpart` comes closer than the offset to the subject in
     /// height (their heights overlap, for an offset of zero).
     fn admit(&mut self, counterpart: &ObjectId) -> Admission {
-        let service = self.service;
+        let Some((service, offset)) = self.heights else {
+            return Ok(true);
+        };
         let theirs = self
+            .caches
             .extents
             .entry(counterpart.clone())
             .or_insert_with(|| {
@@ -703,82 +862,16 @@ impl Heights<'_> {
             .max(bottom.upper_metres() - other_top.lower_metres());
         let least = (other_bottom.lower_metres() - top.upper_metres())
             .max(bottom.lower_metres() - other_top.upper_metres());
-        if most < self.offset {
+        if most < offset {
             Ok(true)
-        } else if least >= self.offset {
+        } else if least >= offset {
             Ok(false)
         } else {
             Err(format!(
                 "whether {counterpart} stands at the subject's heights straddles the height gap \
-                 {:.4} m",
-                self.offset
+                 {offset:.4} m"
             ))
         }
-    }
-}
-
-/// Containers reached from objects through the declared traversal, cached,
-/// and the heights a counterpart must stand at.
-struct Scope<'r> {
-    traversal: Option<&'r Traversal>,
-    kinds: Option<Kinds>,
-    heights: Option<Heights<'r>>,
-    context: &'r RuleContext<'r>,
-    everything: Vec<&'r Object>,
-    reached: BTreeMap<ObjectId, Containers>,
-}
-
-impl<'r> Scope<'r> {
-    fn new(
-        declared: &'r Declaration<'_>,
-        heights: Option<&'r VerticalExtentServiceHandle>,
-        context: &'r RuleContext<'r>,
-    ) -> Self {
-        Self {
-            traversal: declared.scope.as_ref(),
-            kinds: declared
-                .containers
-                .map(|selector| Kinds::of(context, selector)),
-            heights: heights
-                .zip(declared.elevation)
-                .map(|(service, offset)| Heights {
-                    service,
-                    offset,
-                    subject: None,
-                    extents: BTreeMap::new(),
-                }),
-            context,
-            everything: context.project.objects().collect(),
-            reached: BTreeMap::new(),
-        }
-    }
-
-    /// Reads the subject's heights, when they are declared to matter.
-    fn enter(&mut self, subject: &ObjectId) -> Result<(), Unavailable> {
-        if let Some(heights) = &mut self.heights {
-            let extent = heights
-                .service
-                .measure_vertical_extent(subject)
-                .map_err(|error| crate::orientation::extent_unavailable(&error))?;
-            heights.subject = Some(extent);
-        }
-        Ok(())
-    }
-
-    fn containers(&mut self, object: &ObjectId) -> &Containers {
-        let Self {
-            traversal,
-            context,
-            everything,
-            reached,
-            ..
-        } = self;
-        reached.entry(object.clone()).or_insert_with(|| {
-            let traversal = traversal.unwrap_or_else(|| unreachable!("scoped only when declared"));
-            traversal
-                .related(context, object, everything)
-                .map(|(found, evidence)| (found.into_iter().collect(), evidence))
-        })
     }
 
     /// Whether `counterpart` shares a container with a subject reaching
@@ -788,10 +881,7 @@ impl<'r> Scope<'r> {
         subject_containers: &BTreeSet<ObjectId>,
         counterpart: &ObjectId,
     ) -> Admission {
-        let heights = match &mut self.heights {
-            Some(heights) => heights.admit(counterpart),
-            None => Ok(true),
-        };
+        let heights = self.admit(counterpart);
         if heights == Ok(false) || self.traversal.is_none() {
             return heights;
         }
@@ -804,7 +894,7 @@ impl<'r> Scope<'r> {
             Ok((containers, _)) => containers.clone(),
             Err(_) => return both(heights, Err(undecided())),
         };
-        let shared = match &self.kinds {
+        let shared = match self.kinds {
             None => Ok(!theirs.is_disjoint(subject_containers)),
             Some(kinds) => {
                 let (own_sure, own_possible) = kinds.split(subject_containers);
@@ -824,49 +914,40 @@ impl<'r> Scope<'r> {
         both(heights, shared)
     }
 }
-/// Candidates for `subject`: every counterpart the broad phase proposed, in
-/// scope or undecided, measured in the declared projection.
-fn candidates(
-    prepared: &Prepared<'_>,
-    declared: &Declaration<'_>,
-    scope: &mut Scope<'_>,
+
+/// Subjects and counterparts measured by their bodies, after the broad
+/// phase.
+pub(crate) struct Bodies {
+    subjects: Vec<ObjectId>,
+    unmeasurable_subjects: BTreeSet<ObjectId>,
+    counterparts: BTreeSet<ObjectId>,
+    unmeasurable_counterparts: BTreeSet<ObjectId>,
+    pairs: Vec<CandidatePair>,
+    unevaluated: Unevaluated,
+}
+
+impl From<Prepared<'_>> for Bodies {
+    fn from(prepared: Prepared<'_>) -> Self {
+        Self {
+            subjects: prepared.subjects,
+            unmeasurable_subjects: prepared.unmeasurable_subjects,
+            counterparts: prepared.counterparts,
+            unmeasurable_counterparts: prepared.unmeasurable_counterparts,
+            pairs: prepared.pairs,
+            unevaluated: prepared.unevaluated,
+        }
+    }
+}
+
+/// The counterparts whose extent could not be read, as candidates of
+/// `subject`, in scope or undecided.
+fn unmeasurable(
+    counterparts: &BTreeSet<ObjectId>,
+    scope: &mut Scope<'_, '_>,
     subject: &ObjectId,
     subject_containers: &BTreeSet<ObjectId>,
-) -> (Vec<Candidate>, Vec<Candidate>) {
-    // The broad phase reports each pair once, in either orientation.
-    let proposed = prepared.pairs.iter().filter_map(|pair| {
-        if pair.subject() == subject {
-            Some(pair.counterpart())
-        } else if pair.counterpart() == subject && prepared.counterparts.contains(pair.subject()) {
-            Some(pair.subject())
-        } else {
-            None
-        }
-    });
-    let mut measured = Vec::new();
-    for counterpart in proposed {
-        let in_scope = scope.shares(subject_containers, counterpart);
-        if in_scope == Ok(false) {
-            continue;
-        }
-        let outcome =
-            ProximityRequest::projected(subject.clone(), counterpart.clone(), declared.projection)
-                .and_then(|request| prepared.service.measure_distance(&request))
-                .map(|measured| Measured::projected(&measured))
-                .map_err(|error| {
-                    (
-                        reason(error),
-                        format!("distance to {counterpart} could not be measured: {error}"),
-                    )
-                });
-        measured.push(Candidate {
-            counterpart: counterpart.clone(),
-            in_scope,
-            measured: outcome,
-        });
-    }
-    let unmeasurable = prepared
-        .unmeasurable_counterparts
+) -> Vec<Candidate> {
+    counterparts
         .iter()
         .filter(|counterpart| *counterpart != subject)
         .filter_map(|counterpart| {
@@ -877,13 +958,66 @@ fn candidates(
                 measured: Err((
                     NotEvaluatedReason::IncompleteEvidence,
                     format!(
-                        "the extent of counterpart {counterpart} could not be read, so its distance is unknown"
+                        "the extent of counterpart {counterpart} could not be read, so its \
+                         distance is unknown"
                     ),
                 )),
             })
         })
-        .collect();
-    (measured, unmeasurable)
+        .collect()
+}
+
+impl Bodies {
+    /// Candidates for `subject`: every counterpart the broad phase
+    /// proposed, in scope or undecided, measured in the declared
+    /// projection.
+    pub(crate) fn candidates(
+        &self,
+        service: &ProximityServiceHandle,
+        projection: ProximityProjection,
+        scope: &mut Scope<'_, '_>,
+        (subject, subject_containers): (&ObjectId, &BTreeSet<ObjectId>),
+    ) -> (Vec<Candidate>, Vec<Candidate>) {
+        // The broad phase reports each pair once, in either orientation.
+        let proposed = self.pairs.iter().filter_map(|pair| {
+            if pair.subject() == subject {
+                Some(pair.counterpart())
+            } else if pair.counterpart() == subject && self.counterparts.contains(pair.subject()) {
+                Some(pair.subject())
+            } else {
+                None
+            }
+        });
+        let mut measured = Vec::new();
+        for counterpart in proposed {
+            let in_scope = scope.shares(subject_containers, counterpart);
+            if in_scope == Ok(false) {
+                continue;
+            }
+            let outcome =
+                ProximityRequest::projected(subject.clone(), counterpart.clone(), projection)
+                    .and_then(|request| service.measure_distance(&request))
+                    .map(|measured| Measured::projected(&measured))
+                    .map_err(|error| {
+                        (
+                            reason(error),
+                            format!("distance to {counterpart} could not be measured: {error}"),
+                        )
+                    });
+            measured.push(Candidate {
+                counterpart: counterpart.clone(),
+                in_scope,
+                measured: outcome,
+            });
+        }
+        let unmeasurable = unmeasurable(
+            &self.unmeasurable_counterparts,
+            scope,
+            subject,
+            subject_containers,
+        );
+        (measured, unmeasurable)
+    }
 }
 
 /// What one side of a pair is measured by.
@@ -907,9 +1041,9 @@ impl Extent {
 
 /// Subjects and counterparts measured by door swings on at least one side,
 /// with their extents read.
-struct Swings<'a> {
-    proximity: Option<&'a ProximityServiceHandle>,
+pub(crate) struct Swings {
     subjects: Vec<ObjectId>,
+    unmeasurable_subjects: BTreeSet<ObjectId>,
     counterparts: Vec<ObjectId>,
     extents: BTreeMap<(ObjectId, bool), Extent>,
     unmeasurable_counterparts: BTreeSet<ObjectId>,
@@ -918,55 +1052,28 @@ struct Swings<'a> {
     sides: (bool, bool),
 }
 
-impl<'a> Swings<'a> {
-    #[allow(clippy::too_many_lines)]
-    /// Selects both groups and reads each object's extent: its door swing
-    /// or its body, as its side declares.
-    fn prepare(
-        context: &RuleContext<'a>,
-        rule: &CompiledRule,
-        declared: &Declaration<'_>,
-    ) -> Result<Self, CapabilityEvaluation> {
-        let (subjects, evaluation) = select_objects(context, &rule.selector);
-        let Some(selector) = counterpart_selector(rule) else {
-            return Err(refuse_all(
-                &subjects,
-                evaluation,
-                &NotEvaluatedReason::InvalidDeclaration,
-                "`counterparts` is not a selector",
-            ));
-        };
+impl Swings {
+    /// Reads each selected object's extent, its door swing or its body, as
+    /// its side declares; `unevaluated` the objects the selections left
+    /// undecided. Why every subject is refused, when a service is missing.
+    fn among(
+        context: &RuleContext<'_>,
+        declared: &Declaration,
+        (subjects, counterparts): (&[&Object], &[&Object]),
+        mut unevaluated: Unevaluated,
+    ) -> Result<Self, Unavailable> {
         let Some(frames) = context.services.get::<ObjectFrameServiceHandle>() else {
-            return Err(refuse_all(
-                &subjects,
-                evaluation,
-                &NotEvaluatedReason::MissingService,
-                "door swings need the object-frame service, which is not registered",
+            return Err((
+                NotEvaluatedReason::MissingService,
+                "door swings need the object-frame service, which is not registered".to_owned(),
             ));
         };
         let proximity = context.services.get::<ProximityServiceHandle>();
         if proximity.is_none() && !(declared.swings.0 && declared.swings.1) {
-            return Err(refuse_all(
-                &subjects,
-                evaluation,
-                &NotEvaluatedReason::MissingService,
-                "proximity service is not registered",
+            return Err((
+                NotEvaluatedReason::MissingService,
+                "proximity service is not registered".to_owned(),
             ));
-        }
-        let (counterparts, counterpart_selection) = select_objects(context, selector);
-        let mut unevaluated = Unevaluated::default();
-        for outcome in evaluation
-            .not_evaluated_outcomes()
-            .iter()
-            .chain(counterpart_selection.not_evaluated_outcomes())
-        {
-            if let Some(object) = outcome.object_id() {
-                unevaluated.push(
-                    object.clone(),
-                    outcome.reason().clone(),
-                    outcome.message().to_owned(),
-                );
-            }
         }
         let read = |object: &ObjectId, swing: bool| -> Result<Extent, Unavailable> {
             if swing {
@@ -994,10 +1101,11 @@ impl<'a> Swings<'a> {
         };
         let mut extents = BTreeMap::new();
         let mut kept = (Vec::new(), Vec::new());
+        let mut unmeasurable_subjects = BTreeSet::new();
         let mut unmeasurable_counterparts = BTreeSet::new();
         for (objects, swing, is_subject) in [
-            (&subjects, declared.swings.0, true),
-            (&counterparts, declared.swings.1, false),
+            (subjects, declared.swings.0, true),
+            (counterparts, declared.swings.1, false),
         ] {
             for object in objects {
                 if let Entry::Vacant(slot) = extents.entry((object.id.clone(), swing)) {
@@ -1011,7 +1119,9 @@ impl<'a> Swings<'a> {
                                 why,
                                 format!("{message}; its distances were not checked"),
                             );
-                            if !is_subject {
+                            if is_subject {
+                                unmeasurable_subjects.insert(object.id.clone());
+                            } else {
                                 unmeasurable_counterparts.insert(object.id.clone());
                             }
                             continue;
@@ -1029,9 +1139,12 @@ impl<'a> Swings<'a> {
         // failed only there; one failing as a counterpart is unmeasurable.
         kept.1
             .retain(|object| !unmeasurable_counterparts.contains(object));
+        // A subject whose extent was read once, kept, is measurable.
+        kept.0
+            .retain(|object| !unmeasurable_subjects.contains(object));
         Ok(Self {
-            proximity,
             subjects: kept.0,
+            unmeasurable_subjects,
             counterparts: kept.1,
             extents,
             unmeasurable_counterparts,
@@ -1044,8 +1157,12 @@ impl<'a> Swings<'a> {
     /// The plan distance from `footprint` to `body`'s footprint: bounded
     /// below through the circumscribed regions, above through the inscribed
     /// ones.
-    fn to_body(&self, footprint: &Footprint, body: &ObjectId) -> Result<Measured, Unavailable> {
-        let Some(service) = self.proximity else {
+    fn to_body(
+        proximity: Option<&ProximityServiceHandle>,
+        footprint: &Footprint,
+        body: &ObjectId,
+    ) -> Result<Measured, Unavailable> {
+        let Some(service) = proximity else {
             return Err((
                 NotEvaluatedReason::MissingService,
                 "proximity service is not registered".into(),
@@ -1086,7 +1203,12 @@ impl<'a> Swings<'a> {
         Ok(measured)
     }
 
-    fn measure(&self, subject: &ObjectId, counterpart: &ObjectId) -> Result<Measured, Unavailable> {
+    fn measure(
+        &self,
+        proximity: Option<&ProximityServiceHandle>,
+        subject: &ObjectId,
+        counterpart: &ObjectId,
+    ) -> Result<Measured, Unavailable> {
         let (Some(from), Some(to)) = (
             self.extents.get(&(subject.clone(), self.sides.0)),
             self.extents.get(&(counterpart.clone(), self.sides.1)),
@@ -1108,8 +1230,8 @@ impl<'a> Swings<'a> {
                     evidence: vec![from.evidence.clone(), to.evidence.clone()],
                 })
             }
-            (Extent::Swing(from), Extent::Body(_)) => self.to_body(from, counterpart),
-            (Extent::Body(_), Extent::Swing(to)) => self.to_body(to, subject),
+            (Extent::Swing(from), Extent::Body(_)) => Self::to_body(proximity, from, counterpart),
+            (Extent::Body(_), Extent::Swing(to)) => Self::to_body(proximity, to, subject),
             (Extent::Body(_), Extent::Body(_)) => Err(invalid(
                 "neither side is a door swing, so this pair belongs to the body path",
             )),
@@ -1120,9 +1242,9 @@ impl<'a> Swings<'a> {
     /// comes within the margin of the subject's, in scope or undecided.
     fn candidates(
         &self,
-        scope: &mut Scope<'_>,
-        subject: &ObjectId,
-        subject_containers: &BTreeSet<ObjectId>,
+        proximity: Option<&ProximityServiceHandle>,
+        scope: &mut Scope<'_, '_>,
+        (subject, subject_containers): (&ObjectId, &BTreeSet<ObjectId>),
     ) -> (Vec<Candidate>, Vec<Candidate>) {
         let mut measured = Vec::new();
         let from = self
@@ -1152,212 +1274,149 @@ impl<'a> Swings<'a> {
             measured.push(Candidate {
                 counterpart: counterpart.clone(),
                 in_scope,
-                measured: self.measure(subject, counterpart),
+                measured: self.measure(proximity, subject, counterpart),
             });
         }
-        let unmeasurable = self
-            .unmeasurable_counterparts
-            .iter()
-            .filter(|counterpart| *counterpart != subject)
-            .filter_map(|counterpart| {
-                let in_scope = scope.shares(subject_containers, counterpart);
-                (in_scope != Ok(false)).then(|| Candidate {
-                    counterpart: counterpart.clone(),
-                    in_scope,
-                    measured: Err((
-                        NotEvaluatedReason::IncompleteEvidence,
-                        format!(
-                            "the extent of counterpart {counterpart} could not be read, so its \
-                             distance is unknown"
-                        ),
-                    )),
-                })
-            })
-            .collect();
+        let unmeasurable = unmeasurable(
+            &self.unmeasurable_counterparts,
+            scope,
+            subject,
+            subject_containers,
+        );
         (measured, unmeasurable)
     }
 }
 
 /// Where the pairs come from: bodies through the broad phase, or door
 /// swings on at least one side.
-enum Pairs<'a> {
-    Bodies(Prepared<'a>),
-    Swings(Swings<'a>),
+pub(crate) enum Pairs {
+    Bodies(Bodies),
+    Swings(Swings),
 }
 
-impl RuleCapability for Distance {
-    fn id(&self) -> &'static str {
-        "axioval:capability.distance"
-    }
-
-    fn parameters(&self) -> Vec<ParameterDescriptor> {
-        let mut parameters = vec![
-            ParameterDescriptor::required("counterparts", ParameterType::Selector),
-            ParameterDescriptor::optional("minimum_metres", ParameterType::Number).per_object(),
-            ParameterDescriptor::optional("maximum_metres", ParameterType::Number).per_object(),
-            ParameterDescriptor::optional("mode", ParameterType::String),
-            ParameterDescriptor::optional("count", ParameterType::Integer),
-            ParameterDescriptor::optional("projection", ParameterType::String),
-            ParameterDescriptor::optional("footprint_offset_metres", ParameterType::Number),
-            ParameterDescriptor::optional("vertical_direction", ParameterType::String),
-            ParameterDescriptor::optional("subject_extent", ParameterType::String),
-            ParameterDescriptor::optional("counterpart_extent", ParameterType::String),
-            ParameterDescriptor::optional("subject_surface", ParameterType::String),
-            ParameterDescriptor::optional("counterpart_surface", ParameterType::String),
-            ParameterDescriptor::optional("elevation_overlap", ParameterType::String),
-            ParameterDescriptor::optional("elevation_offset_metres", ParameterType::Number),
-            ParameterDescriptor::optional("container_selector", ParameterType::Selector),
-        ];
-        parameters.extend(traversal_parameters());
-        parameters
-    }
-
-    fn grades_deviation(&self) -> bool {
-        true
-    }
-
-    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        if crate::object_parameters::has_object_parameters(rule) {
-            return crate::object_parameters::per_object(self, context, rule);
-        }
-        let declared = match declaration(rule) {
-            Ok(declared) => declared,
-            Err((_, message)) => return refuse_declaration(context, rule, &message),
-        };
-        let heights = context.services.get::<VerticalExtentServiceHandle>();
-        if declared.elevation.is_some() && heights.is_none() {
-            return CapabilityEvaluation::not_evaluated(
-                NotEvaluatedReason::MissingService,
-                "distance: `elevation_overlap` needs the vertical-extent service, which is not \
-                 registered",
-            );
-        }
-        let pairs = if declared.swings.0 || declared.swings.1 {
-            match Swings::prepare(context, rule, &declared) {
-                Ok(swings) => Pairs::Swings(swings),
-                Err(refused) => return refused,
-            }
+impl Pairs {
+    /// Both groups, already selected (the objects in the project's order,
+    /// `unevaluated` those their selections left undecided), prepared as
+    /// the declaration measures them; why every subject is refused, where
+    /// a service is missing or the broad phase cannot run.
+    pub(crate) fn among(
+        context: &RuleContext<'_>,
+        declared: &Declaration,
+        groups: (&[&Object], &[&Object]),
+        unevaluated: Unevaluated,
+    ) -> Result<Self, Unavailable> {
+        if declared.swings.0 || declared.swings.1 {
+            Swings::among(context, declared, groups, unevaluated).map(Pairs::Swings)
         } else {
-            match prepare(context, rule, Some(declared.margin()), declared.projection) {
-                Ok(prepared) => Pairs::Bodies(prepared),
-                Err(refused) => return refused,
-            }
-        };
-        let subjects = match &pairs {
-            Pairs::Bodies(prepared) => prepared.subjects.clone(),
-            Pairs::Swings(swings) => swings.subjects.clone(),
-        };
-        let mut scope = Scope::new(&declared, heights, context);
-        let mut evaluation = CapabilityEvaluation::default();
+            crate::pairs::prepare_among(
+                context,
+                groups,
+                unevaluated,
+                (declared.margin(), declared.projection),
+            )
+            .map(|prepared| Pairs::Bodies(prepared.into()))
+        }
+    }
 
-        for subject in &subjects {
-            if let Err((reason, message)) = scope.enter(subject) {
-                evaluation.push_object_not_evaluated(
-                    subject.clone(),
-                    reason,
-                    format!("the subject's heights could not be read: {message}"),
-                );
-                continue;
-            }
-            let (subject_containers, scope_evidence) = if declared.scope.is_some() {
-                match scope.containers(subject) {
-                    Ok((containers, evidence)) => (containers.clone(), evidence.clone()),
-                    Err((reason, message)) => {
-                        evaluation.push_object_not_evaluated(
-                            subject.clone(),
-                            reason.clone(),
-                            format!("the subject's containers could not be decided: {message}"),
-                        );
-                        continue;
-                    }
-                }
-            } else {
-                (BTreeSet::new(), Vec::new())
-            };
-            let (measured, unmeasurable) = match &pairs {
-                Pairs::Bodies(prepared) => candidates(
-                    prepared,
-                    &declared,
-                    &mut scope,
-                    subject,
-                    &subject_containers,
-                ),
-                Pairs::Swings(swings) => {
-                    swings.candidates(&mut scope, subject, &subject_containers)
-                }
-            };
-            judge(
-                &mut evaluation,
-                rule,
-                &declared,
+    /// The subjects judged, in the selection's order.
+    pub(crate) fn subjects(&self) -> &[ObjectId] {
+        match self {
+            Self::Bodies(bodies) => &bodies.subjects,
+            Self::Swings(swings) => &swings.subjects,
+        }
+    }
+
+    /// The selected subjects whose extent could not be read.
+    pub(crate) fn unmeasurable_subjects(&self) -> &BTreeSet<ObjectId> {
+        match self {
+            Self::Bodies(bodies) => &bodies.unmeasurable_subjects,
+            Self::Swings(swings) => &swings.unmeasurable_subjects,
+        }
+    }
+
+    /// What the selections and the extents left open, by object.
+    pub(crate) fn unevaluated(&self) -> &Unevaluated {
+        match self {
+            Self::Bodies(bodies) => &bodies.unevaluated,
+            Self::Swings(swings) => &swings.unevaluated,
+        }
+    }
+
+    /// What the selections and the extents left open, by object, taken.
+    #[cfg(feature = "parity-reference")]
+    pub(crate) fn into_unevaluated(self) -> Unevaluated {
+        match self {
+            Self::Bodies(bodies) => bodies.unevaluated,
+            Self::Swings(swings) => swings.unevaluated,
+        }
+    }
+
+    fn candidates(
+        &self,
+        context: &RuleContext<'_>,
+        declared: &Declaration,
+        scope: &mut Scope<'_, '_>,
+        subject: (&ObjectId, &BTreeSet<ObjectId>),
+    ) -> (Vec<Candidate>, Vec<Candidate>) {
+        let proximity = context.services.get::<ProximityServiceHandle>();
+        match self {
+            Self::Bodies(bodies) => bodies.candidates(
+                proximity.unwrap_or_else(|| unreachable!("bodies are measured by the service")),
+                declared.projection,
+                scope,
                 subject,
-                (&measured, &unmeasurable),
-                scope_evidence,
-            );
+            ),
+            Self::Swings(swings) => swings.candidates(proximity, scope, subject),
         }
-        match pairs {
-            Pairs::Bodies(prepared) => prepared.unevaluated.drain_into(&mut evaluation),
-            Pairs::Swings(swings) => swings.unevaluated.drain_into(&mut evaluation),
-        }
-        evaluation
     }
 }
 
-/// Judges one subject's candidates and records the outcome.
-fn judge(
-    evaluation: &mut CapabilityEvaluation,
-    rule: &CompiledRule,
-    declared: &Declaration<'_>,
-    subject: &ObjectId,
-    (measured, unmeasurable): (&[Candidate], &[Candidate]),
-    scope_evidence: Vec<Evidence>,
-) {
-    let nearest_mode = matches!(declared.mode, Mode::Nearest);
-    let apart = declared
-        .keep_apart()
-        .map(|minimum| keep_apart(minimum, measured, unmeasurable, nearest_mode));
-    let reach = declared
-        .within()
-        .map(|bounds| within(bounds, measured, unmeasurable, nearest_mode));
+/// What one subject's checks come to: keeping its counterparts apart and
+/// having them within reach, as declared, and the evidence of its
+/// containers.
+pub(crate) struct Verdicts {
+    pub(crate) apart: Option<Verdict>,
+    pub(crate) within: Option<Verdict>,
+    pub(crate) scope_evidence: Vec<Evidence>,
+}
 
-    let mut messages = Vec::new();
-    let mut related = Vec::new();
-    let mut evidence = Vec::new();
-    let mut open = None;
-    // A finding missing both bounds grades by the worse; one naming
-    // no distance against its bound is not graded.
-    let mut deviations = Vec::new();
-    for verdict in [apart, reach].into_iter().flatten() {
-        match verdict {
-            Verdict::Finding {
-                message,
-                related: named,
-                evidence: cited,
-                deviation,
-            } => {
-                messages.push(message);
-                related.extend(named);
-                evidence.extend(cited);
-                deviations.push(deviation);
+/// Judges one subject's counterparts, or why its heights or containers
+/// cannot be read.
+pub(crate) fn verdicts(
+    (context, declared): (&RuleContext<'_>, &Declaration),
+    pairs: &Pairs,
+    scope: &mut Scope<'_, '_>,
+    subject: &ObjectId,
+) -> Result<Verdicts, Unavailable> {
+    scope.enter(subject).map_err(|(reason, message)| {
+        (
+            reason,
+            format!("the subject's heights could not be read: {message}"),
+        )
+    })?;
+    let (subject_containers, scope_evidence) = if declared.scope.is_some() {
+        match scope.containers(subject) {
+            Ok((containers, evidence)) => (containers.clone(), evidence.clone()),
+            Err((reason, message)) => {
+                return Err((
+                    reason.clone(),
+                    format!("the subject's containers could not be decided: {message}"),
+                ));
             }
-            Verdict::NotEvaluated(unavailable) => {
-                open.get_or_insert(unavailable);
-            }
-            Verdict::Pass => {}
         }
-    }
-    // A certain violation stands whatever is undecided.
-    if !messages.is_empty() {
-        evidence.extend(scope_evidence);
-        let deviation = deviations
-            .into_iter()
-            .reduce(|a, b| a.zip(b).map(|(a, b)| a.worst(b)))
-            .flatten();
-        evaluation.push_finding_deviating(
-            finding(rule, subject, messages.join("; "), evidence, related),
-            deviation,
-        );
-    } else if let Some((reason, message)) = open {
-        evaluation.push_object_not_evaluated(subject.clone(), reason, message);
-    }
+    } else {
+        (BTreeSet::new(), Vec::new())
+    };
+    let (measured, unmeasurable) =
+        pairs.candidates(context, declared, scope, (subject, &subject_containers));
+    let nearest_mode = matches!(declared.mode, Mode::Nearest);
+    Ok(Verdicts {
+        apart: declared
+            .keep_apart()
+            .map(|minimum| keep_apart(minimum, &measured, &unmeasurable, nearest_mode)),
+        within: declared
+            .within()
+            .map(|bounds| within(bounds, &measured, &unmeasurable, nearest_mode)),
+        scope_evidence,
+    })
 }

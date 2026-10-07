@@ -220,13 +220,32 @@ fn evaluate(
             AxiolidProximityService::new(geometry),
         )))
         .unwrap();
-    capability.evaluate(
-        &RuleContext {
-            project: &project,
-            services: &services,
-        },
-        &rule,
-    )
+    // A template reads its measured lists as a run does.
+    let registry =
+        axioval::rules::register_builtins(axioval::engine::CapabilityRegistry::new()).unwrap();
+    registry.install_measured(&mut services, &project);
+    let context = RuleContext {
+        project: &project,
+        services: &services,
+    };
+    let evaluated = capability.evaluate(&context, &rule);
+    // `distance` is held to the implementation it replaced, on the same
+    // geometry.
+    if capability.id() == "axioval:capability.distance" {
+        let replaced = axioval_rules::reference::Distance.evaluate(&context, &rule);
+        let parity = axioval::rules::parity::Parity::contract().compare(
+            (
+                capability.id(),
+                &axioval::rules::parity::Observations::of_evaluation(&replaced),
+            ),
+            (
+                "template",
+                &axioval::rules::parity::Observations::of_evaluation(&evaluated),
+            ),
+        );
+        assert!(parity.holds(), "{}", parity.diff());
+    }
+    evaluated
 }
 
 fn kind(kind: &str) -> Selector {

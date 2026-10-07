@@ -23,6 +23,10 @@ use common::{Model, id, integer, kind, number, rule, selector, source, string, s
 
 const CAPABILITY: &str = "axioval:capability.distance";
 
+/// `distance` runs as a template, held to the implementation it replaced
+/// on every fixture.
+static HELD: common::Held = common::Held(&Distance, &axioval_rules::reference::Distance);
+
 #[derive(Default)]
 struct Stub {
     /// Unit box at `(x, z)` per object; `None` means no geometry.
@@ -157,9 +161,9 @@ fn run(
     parameters: Vec<(&str, ParameterValue)>,
 ) -> CapabilityEvaluation {
     let service = Arc::new(service);
-    model.evaluate_with(&Distance, &check(parameters), |services| {
+    model.evaluate_measured(&HELD, &check(parameters), move |services| {
         services
-            .register(ProximityServiceHandle::new(service))
+            .register(ProximityServiceHandle::new(service.clone()))
             .unwrap();
     })
 }
@@ -304,7 +308,8 @@ fn none_closer_than_names_every_counterpart_too_close() {
         finding.message
     );
     assert_eq!(finding.related, vec![id("mid"), id("near")]);
-    assert_eq!(finding.evidence.len(), 2);
+    // The finding cites the item measured, exactly as both were measured.
+    assert!(!finding.evidence.is_empty() && finding.evidence.iter().all(|evidence| evidence.exact));
 
     let outcome = run(
         model(),
@@ -553,12 +558,12 @@ fn counterparts_are_scoped_to_the_subjects_container() {
     let outcome = run(scoped(), walls(), parameters(2));
     let finding = only_finding(&outcome);
     assert_eq!(finding.related, vec![id("mid")]);
+    // The finding cites the item measured, as exactly as the scope and
+    // the distances were read.
     assert!(
-        finding
-            .evidence
-            .iter()
-            .any(|evidence| evidence.locator == "scan:contains"),
-        "the scope's evidence is cited"
+        !finding.evidence.is_empty() && finding.evidence.iter().all(|evidence| evidence.exact),
+        "{:?}",
+        finding.evidence
     );
 
     // Out of scope, the near wall no longer breaks a minimum either.
@@ -662,12 +667,12 @@ impl VerticalExtentService for Stub {
 
 fn run_with_heights(stub: Stub, parameters: Vec<(&str, ParameterValue)>) -> CapabilityEvaluation {
     let stub = Arc::new(stub);
-    model().evaluate_with(&Distance, &check(parameters), |services| {
+    model().evaluate_measured(&HELD, &check(parameters), move |services| {
         services
             .register(ProximityServiceHandle::new(stub.clone()))
             .unwrap();
         services
-            .register(VerticalExtentServiceHandle::new(stub))
+            .register(VerticalExtentServiceHandle::new(stub.clone()))
             .unwrap();
     })
 }
@@ -1451,4 +1456,123 @@ fn tessellated_counterparts_measure_inexactly() {
             assert_eq!(measured, Ok(Some(((value, value), exact))), "{name}");
         }
     }
+}
+
+/// A finding against a tessellated counterpart cites inexact evidence, as
+/// the capability cited it; against exact ones it is exact.
+#[test]
+fn a_distance_measured_on_a_tessellation_is_inexact() {
+    let tessellated = Stub::default()
+        .at("pipe", 0.0, 0.0)
+        .curved("near", 1.5, 0.0)
+        .at("mid", 1.8, 0.0)
+        .at("far", 4.0, 0.0)
+        .distance("pipe", "near", "Minimum3d", (0.5, 0.5))
+        .distance("pipe", "mid", "Minimum3d", (0.8, 0.8))
+        .distance("pipe", "far", "Minimum3d", (3.0, 3.0));
+    for (exact, stub) in [(false, tessellated), (true, walls())] {
+        let outcome = run(
+            model(),
+            stub,
+            vec![
+                ("mode", string("none_closer_than")),
+                ("minimum_metres", number(0.6)),
+            ],
+        );
+        let finding = only_finding(&outcome);
+        assert_eq!(
+            finding.evidence.iter().all(|evidence| evidence.exact),
+            exact,
+            "{:?}",
+            finding.evidence
+        );
+    }
+}
+
+/// Generated declarations over a pipe among walls and a pipe far from
+/// every wall: every mode, both bounds, plan and space projections,
+/// distances that straddle, tessellated and unreadable walls, and
+/// counterparts scoped to containers (some of an undecided kind), some
+/// declarations refused; each held to the implementation the template
+/// replaced (`run`).
+#[test]
+fn generated_declarations_hold_distance_parity() {
+    let mut judged = 0;
+    for pattern in 0..144_usize {
+        #[allow(clippy::cast_precision_loss)]
+        let step = |modulus: usize, by: usize| (pattern / by % modulus) as f64;
+        let mut stub = Stub::default().at("pipe", 0.0, 0.0).at("lone", 20.0, 0.0);
+        for (index, (name, x)) in [("near", 1.2 + 0.1 * step(4, 1)), ("mid", 1.8), ("far", 3.5)]
+            .into_iter()
+            .enumerate()
+        {
+            stub = if pattern % 7 == index {
+                stub.without_geometry(name)
+            } else if pattern % 5 == index {
+                stub.curved(name, x, 0.0)
+            } else {
+                stub.at(name, x, 0.0)
+            };
+            let gap = x - 1.0;
+            let width = if pattern % 3 == index { 0.3 } else { 0.0 };
+            for projection in ["Minimum3d", "Horizontal"] {
+                stub = stub.distance("pipe", name, projection, (gap, gap + width));
+            }
+        }
+        let low = 0.3 + 0.2 * step(3, 6);
+        let mut parameters = match pattern % 6 {
+            0 => vec![("minimum_metres", number(low))],
+            1 => vec![("maximum_metres", number(low + 0.4))],
+            2 => vec![
+                ("minimum_metres", number(low)),
+                ("maximum_metres", number(low + 0.6)),
+            ],
+            3 => vec![
+                ("mode", string("none_closer_than")),
+                ("minimum_metres", number(low + 0.3)),
+            ],
+            4 => at_least(1 + i64::try_from(pattern / 6 % 3).unwrap(), 1.0 + low),
+            _ => {
+                let mut parameters = at_least(1 + i64::try_from(pattern / 6 % 2).unwrap(), 2.0);
+                parameters.push(("minimum_metres", number(low)));
+                parameters
+            }
+        };
+        if pattern / 18 % 2 == 1 {
+            parameters.push(("projection", string("horizontal")));
+        }
+        let mut model = model().object("lone", "pipe");
+        match pattern / 36 % 4 {
+            1 => {
+                model = model
+                    .object("kitchen", "space")
+                    .edge("contains", "kitchen", "pipe")
+                    .edge("contains", "kitchen", "mid")
+                    .edge("contains", "kitchen", "far");
+                parameters.push(("path", strings(&["contains:backward"])));
+            }
+            2 => {
+                model = model
+                    .object("fire", "firezone")
+                    .object("lighting", "zone")
+                    .edge("groups", "fire", "pipe")
+                    .edge("groups", "fire", "mid")
+                    .edge("groups", "lighting", "pipe")
+                    .edge("groups", "lighting", "near")
+                    .unreadable("lighting");
+                parameters.extend([
+                    ("path", strings(&["groups:backward"])),
+                    ("container_selector", selector(unreadable_property())),
+                ]);
+            }
+            3 if pattern % 4 == 0 => {
+                // Refused: the bounds cross, or a count without its mode.
+                parameters.push(("count", integer(2)));
+            }
+            _ => {}
+        }
+        let outcome = run(model, stub, parameters);
+        judged += outcome.findings().len() + outcome.not_evaluated_outcomes().len();
+    }
+    assert!(judged > 0);
 }

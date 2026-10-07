@@ -45,7 +45,7 @@ table, and `light-well`, `centre-line-distance`, `component-visibility`
 and `exit-separation` (whose required separation stays an interval over
 both shares where its flag is unknown) follow, and `name-sequence` is the
 first judging the items of a list on objects of their own (`at`), and
-`numbering-consistency`, `wall-spacing` and `parking-bay` follow; `coordinate-consistency` is the first judging the sources themselves,
+`numbering-consistency`, `wall-spacing`, `parking-bay` and `distance` follow; `coordinate-consistency` is the first judging the sources themselves,
 against a reference read once per rule, and `external-wall-validation`
 the first leading one measurement to outcomes at source and at object
 level ([#291](https://github.com/axioval/engine/issues/291)): every
@@ -1412,6 +1412,36 @@ declaration is the capability's own (`arguments`,
 `parking_bay::check_arguments`), refused once for the rule; the strings it
 binds untrimmed (`pattern`).
 
+### `distance`
+
+| Form | When | Values | Checks |
+| --- | --- | --- | --- |
+| one | always | `judged` = 1 | `Items` over `distance_items;counterparts=@counterparts;…;selection=@selection` (every parameter under its own name, unstated ones dropped, the rule's subjects bound), joined by `; `; of the project, `Items` over `distance_open` with the same arguments, each item's outcome on its `object` |
+
+The list is the capability's own reading (`Pairs::among`, then `verdicts`
+for each subject): one broad phase per rule over the bound subjects and
+counterparts (or their door swings), the counterparts each subject shares a
+container with and stands at the heights of, measured in the declared
+projection, and what keeping them apart and having them within reach come
+to. A subject's one item holds `apart` (the nearest counterpart surely
+closer than `minimum_metres`, at least the minimum, graded), `reach` (in
+`nearest`, the nearest counterpart where none surely lies within, at most
+`maximum_metres`, graded), `none_within` (no counterpart near at all, a
+finding) and `count` (in `at_least`, from the counterparts surely within
+the range to every one that may be, at least `count`, ungraded), each
+worded as the capability worded it (`{apart_words}`, `{reach_words}`,
+`{count_words}`) and relating what it named; a check left open is its
+number refused for why. Its failing checks are one finding, graded by the
+worse deviation where each states one; where none fails, the first left
+open (`joined`). The objects the selections and the broad phase leave open
+beyond the subjects (an undecided or unreadable counterpart) are the
+project's `distance_open`, each open for its own reason. The declaration
+is the capability's own (`arguments`, `distance::check_arguments`),
+refused for each subject; `elevation_overlap` `overlapping` needs the
+vertical-extent service, refused once for the rule (`services` with
+`only` and `whole`). Computed bounds run per object, as for any template
+(`object_parameters`).
+
 ### `coordinate-consistency`
 
 | Form | When | Once | Scopes | Decision |
@@ -2210,6 +2240,17 @@ mode and filters by orientation (to the aisle or the neighbours) and by
 obstructed ends and sides, some objects tessellated; and by the
 `parking-bay` rules of the `spans` case, recorded before the switch. It
 is never forked (D35).
+
+`distance` is held to `distance/reference.rs`
+(`axioval_rules::reference::Distance`, which judges the same `verdicts`)
+on every fixture of `tests/distance.rs`, `tests/distance_door_swing.rs`
+and the distance tests of `tests/clash.rs`, and on real meshes in the
+facade's `tests/axiolid_certified_distance.rs`; by generated declarations
+over every mode, both bounds, plan and space projections, straddling,
+tessellated and unreadable counterparts and counterparts scoped to
+containers of an undecided kind, some declarations refused; and by the
+`distance` rules of the `proximity` case, recorded before the switch. It
+is never forked (D36).
 `coordinate-consistency` is held to `coordinate_consistency/reference.rs`
 (`axioval_rules::reference::CoordinateConsistencyCheck`, which shares the
 comparison and the choice of the reference) through `common::Held` on

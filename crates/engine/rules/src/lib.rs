@@ -194,6 +194,7 @@ pub mod reference {
     pub use crate::coordinate_consistency::reference::CoordinateConsistencyCheck;
     pub use crate::corridor_end_openings::reference::CorridorEndOpenings;
     pub use crate::counterpart_coverage::reference::CounterpartCoverage;
+    pub use crate::distance::reference::Distance;
     pub use crate::door_swing_direction::reference::DoorSwing;
     pub use crate::effective_coverage::reference::EffectiveCoverage;
     pub use crate::empty_host::reference::EmptyHost;
@@ -315,6 +316,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register(UnclassifiedObject))
         .and_then(|registry| registry.register(QuantityTakeoff))
         .and_then(|registry| registry.register_measured(distance::DistanceMeasures))
+        .and_then(|registry| registry.register_measured(distance::DistanceItems))
         .and_then(|registry| registry.register_measured(measured_openings::OpeningMeasures))
         .and_then(|registry| registry.register_measured(keyed_limit::DoorMeasures))
         .and_then(|registry| registry.register_measured(door_swing_direction::SwingMeasures))

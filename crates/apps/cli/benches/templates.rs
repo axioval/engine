@@ -268,6 +268,11 @@ const PAIRS: &[Pair] = &[
         reference: |registry| registry.replace(axioval::rules::reference::ParkingBay),
     },
     Pair {
+        capability: "axioval:capability.distance",
+        case: "proximity",
+        reference: |registry| registry.replace(axioval::rules::reference::Distance),
+    },
+    Pair {
         capability: "axioval:capability.coordinate-consistency",
         case: "storeys",
         reference: |registry| {

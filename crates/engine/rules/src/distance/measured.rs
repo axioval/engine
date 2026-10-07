@@ -13,13 +13,12 @@ use std::collections::BTreeMap;
 
 use axioval_engine::{
     CompiledRule, MeasuredProvider, Measurement, PropertyResolutionError, RuleContext,
-    VerticalExtentServiceHandle,
 };
 use axioval_ir::contract::{ParameterValue, Selector, Severity};
 use axioval_ir::measured::{COUNT_WITHIN, DISTANCE, MeasuredArgument, MeasuredCall};
 use axioval_ir::{ObjectId, QuantityDimension, RuleId};
 
-use super::{Candidate, Scope, candidates, declaration};
+use super::{Bodies, Caches, Candidate, Scope, declaration};
 use crate::pairs::prepare;
 
 /// Measures `distance` and `count_within`.
@@ -244,14 +243,16 @@ impl MeasuredProvider for DistanceMeasures {
         if !prepared.subjects.contains(object) || prepared.unmeasurable_subjects.contains(object) {
             return Err(unavailable("its extent could not be read".into()));
         }
-        let heights = context.services.get::<VerticalExtentServiceHandle>();
-        let mut scope = Scope::new(&declared, heights, context);
-        let (measured, unmeasurable) = candidates(
-            &prepared,
-            &declared,
+        let service = prepared.service;
+        let bodies = Bodies::from(prepared);
+        let everything = crate::support::everything(context);
+        let mut caches = Caches::default();
+        let mut scope = Scope::new(&declared, None, (context, &everything), &mut caches);
+        let (measured, unmeasurable) = bodies.candidates(
+            service,
+            declared.projection,
             &mut scope,
-            object,
-            &std::collections::BTreeSet::new(),
+            (object, &std::collections::BTreeSet::new()),
         );
         let all: Vec<&Candidate> = measured.iter().chain(&unmeasurable).collect();
         let locator = format!("{name}:{object}:{}", all.len());

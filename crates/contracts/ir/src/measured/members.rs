@@ -1137,6 +1137,621 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
     },
     MemberDescriptor {
         list: MeasuredDescriptor {
+            name: "distance_items",
+            parameters: &[
+                MeasuredParameter {
+                    key: "counterparts",
+                    kind: MeasuredParameterKind::Objects,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The counterparts each subject keeps its distance from (`@counterparts`).",
+                        "Die Gegenstücke, zu denen jedes Subjekt seinen Abstand hält (`@counterparts`).",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "minimum_metres",
+                    kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "No counterpart may come closer, in metres, if stated.",
+                        "Kein Gegenstück darf näher kommen, in Metern, falls angegeben.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "maximum_metres",
+                    kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "A counterpart must lie within it, in metres, if stated.",
+                        "Ein Gegenstück muss innerhalb liegen, in Metern, falls angegeben.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "mode",
+                    kind: MeasuredParameterKind::Pattern,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "`nearest`, `none_closer_than` or `at_least`, as the rule states it.",
+                        "`nearest`, `none_closer_than` oder `at_least`, wie die Regel es angibt.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "count",
+                    kind: MeasuredParameterKind::Number { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "How many counterparts `at_least` requires.",
+                        "Wie viele Gegenstücke `at_least` verlangt.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "projection",
+                    kind: MeasuredParameterKind::Pattern,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The projection distances are measured in, as the rule states it.",
+                        "Die Projektion, in der Abstände gemessen werden, wie die Regel sie angibt.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "footprint_offset_metres",
+                    kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "How far a vertical distance reaches beyond the footprint.",
+                        "Wie weit ein vertikaler Abstand über die Grundfläche hinausreicht.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "vertical_direction",
+                    kind: MeasuredParameterKind::Pattern,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "Which side a vertical distance counts, as the rule states it.",
+                        "Welche Seite ein vertikaler Abstand zählt, wie die Regel sie angibt.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "subject_extent",
+                    kind: MeasuredParameterKind::Pattern,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "What a subject is measured by, as the rule states it.",
+                        "Woran ein Subjekt gemessen wird, wie die Regel es angibt.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "counterpart_extent",
+                    kind: MeasuredParameterKind::Pattern,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "What a counterpart is measured by, as the rule states it.",
+                        "Woran ein Gegenstück gemessen wird, wie die Regel es angibt.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "subject_surface",
+                    kind: MeasuredParameterKind::Pattern,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The subject's surface a vertical distance runs from.",
+                        "Die Fläche des Subjekts, von der ein vertikaler Abstand ausgeht.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "counterpart_surface",
+                    kind: MeasuredParameterKind::Pattern,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The counterpart's surface a vertical distance runs to.",
+                        "Die Fläche des Gegenstücks, zu der ein vertikaler Abstand reicht.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "elevation_overlap",
+                    kind: MeasuredParameterKind::Pattern,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "Whether only counterparts at the subject's heights count.",
+                        "Ob nur Gegenstücke auf der Höhe des Subjekts zählen.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "elevation_offset_metres",
+                    kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The height gap a counterpart must stay under.",
+                        "Der Höhenabstand, unter dem ein Gegenstück bleiben muss.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "container_selector",
+                    kind: MeasuredParameterKind::Objects,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The containers that count (`@container_selector`).",
+                        "Die Behälter, die zählen (`@container_selector`).",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "relationship",
+                    kind: MeasuredParameterKind::Pattern,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The relationship to the containers, as the rule states it.",
+                        "Die Beziehung zu den Behältern, wie die Regel sie angibt.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "direction",
+                    kind: MeasuredParameterKind::Pattern,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The direction the relationship is followed in.",
+                        "Die Richtung, in der der Beziehung gefolgt wird.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "follow_chain",
+                    kind: MeasuredParameterKind::Truth,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "Whether chains of the relationship are followed.",
+                        "Ob Ketten der Beziehung verfolgt werden.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "path",
+                    kind: MeasuredParameterKind::Path,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The path to the containers, step by step.",
+                        "Der Pfad zu den Behältern, Schritt für Schritt.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "skip_absent_relationship_ends",
+                    kind: MeasuredParameterKind::Truth,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "Whether a relationship end that is absent is skipped.",
+                        "Ob ein fehlendes Beziehungsende übersprungen wird.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "selection",
+                    kind: MeasuredParameterKind::Objects,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The rule's subjects (`@selection`).",
+                        "Die Subjekte der Regel (`@selection`).",
+                    ),
+                },
+            ],
+            dimension: None,
+            services: &["proximity", "object-frame", "vertical-extent"],
+            exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
+            not_evaluated: &[
+                "a service is not registered",
+                "the subject's extent, heights or containers cannot be read",
+            ],
+            label: &en_de("Distance", "Abstand"),
+            help: &en_de(
+                "What `distance` judges of a subject: the nearest counterpart closer than the \
+                 minimum, the nearest one beyond the maximum, or the counterparts within the \
+                 range, with the capability's words.",
+                "Was `distance` an einem Subjekt beurteilt: das nächste Gegenstück näher als das \
+                 Minimum, das nächste jenseits des Maximums oder die Gegenstücke im Bereich, mit \
+                 den Worten der Fähigkeit.",
+            ),
+        },
+        fields: &[
+            field(
+                "apart_checked",
+                TRUTH,
+                &en_de("Apart", "Abstand"),
+                &en_de(
+                    "Whether no counterpart may come closer than the minimum.",
+                    "Ob kein Gegenstück näher als das Minimum kommen darf.",
+                ),
+            ),
+            field(
+                "apart",
+                LENGTH,
+                &en_de("Nearest closer", "Nächstes näher"),
+                &en_de(
+                    "The nearest counterpart closer than the minimum; `null` where none surely is; refused for why it is open.",
+                    "Das nächste Gegenstück näher als das Minimum; `null`, wo sicher keines ist; verweigert mit dem Grund, warum es offen ist.",
+                ),
+            ),
+            field(
+                "apart_words",
+                MemberFieldKind::Text,
+                &en_de("Words", "Worte"),
+                &en_de(
+                    "The finding of a counterpart too close, worded.",
+                    "Der Befund eines zu nahen Gegenstücks, in Worten.",
+                ),
+            ),
+            field(
+                "apart_related",
+                MemberFieldKind::Objects,
+                &en_de("Too close", "Zu nah"),
+                &en_de("The counterparts too close.", "Die zu nahen Gegenstücke."),
+            ),
+            field(
+                "reach_checked",
+                TRUTH,
+                &en_de("Reach", "Reichweite"),
+                &en_de(
+                    "Whether the nearest counterpart must lie within the maximum.",
+                    "Ob das nächste Gegenstück innerhalb des Maximums liegen muss.",
+                ),
+            ),
+            field(
+                "reach",
+                LENGTH,
+                &en_de("Nearest", "Nächstes"),
+                &en_de(
+                    "The nearest counterpart where none lies within the maximum; `null` where one does or none is near; refused for why it is open.",
+                    "Das nächste Gegenstück, wo keines innerhalb des Maximums liegt; `null`, wo eines es tut oder keines nahe ist; verweigert mit dem Grund, warum es offen ist.",
+                ),
+            ),
+            field(
+                "reach_words",
+                MemberFieldKind::Text,
+                &en_de("Words", "Worte"),
+                &en_de(
+                    "The finding of no counterpart within the maximum, worded.",
+                    "Der Befund, dass kein Gegenstück innerhalb des Maximums liegt, in Worten.",
+                ),
+            ),
+            field(
+                "reach_related",
+                MemberFieldKind::Objects,
+                &en_de("Nearest", "Nächstes"),
+                &en_de(
+                    "The nearest counterpart named.",
+                    "Das genannte nächste Gegenstück.",
+                ),
+            ),
+            field(
+                "none_within",
+                TRUTH,
+                &en_de("None within", "Keines innerhalb"),
+                &en_de(
+                    "Whether no counterpart lies near at all.",
+                    "Ob überhaupt kein Gegenstück nahe liegt.",
+                ),
+            ),
+            field(
+                "count_checked",
+                TRUTH,
+                &en_de("Count", "Zählung"),
+                &en_de(
+                    "Whether `count` counterparts must lie within the range.",
+                    "Ob `count` Gegenstücke im Bereich liegen müssen.",
+                ),
+            ),
+            field(
+                "count",
+                RATIO,
+                &en_de("Counted", "Gezählt"),
+                &en_de(
+                    "From the counterparts surely within the range to every one that may be; refused for why it is open.",
+                    "Von den sicher im Bereich liegenden Gegenstücken bis zu jedem, das es kann; verweigert mit dem Grund, warum es offen ist.",
+                ),
+            ),
+            field(
+                "count_words",
+                MemberFieldKind::Text,
+                &en_de("Words", "Worte"),
+                &en_de(
+                    "The finding of too few counterparts, worded.",
+                    "Der Befund zu weniger Gegenstücke, in Worten.",
+                ),
+            ),
+            field(
+                "count_related",
+                MemberFieldKind::Objects,
+                &en_de("Counted", "Gezählt"),
+                &en_de(
+                    "The counterparts that may lie within the range.",
+                    "Die Gegenstücke, die im Bereich liegen können.",
+                ),
+            ),
+            field(
+                "reason",
+                MemberFieldKind::Text,
+                &en_de("Reason", "Grund"),
+                &en_de(
+                    "Why the item is undecided where not for incomplete evidence, as a report writes it (`missing_service`).",
+                    "Warum das Element unentschieden ist, wo nicht wegen unvollständiger Belege, wie ein Bericht es schreibt (`missing_service`).",
+                ),
+            ),
+        ],
+    },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
+            name: "distance_open",
+            parameters: &[
+                MeasuredParameter {
+                    key: "counterparts",
+                    kind: MeasuredParameterKind::Objects,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The counterparts each subject keeps its distance from (`@counterparts`).",
+                        "Die Gegenstücke, zu denen jedes Subjekt seinen Abstand hält (`@counterparts`).",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "minimum_metres",
+                    kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "No counterpart may come closer, in metres, if stated.",
+                        "Kein Gegenstück darf näher kommen, in Metern, falls angegeben.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "maximum_metres",
+                    kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "A counterpart must lie within it, in metres, if stated.",
+                        "Ein Gegenstück muss innerhalb liegen, in Metern, falls angegeben.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "mode",
+                    kind: MeasuredParameterKind::Pattern,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "`nearest`, `none_closer_than` or `at_least`, as the rule states it.",
+                        "`nearest`, `none_closer_than` oder `at_least`, wie die Regel es angibt.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "count",
+                    kind: MeasuredParameterKind::Number { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "How many counterparts `at_least` requires.",
+                        "Wie viele Gegenstücke `at_least` verlangt.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "projection",
+                    kind: MeasuredParameterKind::Pattern,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The projection distances are measured in, as the rule states it.",
+                        "Die Projektion, in der Abstände gemessen werden, wie die Regel sie angibt.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "footprint_offset_metres",
+                    kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "How far a vertical distance reaches beyond the footprint.",
+                        "Wie weit ein vertikaler Abstand über die Grundfläche hinausreicht.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "vertical_direction",
+                    kind: MeasuredParameterKind::Pattern,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "Which side a vertical distance counts, as the rule states it.",
+                        "Welche Seite ein vertikaler Abstand zählt, wie die Regel sie angibt.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "subject_extent",
+                    kind: MeasuredParameterKind::Pattern,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "What a subject is measured by, as the rule states it.",
+                        "Woran ein Subjekt gemessen wird, wie die Regel es angibt.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "counterpart_extent",
+                    kind: MeasuredParameterKind::Pattern,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "What a counterpart is measured by, as the rule states it.",
+                        "Woran ein Gegenstück gemessen wird, wie die Regel es angibt.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "subject_surface",
+                    kind: MeasuredParameterKind::Pattern,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The subject's surface a vertical distance runs from.",
+                        "Die Fläche des Subjekts, von der ein vertikaler Abstand ausgeht.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "counterpart_surface",
+                    kind: MeasuredParameterKind::Pattern,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The counterpart's surface a vertical distance runs to.",
+                        "Die Fläche des Gegenstücks, zu der ein vertikaler Abstand reicht.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "elevation_overlap",
+                    kind: MeasuredParameterKind::Pattern,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "Whether only counterparts at the subject's heights count.",
+                        "Ob nur Gegenstücke auf der Höhe des Subjekts zählen.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "elevation_offset_metres",
+                    kind: MeasuredParameterKind::Length { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The height gap a counterpart must stay under.",
+                        "Der Höhenabstand, unter dem ein Gegenstück bleiben muss.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "container_selector",
+                    kind: MeasuredParameterKind::Objects,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The containers that count (`@container_selector`).",
+                        "Die Behälter, die zählen (`@container_selector`).",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "relationship",
+                    kind: MeasuredParameterKind::Pattern,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The relationship to the containers, as the rule states it.",
+                        "Die Beziehung zu den Behältern, wie die Regel sie angibt.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "direction",
+                    kind: MeasuredParameterKind::Pattern,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The direction the relationship is followed in.",
+                        "Die Richtung, in der der Beziehung gefolgt wird.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "follow_chain",
+                    kind: MeasuredParameterKind::Truth,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "Whether chains of the relationship are followed.",
+                        "Ob Ketten der Beziehung verfolgt werden.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "path",
+                    kind: MeasuredParameterKind::Path,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The path to the containers, step by step.",
+                        "Der Pfad zu den Behältern, Schritt für Schritt.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "skip_absent_relationship_ends",
+                    kind: MeasuredParameterKind::Truth,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "Whether a relationship end that is absent is skipped.",
+                        "Ob ein fehlendes Beziehungsende übersprungen wird.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "selection",
+                    kind: MeasuredParameterKind::Objects,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The rule's subjects (`@selection`).",
+                        "Die Subjekte der Regel (`@selection`).",
+                    ),
+                },
+            ],
+            dimension: None,
+            services: &["proximity", "object-frame", "vertical-extent"],
+            exactness: MeasuredExactness::Stated,
+            subject: MeasuredSubject::Project,
+            not_evaluated: &["a service is not registered"],
+            label: &en_de("Distance open", "Abstand offen"),
+            help: &en_de(
+                "The objects `distance` leaves open beyond its subjects: those its selections \
+                 cannot decide and the counterparts whose extent cannot be read.",
+                "Die Objekte, die `distance` über seine Subjekte hinaus offen lässt: die, die seine \
+                 Auswahlen nicht entscheiden, und die Gegenstücke, deren Ausdehnung nicht gelesen \
+                 werden kann.",
+            ),
+        },
+        fields: &[
+            field(
+                "object",
+                MemberFieldKind::Objects,
+                &en_de("Object", "Objekt"),
+                &en_de("The object left open.", "Das offen gelassene Objekt."),
+            ),
+            field(
+                "open",
+                TRUTH,
+                &en_de("Open", "Offen"),
+                &en_de(
+                    "Refused for why the object is open.",
+                    "Verweigert mit dem Grund, warum das Objekt offen ist.",
+                ),
+            ),
+            field(
+                "reason",
+                MemberFieldKind::Text,
+                &en_de("Reason", "Grund"),
+                &en_de(
+                    "Why the item is undecided where not for incomplete evidence, as a report writes it (`missing_service`).",
+                    "Warum das Element unentschieden ist, wo nicht wegen unvollständiger Belege, wie ein Bericht es schreibt (`missing_service`).",
+                ),
+            ),
+        ],
+    },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
             name: "effective_missing",
             parameters: EFFECTIVE,
             dimension: None,
@@ -2740,6 +3355,15 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
                     "Die Objekte, gegen die sein Präfix oder Schritt beurteilt wird.",
                 ),
             ),
+            field(
+                "reason",
+                MemberFieldKind::Text,
+                &en_de("Reason", "Grund"),
+                &en_de(
+                    "Why the item is undecided where not for incomplete evidence, as a report writes it (`missing_service`).",
+                    "Warum das Element unentschieden ist, wo nicht wegen unvollständiger Belege, wie ein Bericht es schreibt (`missing_service`).",
+                ),
+            ),
         ],
     },
     MemberDescriptor {
@@ -3291,6 +3915,15 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
                 &en_de(
                     "Why the filters may leave the bay out, after `; `, where they may.",
                     "Warum die Filter den Stellplatz auslassen können, nach `; `, wo sie es können.",
+                ),
+            ),
+            field(
+                "reason",
+                MemberFieldKind::Text,
+                &en_de("Reason", "Grund"),
+                &en_de(
+                    "Why the item is undecided where not for incomplete evidence, as a report writes it (`missing_service`).",
+                    "Warum das Element unentschieden ist, wo nicht wegen unvollständiger Belege, wie ein Bericht es schreibt (`missing_service`).",
                 ),
             ),
         ],
@@ -3848,15 +4481,6 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
                      reaching the space.",
                     "Die verbundenen Räume und Elemente, wo verbunden; sonst die Elemente, \
                      die den Raum erreichen.",
-                ),
-            ),
-            field(
-                "reason",
-                MemberFieldKind::Text,
-                &en_de("Reason", "Grund"),
-                &en_de(
-                    "Why the item is undecided where not for incomplete evidence, as a report writes it (`missing_service`).",
-                    "Warum das Element unentschieden ist, wo nicht wegen unvollständiger Belege, wie ein Bericht es schreibt (`missing_service`).",
                 ),
             ),
         ],
@@ -4762,15 +5386,6 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
                 &en_de(
                     "What a finding on the item relates: the host, and the objects it is measured to.",
                     "Worauf sich ein Befund zum Element bezieht: den Wirt und die Objekte, zu denen gemessen wurde.",
-                ),
-            ),
-            field(
-                "reason",
-                MemberFieldKind::Text,
-                &en_de("Reason", "Grund"),
-                &en_de(
-                    "Why the item is undecided where not for incomplete evidence, as a report writes it (`missing_service`).",
-                    "Warum das Element unentschieden ist, wo nicht wegen unvollständiger Belege, wie ein Bericht es schreibt (`missing_service`).",
                 ),
             ),
             field(

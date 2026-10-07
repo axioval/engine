@@ -269,13 +269,42 @@ fn run(
     services
         .register(ProximityServiceHandle::new(Arc::new(stub)))
         .unwrap();
-    capability.evaluate(
-        &RuleContext {
-            project,
-            services: &services,
-        },
-        rule,
-    )
+    if capability.id() != "axioval:capability.distance" {
+        return capability.evaluate(
+            &RuleContext {
+                project,
+                services: &services,
+            },
+            rule,
+        );
+    }
+    // `distance` runs as a template over measured lists, held to the
+    // implementation it replaced under the parity contract.
+    let registry =
+        axioval_rules::register_builtins(axioval_engine::CapabilityRegistry::new()).unwrap();
+    let mut inner = services.clone();
+    registry.install_measured(&mut inner, project);
+    let values = axioval_engine::MeasuredValues::of(&inner, project);
+    registry.install_measured(&mut services, project);
+    services.register(values).unwrap();
+    let context = RuleContext {
+        project,
+        services: &services,
+    };
+    let template = capability.evaluate(&context, rule);
+    let reference = axioval_rules::reference::Distance.evaluate(&context, rule);
+    let parity = axioval_rules::parity::Parity::contract().compare(
+        (
+            "distance",
+            &axioval_rules::parity::Observations::of_evaluation(&reference),
+        ),
+        (
+            "template",
+            &axioval_rules::parity::Observations::of_evaluation(&template),
+        ),
+    );
+    assert!(parity.holds(), "{}", parity.diff());
+    template
 }
 
 fn pipes_and_walls() -> Project {

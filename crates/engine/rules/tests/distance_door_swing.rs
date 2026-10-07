@@ -20,6 +20,10 @@ use common::{Model, kind, number, rule, selector, source, string, unevaluated};
 
 const CAPABILITY: &str = "axioval:capability.distance";
 
+/// `distance` runs as a template, held to the implementation it replaced
+/// on every fixture.
+static HELD: common::Held = common::Held(&Distance, &axioval_rules::reference::Distance);
+
 /// Plan boxes per object, measured exactly.
 #[derive(Default)]
 struct Boxes(BTreeMap<String, ([f64; 2], [f64; 2])>);
@@ -135,14 +139,15 @@ fn run(
     ];
     all.extend(parameters);
     let proximity = Arc::new(boxes());
-    model().evaluate_with(
-        &Distance,
+    let frames = doors().handle();
+    model().evaluate_measured(
+        &HELD,
         &rule(CAPABILITY, kind(subjects), all),
-        |services| {
+        move |services| {
             services
-                .register(ProximityServiceHandle::new(proximity))
+                .register(ProximityServiceHandle::new(proximity.clone()))
                 .unwrap();
-            services.register(doors().handle()).unwrap();
+            services.register(frames.clone()).unwrap();
         },
     )
 }
@@ -287,8 +292,9 @@ fn a_window_swing_is_measured_by_its_casement_and_tilt() {
     let model = Model::default()
         .object("w", "window")
         .object("post", "column");
-    let outcome = model.evaluate_with(
-        &Distance,
+    let frames = windows.handle();
+    let outcome = model.evaluate_measured(
+        &HELD,
         &rule(
             CAPABILITY,
             kind("window"),
@@ -300,11 +306,11 @@ fn a_window_swing_is_measured_by_its_casement_and_tilt() {
                 ("minimum_metres", number(0.5)),
             ],
         ),
-        |services| {
+        move |services| {
             services
-                .register(ProximityServiceHandle::new(proximity))
+                .register(ProximityServiceHandle::new(proximity.clone()))
                 .unwrap();
-            services.register(windows.handle()).unwrap();
+            services.register(frames.clone()).unwrap();
         },
     );
     let found = findings(&outcome);

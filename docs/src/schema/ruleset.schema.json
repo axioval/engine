@@ -1,5 +1,5 @@
 {
-  "$comment": "Generated from axioval-ir 0.3.0 by `axioval_ir::schema`; never edit by hand.",
+  "$comment": "Generated from axioval-ir 0.4.0 by `axioval_ir::schema`; never edit by hand.",
   "$defs": {
     "AggregateFunction": {
       "description": "What an [`Expression::Aggregate`] computes over its members.",

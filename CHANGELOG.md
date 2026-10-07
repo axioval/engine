@@ -4,6 +4,8 @@ All notable changes are documented here. This project follows Semantic Versionin
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-07
+
 Composable rules ([#225](https://github.com/axioval/engine/issues/225)).
 Rules are now built from shared parts: **measured values** registered with
 typed descriptors, a total and pure **expression** language over intervals
@@ -5302,7 +5304,8 @@ meshes with `axiolid-mesh` 0.1.
 
 - Placement offset bounds no longer admit tolerance-expanded witnesses; supported found placements now require exact frame-bound whole-base support evidence.
 
-[Unreleased]: https://github.com/axioval/engine/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/axioval/engine/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/axioval/engine/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/axioval/engine/compare/v0.1.2...v0.3.0
 [0.1.2]: https://github.com/axioval/engine/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/axioval/engine/compare/v0.1.0...v0.1.1

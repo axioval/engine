@@ -2,7 +2,14 @@
 //!
 //! ADR 0004: the service measures exposed edges and nearby elements; the
 //! capability decides whether an edge is adequately guarded.
+//!
+//! The capability runs as a template; every evaluation here runs it and the
+//! implementation it replaced (`axioval_rules::reference::HorizontalGuard`)
+//! on the same services and holds the template to its whole outside
+//! contract (`held`).
 #![allow(missing_docs)]
+
+mod common;
 
 use std::{collections::BTreeMap, sync::Arc};
 
@@ -14,6 +21,7 @@ use axioval_engine::{
 use axioval_ir::contract::{ParameterValue, Selector, Severity as RuleSeverity};
 use axioval_ir::{Evidence, Object, ObjectId, Project, RuleId, SourceId};
 use axioval_rules::HorizontalGuard;
+use axioval_rules::reference::HorizontalGuard as Reference;
 
 fn source() -> SourceId {
     SourceId::new("cad", "model").unwrap()
@@ -60,6 +68,37 @@ fn rule() -> CompiledRule {
     rule_with(&[])
 }
 
+/// The template's evaluation of `rule`, its measured values read as a run
+/// reads them, held to the replaced implementation's whole contract on the
+/// same services.
+fn held(
+    project: &Project,
+    services: &ServiceRegistry,
+    rule: &CompiledRule,
+) -> axioval_engine::CapabilityEvaluation {
+    use axioval_rules::parity::{Observations, Parity};
+    let reference = Reference.evaluate(&RuleContext { project, services }, rule);
+    let mut measured = services.clone();
+    axioval_rules::register_builtins(axioval_engine::CapabilityRegistry::new())
+        .unwrap()
+        .install_measured(&mut measured, project);
+    let values = axioval_engine::MeasuredValues::of(&measured, project);
+    measured.register(values).unwrap();
+    let template = HorizontalGuard.evaluate(
+        &RuleContext {
+            project,
+            services: &measured,
+        },
+        rule,
+    );
+    let parity = Parity::contract().compare(
+        ("horizontal-guard", &Observations::of_evaluation(&reference)),
+        ("template", &Observations::of_evaluation(&template)),
+    );
+    assert!(parity.holds(), "{}", parity.diff());
+    template
+}
+
 fn barrier(gap: f64, top: f64, interval: [f64; 2], curb: Option<f64>) -> GuardCandidate {
     GuardCandidate::try_new(oid("rail"), gap, top, interval, 0.0, curb).unwrap()
 }
@@ -88,13 +127,7 @@ fn evaluate(
     services
         .register(GuardServiceHandle::new(Arc::new(Stub(edge))))
         .unwrap();
-    HorizontalGuard.evaluate(
-        &RuleContext {
-            project: &project,
-            services: &services,
-        },
-        rule,
-    )
+    held(&project, &services, rule)
 }
 
 fn edge(
@@ -294,13 +327,7 @@ fn unavailable_measurement_is_not_a_pass() {
 fn missing_service_is_neither_a_pass_nor_a_violation() {
     let project = Project::new(vec![Object::new(oid("slab-1"), "slab")]).unwrap();
     let services = ServiceRegistry::new();
-    let outcome = HorizontalGuard.evaluate(
-        &RuleContext {
-            project: &project,
-            services: &services,
-        },
-        &rule(),
-    );
+    let outcome = held(&project, &services, &rule());
     assert!(outcome.findings().is_empty());
     assert_eq!(
         outcome.not_evaluated_outcomes()[0].reason(),
@@ -348,13 +375,7 @@ fn evaluate_edges(edges: Vec<GuardEdge>) -> axioval_engine::CapabilityEvaluation
     services
         .register(GuardServiceHandle::new(Arc::new(MultiEdge(edges))))
         .unwrap();
-    HorizontalGuard.evaluate(
-        &RuleContext {
-            project: &project,
-            services: &services,
-        },
-        &rule(),
-    )
+    held(&project, &services, &rule())
 }
 
 fn message_of(outcome: &axioval_engine::CapabilityEvaluation) -> String {
@@ -439,11 +460,15 @@ fn a_surface_reports_each_distinct_defect_once_not_one_finding_per_edge() {
         "two different defects on one surface must both be reported: {:?}",
         outcome.findings()
     );
-    assert_eq!(
-        outcome.findings()[0].message,
-        "missing_barrier",
-        "the worst defect must win, not the first measured"
-    );
+    // Both are reported, whichever edge was measured first; a report
+    // orders them, not the evaluation.
+    let mut messages: Vec<&str> = outcome
+        .findings()
+        .iter()
+        .map(|finding| finding.message.as_str())
+        .collect();
+    messages.sort_unstable();
+    assert_eq!(messages, ["hole_in_barrier", "missing_barrier"]);
 }
 
 #[test]
@@ -550,13 +575,7 @@ fn related_elements_merged_across_edges_stay_sorted() {
         ))))
         .unwrap();
     let project = Project::new(vec![Object::new(oid("slab-1"), "slab")]).unwrap();
-    let outcome = HorizontalGuard.evaluate(
-        &RuleContext {
-            project: &project,
-            services: &services,
-        },
-        &rule(),
-    );
+    let outcome = held(&project, &services, &rule());
     let related: Vec<&str> = outcome.findings()[0]
         .related
         .iter()
@@ -635,13 +654,7 @@ fn the_selection_is_the_walking_surface_profile() {
     services
         .register(GuardServiceHandle::new(Arc::new(SelectionStub)))
         .unwrap();
-    let outcome = HorizontalGuard.evaluate(
-        &RuleContext {
-            project: &project,
-            services: &services,
-        },
-        &rule(),
-    );
+    let outcome = held(&project, &services, &rule());
     assert_eq!(outcome.findings().len(), 1, "{:?}", outcome.findings());
     assert_eq!(outcome.findings()[0].object_id(), Some(&oid("slab-1")));
     let not_evaluated = outcome.not_evaluated_outcomes();
@@ -701,13 +714,7 @@ fn evaluate_roles(rule: &CompiledRule) -> axioval_engine::CapabilityEvaluation {
     services
         .register(GuardServiceHandle::new(Arc::new(CupboardStub)))
         .unwrap();
-    HorizontalGuard.evaluate(
-        &RuleContext {
-            project: &project,
-            services: &services,
-        },
-        rule,
-    )
+    held(&project, &services, rule)
 }
 
 /// A cupboard along the edge is not a barrier when the ruleset names only
@@ -972,11 +979,7 @@ fn the_guard_decision_as_an_expression_over_edges_reaches_the_verdicts() {
         services
             .register(GuardServiceHandle::new(Arc::new(MultiEdge(edges))))
             .unwrap();
-        let context = RuleContext {
-            project: &project,
-            services: &services,
-        };
-        let expected = HorizontalGuard.evaluate(&context, &curb_rule);
+        let expected = held(&project, &services, &curb_rule);
         registry.install_measured(&mut services, &project);
         let expression = CompiledRule {
             capability: "axioval:capability.expression".into(),
@@ -1011,11 +1014,7 @@ fn the_guard_decision_as_an_expression_over_edges_reaches_the_verdicts() {
                 )))))
                 .unwrap();
         }
-        let context = RuleContext {
-            project: &project,
-            services: &services,
-        };
-        let expected = HorizontalGuard.evaluate(&context, &rule());
+        let expected = held(&project, &services, &rule());
         registry.install_measured(&mut services, &project);
         let expression = CompiledRule {
             capability: "axioval:capability.expression".into(),
@@ -1062,5 +1061,339 @@ fn the_guard_decision_as_an_expression_over_edges_reaches_the_verdicts() {
                 },
             ]
         );
+    }
+}
+
+/// Every refusal is the rule's, after it selected, worded as the capability
+/// worded it; a rule selecting nothing judges nothing, its declaration
+/// included.
+#[test]
+#[allow(clippy::too_many_lines)]
+fn refusals_are_the_rules_and_worded_as_before() {
+    let project = Project::new(vec![
+        Object::new(oid("slab-1"), "slab"),
+        Object::new(oid("slab-2"), "slab"),
+    ])
+    .unwrap();
+    let edges = || {
+        let mut services = ServiceRegistry::new();
+        services
+            .register(GuardServiceHandle::new(Arc::new(SelectionStub)))
+            .unwrap();
+        services
+    };
+    let opened = |outcome: &axioval_engine::CapabilityEvaluation| {
+        outcome
+            .not_evaluated_outcomes()
+            .iter()
+            .map(|outcome| {
+                (
+                    outcome.object_id().map(|object| object.local_id.clone()),
+                    outcome.reason().clone(),
+                    outcome.message().to_owned(),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let number = |value: f64| ParameterValue::Number { value };
+    let zero_gaps = rule_with(&[
+        ("maximum_barrier_gap_metres", number(0.0)),
+        ("maximum_platform_gap_metres", number(0.0)),
+        ("maximum_landing_gap_metres", number(0.0)),
+        ("climbable_barrier_distance_metres", number(0.0)),
+    ]);
+    for (services, rule, reason, message) in [
+        (
+            edges(),
+            rule_with(&[("maximum_fall_height_metres", number(-0.5))]),
+            NotEvaluatedReason::InvalidDeclaration,
+            "horizontal-guard declaration is missing or not realisable",
+        ),
+        (
+            edges(),
+            rule_with(&[(
+                "measure_barrier_from_curb",
+                ParameterValue::String {
+                    value: "yes".into(),
+                },
+            )]),
+            NotEvaluatedReason::InvalidDeclaration,
+            "horizontal-guard declaration is missing or not realisable",
+        ),
+        (
+            ServiceRegistry::new(),
+            rule(),
+            NotEvaluatedReason::MissingService,
+            "guard service is not registered",
+        ),
+        (
+            edges(),
+            zero_gaps,
+            NotEvaluatedReason::InvalidDeclaration,
+            "horizontal-guard thresholds do not define a usable search",
+        ),
+    ] {
+        let outcome = held(&project, &services, &rule);
+        assert_eq!(opened(&outcome), [(None, reason, message.to_owned())]);
+    }
+    let unavailable = evaluate(Err(GuardError::Unavailable), &rule());
+    assert_eq!(
+        opened(&unavailable),
+        [(
+            None,
+            NotEvaluatedReason::IncompleteEvidence,
+            "guard measurement is unavailable".to_owned()
+        )]
+    );
+    let wrong = evaluate(
+        Ok(edge(vec![], vec![], vec![])),
+        &rule_with(&[("climbable_selector", ParameterValue::Number { value: 1.0 })]),
+    );
+    assert!(
+        wrong.not_evaluated_outcomes()[0]
+            .message()
+            .starts_with("horizontal-guard: "),
+        "{:?}",
+        opened(&wrong)
+    );
+    // A surface without a measured edge is open on its own.
+    let outcome = held(&project, &edges(), &rule());
+    assert_eq!(
+        opened(&outcome),
+        [(
+            Some("slab-2".to_owned()),
+            NotEvaluatedReason::IncompleteEvidence,
+            "no edge was measured for this walking surface; it has no measurable body".to_owned()
+        )]
+    );
+    // Nothing selected, nothing judged, the declaration included.
+    let nothing = Project::new(vec![Object::new(oid("roof"), "roof")]).unwrap();
+    let outcome = held(
+        &nothing,
+        &ServiceRegistry::new(),
+        &rule_with(&[("maximum_fall_height_metres", number(-0.5))]),
+    );
+    assert!(outcome.not_evaluated_outcomes().is_empty());
+    assert!(outcome.findings().is_empty());
+}
+
+/// A role selection that cannot decide an object leaves the rule open,
+/// naming the selector and how many objects it leaves undecided.
+#[test]
+fn an_undecided_role_selection_leaves_the_rule_open() {
+    let (project, mut services) = common::Model::default()
+        .object("slab-1", "slab")
+        .object("rail-1", "railing")
+        .unreadable("rail-1")
+        .services();
+    services
+        .register(GuardServiceHandle::new(Arc::new(Stub(Ok(GuardEdge::new(
+            common::id("slab-1"),
+            vec![],
+            vec![],
+            vec![],
+        ))))))
+        .unwrap();
+    let barrier = common::selector(Selector::Property {
+        property_set: Some("Pset".into()),
+        property: "Barrier".into(),
+        operator: axioval_ir::contract::ComparisonOperator::Equals,
+        value: Some(ParameterValue::Boolean { value: true }),
+        case_sensitive: false,
+        trim: false,
+        quantifier: None,
+        precision: None,
+    });
+    let outcome = held(
+        &project,
+        &services,
+        &rule_with(&[("barrier_selector", barrier)]),
+    );
+    assert!(outcome.findings().is_empty());
+    let open = outcome.not_evaluated_outcomes();
+    assert_eq!(open.len(), 1, "{open:?}");
+    assert_eq!(open[0].object_id(), None);
+    assert_eq!(open[0].reason(), &NotEvaluatedReason::IncompleteEvidence);
+    assert_eq!(
+        open[0].message(),
+        "horizontal-guard: `barrier_selector` cannot be decided for 2 object(s)"
+    );
+}
+
+mod generated {
+    use super::*;
+    use proptest::collection::vec;
+    use proptest::prelude::*;
+
+    /// A candidate's gap, top, interval along the edge, curb, width and
+    /// element.
+    type Raw = (u8, i8, (u8, u8), Option<u8>, u8, u8);
+
+    fn raw() -> impl Strategy<Value = Raw> {
+        (
+            0u8..8,
+            -30i8..30,
+            (0u8..10, 0u8..11),
+            proptest::option::weighted(0.3, 0u8..8),
+            0u8..20,
+            0u8..4,
+        )
+    }
+
+    fn interval((start, length): (u8, u8)) -> [f64; 2] {
+        let start = f64::from(start) / 10.0;
+        [start, (start + f64::from(length) / 10.0).min(1.0)]
+    }
+
+    fn barrier((gap, top, along, curb, _, which): Raw) -> GuardCandidate {
+        GuardCandidate::try_new(
+            oid(&format!("rail-{which}")),
+            f64::from(gap) / 20.0,
+            f64::from(top.unsigned_abs()) / 20.0,
+            interval(along),
+            0.0,
+            curb.map(|curb| f64::from(curb) / 10.0),
+        )
+        .unwrap()
+    }
+
+    fn landing((gap, top, along, _, width, which): Raw) -> GuardCandidate {
+        GuardCandidate::try_new(
+            oid(&format!("floor-{which}")),
+            f64::from(gap) / 10.0,
+            -f64::from(top.unsigned_abs()) / 20.0,
+            interval(along),
+            f64::from(width) / 10.0,
+            None,
+        )
+        .unwrap()
+    }
+
+    fn climbable((gap, top, _, _, width, which): Raw) -> ClimbableCandidate {
+        ClimbableCandidate::try_new(
+            oid(&format!("bench-{which}")),
+            oid(&format!("rail-{}", which % 2 * 2)),
+            f64::from(gap) / 10.0,
+            f64::from(top.unsigned_abs()) / 20.0,
+            f64::from(width) / 20.0,
+        )
+        .unwrap()
+    }
+
+    type RawEdge = (Vec<Raw>, Vec<Raw>, Vec<Raw>);
+
+    fn raw_edge() -> impl Strategy<Value = RawEdge> {
+        (vec(raw(), 0..4), vec(raw(), 0..3), vec(raw(), 0..2))
+    }
+
+    fn parameters() -> impl Strategy<Value = Vec<(&'static str, ParameterValue)>> {
+        (
+            (1u8..30, 0u8..4, 0u8..4, 0u8..6),
+            (0u8..20, 0u8..20, 0u8..6, 0u8..20, 0u8..6),
+            any::<bool>(),
+            (any::<bool>(), any::<bool>(), any::<bool>()),
+        )
+            .prop_map(
+                |(
+                    (height, barrier_gap, platform_gap, landing_gap),
+                    (fall, width, distance, climb, side),
+                    curb,
+                    (barriers, landings, climbables),
+                )| {
+                    let number = |value: f64| ParameterValue::Number { value };
+                    let mut parameters = vec![
+                        (
+                            "minimum_barrier_height_metres",
+                            number(f64::from(height) / 20.0),
+                        ),
+                        (
+                            "maximum_barrier_gap_metres",
+                            number(f64::from(barrier_gap) / 20.0),
+                        ),
+                        (
+                            "maximum_platform_gap_metres",
+                            number(f64::from(platform_gap) / 20.0),
+                        ),
+                        (
+                            "maximum_landing_gap_metres",
+                            number(f64::from(landing_gap) / 10.0),
+                        ),
+                        ("maximum_fall_height_metres", number(f64::from(fall) / 20.0)),
+                        (
+                            "minimum_landing_width_metres",
+                            number(f64::from(width) / 10.0),
+                        ),
+                        (
+                            "climbable_barrier_distance_metres",
+                            number(f64::from(distance) / 10.0),
+                        ),
+                        (
+                            "maximum_climbable_height_metres",
+                            number(f64::from(climb) / 20.0),
+                        ),
+                        (
+                            "minimum_climbable_side_length_metres",
+                            number(f64::from(side) / 20.0),
+                        ),
+                        (
+                            "measure_barrier_from_curb",
+                            ParameterValue::Boolean { value: curb },
+                        ),
+                    ];
+                    if barriers {
+                        parameters.push(("barrier_selector", entity("railing")));
+                    }
+                    if landings {
+                        parameters.push(("landing_selector", entity("floor")));
+                    }
+                    if climbables {
+                        parameters.push(("climbable_selector", entity("bench")));
+                    }
+                    parameters
+                },
+            )
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(160))]
+
+        #[test]
+        fn generated_edges_hold_parity(
+            surfaces in vec(vec(raw_edge(), 0..4), 1..4),
+            parameters in parameters(),
+        ) {
+            // Odd rails are not railings, so a role selection leaves them out.
+            let mut objects: Vec<Object> = (0..4)
+                .flat_map(|which| {
+                    [
+                        Object::new(
+                            oid(&format!("rail-{which}")),
+                            if which % 2 == 0 { "railing" } else { "wall" },
+                        ),
+                        Object::new(oid(&format!("floor-{which}")), "floor"),
+                        Object::new(oid(&format!("bench-{which}")), "bench"),
+                    ]
+                })
+                .collect();
+            let mut edges = Vec::new();
+            for (index, surface) in surfaces.iter().enumerate() {
+                let id = format!("slab-{index}");
+                objects.push(Object::new(oid(&id), "slab"));
+                for (barriers, landings, climbables) in surface {
+                    edges.push(GuardEdge::new(
+                        oid(&id),
+                        barriers.iter().copied().map(barrier).collect(),
+                        landings.iter().copied().map(landing).collect(),
+                        climbables.iter().copied().map(climbable).collect(),
+                    ));
+                }
+            }
+            let project = Project::new(objects).unwrap();
+            let mut services = ServiceRegistry::new();
+            services
+                .register(GuardServiceHandle::new(Arc::new(MultiEdge(edges))))
+                .unwrap();
+            held(&project, &services, &rule_with(&parameters));
+        }
     }
 }

@@ -3441,6 +3441,30 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         ),
     },
     MeasuredDescriptor {
+        name: "guard_surfaces",
+        parameters: &super::members::GUARD,
+        dimension: None,
+        services: &["guard", "type-hierarchy"],
+        exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Project,
+        not_evaluated: &[
+            "the gaps define no usable search",
+            "a role selection leaves objects undecided",
+            "the guard service cannot measure the surfaces' exposed edges",
+        ],
+        label: &en_de("Guarded surfaces measured", "Gemessene Laufflächen"),
+        help: &en_de(
+            "How many walking surfaces the guard service measured in the one request \
+             `guard_edges` lists every surface's edges from, as `horizontal-guard` asks it: \
+             refused, as the rule is, where the gaps define no search, a role selection \
+             leaves objects undecided or the service cannot measure.",
+            "Wie viele Laufflächen der Absturzdienst in der einen Anfrage gemessen hat, aus \
+             der `guard_edges` die Kanten jeder Lauffläche liest, wie `horizontal-guard` ihn \
+             fragt: abgelehnt, wie die Regel, wo die Lücken keine Suche ergeben, eine \
+             Rollenauswahl Objekte unentschieden lässt oder der Dienst nicht messen kann.",
+        ),
+    },
+    MeasuredDescriptor {
         name: "handrail_breaks",
         parameters: &[
             DEFECT_RAILS,

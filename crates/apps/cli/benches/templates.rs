@@ -219,6 +219,11 @@ const PAIRS: &[Pair] = &[
         case: "spaces",
         reference: |registry| registry.replace(axioval::rules::reference::SpaceBoundaryCoverage),
     },
+    Pair {
+        capability: "axioval:capability.horizontal-guard",
+        case: "spaces",
+        reference: |registry| registry.replace(axioval::rules::reference::HorizontalGuard),
+    },
 ];
 
 /// Warm-up runs per side before measuring.

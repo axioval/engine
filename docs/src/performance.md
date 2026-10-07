@@ -344,3 +344,12 @@ boundary-coverage request per space and plane tolerance for the run
 (`BoundaryMeasures`), so the off-surface count, share, uncovered and
 overlapping areas and the surface share it, and two rules of one tolerance
 share it too.
+
+`horizontal-guard` runs the `spaces` case's two rules: 1.06× its reference's
+run time on the generated fixture and 1.12× on the infra road (peak heap
+1.20 and 1.15×); on the architecture models, whose guard requests the
+service refuses, its runs of 80 to 100 µs lie below the floor and are
+judged with the other small inputs (1.23 to 1.29× each, within budget
+together). Its values name the rule's own selection (`@selection`), so the
+surfaces are measured in one request for the run, read once for the rule
+(`once`) and then by each surface's edges.

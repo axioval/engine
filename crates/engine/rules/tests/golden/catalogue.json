@@ -16310,7 +16310,808 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "horizontal-guard",
+        "refusals": "selected",
+        "declaration": [
+          {
+            "kind": "finite",
+            "parameters": [
+              "minimum_barrier_height_metres",
+              "maximum_barrier_gap_metres",
+              "maximum_platform_gap_metres",
+              "maximum_landing_gap_metres",
+              "maximum_fall_height_metres",
+              "minimum_landing_width_metres",
+              "climbable_barrier_distance_metres",
+              "maximum_climbable_height_metres",
+              "minimum_climbable_side_length_metres"
+            ],
+            "at_least": 0.0,
+            "message": "horizontal-guard declaration is missing or not realisable"
+          },
+          {
+            "kind": "holds",
+            "condition": {
+              "kind": "stated",
+              "parameter": "measure_barrier_from_curb"
+            },
+            "message": "horizontal-guard declaration is missing or not realisable"
+          },
+          {
+            "kind": "kind",
+            "parameter": "barrier_selector"
+          },
+          {
+            "kind": "kind",
+            "parameter": "landing_selector"
+          },
+          {
+            "kind": "kind",
+            "parameter": "climbable_selector"
+          }
+        ],
+        "services": {
+          "needs": [
+            "guard"
+          ],
+          "message": "guard service is not registered"
+        },
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "zero",
+                "expression": {
+                  "kind": "literal",
+                  "value": {
+                    "type": "number",
+                    "value": 0.0
+                  }
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "zero",
+              "rounding": []
+            },
+            "fail": "",
+            "undecided": "",
+            "checks": [
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {},
+                  "list": "guard_edges;surfaces=@selection;barrier_gap=@maximum_barrier_gap_metres;platform_gap=@maximum_platform_gap_metres;landing_gap=@maximum_landing_gap_metres;landing_width=@minimum_landing_width_metres;climb_distance=@climbable_barrier_distance_metres;climb_side=@minimum_climbable_side_length_metres;from_curb=@measure_barrier_from_curb;climb_height=@maximum_climbable_height_metres;barriers=@barrier_selector;landings=@landing_selector;climbables=@climbable_selector",
+                  "refused": "{why}",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "judge": {
+                        "kind": "range",
+                        "value": "guarded_height",
+                        "unit": "length",
+                        "atLeast": [
+                          {
+                            "name": "bound",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "parameter",
+                                    "name": "minimum_barrier_height_metres"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "raised",
+                          "value": 1e-6
+                        },
+                        "grade": false,
+                        "null": {
+                          "kind": "unmet"
+                        }
+                      },
+                      "fail": "missing_barrier",
+                      "undecided": "{why}",
+                      "then": {
+                        "judge": {
+                          "kind": "range",
+                          "value": "climbable_height",
+                          "unit": "length",
+                          "atMost": [
+                            {
+                              "name": "bound",
+                              "options": [
+                                {
+                                  "bound": {
+                                    "kind": "operand",
+                                    "value": {
+                                      "kind": "parameter",
+                                      "name": "maximum_climbable_height_metres"
+                                    }
+                                  }
+                                }
+                              ],
+                              "words": ""
+                            }
+                          ],
+                          "allowance": {
+                            "kind": "fixed",
+                            "value": 1e-6
+                          },
+                          "grade": false,
+                          "null": {
+                            "kind": "skip"
+                          }
+                        },
+                        "fail": "barrier_too_low_due_to_climbable_object",
+                        "undecided": "{why}",
+                        "then": {
+                          "judge": {
+                            "kind": "fails"
+                          },
+                          "fail": "barrier_too_low_due_to_climbable_object",
+                          "undecided": "{why}",
+                          "related": "climbable"
+                        },
+                        "otherwise": {
+                          "judge": {
+                            "kind": "range",
+                            "value": "climbable_height",
+                            "unit": "length",
+                            "allowance": {
+                              "kind": "none"
+                            },
+                            "grade": false,
+                            "null": {
+                              "kind": "skip"
+                            }
+                          },
+                          "fail": "barrier_too_low_due_to_climbable_object",
+                          "undecided": "{why}"
+                        },
+                        "related": "climbable"
+                      },
+                      "otherwise": {
+                        "judge": {
+                          "kind": "range",
+                          "value": "barrier_share",
+                          "unit": "length",
+                          "atMost": [
+                            {
+                              "name": "bound",
+                              "options": [
+                                {
+                                  "bound": {
+                                    "kind": "literal",
+                                    "value": 0.5
+                                  }
+                                }
+                              ],
+                              "words": ""
+                            }
+                          ],
+                          "allowance": {
+                            "kind": "none"
+                          },
+                          "grade": false,
+                          "null": {
+                            "kind": "skip"
+                          }
+                        },
+                        "fail": "barrier_too_low",
+                        "undecided": "{why}",
+                        "then": {
+                          "judge": {
+                            "kind": "range",
+                            "value": "landing_fall",
+                            "unit": "length",
+                            "atMost": [
+                              {
+                                "name": "bound",
+                                "options": [
+                                  {
+                                    "bound": {
+                                      "kind": "operand",
+                                      "value": {
+                                        "kind": "parameter",
+                                        "name": "maximum_fall_height_metres"
+                                      }
+                                    }
+                                  }
+                                ],
+                                "words": ""
+                              }
+                            ],
+                            "allowance": {
+                              "kind": "raised",
+                              "value": 1e-6
+                            },
+                            "grade": false,
+                            "null": {
+                              "kind": "unmet"
+                            }
+                          },
+                          "fail": "missing_barrier",
+                          "undecided": "{why}",
+                          "otherwise": {
+                            "when": [
+                              {
+                                "kind": "stated",
+                                "field": "nearest_gap"
+                              }
+                            ],
+                            "judge": {
+                              "kind": "range",
+                              "value": "nearest_gap",
+                              "unit": "length",
+                              "atMost": [
+                                {
+                                  "name": "bound",
+                                  "options": [
+                                    {
+                                      "bound": {
+                                        "kind": "operand",
+                                        "value": {
+                                          "kind": "parameter",
+                                          "name": "maximum_landing_gap_metres"
+                                        }
+                                      }
+                                    }
+                                  ],
+                                  "words": ""
+                                }
+                              ],
+                              "allowance": {
+                                "kind": "none"
+                              },
+                              "grade": false,
+                              "null": {
+                                "kind": "skip"
+                              }
+                            },
+                            "fail": "landing_too_far_away",
+                            "undecided": "{why}",
+                            "then": {
+                              "judge": {
+                                "kind": "range",
+                                "value": "nearest_fall",
+                                "unit": "length",
+                                "atMost": [
+                                  {
+                                    "name": "bound",
+                                    "options": [
+                                      {
+                                        "bound": {
+                                          "kind": "operand",
+                                          "value": {
+                                            "kind": "parameter",
+                                            "name": "maximum_fall_height_metres"
+                                          }
+                                        }
+                                      }
+                                    ],
+                                    "words": ""
+                                  }
+                                ],
+                                "allowance": {
+                                  "kind": "fixed",
+                                  "value": 1e-6
+                                },
+                                "grade": false,
+                                "null": {
+                                  "kind": "skip"
+                                }
+                              },
+                              "fail": "landing_too_low",
+                              "undecided": "{why}",
+                              "then": {
+                                "judge": {
+                                  "kind": "range",
+                                  "value": "nearest_width",
+                                  "unit": "length",
+                                  "atLeast": [
+                                    {
+                                      "name": "bound",
+                                      "options": [
+                                        {
+                                          "bound": {
+                                            "kind": "operand",
+                                            "value": {
+                                              "kind": "parameter",
+                                              "name": "minimum_landing_width_metres"
+                                            }
+                                          }
+                                        }
+                                      ],
+                                      "words": ""
+                                    }
+                                  ],
+                                  "allowance": {
+                                    "kind": "raised",
+                                    "value": 1e-6
+                                  },
+                                  "grade": false,
+                                  "null": {
+                                    "kind": "skip"
+                                  }
+                                },
+                                "fail": "landings_too_small",
+                                "undecided": "{why}",
+                                "then": {
+                                  "judge": {
+                                    "kind": "fails"
+                                  },
+                                  "fail": "insufficient_landings",
+                                  "undecided": "{why}",
+                                  "related": "nearest"
+                                },
+                                "related": "nearest"
+                              },
+                              "related": "nearest"
+                            },
+                            "related": "nearest"
+                          }
+                        },
+                        "otherwise": {
+                          "judge": {
+                            "kind": "range",
+                            "value": "tallest_barrier",
+                            "unit": "length",
+                            "atLeast": [
+                              {
+                                "name": "bound",
+                                "options": [
+                                  {
+                                    "bound": {
+                                      "kind": "operand",
+                                      "value": {
+                                        "kind": "parameter",
+                                        "name": "minimum_barrier_height_metres"
+                                      }
+                                    }
+                                  }
+                                ],
+                                "words": ""
+                              }
+                            ],
+                            "allowance": {
+                              "kind": "raised",
+                              "value": 1e-6
+                            },
+                            "grade": false,
+                            "null": {
+                              "kind": "skip"
+                            }
+                          },
+                          "fail": "barrier_too_low",
+                          "undecided": "{why}",
+                          "then": {
+                            "judge": {
+                              "kind": "range",
+                              "value": "partial_height",
+                              "unit": "length",
+                              "atLeast": [
+                                {
+                                  "name": "bound",
+                                  "options": [
+                                    {
+                                      "bound": {
+                                        "kind": "operand",
+                                        "value": {
+                                          "kind": "parameter",
+                                          "name": "minimum_barrier_height_metres"
+                                        }
+                                      }
+                                    }
+                                  ],
+                                  "words": ""
+                                }
+                              ],
+                              "allowance": {
+                                "kind": "raised",
+                                "value": 1e-6
+                              },
+                              "grade": false,
+                              "null": {
+                                "kind": "unmet"
+                              }
+                            },
+                            "fail": "hole_in_barrier",
+                            "undecided": "{why}",
+                            "then": {
+                              "judge": {
+                                "kind": "fails"
+                              },
+                              "fail": "hole_in_barrier",
+                              "undecided": "{why}",
+                              "related": "tallest"
+                            },
+                            "otherwise": {
+                              "judge": {
+                                "kind": "range",
+                                "value": "landing_fall",
+                                "unit": "length",
+                                "atMost": [
+                                  {
+                                    "name": "bound",
+                                    "options": [
+                                      {
+                                        "bound": {
+                                          "kind": "operand",
+                                          "value": {
+                                            "kind": "parameter",
+                                            "name": "maximum_fall_height_metres"
+                                          }
+                                        }
+                                      }
+                                    ],
+                                    "words": ""
+                                  }
+                                ],
+                                "allowance": {
+                                  "kind": "raised",
+                                  "value": 1e-6
+                                },
+                                "grade": false,
+                                "null": {
+                                  "kind": "unmet"
+                                }
+                              },
+                              "fail": "missing_barrier",
+                              "undecided": "{why}",
+                              "otherwise": {
+                                "when": [
+                                  {
+                                    "kind": "stated",
+                                    "field": "nearest_gap"
+                                  }
+                                ],
+                                "judge": {
+                                  "kind": "range",
+                                  "value": "nearest_gap",
+                                  "unit": "length",
+                                  "atMost": [
+                                    {
+                                      "name": "bound",
+                                      "options": [
+                                        {
+                                          "bound": {
+                                            "kind": "operand",
+                                            "value": {
+                                              "kind": "parameter",
+                                              "name": "maximum_landing_gap_metres"
+                                            }
+                                          }
+                                        }
+                                      ],
+                                      "words": ""
+                                    }
+                                  ],
+                                  "allowance": {
+                                    "kind": "none"
+                                  },
+                                  "grade": false,
+                                  "null": {
+                                    "kind": "skip"
+                                  }
+                                },
+                                "fail": "landing_too_far_away",
+                                "undecided": "{why}",
+                                "then": {
+                                  "judge": {
+                                    "kind": "range",
+                                    "value": "nearest_fall",
+                                    "unit": "length",
+                                    "atMost": [
+                                      {
+                                        "name": "bound",
+                                        "options": [
+                                          {
+                                            "bound": {
+                                              "kind": "operand",
+                                              "value": {
+                                                "kind": "parameter",
+                                                "name": "maximum_fall_height_metres"
+                                              }
+                                            }
+                                          }
+                                        ],
+                                        "words": ""
+                                      }
+                                    ],
+                                    "allowance": {
+                                      "kind": "fixed",
+                                      "value": 1e-6
+                                    },
+                                    "grade": false,
+                                    "null": {
+                                      "kind": "skip"
+                                    }
+                                  },
+                                  "fail": "landing_too_low",
+                                  "undecided": "{why}",
+                                  "then": {
+                                    "judge": {
+                                      "kind": "range",
+                                      "value": "nearest_width",
+                                      "unit": "length",
+                                      "atLeast": [
+                                        {
+                                          "name": "bound",
+                                          "options": [
+                                            {
+                                              "bound": {
+                                                "kind": "operand",
+                                                "value": {
+                                                  "kind": "parameter",
+                                                  "name": "minimum_landing_width_metres"
+                                                }
+                                              }
+                                            }
+                                          ],
+                                          "words": ""
+                                        }
+                                      ],
+                                      "allowance": {
+                                        "kind": "raised",
+                                        "value": 1e-6
+                                      },
+                                      "grade": false,
+                                      "null": {
+                                        "kind": "skip"
+                                      }
+                                    },
+                                    "fail": "landings_too_small",
+                                    "undecided": "{why}",
+                                    "then": {
+                                      "judge": {
+                                        "kind": "fails"
+                                      },
+                                      "fail": "insufficient_landings",
+                                      "undecided": "{why}",
+                                      "related": "nearest"
+                                    },
+                                    "related": "nearest"
+                                  },
+                                  "related": "nearest"
+                                },
+                                "related": "nearest"
+                              }
+                            },
+                            "related": "tallest"
+                          },
+                          "otherwise": {
+                            "when": [
+                              {
+                                "kind": "stated",
+                                "field": "tallest_top"
+                              }
+                            ],
+                            "judge": {
+                              "kind": "range",
+                              "value": "tallest_top",
+                              "unit": "length",
+                              "atLeast": [
+                                {
+                                  "name": "bound",
+                                  "options": [
+                                    {
+                                      "bound": {
+                                        "kind": "operand",
+                                        "value": {
+                                          "kind": "parameter",
+                                          "name": "minimum_barrier_height_metres"
+                                        }
+                                      }
+                                    }
+                                  ],
+                                  "words": ""
+                                }
+                              ],
+                              "allowance": {
+                                "kind": "raised",
+                                "value": 1e-6
+                              },
+                              "grade": false,
+                              "null": {
+                                "kind": "skip"
+                              }
+                            },
+                            "fail": "barrier_too_low",
+                            "undecided": "{why}",
+                            "then": {
+                              "judge": {
+                                "kind": "fails"
+                              },
+                              "fail": "barrier_too_low_due_to_curb",
+                              "undecided": "{why}",
+                              "related": "tallest"
+                            },
+                            "related": "tallest"
+                          },
+                          "related": "tallest"
+                        }
+                      }
+                    }
+                  ],
+                  "merged": true
+                },
+                "fail": "",
+                "undecided": "",
+                "grading": {
+                  "bands": [
+                    {
+                      "severity": "error"
+                    }
+                  ]
+                }
+              }
+            ],
+            "once": [
+              {
+                "value": {
+                  "name": "surfaces",
+                  "expression": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "guard_surfaces;surfaces=@selection;barrier_gap=@maximum_barrier_gap_metres;platform_gap=@maximum_platform_gap_metres;landing_gap=@maximum_landing_gap_metres;landing_width=@minimum_landing_width_metres;climb_distance=@climbable_barrier_distance_metres;climb_side=@minimum_climbable_side_length_metres;from_curb=@measure_barrier_from_curb;climb_height=@maximum_climbable_height_metres;barriers=@barrier_selector;landings=@landing_selector;climbables=@climbable_selector"
+                  }
+                },
+                "refused": "{why}",
+                "required": true
+              }
+            ]
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "aggregate",
+                  "function": "none",
+                  "over": {
+                    "kind": "measured",
+                    "name": "guard_edges;surfaces=@selection;barrier_gap=@maximum_barrier_gap_metres;platform_gap=@maximum_platform_gap_metres;landing_gap=@maximum_landing_gap_metres;landing_width=@minimum_landing_width_metres;climb_distance=@climbable_barrier_distance_metres;climb_side=@minimum_climbable_side_length_metres;from_curb=@measure_barrier_from_curb;climb_height=@maximum_climbable_height_metres;barriers=@barrier_selector;landings=@landing_selector;climbables=@climbable_selector"
+                  },
+                  "value": {
+                    "kind": "not",
+                    "operand": {
+                      "kind": "and",
+                      "operands": [
+                        {
+                          "kind": "compare",
+                          "operator": "greaterThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "guarded_height"
+                          },
+                          "right": {
+                            "kind": "parameter",
+                            "name": "minimum_barrier_height_metres"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "label": "no item fails"
+                },
+                {
+                  "kind": "isDefined",
+                  "operand": {
+                    "kind": "literal",
+                    "value": {
+                      "type": "number",
+                      "value": 0.0
+                    }
+                  },
+                  "label": "read"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.aggregate",
+                      "label": "no item fails",
+                      "fields": {
+                        "function": "none"
+                      },
+                      "inputs": {
+                        "over": {
+                          "block": {
+                            "type": "source.measured",
+                            "fields": {
+                              "name": "guard_edges;surfaces=@selection;barrier_gap=@maximum_barrier_gap_metres;platform_gap=@maximum_platform_gap_metres;landing_gap=@maximum_landing_gap_metres;landing_width=@minimum_landing_width_metres;climb_distance=@climbable_barrier_distance_metres;climb_side=@minimum_climbable_side_length_metres;from_curb=@measure_barrier_from_curb;climb_height=@maximum_climbable_height_metres;barriers=@barrier_selector;landings=@landing_selector;climbables=@climbable_selector"
+                            }
+                          }
+                        },
+                        "value": {
+                          "block": {
+                            "type": "expression.not",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.and",
+                                  "inputs": {
+                                    "operands": {
+                                      "blocks": [
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "greaterThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "guarded_height",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.parameter",
+                                                "fields": {
+                                                  "name": "minimum_barrier_height_metres"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.isDefined",
+                      "label": "read",
+                      "inputs": {
+                        "operand": {
+                          "block": {
+                            "type": "expression.literal",
+                            "fields": {
+                              "value": {
+                                "type": "number",
+                                "value": 0.0
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.keyed-limit",
@@ -61720,6 +62521,290 @@
       "available": true
     },
     {
+      "name": "guard_surfaces",
+      "parameters": [
+        {
+          "key": "barrier_gap",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The widest gap between barriers that still guards the edge."
+            },
+            {
+              "language": "de",
+              "text": "Die größte Lücke zwischen Absturzsicherungen, die die Kante noch sichert."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "platform_gap",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "How far from the edge a barrier may stand."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit von der Kante eine Absturzsicherung stehen darf."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "landing_gap",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "How far from the edge a landing below may lie."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit von der Kante eine tiefere Auftrittsfläche liegen darf."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "landing_width",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "How wide a landing below must be to stand on."
+            },
+            {
+              "language": "de",
+              "text": "Wie breit eine tiefere Auftrittsfläche sein muss, um darauf zu stehen."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "climb_distance",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "How close to a barrier an object may be climbed."
+            },
+            {
+              "language": "de",
+              "text": "Wie nah an einer Absturzsicherung ein Objekt beklettert werden kann."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "climb_side",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "How long an object's shortest side must be to stand on."
+            },
+            {
+              "language": "de",
+              "text": "Wie lang die kürzeste Seite eines Objekts sein muss, um darauf zu stehen."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "measure_from",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "floor",
+              "curb"
+            ]
+          },
+          "required": false,
+          "default": "floor",
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether a barrier on a curb is measured from the floor or from the curb."
+            },
+            {
+              "language": "de",
+              "text": "Ob eine Absturzsicherung auf einer Aufkantung vom Boden oder von der Aufkantung gemessen wird."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "barriers",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects that may be barriers: their source kinds, or `@` a selector parameter of the rule, whose undecided objects leave the search refused; any nearby body without it."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, die Absturzsicherungen sein können: ihre Quellarten oder mit `@` ein Selektorparameter der Regel, dessen unentschiedene Objekte die Suche ablehnen lassen; ohne Angabe jeder nahe Körper."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "landings",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects that may be landings below, as `barriers` names them; any without it."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, die tiefere Auftrittsflächen sein können, benannt wie bei `barriers`; ohne Angabe jede."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "climbables",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects that may be climbed, as `barriers` names them; any without it."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, die beklettert werden können, benannt wie bei `barriers`; ohne Angabe jede."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "surfaces",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The walking surfaces measured together in one request: their source kinds, `,`-separated, or `@` a selector parameter of the rule (`@selection`, in a template, the rule's own selection); without it, the object alone. With it, role kinds leave no surface out."
+            },
+            {
+              "language": "de",
+              "text": "Die in einer Anfrage gemeinsam gemessenen Laufflächen: ihre Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel (`@selection`, in einer Vorlage, die eigene Auswahl der Regel); ohne Angabe das Objekt allein. Mit Angabe lassen Rollenarten keine Lauffläche aus."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "from_curb",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether a barrier on a curb is measured from the curb (`true`), as `measure_from` `curb` states it: a rule's boolean."
+            },
+            {
+              "language": "de",
+              "text": "Ob eine Absturzsicherung auf einer Aufkantung von der Aufkantung gemessen wird (`true`), wie `measure_from` `curb` es angibt: ein Wahrheitswert der Regel."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "climb_height",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How tall an object beside a barrier may be and still be climbed: names the first such object (`climbable`); none without it."
+            },
+            {
+              "language": "de",
+              "text": "Wie hoch ein Objekt neben einer Absturzsicherung sein darf, um noch beklettert zu werden: benennt das erste solche Objekt (`climbable`); ohne Angabe keines."
+            }
+          ],
+          "references": "length"
+        }
+      ],
+      "services": [
+        "guard",
+        "type-hierarchy"
+      ],
+      "exactness": "stated",
+      "subject": "project",
+      "notEvaluated": [
+        "the gaps define no usable search",
+        "a role selection leaves objects undecided",
+        "the guard service cannot measure the surfaces' exposed edges"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Guarded surfaces measured"
+        },
+        {
+          "language": "de",
+          "text": "Gemessene Laufflächen"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "How many walking surfaces the guard service measured in the one request `guard_edges` lists every surface's edges from, as `horizontal-guard` asks it: refused, as the rule is, where the gaps define no search, a role selection leaves objects undecided or the service cannot measure."
+        },
+        {
+          "language": "de",
+          "text": "Wie viele Laufflächen der Absturzdienst in der einen Anfrage gemessen hat, aus der `guard_edges` die Kanten jeder Lauffläche liest, wie `horizontal-guard` ihn fragt: abgelehnt, wie die Regel, wo die Lücken keine Suche ergeben, eine Rollenauswahl Objekte unentschieden lässt oder der Dienst nicht messen kann."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
       "name": "handrail_breaks",
       "parameters": [
         {
@@ -72143,56 +73228,111 @@
         {
           "key": "barriers",
           "kind": {
-            "type": "sourceKind"
+            "type": "objects"
           },
           "required": false,
           "help": [
             {
               "language": "en",
-              "text": "The source kinds that may be barriers; any nearby body without it."
+              "text": "The objects that may be barriers: their source kinds, or `@` a selector parameter of the rule, whose undecided objects leave the search refused; any nearby body without it."
             },
             {
               "language": "de",
-              "text": "Die Quellarten, die Absturzsicherungen sein können; ohne Angabe jeder nahe Körper."
+              "text": "Die Objekte, die Absturzsicherungen sein können: ihre Quellarten oder mit `@` ein Selektorparameter der Regel, dessen unentschiedene Objekte die Suche ablehnen lassen; ohne Angabe jeder nahe Körper."
             }
           ],
-          "references": "string"
+          "references": "selector"
         },
         {
           "key": "landings",
           "kind": {
-            "type": "sourceKind"
+            "type": "objects"
           },
           "required": false,
           "help": [
             {
               "language": "en",
-              "text": "The source kinds that may be landings below; any without it."
+              "text": "The objects that may be landings below, as `barriers` names them; any without it."
             },
             {
               "language": "de",
-              "text": "Die Quellarten, die tiefere Auftrittsflächen sein können; ohne Angabe jede."
+              "text": "Die Objekte, die tiefere Auftrittsflächen sein können, benannt wie bei `barriers`; ohne Angabe jede."
             }
           ],
-          "references": "string"
+          "references": "selector"
         },
         {
           "key": "climbables",
           "kind": {
-            "type": "sourceKind"
+            "type": "objects"
           },
           "required": false,
           "help": [
             {
               "language": "en",
-              "text": "The source kinds that may be climbed; any without it."
+              "text": "The objects that may be climbed, as `barriers` names them; any without it."
             },
             {
               "language": "de",
-              "text": "Die Quellarten, die beklettert werden können; ohne Angabe jede."
+              "text": "Die Objekte, die beklettert werden können, benannt wie bei `barriers`; ohne Angabe jede."
             }
           ],
-          "references": "string"
+          "references": "selector"
+        },
+        {
+          "key": "surfaces",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The walking surfaces measured together in one request: their source kinds, `,`-separated, or `@` a selector parameter of the rule (`@selection`, in a template, the rule's own selection); without it, the object alone. With it, role kinds leave no surface out."
+            },
+            {
+              "language": "de",
+              "text": "Die in einer Anfrage gemeinsam gemessenen Laufflächen: ihre Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel (`@selection`, in einer Vorlage, die eigene Auswahl der Regel); ohne Angabe das Objekt allein. Mit Angabe lassen Rollenarten keine Lauffläche aus."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "from_curb",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether a barrier on a curb is measured from the curb (`true`), as `measure_from` `curb` states it: a rule's boolean."
+            },
+            {
+              "language": "de",
+              "text": "Ob eine Absturzsicherung auf einer Aufkantung von der Aufkantung gemessen wird (`true`), wie `measure_from` `curb` es angibt: ein Wahrheitswert der Regel."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "climb_height",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How tall an object beside a barrier may be and still be climbed: names the first such object (`climbable`); none without it."
+            },
+            {
+              "language": "de",
+              "text": "Wie hoch ein Objekt neben einer Absturzsicherung sein darf, um noch beklettert zu werden: benennt das erste solche Objekt (`climbable`); ohne Angabe keines."
+            }
+          ],
+          "references": "length"
         }
       ],
       "services": [
@@ -72356,6 +73496,219 @@
             {
               "language": "de",
               "text": "Die Höhe des niedrigsten Objekts innerhalb von `climb_distance` einer Absturzsicherung mit einer Seite von mindestens `climb_side`; `null` ohne."
+            }
+          ]
+        },
+        {
+          "name": "climbable",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Climbable object"
+            },
+            {
+              "language": "de",
+              "text": "Bekletterbares Objekt"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The first such object no taller than `climb_height` (within a micrometre), as the guard service lists them; none without one."
+            },
+            {
+              "language": "de",
+              "text": "Das erste solche Objekt, das nicht höher als `climb_height` ist (auf einen Mikrometer), wie der Absturzdienst sie auflistet; keines ohne."
+            }
+          ]
+        },
+        {
+          "name": "partial_height",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Partial barrier height"
+            },
+            {
+              "language": "de",
+              "text": "Höhe teilweiser Absturzsicherung"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The height of the tallest barrier within the gaps that runs along part of the edge at all; `null` with none."
+            },
+            {
+              "language": "de",
+              "text": "Die Höhe der höchsten Absturzsicherung innerhalb der Lücken, die überhaupt an einem Teil der Kante verläuft; `null` ohne."
+            }
+          ]
+        },
+        {
+          "name": "tallest",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Tallest barrier"
+            },
+            {
+              "language": "de",
+              "text": "Höchste Absturzsicherung"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The tallest barrier within `platform_gap` (the last of equally tall ones, as the guard service lists them); none without one."
+            },
+            {
+              "language": "de",
+              "text": "Die höchste Absturzsicherung innerhalb von `platform_gap` (die letzte gleich hoher, wie der Absturzdienst sie auflistet); keine ohne."
+            }
+          ]
+        },
+        {
+          "name": "tallest_top",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Tallest barrier's top"
+            },
+            {
+              "language": "de",
+              "text": "Oberkante der höchsten Absturzsicherung"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The tallest barrier's top above the surface where it is measured from a curb under it (`measure_from` `curb`); `null` otherwise."
+            },
+            {
+              "language": "de",
+              "text": "Die Oberkante der höchsten Absturzsicherung über der Lauffläche, wo sie von einer Aufkantung darunter gemessen wird (`measure_from` `curb`); sonst `null`."
+            }
+          ]
+        },
+        {
+          "name": "nearest_gap",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Nearest landing's gap"
+            },
+            {
+              "language": "de",
+              "text": "Abstand der nächsten Auftrittsfläche"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "How far from the edge the landing nearest it lies, whatever its width or depth; `null` with no landing."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit die nächste Auftrittsfläche von der Kante liegt, gleich welcher Breite oder Tiefe; `null` ohne Auftrittsfläche."
+            }
+          ]
+        },
+        {
+          "name": "nearest_fall",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Fall onto the nearest landing"
+            },
+            {
+              "language": "de",
+              "text": "Fallhöhe auf die nächste Auftrittsfläche"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "How far below the surface the nearest landing's top lies; `null` with no landing."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit die Oberkante der nächsten Auftrittsfläche unter der Lauffläche liegt; `null` ohne Auftrittsfläche."
+            }
+          ]
+        },
+        {
+          "name": "nearest_width",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Nearest landing's width"
+            },
+            {
+              "language": "de",
+              "text": "Breite der nächsten Auftrittsfläche"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "How wide the nearest landing is to stand on; `null` with no landing."
+            },
+            {
+              "language": "de",
+              "text": "Wie breit die nächste Auftrittsfläche zum Stehen ist; `null` ohne Auftrittsfläche."
+            }
+          ]
+        },
+        {
+          "name": "nearest",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Nearest landing"
+            },
+            {
+              "language": "de",
+              "text": "Nächste Auftrittsfläche"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The landing nearest the edge (the first of equally near ones); none without one."
+            },
+            {
+              "language": "de",
+              "text": "Die Auftrittsfläche, die der Kante am nächsten liegt (die erste gleich naher); keine ohne."
             }
           ]
         }

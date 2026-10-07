@@ -138,7 +138,7 @@ pub use external_wall_validation::ExternalWallValidation;
 pub use free_floor_circle::FreeFloorCircle;
 pub use free_floor_rectangle::FreeFloorRectangle;
 pub use group_composition::GroupComposition;
-pub use guard_diagnosis::{GuardDefect, GuardDiagnosis};
+pub use guard_diagnosis::GuardDefect;
 pub use horizontal_guard::HorizontalGuard;
 pub use keyed_limit::KeyedLimit;
 pub use level_spacing::LevelSpacing;
@@ -195,6 +195,7 @@ pub mod reference {
     pub use crate::counterpart_coverage::reference::CounterpartCoverage;
     pub use crate::effective_coverage::reference::EffectiveCoverage;
     pub use crate::external_wall_validation::reference::ExternalWallValidation;
+    pub use crate::horizontal_guard::reference::HorizontalGuard;
     pub use crate::level_spacing::reference::LevelSpacing;
     pub use crate::light_well::reference::LightWell;
     pub use crate::object_count::reference::ObjectCount;

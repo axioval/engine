@@ -1261,6 +1261,43 @@ outcome, joined by `; ` (`joined`). The declaration keeps the
 capability's checks, words and order; without the service the rule is
 open (`space-boundary coverage service is not registered`).
 
+### `horizontal-guard`
+
+| Form | When | Values | Checks |
+| --- | --- | --- | --- |
+| one | always | once, required: `surfaces` = `guard_surfaces;surfaces=@selection;…`, of the project | edges: each item of `guard_edges;surfaces=@selection;…` judged by its first defect, merged per defect |
+
+Every value names the search as the rule states it (`barrier_gap`,
+`platform_gap`, `landing_gap`, `landing_width`, `climb_distance`,
+`climb_side`, `from_curb`, `climb_height` and the role selectors, an
+unstated one dropped) and the rule's own selection, so the rule's
+surfaces are measured in one request for the run. `guard_surfaces` is
+read once per rule (`once`, `{why}` its refusal): unusable thresholds (`horizontal-guard thresholds do
+not define a usable search`), a role selection leaving objects undecided
+(`` horizontal-guard: `barrier_selector` cannot be decided for 2
+object(s) ``) or a refused request leave the rule open as a whole. A
+surface without a measured edge is open (`no edge was measured for this
+walking surface; it has no measurable body`). Each edge is judged by a
+chain of tests (`then` where one passes, `otherwise` where it fails,
+`unmet` nulls failing, lengths raised by a micrometre against their
+bounds as the capability compared them): `guarded_height` at least the
+barrier height, then `climbable_height` at most the climbable height
+(`barrier_too_low_due_to_climbable_object`, relating `climbable`);
+otherwise `barrier_share` above one half: `tallest_barrier` too low
+(`barrier_too_low`, or, `tallest_top` reaching the height,
+`barrier_too_low_due_to_curb`), else `partial_height` reaching it
+(`hole_in_barrier`, relating `tallest`); otherwise, and where neither
+applies, `landing_fall` at most the fall height, else the nearest landing
+too far (`landing_too_far_away`), too low, too small or too few
+(`insufficient_landings`), relating `nearest`, else `missing_barrier`.
+Findings of one defect on a surface are one (`merged`), graded error
+whatever the rule's severity. The declaration is refused once, after
+selecting (`selected`): every threshold a finite number of at least zero
+and the curb flag stated (`horizontal-guard declaration is missing or not
+realisable`, naming the capability itself), then each role selector's
+kind after `horizontal-guard: `; a rule selecting nothing judges nothing. Without the
+service the rule is open (`guard service is not registered`).
+
 ## Binding and running a rule
 
 The rules crate's `templates` module runs a template
@@ -1722,6 +1759,16 @@ unknown declaration at random, under one or both derivations in either
 order, bounded by decided, undecided or empty selections, with the
 service answering or refusing; and by the `external-walls` rule of the
 `coverage` case, recorded before the switch. It is never forked (D30).
+
+`horizontal-guard` is held to `horizontal_guard/reference.rs`
+(`axioval_rules::reference::HorizontalGuard`, which shares the search and
+the filters with `guard_edges`) on every fixture of
+`tests/horizontal_guard.rs` (`held`), its refusals asserted word for word;
+by generated slabs of random edges, barriers (some on curbs), landings and
+climbable objects under random thresholds, curb measurement and role
+selections; and by the `horizontal-guard` rules of the `spaces` case,
+recorded before the switch (the public models' guard requests are refused,
+so they hold the rule's refusal). It is never forked.
 
 `space-boundary-coverage` is held to `space_boundary_coverage/reference.rs`
 (`axioval_rules::reference::SpaceBoundaryCoverage`) on every fixture of

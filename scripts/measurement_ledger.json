@@ -413,7 +413,7 @@
         "free_placements"
       ]
     },
-    "horizontal_guard::evaluate::measure_guard_edges": {
+    "horizontal_guard::reference::evaluate::measure_guard_edges": {
       "count": 1,
       "providedBy": [
         "guard_edges"

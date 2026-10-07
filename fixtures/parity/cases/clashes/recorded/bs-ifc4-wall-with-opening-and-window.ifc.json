@@ -1,0 +1,126 @@
+{
+  "findings": [
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-wall-with-opening-and-window.ifc/#102:ifc-step:bs-ifc4-wall-with-opening-and-window.ifc/#45",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "dd2d7f3e-f3d8-5067-a189-95462a6f2fcb",
+      "message": "hard clash with ifc-step:bs-ifc4-wall-with-opening-and-window.ifc/#45: penetration 0.1000 m exceeds tolerance 0.0000 m",
+      "object_id": {
+        "local_id": "#102",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#45",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "clash-clearance",
+      "severity": "error"
+    },
+    {
+      "evidence": [
+        {
+          "exact": true,
+          "locator": "axiolid:proximity:ifc-step:bs-ifc4-wall-with-opening-and-window.ifc/#102:ifc-step:bs-ifc4-wall-with-opening-and-window.ifc/#45",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "id": "eb607f66-4d49-509d-9c8c-c6464ae79cfe",
+      "message": "hard clash with ifc-step:bs-ifc4-wall-with-opening-and-window.ifc/#45: penetration 0.1000 m exceeds tolerance 0.0000 m, graded error by its smallest extent of 0.2000 m (clash matrix cell 2 `furnishing`)",
+      "object_id": {
+        "local_id": "#102",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "related": [
+        {
+          "local_id": "#45",
+          "source": {
+            "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+            "system": "ifc-step"
+          }
+        }
+      ],
+      "rule_id": "matrix-selectors",
+      "severity": "error"
+    }
+  ],
+  "not_evaluated": [
+    {
+      "message": "the requested object occupies no material; pairs involving this object were not checked",
+      "object_id": {
+        "local_id": "#80",
+        "source": {
+          "document": "bs-ifc4-wall-with-opening-and-window.ifc",
+          "system": "ifc-step"
+        }
+      },
+      "reason": "incomplete_evidence",
+      "rule_id": "clash-clearance"
+    }
+  ],
+  "rules": [
+    {
+      "checked": 2,
+      "failed": 1,
+      "not_evaluated": 1,
+      "rule_id": "clash-clearance",
+      "status": "failed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "clash-similar",
+      "status": "passed"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "clash-structure",
+      "status": "passed"
+    },
+    {
+      "checked": 0,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "clash-subjects",
+      "status": "nothing_selected"
+    },
+    {
+      "checked": 1,
+      "failed": 0,
+      "not_evaluated": 0,
+      "rule_id": "matrix-grouped",
+      "status": "passed"
+    },
+    {
+      "checked": 2,
+      "failed": 1,
+      "not_evaluated": 0,
+      "rule_id": "matrix-selectors",
+      "status": "failed"
+    }
+  ]
+}

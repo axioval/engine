@@ -1,0 +1,14 @@
+{
+  "description": "clash and clash-matrix over every public model, recorded before they became templates (#285).",
+  "models": "*",
+  "pairs": [],
+  "recorded": [
+    {"rule": "clash-structure", "comparison": "contract", "reason": "the clash capabilities become templates over shared measurements (#285); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "clash-clearance", "comparison": "contract", "reason": "the clash capabilities become templates over shared measurements (#285); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "clash-similar", "comparison": "contract", "reason": "the clash capabilities become templates over shared measurements (#285); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "clash-subjects", "comparison": "contract", "reason": "the clash capabilities become templates over shared measurements (#285); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "matrix-selectors", "comparison": "contract", "reason": "the clash capabilities become templates over shared measurements (#285); the outcomes their implementation reported, recorded before it was replaced, are the contract."},
+    {"rule": "matrix-grouped", "comparison": "contract", "reason": "the clash capabilities become templates over shared measurements (#285); the outcomes their implementation reported, recorded before it was replaced, are the contract."}
+  ],
+  "divergences": []
+}

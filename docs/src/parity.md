@@ -249,6 +249,17 @@ them, no row and a refused declaration), `door-swing`, `opening-spaces`,
 one wall with an opening and a window and no door, so most door rules
 record the object-frame and adjacency services' refusals.
 
+The case `clashes` records `clash` and `clash-matrix` over every public
+model before they are rebuilt as templates (#285): `clash` with axis and
+volume tolerances, severities by class and graded by the smallest extent,
+duplicates compared by stated values; clearances grouped per type pair and
+storey; walls grouped as similar clashes, excluded along a connection and
+by a shared presentation layer; subjects grouped, graded by the shared
+volume and excused by tolerance cases along the elements' own axes; and
+`clash-matrix` with cells picked by selectors, a cell's severity, unmatched
+pairs reported, and cells keyed by a property and a discipline the public
+models do not declare.
+
 Each pair's evidence prints as one JSON line. That line is what the
 migration ledger records as a proof item, tagged `"kind": "parity"`; the
 ledger check (`scripts/migration.py`) rejects a parity proof that does not

@@ -1,0 +1,908 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:parity.public.clashes",
+    "name": {
+      "default": "Public parity ruleset, clashes",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "clash and clash-matrix, recorded before they became templates.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "definitionPackages": [
+    "axioval:parity.public.clashes.definitions"
+  ],
+  "root": {
+    "id": "root",
+    "name": {
+      "default": "Clashes",
+      "translations": {}
+    },
+    "rules": [
+      {
+        "id": "clash-structure",
+        "definitionId": "axioval:parity.public.clashes.clash",
+        "name": {
+          "default": "clash-structure",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "anyOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.clashes.wall",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.clashes.beam",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.clashes.column",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.clashes.slab",
+              "includeSubtypes": true
+            }
+          ]
+        },
+        "parameters": {
+          "counterparts": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.clashes.wall",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.clashes.beam",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.clashes.column",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.clashes.slab",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "penetration_tolerance_metres": {
+            "type": "number",
+            "value": 0.01
+          },
+          "duplicate_tolerance_metres": {
+            "type": "number",
+            "value": 0.001
+          },
+          "horizontal_tolerance_metres": {
+            "type": "number",
+            "value": 0.02
+          },
+          "vertical_tolerance_metres": {
+            "type": "number",
+            "value": 0.02
+          },
+          "volume_tolerance_cubic_metres": {
+            "type": "number",
+            "value": 1e-06
+          },
+          "severity_by_class": {
+            "type": "table",
+            "value": [
+              {
+                "class": {
+                  "type": "string",
+                  "value": "duplicate"
+                },
+                "severity": {
+                  "type": "string",
+                  "value": "error"
+                }
+              },
+              {
+                "class": {
+                  "type": "string",
+                  "value": "containment"
+                },
+                "severity": {
+                  "type": "string",
+                  "value": "info"
+                }
+              }
+            ]
+          },
+          "grade_by": {
+            "type": "string",
+            "value": "smallest_extent"
+          },
+          "severity_grades": {
+            "type": "table",
+            "value": [
+              {
+                "above": {
+                  "type": "number",
+                  "value": 0.05
+                },
+                "severity": {
+                  "type": "string",
+                  "value": "warning"
+                }
+              },
+              {
+                "above": {
+                  "type": "number",
+                  "value": 0.2
+                },
+                "severity": {
+                  "type": "string",
+                  "value": "error"
+                }
+              }
+            ]
+          },
+          "duplicate_quantities": {
+            "type": "table",
+            "value": [
+              {
+                "property_set": {
+                  "type": "string",
+                  "value": "axioval:attributes"
+                },
+                "property": {
+                  "type": "string",
+                  "value": "axioval:parity.public.clashes.name"
+                }
+              },
+              {
+                "property_set": {
+                  "type": "string",
+                  "value": "axioval:parity.public.clashes.wall-common"
+                },
+                "property": {
+                  "type": "string",
+                  "value": "axioval:parity.public.clashes.is-external"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "clash-clearance",
+        "definitionId": "axioval:parity.public.clashes.clash",
+        "name": {
+          "default": "clash-clearance",
+          "translations": {}
+        },
+        "severity": "error",
+        "applicability": {
+          "kind": "anyOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.clashes.furniture",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.clashes.duct",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.clashes.window",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.clashes.opening",
+              "includeSubtypes": true
+            }
+          ]
+        },
+        "parameters": {
+          "counterparts": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.clashes.wall",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.clashes.slab",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.clashes.column",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.clashes.beam",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "penetration_tolerance_metres": {
+            "type": "number",
+            "value": 0.0
+          },
+          "clearance_metres": {
+            "type": "number",
+            "value": 0.05
+          },
+          "report_duplicates": {
+            "type": "boolean",
+            "value": false
+          },
+          "group_by": {
+            "type": "string",
+            "value": "type_pair"
+          },
+          "per_storey": {
+            "type": "boolean",
+            "value": true
+          },
+          "storey_path": {
+            "type": "string",
+            "value": "IfcRelContainedInSpatialStructure:backward"
+          }
+        }
+      },
+      {
+        "id": "clash-similar",
+        "definitionId": "axioval:parity.public.clashes.clash",
+        "name": {
+          "default": "clash-similar",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "anyOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.clashes.wall",
+              "includeSubtypes": true
+            }
+          ]
+        },
+        "parameters": {
+          "counterparts": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.clashes.slab",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.clashes.beam",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.clashes.wall",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "penetration_tolerance_metres": {
+            "type": "number",
+            "value": 0.0
+          },
+          "report_containment": {
+            "type": "boolean",
+            "value": false
+          },
+          "group_by": {
+            "type": "string",
+            "value": "similar"
+          },
+          "group_tolerance_metres": {
+            "type": "number",
+            "value": 0.05
+          },
+          "exclude_paths": {
+            "type": "stringList",
+            "value": [
+              "IfcRelConnectsPathElements:either"
+            ]
+          },
+          "exclude_same_layer": {
+            "type": "boolean",
+            "value": true
+          }
+        }
+      },
+      {
+        "id": "clash-subjects",
+        "definitionId": "axioval:parity.public.clashes.clash",
+        "name": {
+          "default": "clash-subjects",
+          "translations": {}
+        },
+        "severity": "info",
+        "applicability": {
+          "kind": "anyOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.clashes.slab",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.clashes.beam",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.clashes.column",
+              "includeSubtypes": true
+            }
+          ]
+        },
+        "parameters": {
+          "counterparts": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.clashes.wall",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.clashes.beam",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.clashes.column",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.clashes.slab",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "penetration_tolerance_metres": {
+            "type": "number",
+            "value": 0.0
+          },
+          "clearance_metres": {
+            "type": "number",
+            "value": 0.01
+          },
+          "group_by": {
+            "type": "string",
+            "value": "subject"
+          },
+          "grade_by": {
+            "type": "string",
+            "value": "volume"
+          },
+          "severity_grades": {
+            "type": "table",
+            "value": [
+              {
+                "above": {
+                  "type": "number",
+                  "value": 0.001
+                },
+                "severity": {
+                  "type": "string",
+                  "value": "warning"
+                }
+              },
+              {
+                "above": {
+                  "type": "number",
+                  "value": 0.1
+                },
+                "severity": {
+                  "type": "string",
+                  "value": "error"
+                }
+              }
+            ]
+          },
+          "tolerance_cases": {
+            "type": "table",
+            "value": [
+              {
+                "case": {
+                  "type": "string",
+                  "value": "horizontal_orthogonal"
+                },
+                "first_selector": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.clashes.slab",
+                    "includeSubtypes": true
+                  }
+                },
+                "second_selector": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.clashes.wall",
+                    "includeSubtypes": true
+                  }
+                },
+                "tolerance_metres": {
+                  "type": "number",
+                  "value": 0.05
+                }
+              },
+              {
+                "case": {
+                  "type": "string",
+                  "value": "vertical_protrusion"
+                },
+                "first_selector": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.clashes.beam",
+                    "includeSubtypes": true
+                  }
+                },
+                "tolerance_metres": {
+                  "type": "number",
+                  "value": 0.1
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "matrix-selectors",
+        "definitionId": "axioval:parity.public.clashes.clash-matrix",
+        "name": {
+          "default": "matrix-selectors",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "anyOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.clashes.wall",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.clashes.beam",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.clashes.column",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.clashes.slab",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.clashes.furniture",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.clashes.window",
+              "includeSubtypes": true
+            }
+          ]
+        },
+        "parameters": {
+          "counterparts": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.clashes.wall",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.clashes.beam",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.clashes.column",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.clashes.slab",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "cells": {
+            "type": "table",
+            "value": [
+              {
+                "label": {
+                  "type": "string",
+                  "value": "walls on slabs"
+                },
+                "severity": {
+                  "type": "string",
+                  "value": "warning"
+                },
+                "subject_selector": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.clashes.wall",
+                    "includeSubtypes": true
+                  }
+                },
+                "counterpart_selector": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.clashes.slab",
+                    "includeSubtypes": true
+                  }
+                },
+                "penetration_tolerance_metres": {
+                  "type": "number",
+                  "value": 0.01
+                },
+                "volume_tolerance_cubic_metres": {
+                  "type": "number",
+                  "value": 1e-06
+                }
+              },
+              {
+                "label": {
+                  "type": "string",
+                  "value": "frames"
+                },
+                "subject_selector": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.clashes.beam",
+                    "includeSubtypes": true
+                  }
+                },
+                "counterpart_selector": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.clashes.column",
+                    "includeSubtypes": true
+                  }
+                },
+                "penetration_tolerance_metres": {
+                  "type": "number",
+                  "value": 0.0
+                },
+                "clearance_metres": {
+                  "type": "number",
+                  "value": 0.02
+                }
+              },
+              {
+                "label": {
+                  "type": "string",
+                  "value": "furnishing"
+                },
+                "severity": {
+                  "type": "string",
+                  "value": "info"
+                },
+                "subject_selector": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "anyOf",
+                    "operands": [
+                      {
+                        "kind": "entityType",
+                        "objectType": "axioval:parity.public.clashes.furniture",
+                        "includeSubtypes": true
+                      },
+                      {
+                        "kind": "entityType",
+                        "objectType": "axioval:parity.public.clashes.window",
+                        "includeSubtypes": true
+                      }
+                    ]
+                  }
+                },
+                "penetration_tolerance_metres": {
+                  "type": "number",
+                  "value": 0.0
+                },
+                "clearance_metres": {
+                  "type": "number",
+                  "value": 0.05
+                },
+                "report_duplicates": {
+                  "type": "boolean",
+                  "value": false
+                }
+              },
+              {
+                "label": {
+                  "type": "string",
+                  "value": "walls"
+                },
+                "subject_selector": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.clashes.wall",
+                    "includeSubtypes": true
+                  }
+                },
+                "counterpart_selector": {
+                  "type": "selector",
+                  "value": {
+                    "kind": "entityType",
+                    "objectType": "axioval:parity.public.clashes.wall",
+                    "includeSubtypes": true
+                  }
+                },
+                "penetration_tolerance_metres": {
+                  "type": "number",
+                  "value": 0.005
+                },
+                "duplicate_tolerance_metres": {
+                  "type": "number",
+                  "value": 0.001
+                }
+              }
+            ]
+          },
+          "exclude_same_system": {
+            "type": "boolean",
+            "value": false
+          },
+          "report_unmatched": {
+            "type": "boolean",
+            "value": true
+          },
+          "severity_by_class": {
+            "type": "table",
+            "value": [
+              {
+                "class": {
+                  "type": "string",
+                  "value": "clearance"
+                },
+                "severity": {
+                  "type": "string",
+                  "value": "info"
+                }
+              }
+            ]
+          },
+          "grade_by": {
+            "type": "string",
+            "value": "smallest_extent"
+          },
+          "severity_grades": {
+            "type": "table",
+            "value": [
+              {
+                "above": {
+                  "type": "number",
+                  "value": 0.1
+                },
+                "severity": {
+                  "type": "string",
+                  "value": "error"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "matrix-grouped",
+        "definitionId": "axioval:parity.public.clashes.clash-matrix",
+        "name": {
+          "default": "matrix-grouped",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "anyOf",
+          "operands": [
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.clashes.wall",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.clashes.beam",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.clashes.column",
+              "includeSubtypes": true
+            },
+            {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.clashes.slab",
+              "includeSubtypes": true
+            }
+          ]
+        },
+        "parameters": {
+          "counterparts": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.clashes.wall",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.clashes.beam",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.clashes.column",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.clashes.slab",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          },
+          "cells": {
+            "type": "table",
+            "value": [
+              {
+                "label": {
+                  "type": "string",
+                  "value": "named"
+                },
+                "subject_key_1": {
+                  "type": "string",
+                  "value": "*"
+                },
+                "penetration_tolerance_metres": {
+                  "type": "number",
+                  "value": 0.01
+                },
+                "horizontal_tolerance_metres": {
+                  "type": "number",
+                  "value": 0.02
+                }
+              },
+              {
+                "label": {
+                  "type": "string",
+                  "value": "structure"
+                },
+                "subject_discipline": {
+                  "type": "string",
+                  "value": "structural"
+                },
+                "penetration_tolerance_metres": {
+                  "type": "number",
+                  "value": 0.0
+                }
+              },
+              {
+                "penetration_tolerance_metres": {
+                  "type": "number",
+                  "value": 0.02
+                },
+                "report_containment": {
+                  "type": "boolean",
+                  "value": false
+                }
+              }
+            ]
+          },
+          "key_1": {
+            "type": "propertyReference",
+            "propertySet": "axioval:attributes",
+            "property": "axioval:parity.public.clashes.name"
+          },
+          "system_path": {
+            "type": "string",
+            "value": "IfcRelAssignsToGroup:forward"
+          },
+          "symmetric": {
+            "type": "boolean",
+            "value": false
+          },
+          "group_by": {
+            "type": "string",
+            "value": "similar"
+          },
+          "group_tolerance_metres": {
+            "type": "number",
+            "value": 0.1
+          },
+          "per_storey": {
+            "type": "boolean",
+            "value": true
+          },
+          "storey_path": {
+            "type": "string",
+            "value": "IfcRelContainedInSpatialStructure:backward"
+          },
+          "duplicate_quantities": {
+            "type": "table",
+            "value": [
+              {
+                "property_set": {
+                  "type": "string",
+                  "value": "axioval:attributes"
+                },
+                "property": {
+                  "type": "string",
+                  "value": "axioval:parity.public.clashes.object-type"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

@@ -188,6 +188,26 @@ struct Bound {
     /// Whether the form names `@selection` anywhere: only then is the
     /// rule's selection made a bound selection.
     reads_selection: bool,
+    /// Each member list the form reads, as written for the rule: written
+    /// once and kept with the plan, since it depends only on the template
+    /// and the rule's parameters.
+    written: Mutex<BTreeMap<&'static str, Arc<str>>>,
+}
+
+impl Bound {
+    /// The member list a template writes as `list`, without the arguments
+    /// naming parameters the rule leaves unstated ([`unstated_dropped`]),
+    /// written once for the rule.
+    fn written_list(&self, list: &'static str) -> Arc<str> {
+        let mut written = self
+            .written
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        written
+            .entry(list)
+            .or_insert_with(|| Arc::from(unstated_dropped_list(list, &self.constants)))
+            .clone()
+    }
 }
 
 impl std::ops::Deref for Plan<'_> {
@@ -1385,6 +1405,7 @@ fn bind(template: &Template, rule: &CompiledRule) -> Result<Bound, Unavailable> 
         })
         .collect();
     Ok(Bound {
+        written: Mutex::new(BTreeMap::new()),
         form: index,
         parameters,
         constants,

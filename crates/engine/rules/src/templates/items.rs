@@ -613,9 +613,7 @@ pub(super) fn judge_items(
         chosen: Vec::new(),
         unit: ItemUnit::Length,
     };
-    let list = leaves.written_list(items.list, || {
-        super::unstated_dropped_list(items.list, &plan.constants)
-    });
+    let list = plan.written_list(items.list);
     let listed = leaves.bound_members(&list);
     let (members, evidence) = match listed.as_ref() {
         Ok((members, evidence)) => (members, evidence),

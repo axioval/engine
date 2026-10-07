@@ -262,19 +262,6 @@ impl<'a> ObjectLeaves<'a> {
     /// references bound to the rule's parameters and the anchor) measured
     /// of the object, once per object however many checks read it. A
     /// refusal states why without the list's name and the object.
-    /// The list a template writes as `list`, as `write` writes it for the
-    /// rule: once per rule where the rule's arguments are known.
-    pub(crate) fn written_list(
-        &self,
-        list: &'static str,
-        write: impl FnOnce() -> String,
-    ) -> Arc<str> {
-        match self.arguments {
-            Some(arguments) => arguments.written(list, write),
-            None => Arc::from(write()),
-        }
-    }
-
     pub(crate) fn bound_members(&self, list: &str) -> Arc<Listed> {
         if let Some((_, listed)) = self
             .lists

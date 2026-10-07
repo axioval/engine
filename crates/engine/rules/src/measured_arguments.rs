@@ -41,9 +41,6 @@ pub(crate) struct Arguments {
     /// as a value and as a list: the rule's parameters bound, the anchor
     /// left for each object.
     anchored: RefCell<BTreeMap<(bool, String), Anchored>>,
-    /// Member lists as a template writes them, without the arguments
-    /// naming parameters the rule leaves unstated.
-    written: RefCell<BTreeMap<&'static str, std::sync::Arc<str>>>,
 }
 
 /// A name prepared once for the rule; `None` where it is not.
@@ -226,21 +223,6 @@ impl Arguments {
         });
         self.anchored.borrow_mut().insert(key, call.clone());
         call
-    }
-
-    /// The list a template writes as `list`, as `write` writes it for the
-    /// rule, once per rule.
-    pub(crate) fn written(
-        &self,
-        list: &'static str,
-        write: impl FnOnce() -> String,
-    ) -> std::sync::Arc<str> {
-        if let Some(written) = self.written.borrow().get(list) {
-            return written.clone();
-        }
-        let written: std::sync::Arc<str> = std::sync::Arc::from(write());
-        self.written.borrow_mut().insert(list, written.clone());
-        written
     }
 
     /// The objects the selector parameter `parameter` picks, read once.

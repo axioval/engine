@@ -168,5 +168,6 @@ fn form() -> Form {
             refused: "coordinate-consistency: {why}",
             required: true,
         }],
+        joined: None,
     }
 }

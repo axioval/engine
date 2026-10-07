@@ -125,6 +125,7 @@ fn federation() -> Template {
                 refused: "federation: {why}",
                 required: true,
             }],
+            joined: None,
         }],
     }
 }
@@ -597,6 +598,7 @@ fn walls() -> Template {
                 refused: "envelope: {why}",
                 required: false,
             }],
+            joined: None,
         }],
     }
 }

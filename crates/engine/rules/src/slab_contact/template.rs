@@ -325,6 +325,7 @@ pub(crate) fn template() -> Template {
             related: Some("share"),
             checks: Vec::new(),
             once: Vec::new(),
+            joined: None,
         }],
     }
 }

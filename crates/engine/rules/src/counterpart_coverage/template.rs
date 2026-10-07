@@ -508,6 +508,7 @@ pub(crate) fn template() -> Template {
             unless: Vec::new(),
             grading: None,
             once: Vec::new(),
+            joined: None,
         }],
     }
 }

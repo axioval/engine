@@ -101,6 +101,7 @@ fn form(when: &'static [&'static str], existence: bool) -> Form {
         related: None,
         checks: Vec::new(),
         once: Vec::new(),
+        joined: None,
     }
 }
 

@@ -507,6 +507,8 @@ pub enum Service {
     PlanSpan,
     CoordinateSystem,
     EnvelopeMembership,
+    BoundaryCoverage,
+    Guard,
 }
 
 impl Service {
@@ -533,6 +535,10 @@ impl Service {
             Self::EnvelopeMembership => services
                 .get::<crate::EnvelopeMembershipServiceHandle>()
                 .is_some(),
+            Self::BoundaryCoverage => services
+                .get::<crate::BoundaryCoverageServiceHandle>()
+                .is_some(),
+            Self::Guard => services.get::<crate::GuardServiceHandle>().is_some(),
         }
     }
 }
@@ -610,6 +616,10 @@ pub enum Condition {
     /// The source a scope judges is one the value's measured reads cite
     /// ([`crate::Citation::sources`]): the reference source.
     Scope { value: &'static str },
+    /// The value's measured reads noted something ([`crate::Citation`]'s
+    /// notes): a measurement found what its value does not say, such as
+    /// boundaries that surely overlap.
+    Noted { value: &'static str },
 }
 
 /// One composition of a template.
@@ -666,6 +676,13 @@ pub struct Form {
     /// Values read once per rule, before any scope or object ([`Once`]).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub once: Vec<Once>,
+    /// Where stated, everything the form and its checks leave open on an
+    /// object is one not-evaluated outcome, their messages joined by this
+    /// separator in order, for the first one's reason, after the object's
+    /// findings: as capabilities wording all one object leaves undecided in
+    /// one message did.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub joined: Option<&'static str>,
 }
 
 /// A value read once per rule, before any scope or object is judged, of
@@ -2599,6 +2616,7 @@ mod tests {
             unless: Vec::new(),
             grading: None,
             once: Vec::new(),
+            joined: None,
         };
         let Expression::And { operands, .. } = form.requirement() else {
             panic!("an `and` of the checks and the form's decision");

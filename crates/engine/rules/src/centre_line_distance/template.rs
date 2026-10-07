@@ -159,6 +159,7 @@ fn sides() -> FormCheck {
                            none surely does",
                 },
             ],
+            merged: false,
         })),
         fail: "",
         undecided: "",
@@ -267,6 +268,7 @@ pub(crate) fn template() -> Template {
             related: None,
             checks: vec![sides()],
             once: Vec::new(),
+            joined: None,
         }],
     }
 }

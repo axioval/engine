@@ -1099,8 +1099,10 @@ fn unstated_dropped_from(
     let dropped: Vec<&str> = call
         .references()
         .filter_map(|(key, argument)| match argument {
+            // The template's own selection is always bound.
             MeasuredArgument::Parameter(parameter)
-                if !constants.contains_key(parameter.as_str())
+                if parameter != axioval_engine::template::SELECTION
+                    && !constants.contains_key(parameter.as_str())
                     && call.parameter(key).is_some_and(|declared| {
                         !declared.required && declared.default.is_none()
                     }) =>
@@ -1797,6 +1799,23 @@ fn placeholder(plan: &Plan<'_>, read: &Read, key: &str) -> Option<String> {
                     .join(", ")
             })
         }
+        // An area with its unit, to the micrometre squared, as the boundary
+        // capabilities showed it: `7.5 m²`, or `between … and …`.
+        "m2" => spanned(plan, read, name, square_metres),
+        // A share as a percentage to two decimals: `87.29%`, or `between …
+        // and …`.
+        "percent" => spanned(plan, read, name, percent),
+        // What the value's measured reads noted, joined by `; `: nothing
+        // where they noted nothing.
+        "noted" => Some(
+            read.notes
+                .iter()
+                .filter(|(read, _)| *read == name)
+                .flat_map(|(_, notes)| notes)
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .join("; "),
+        ),
         "share" => match read.values.get(name) {
             Some(Value::Number { value, .. }) => {
                 Some(((value.upper.min(1.0) * 1e4).round() / 1e4).to_string())
@@ -1835,6 +1854,35 @@ fn placeholder(plan: &Plan<'_>, read: &Read, key: &str) -> Option<String> {
             .or_else(|| read.values.get(name).map(ToString::to_string)),
         _ => None,
     }
+}
+
+/// A value's interval, or a constant, each end shown by `show`: one end
+/// where both show alike, `between … and …` otherwise.
+fn spanned(plan: &Plan<'_>, read: &Read, name: &str, show: fn(f64) -> String) -> Option<String> {
+    let (lower, upper) = match read.values.get(name) {
+        Some(Value::Number { value, .. }) => (value.lower, value.upper),
+        Some(_) => return None,
+        None => {
+            let value = plan.constants.get(name).and_then(Constant::number)?;
+            (value, value)
+        }
+    };
+    let (low, high) = (show(lower), show(upper));
+    Some(if low == high {
+        low
+    } else {
+        format!("between {low} and {high}")
+    })
+}
+
+/// An area in square metres, rounded to the micrometre squared: `7.5 m²`.
+fn square_metres(value: f64) -> String {
+    format!("{} m²", (value * 1e6).round() / 1e6)
+}
+
+/// A share as a percentage, rounded to two decimals: `87.29%`.
+fn percent(share: f64) -> String {
+    format!("{}%", (share * 1e4).round() / 1e2)
 }
 
 /// A format showing a number with a fixed number of decimals, `fixed3`,
@@ -1923,6 +1971,10 @@ fn holds_over(
                 .iter()
                 .any(|source| source.to_string() == *scope)
         }),
+        Some(Condition::Noted { value }) => read
+            .notes
+            .iter()
+            .any(|(name, notes)| *name == value && !notes.is_empty()),
     }
 }
 
@@ -2367,9 +2419,15 @@ fn judge_checks_in(
             continue;
         }
         if let Decision::Items(judged) = &check.decision {
-            outcomes.extend(items::judge_items(
-                plan, judged, &checked, context, object, leaves,
-            ));
+            let found = items::judge_items(plan, judged, &checked, context, object, leaves);
+            // The check's grading grades its items' findings too.
+            let found = match index {
+                Some(index) if check.grading.is_some() => {
+                    graded_items(plan, index, found, object, leaves, &mut checked)
+                }
+                _ => found,
+            };
+            outcomes.extend(found);
             continue;
         }
         let decision = effective_of(plan, &check.decision);
@@ -2427,6 +2485,32 @@ fn judge_checks_in(
         ));
     }
     outcomes
+}
+
+/// The findings of a check's items graded by the check's grading (`index`
+/// its place, the form's 0), or the outcome leaving it open where its
+/// values cannot be read.
+fn graded_items(
+    plan: &Plan<'_>,
+    index: usize,
+    found: Vec<Outcome>,
+    object: &Object,
+    leaves: &mut ObjectLeaves<'_>,
+    read: &mut Read,
+) -> Vec<Outcome> {
+    if !found
+        .iter()
+        .any(|outcome| matches!(outcome, Outcome::Finding { .. }))
+    {
+        return found;
+    }
+    match grade(plan, index, object, leaves, read) {
+        Ok(severity) => found
+            .into_iter()
+            .map(|outcome| graded(outcome, severity.clone()))
+            .collect(),
+        Err(outcome) => vec![outcome],
+    }
 }
 
 /// `outcome` with the severity a grading gave it, if any.
@@ -3226,6 +3310,41 @@ fn read_once(
     Ok((read, opened))
 }
 
+/// Pushes an object's outcomes into `evaluation`: each as it is, or, with
+/// a `joined` separator, everything left open as one outcome after the
+/// findings, its messages joined in order, for the first one's reason.
+fn push_all(
+    evaluation: &mut CapabilityEvaluation,
+    rule: &CompiledRule,
+    object: &Object,
+    outcomes: impl Iterator<Item = Outcome>,
+    joined: Option<&str>,
+) {
+    let Some(separator) = joined else {
+        for outcome in outcomes {
+            push(evaluation, rule, object, outcome);
+        }
+        return;
+    };
+    let mut open: Vec<(NotEvaluatedReason, String)> = Vec::new();
+    for outcome in outcomes {
+        match outcome {
+            Outcome::Open(reason, message) => open.push((reason, message)),
+            outcome => push(evaluation, rule, object, outcome),
+        }
+    }
+    if let Some((reason, _)) = open.first() {
+        let reason = reason.clone();
+        let messages: Vec<String> = open.into_iter().map(|(_, message)| message).collect();
+        push(
+            evaluation,
+            rule,
+            object,
+            Outcome::Open(reason, messages.join(separator)),
+        );
+    }
+}
+
 /// Runs `template` for `rule`.
 #[allow(clippy::too_many_lines)]
 pub(crate) fn run(
@@ -3347,9 +3466,13 @@ pub(crate) fn run(
                     }
                 }
             }
-            for outcome in checks.into_iter().chain([outcome]) {
-                push(&mut evaluation, rule, object, outcome);
-            }
+            push_all(
+                &mut evaluation,
+                rule,
+                object,
+                checks.into_iter().chain([outcome]),
+                plan.form.joined,
+            );
         }
     }
     if let Some(table) = table {

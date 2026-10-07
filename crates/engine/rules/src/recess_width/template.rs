@@ -90,6 +90,7 @@ fn recesses() -> FormCheck {
             together: None,
             passing: None,
             texts: Vec::new(),
+            merged: false,
         })),
         fail: "",
         undecided: "",
@@ -155,6 +156,7 @@ pub(crate) fn template() -> Template {
             related: None,
             checks: vec![recesses()],
             once: Vec::new(),
+            joined: None,
         }],
     }
 }

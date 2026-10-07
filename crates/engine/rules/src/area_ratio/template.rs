@@ -307,6 +307,7 @@ fn form(light_areas: bool, members: bool) -> Form {
         related: Some("members:numerator_selector"),
         checks: Vec::new(),
         once: Vec::new(),
+        joined: None,
     }
 }
 

@@ -95,6 +95,7 @@ fn items(list: &'static str, checks: Vec<ItemCheck>) -> FormCheck {
             together: None,
             passing: None,
             texts: Vec::new(),
+            merged: false,
         })),
         fail: "",
         undecided: "",
@@ -239,6 +240,7 @@ pub(crate) fn template() -> Template {
             related: None,
             checks: vec![gaps(), section()],
             once: Vec::new(),
+            joined: None,
         }],
     }
 }

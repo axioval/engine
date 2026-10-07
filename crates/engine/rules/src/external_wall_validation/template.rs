@@ -446,5 +446,6 @@ fn form() -> Form {
                 required: false,
             },
         ],
+        joined: None,
     }
 }

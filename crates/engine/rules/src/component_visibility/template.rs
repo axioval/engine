@@ -125,6 +125,7 @@ fn view() -> FormCheck {
                     text: "; {hidden:count} hidden",
                 },
             ],
+            merged: false,
         })),
         fail: "",
         undecided: "",
@@ -219,6 +220,7 @@ pub(crate) fn template() -> Template {
             related: None,
             checks: vec![view()],
             once: Vec::new(),
+            joined: None,
         }],
     }
 }

@@ -415,6 +415,7 @@ fn missing() -> FormCheck {
             together: None,
             passing: None,
             texts: Vec::new(),
+            merged: false,
         })),
         fail: "",
         undecided: "",
@@ -462,6 +463,7 @@ pub(crate) fn template() -> Template {
             unless: Vec::new(),
             grading: None,
             once: Vec::new(),
+            joined: None,
         }],
     }
 }

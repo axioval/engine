@@ -319,7 +319,8 @@ fn operand(plan: &Plan<'_>, member: Option<&MeasuredMember>, operand: Operand) -
 /// item judged together: the largest).
 fn allowance(plan: &Plan<'_>, members: &[&MeasuredMember], allowance: Allowance) -> f64 {
     match allowance {
-        Allowance::None => 0.0,
+        // A raised value is moved, never its bound.
+        Allowance::None | Allowance::Raised { .. } => 0.0,
         Allowance::Fixed { value } => value,
         Allowance::Slack { times, magnitude } => {
             let end = |span: Span| match magnitude.end {
@@ -457,6 +458,30 @@ fn ranged(
         Verdict::Pass => Ranged::Pass,
         _ => Ranged::Undecided,
     }
+}
+
+/// A value against bounds, raised by `raised` against the lower one and
+/// lowered by it against the upper one ([`Allowance::Raised`]): failing
+/// either fails, straddling either is open.
+fn raised_range(
+    (lower, upper): Span,
+    minimum: Option<Span>,
+    maximum: Option<Span>,
+    raised: f64,
+) -> Ranged {
+    let at_least =
+        minimum.map(|bound| ranged((lower + raised, upper + raised), Some(bound), None, 0.0));
+    let at_most =
+        maximum.map(|bound| ranged((lower - raised, upper - raised), None, Some(bound), 0.0));
+    let mut verdict = Ranged::Pass;
+    for judged in [at_least, at_most].into_iter().flatten() {
+        match judged {
+            Ranged::Fail { .. } => return judged,
+            Ranged::Undecided => verdict = Ranged::Undecided,
+            Ranged::Pass => {}
+        }
+    }
+    verdict
 }
 
 /// The worse of two optional deviations.
@@ -600,6 +625,9 @@ pub(super) fn judge_items(
             .any(|outcome| !matches!(outcome, Outcome::Passed));
         keyed.push((key, failed));
     }
+    if items.merged {
+        outcomes = merged(outcomes);
+    }
     if let Some(passing) = &items.passing {
         match &passing.groups {
             None => {
@@ -631,6 +659,63 @@ pub(super) fn judge_items(
         }
     }
     outcomes
+}
+
+/// `outcomes` with the findings worded alike made one, in the place of the
+/// first: relating the objects each related, sorted and each once, citing
+/// what each cited, graded by the worst.
+fn merged(outcomes: Vec<Outcome>) -> Vec<Outcome> {
+    let mut merged: Vec<Outcome> = Vec::with_capacity(outcomes.len());
+    for outcome in outcomes {
+        let Outcome::Finding {
+            message,
+            evidence,
+            related,
+            deviation,
+            severity,
+        } = outcome
+        else {
+            merged.push(outcome);
+            continue;
+        };
+        let alike = merged.iter_mut().find_map(|kept| match kept {
+            Outcome::Finding {
+                message: kept_message,
+                evidence: kept_evidence,
+                related: kept_related,
+                deviation: kept_deviation,
+                ..
+            } if *kept_message == message => Some((kept_evidence, kept_related, kept_deviation)),
+            _ => None,
+        });
+        if let Some((kept_evidence, kept_related, kept_deviation)) = alike {
+            {
+                for cited in evidence {
+                    if !kept_evidence.contains(&cited) {
+                        kept_evidence.push(cited);
+                    }
+                }
+                kept_related.extend(related);
+                kept_related.sort();
+                kept_related.dedup();
+                *kept_deviation = worse(kept_deviation.take(), deviation);
+            }
+        } else {
+            {
+                let mut related = related;
+                related.sort();
+                related.dedup();
+                merged.push(Outcome::Finding {
+                    message,
+                    evidence,
+                    related,
+                    deviation,
+                    severity,
+                });
+            }
+        }
+    }
+    merged
 }
 
 fn check_item(
@@ -713,7 +798,7 @@ fn guarded(scope: &Scope<'_, '_, '_>, guard: &Guard, listed: &[Evidence], object
 /// What a `null` comes to.
 fn null(scope: &Scope<'_, '_, '_>, on: OnNull, listed: &[Evidence], object: &Object) -> Stop {
     match on {
-        OnNull::Judge => Stop::On,
+        OnNull::Judge | OnNull::Unmet => Stop::On,
         OnNull::Skip => Stop::Here(None),
         OnNull::Open(message) => Stop::Here(Some(open(scope.render(message)))),
         OnNull::Fail(message) => Stop::Here(Some(Outcome::Finding {
@@ -844,6 +929,7 @@ fn test_item(
                         // a lower bound the rule states.
                         OnNull::Fail(_) if minimum.is_none() => Outcome::Passed,
                         OnNull::Fail(message) => worded(&scope, message, None, true),
+                        OnNull::Unmet => worded(&scope, test.fail, None, false),
                         on => match null(&scope, on, listed, object) {
                             Stop::Here(Some(outcome)) => outcome,
                             _ => Outcome::Passed,
@@ -864,8 +950,18 @@ fn test_item(
                     );
                 }
             };
-            let allowance = allowance(scope.plan, &[member], range.allowance);
-            match ranged(value, minimum, maximum, allowance) {
+            let verdict = match range.allowance {
+                Allowance::Raised { value: raised } => {
+                    raised_range(value, minimum, maximum, raised)
+                }
+                widened => ranged(
+                    value,
+                    minimum,
+                    maximum,
+                    allowance(scope.plan, &[member], widened),
+                ),
+            };
+            match verdict {
                 Ranged::Pass => passed(&scope),
                 Ranged::Fail { below, deviation } => {
                     scope.named(
@@ -1374,5 +1470,89 @@ mod tests {
             plain_bound((0.5, 0.6), Some((1.0, 2.0)), None, Some(true)),
             "at least 1"
         );
+    }
+}
+
+#[cfg(test)]
+mod raised_and_merged {
+    use super::*;
+
+    fn id(local: &str) -> ObjectId {
+        ObjectId::new(axioval_ir::SourceId::new("test", "model").unwrap(), local).unwrap()
+    }
+
+    /// A raised value meets a lower bound where the value and the allowance
+    /// together reach it, as `value + allowance >= bound` does, and an
+    /// upper bound where the value less it stays within.
+    #[test]
+    fn a_raised_value_is_moved_toward_passing() {
+        let step = 1.0e-6;
+        let below = 1.0 - 2.0 * step;
+        assert!(matches!(
+            raised_range((below, below), Some((1.0, 1.0)), None, step),
+            Ranged::Fail { .. }
+        ));
+        let within = 1.0 - step / 2.0;
+        assert!(matches!(
+            raised_range((within, within), Some((1.0, 1.0)), None, step),
+            Ranged::Pass
+        ));
+        assert!(matches!(
+            raised_range(
+                (1.0 + step / 2.0, 1.0 + step / 2.0),
+                None,
+                Some((1.0, 1.0)),
+                step
+            ),
+            Ranged::Pass
+        ));
+        assert!(matches!(
+            raised_range((0.5, 2.0), Some((1.0, 1.0)), None, step),
+            Ranged::Undecided
+        ));
+        // Failing either bound fails.
+        assert!(matches!(
+            raised_range((3.0, 3.0), Some((1.0, 1.0)), Some((2.0, 2.0)), step),
+            Ranged::Fail { .. }
+        ));
+    }
+
+    /// Findings worded alike are one, relating every object each related,
+    /// sorted and each once; other outcomes stay as they are.
+    #[test]
+    fn findings_worded_alike_merge() {
+        let finding = |message: &str, related: &[&str]| Outcome::Finding {
+            message: message.to_owned(),
+            evidence: Vec::new(),
+            related: related.iter().map(|local| id(local)).collect(),
+            deviation: None,
+            severity: None,
+        };
+        let merged = merged(vec![
+            finding("hole", &["z"]),
+            Outcome::Passed,
+            finding("missing", &[]),
+            finding("hole", &["a", "z"]),
+        ]);
+        let shown: Vec<(String, Vec<String>)> = merged
+            .iter()
+            .filter_map(|outcome| match outcome {
+                Outcome::Finding {
+                    message, related, ..
+                } => Some((
+                    message.clone(),
+                    related.iter().map(|id| id.local_id.clone()).collect(),
+                )),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            shown,
+            [
+                ("hole".to_owned(), vec!["a".to_owned(), "z".to_owned()]),
+                ("missing".to_owned(), Vec::new()),
+            ]
+        );
+        assert_eq!(merged.len(), 3);
     }
 }

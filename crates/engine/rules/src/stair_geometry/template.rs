@@ -102,6 +102,7 @@ fn items(applies: Applies, list: &'static str) -> Items {
         together: None,
         passing: None,
         texts: Vec::new(),
+        merged: false,
     }
 }
 
@@ -1302,6 +1303,7 @@ pub(crate) fn ramp(parameters: Vec<ParameterDescriptor>) -> Template {
             related: None,
             checks,
             once: Vec::new(),
+            joined: None,
         }],
     }
 }
@@ -2087,6 +2089,7 @@ pub(crate) fn stair(parameters: Vec<ParameterDescriptor>) -> Template {
         related: None,
         checks,
         once: Vec::new(),
+        joined: None,
     };
     Template {
         id: STAIR,

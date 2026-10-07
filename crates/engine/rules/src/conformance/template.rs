@@ -60,6 +60,7 @@ pub(crate) fn template() -> Template {
             related: None,
             checks: Vec::new(),
             once: Vec::new(),
+            joined: None,
         }],
     }
 }

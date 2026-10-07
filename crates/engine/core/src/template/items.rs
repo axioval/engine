@@ -59,6 +59,11 @@ pub struct Items {
     /// several of one name the first that holds.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub texts: Vec<ItemText>,
+    /// Whether the findings of several items worded alike are one finding
+    /// on the object, relating the objects each related (sorted, each
+    /// once): one finding per distinct defect, not one per item.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub merged: bool,
 }
 
 /// A named message part of [`Items`].
@@ -154,6 +159,11 @@ pub enum OnNull {
     Open(&'static str),
     /// The item is a finding with the message.
     Fail(&'static str),
+    /// The value does not meet a test reading it, however the test bounds
+    /// it: the test fails, worded by its own message, its `otherwise` in
+    /// its place (no barrier covers the edge, so it is not covered). A
+    /// guard reading it judges on.
+    Unmet,
 }
 
 /// One test of an item.
@@ -297,6 +307,11 @@ pub enum Allowance {
     Stated { times: f64, value: &'static str },
     /// A fixed allowance in the value's unit.
     Fixed { value: f64 },
+    /// A fixed allowance added to the value rather than to the bound: the
+    /// value raised against a lower bound (`value + allowance ≥ bound`) and
+    /// lowered against an upper one, as capabilities widening a measured
+    /// length by its rounding compared it. Only a test's range reads it.
+    Raised { value: f64 },
 }
 
 /// An outcome turned open, worded by `message`.

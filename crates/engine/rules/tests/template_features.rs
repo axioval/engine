@@ -91,6 +91,7 @@ fn template() -> Template {
             related: None,
             checks: Vec::new(),
             once: Vec::new(),
+            joined: None,
         }],
     }
 }
@@ -643,6 +644,7 @@ mod graded {
                 related: None,
                 checks: Vec::new(),
                 once: Vec::new(),
+                joined: None,
             }],
         }
     }
@@ -898,6 +900,7 @@ mod near {
                     quiet: false,
                 }],
                 once: Vec::new(),
+                joined: None,
             }],
         }
     }
@@ -1156,6 +1159,7 @@ mod thresholds {
                     quiet: false,
                 }],
                 once: Vec::new(),
+                joined: None,
             }],
         }
     }
@@ -1483,6 +1487,7 @@ mod open_sums {
                 unless: Vec::new(),
                 grading: None,
                 once: Vec::new(),
+                joined: None,
             }],
         }
     }
@@ -1598,5 +1603,247 @@ mod open_sums {
             ),
             Err(ForkError::Inexpressible(_))
         ));
+    }
+}
+
+mod joined {
+    use super::*;
+    use axioval_engine::template::{Applies, FormCheck, Refusals};
+    use axioval_ir::contract::ScalarValue;
+    use axioval_ir::{PropertyValue, QuantityDimension};
+
+    const ID: &str = "test:joined";
+
+    fn stated(name: &'static str, property: &str) -> TemplateValue {
+        TemplateValue {
+            name,
+            expression: Expression::Property {
+                property_set: Some("Pset".into()),
+                property: property.into(),
+                of: None,
+                label: None,
+            },
+            expect: None,
+            absent: None,
+            mismatch: None,
+        }
+    }
+
+    fn check(value: &'static str, bound: &'static str, fail: &'static str) -> FormCheck {
+        FormCheck {
+            values: vec![stated(value, value)],
+            derived: Vec::new(),
+            decision: Decision::Within {
+                value,
+                minimum: None,
+                maximum: Some(vec![Term::plus(Operand::Parameter(bound))]),
+                rounding: Vec::new(),
+            },
+            fail,
+            undecided: "{Area:m2} straddles {maximum_area:m2}",
+            related: None,
+            grading: None,
+            applies: Some(Applies {
+                when: &[],
+                any: &[],
+                condition: None,
+            }),
+            unless: None,
+            quiet: false,
+        }
+    }
+
+    /// A panel's area and its share at most their maxima, each a check;
+    /// whatever one panel leaves open is one outcome, its messages joined.
+    fn template() -> Template {
+        let zero = TemplateValue {
+            name: "zero",
+            expression: Expression::Literal {
+                value: ScalarValue::Number { value: 0.0 },
+                label: None,
+            },
+            expect: None,
+            absent: None,
+            mismatch: None,
+        };
+        let mut share = check(
+            "Share",
+            "maximum_share",
+            "{Share:percent} of the panel, at most {maximum_share:percent}",
+        );
+        share.undecided = "{Share:percent} straddles {maximum_share:percent}";
+        Template {
+            id: ID,
+            parameters: vec![
+                ParameterDescriptor::optional("maximum_area", ParameterType::Quantity),
+                ParameterDescriptor::optional("maximum_share", ParameterType::Number),
+            ],
+            grades: false,
+            name: "joined",
+            refusals: Refusals::Rule,
+            defaults: Vec::new(),
+            declaration: Vec::new(),
+            services: None,
+            texts: Vec::new(),
+            forms: vec![Form {
+                when: &[],
+                values: vec![zero],
+                decision: Decision::Within {
+                    value: "zero",
+                    minimum: None,
+                    maximum: None,
+                    rounding: Vec::new(),
+                },
+                fail: "",
+                undecided: "",
+                members: None,
+                table: None,
+                scope: None,
+                derived: Vec::new(),
+                related: None,
+                checks: vec![
+                    check(
+                        "Area",
+                        "maximum_area",
+                        "{Area:m2}, at most {maximum_area:m2}",
+                    ),
+                    share,
+                ],
+                unless: Vec::new(),
+                grading: None,
+                joined: Some("; "),
+                once: Vec::new(),
+            }],
+        }
+    }
+
+    fn interval(lower: f64, upper: f64, dimension: Option<QuantityDimension>) -> PropertyValue {
+        PropertyValue::Measured {
+            lower,
+            upper,
+            dimension,
+        }
+    }
+
+    fn panels() -> Model {
+        let area = Some(QuantityDimension::Area);
+        Model::default()
+            .object("large", "panel")
+            .value("large", "Pset", "Area", interval(7.5, 7.5, area))
+            .value("large", "Pset", "Share", interval(0.25, 0.25, None))
+            .object("vague", "panel")
+            .value(
+                "vague",
+                "Pset",
+                "Area",
+                interval(0.999_999_2, 1.000_000_5, area),
+            )
+            .value("vague", "Pset", "Share", interval(0.872_89, 0.872_91, None))
+            .object("mixed", "panel")
+            .value("mixed", "Pset", "Area", interval(2.0, 2.0, area))
+            .value("mixed", "Pset", "Share", interval(0.8, 0.9, None))
+    }
+
+    fn opened(evaluation: &axioval_engine::CapabilityEvaluation) -> Vec<(String, String)> {
+        let mut open: Vec<(String, String)> = evaluation
+            .not_evaluated_outcomes()
+            .iter()
+            .map(|outcome| {
+                (
+                    outcome
+                        .object_id()
+                        .map_or_else(String::new, |object| object.local_id.clone()),
+                    outcome.message().to_owned(),
+                )
+            })
+            .collect();
+        open.sort();
+        open
+    }
+
+    /// Each check's finding is its own outcome, while everything one panel
+    /// leaves open is one, its messages joined in order; areas and shares
+    /// are shown with their units, intervals as such.
+    #[test]
+    fn what_an_object_leaves_open_is_one_outcome() {
+        let templated = Templated::new(template());
+        let evaluation = panels().evaluate(
+            &templated,
+            &rule(
+                ID,
+                kind("panel"),
+                vec![
+                    (
+                        "maximum_area",
+                        ParameterValue::Quantity {
+                            value: 1.0,
+                            unit: "m2".into(),
+                        },
+                    ),
+                    ("maximum_share", number(0.8729)),
+                ],
+            ),
+        );
+        let mut found = findings(&evaluation);
+        found.sort();
+        assert_eq!(
+            found,
+            [
+                ("large".to_owned(), "7.5 m², at most 1 m²".to_owned()),
+                ("mixed".to_owned(), "2 m², at most 1 m²".to_owned()),
+            ]
+        );
+        assert_eq!(
+            opened(&evaluation),
+            [
+                (
+                    "mixed".to_owned(),
+                    "between 80% and 90% straddles 87.29%".to_owned()
+                ),
+                (
+                    "vague".to_owned(),
+                    "between 0.999999 m² and 1.000001 m² straddles 1 m²; 87.29% straddles 87.29%"
+                        .to_owned()
+                ),
+            ]
+        );
+        assert_eq!(
+            unevaluated(&evaluation),
+            [
+                ("mixed".to_owned(), NotEvaluatedReason::IncompleteEvidence),
+                ("vague".to_owned(), NotEvaluatedReason::IncompleteEvidence),
+            ]
+        );
+    }
+
+    /// Without `joined`, each check left open is an outcome of its own.
+    #[test]
+    fn without_it_each_check_is_open_on_its_own() {
+        let mut unjoined = template();
+        unjoined.forms[0].joined = None;
+        let evaluation = panels().evaluate(
+            &Templated::new(unjoined),
+            &rule(
+                ID,
+                kind("panel"),
+                vec![
+                    (
+                        "maximum_area",
+                        ParameterValue::Quantity {
+                            value: 1.0,
+                            unit: "m2".into(),
+                        },
+                    ),
+                    ("maximum_share", number(0.8729)),
+                ],
+            ),
+        );
+        assert_eq!(
+            opened(&evaluation)
+                .iter()
+                .filter(|(panel, _)| panel == "vague")
+                .count(),
+            2
+        );
     }
 }

@@ -1,6 +1,7 @@
 //! The implementation `opening-zone`'s template replaced, kept to hold the
 //! template to on generated inputs (`parity-reference` only).
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 use axioval_engine::{
@@ -11,7 +12,7 @@ use axioval_ir::{Evidence, Finding, Object, ObjectId};
 
 use super::dimensions::{Applied, Verdict};
 use super::face::{Host, ROUNDING, Span};
-use super::supports::{Decided, Opening, Supports};
+use super::supports::{Decided, Opening, Supports, SupportsRead};
 use super::{Clearance, Config, Judge, Placed, list};
 use crate::counts::Population;
 use crate::level_spacing::metres;
@@ -55,18 +56,21 @@ impl RuleCapability for OpeningZone {
             .as_ref()
             .map(|supports| Population::of(context, supports.selector));
         let dimension_selections = super::dimensions::Selections::of(context, &config.dimensions);
+        let supports_read = SupportsRead::default();
         let mut judge = Judge {
-            dimensions: dimension_selections,
+            dimensions: &dimension_selections,
             context,
             rule,
             config: &config,
             hosts: &hosts,
-            bodies: BTreeMap::new(),
-            placed: BTreeMap::new(),
+            bodies: Cow::Owned(BTreeMap::new()),
+            placed: Cow::Owned(BTreeMap::new()),
             supports: support_population
                 .as_ref()
                 .zip(config.supports.as_ref())
-                .map(|(population, config)| Supports::new(context, config, population)),
+                .map(|(population, config)| {
+                    Supports::new(context, config, population, &supports_read)
+                }),
         };
         // Every opening that may be selected is placed, so spacing sees the
         // undecided ones too.
@@ -77,7 +81,7 @@ impl RuleCapability for OpeningZone {
             .collect();
         for opening in &candidates {
             let placed = judge.place(opening);
-            judge.placed.insert(opening.id.clone(), placed);
+            judge.placed.to_mut().insert(opening.id.clone(), placed);
         }
         for opening in selected {
             judge.judge(opening, &openings, &mut evaluation);

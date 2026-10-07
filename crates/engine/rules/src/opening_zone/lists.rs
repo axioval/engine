@@ -24,23 +24,25 @@
 //! The order is the capability's, so an opening left open for several
 //! reasons is left open for the first as the capability left it.
 //!
-//! Every opening the rule may select is placed once per run, so each
+//! Every opening the rule may select is placed once per rule, so each
 //! opening's neighbours are the capability's; the checks of each opening
-//! the rule selects are measured then.
+//! the rule selects are measured when its list is read, so only one
+//! opening's checks are held at a time.
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use axioval_engine::{
-    ArgumentsKey, MeasuredMember, MeasuredMemo, MeasuredProvider, Measurement, MemberValue,
-    NotEvaluatedReason, PropertyResolutionError, RuleContext,
+    ArgumentsKey, CompiledRule, MeasuredMember, MeasuredMemo, MeasuredProvider, Measurement,
+    MemberValue, NotEvaluatedReason, PropertyResolutionError, RuleContext,
 };
 use axioval_ir::measured::MeasuredCall;
 use axioval_ir::{Evidence, Object, ObjectId, QuantityDimension};
 
 use super::dimensions::{Applied, Selections};
-use super::supports::{Decided, Opening, Supports};
-use super::{Clearance, Config, Host, Judge, Placed, ROUNDING, Span, list};
+use super::supports::{Decided, Opening, Supports, SupportsRead};
+use super::{Bodies, Clearance, Config, Host, Judge, Placed, Placement, ROUNDING, Span, list};
 use crate::counts::Population;
 use crate::level_spacing::metres;
 use crate::measured_kinds::{population, resolution_error, stated_rule};
@@ -54,69 +56,98 @@ pub(crate) struct ZoneMeasures;
 /// The checks of an opening, or why it cannot be placed.
 type Checks = Result<Vec<MeasuredMember>, Unavailable>;
 
-/// The checks of every opening the rule selects, each handed over once:
-/// the rule reads each opening's list once, so it is moved out rather than
-/// copied, and measured again in the rare case it is read twice.
-type Run = Arc<BTreeMap<ObjectId, Mutex<Option<Checks>>>>;
+/// What a rule's openings share, measured once per rule: the declaration,
+/// the populations, every host's body and every opening's placement (each
+/// opening's neighbours are among them), the dimensioning table's
+/// selections and the supports read so far. Each opening's checks are
+/// measured from it when its list is read, so neither time nor heap grows
+/// with the checks of the rule's other openings.
+struct Run {
+    rule: CompiledRule,
+    openings: Arc<Population>,
+    hosts: Arc<Population>,
+    supported: Option<Arc<Population>>,
+    bodies: Bodies,
+    placed: BTreeMap<ObjectId, Placement>,
+    dimensions: Selections,
+    supports: SupportsRead,
+}
 
 #[derive(Hash, PartialEq, Eq)]
 struct RunKey(ArgumentsKey);
 
-/// The checks of the rule's openings, measured once per rule and kept
-/// for it alone.
-fn run(call: &MeasuredCall, context: &RuleContext<'_>) -> Result<Run, Unavailable> {
+/// What the rule's openings share, measured once per rule and kept for it
+/// alone.
+fn run(call: &MeasuredCall, context: &RuleContext<'_>) -> Result<Arc<Run>, Unavailable> {
     MeasuredMemo::of_rule(context.services, RunKey(ArgumentsKey::of(call)), || {
-        measure(call, context)
+        measure(call, context).map(Arc::new)
     })
 }
 
-/// The checks of the run's openings.
+/// Places every opening the rule may select, so spacing sees the
+/// undecided ones too.
 fn measure(call: &MeasuredCall, context: &RuleContext<'_>) -> Result<Run, Unavailable> {
-    {
-        let rule = stated_rule(call, &["minimum_opening_area"]);
+    let rule = stated_rule(call, &["minimum_opening_area"]);
+    let openings = population(call, "openings", context)?;
+    let hosts = population(call, "host_selector", context)?;
+    let (supported, dimensions, bodies, placed) = {
         let config = Config::parse(&rule)?;
-        let openings = population(call, "openings", context)?;
-        let hosts = population(call, "host_selector", context)?;
         let supported = match config.supports {
             Some(_) => Some(population(call, "support_selector", context)?),
             None => None,
         };
+        let dimensions = Selections::of(context, &config.dimensions);
         let mut judge = Judge {
-            dimensions: Selections::of(context, &config.dimensions),
+            dimensions: &dimensions,
             context,
             #[cfg(feature = "parity-reference")]
             rule: &rule,
             config: &config,
             hosts: &hosts,
-            bodies: BTreeMap::new(),
-            placed: BTreeMap::new(),
-            supports: supported
-                .as_deref()
-                .zip(config.supports.as_ref())
-                .map(|(population, config)| Supports::new(context, config, population)),
+            bodies: Cow::Owned(BTreeMap::new()),
+            placed: Cow::Owned(BTreeMap::new()),
+            supports: None,
         };
-        // Every opening that may be selected is placed, so spacing sees the
-        // undecided ones too.
-        let candidates: Vec<&Object> = context
-            .project
-            .objects()
-            .filter(|object| openings.contains(&object.id))
-            .collect();
-        for opening in &candidates {
-            let placed = judge.place(opening);
-            judge.placed.insert(opening.id.clone(), placed);
+        for opening in context.project.objects() {
+            if openings.contains(&opening.id) {
+                let placed = judge.place(opening);
+                judge.placed.to_mut().insert(opening.id.clone(), placed);
+            }
         }
-        Ok(Arc::new(
-            candidates
-                .iter()
-                .filter(|opening| openings.matched.contains(&opening.id))
-                .map(|opening| {
-                    let checks = judge.checks(opening, &openings);
-                    (opening.id.clone(), Mutex::new(Some(checks)))
-                })
-                .collect(),
-        ))
-    }
+        let (bodies, placed) = (judge.bodies.into_owned(), judge.placed.into_owned());
+        (supported, dimensions, bodies, placed)
+    };
+    Ok(Run {
+        rule,
+        openings,
+        hosts,
+        supported,
+        bodies,
+        placed,
+        dimensions,
+        supports: SupportsRead::default(),
+    })
+}
+
+/// The checks of `opening`, one the rule selects, measured from what the
+/// rule's openings share.
+fn checks(run: &Run, opening: &Object, context: &RuleContext<'_>) -> Checks {
+    let config = Config::parse(&run.rule)?;
+    let judge =
+        Judge {
+            dimensions: &run.dimensions,
+            context,
+            #[cfg(feature = "parity-reference")]
+            rule: &run.rule,
+            config: &config,
+            hosts: &run.hosts,
+            bodies: Cow::Borrowed(&run.bodies),
+            placed: Cow::Borrowed(&run.placed),
+            supports: run.supported.as_deref().zip(config.supports.as_ref()).map(
+                |(population, config)| Supports::new(context, config, population, &run.supports),
+            ),
+        };
+    judge.checks(opening, &run.openings)
 }
 
 fn absent(locator: &str) -> MemberValue {
@@ -679,18 +710,14 @@ impl MeasuredProvider for ZoneMeasures {
         let refused = |(reason, why): Unavailable| {
             resolution_error((reason, format!("`{}` of {object}: {why}", call.name())))
         };
-        let take = |run: &Run| {
-            run.get(object)
-                .map(|held| held.lock().ok().and_then(|mut held| held.take()))
+        let run = run(call, context).map_err(refused)?;
+        // Only the openings the rule selects are checked.
+        if !run.openings.matched.contains(object) {
+            return Ok(Vec::new());
+        }
+        let Some(opening) = context.project.object(object) else {
+            return Ok(Vec::new());
         };
-        let checks = match take(&run(call, context).map_err(refused)?) {
-            None => return Ok(Vec::new()),
-            Some(Some(checks)) => checks,
-            // Read once already: measured again.
-            Some(None) => take(&measure(call, context).map_err(refused)?)
-                .flatten()
-                .unwrap_or_else(|| Ok(Vec::new())),
-        };
-        checks.map_err(refused)
+        checks(&run, opening, context).map_err(refused)
     }
 }

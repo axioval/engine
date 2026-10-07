@@ -1,8 +1,10 @@
 //! `opening-zone`: each opening lies within its host and inside the zone
 //! the host allows openings in.
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::sync::LazyLock;
 
 use axioval_engine::{
@@ -271,6 +273,7 @@ impl RuleCapability for OpeningZone {
 }
 
 /// An opening placed in one of its hosts' faces.
+#[derive(Clone)]
 struct Placed {
     host: ObjectId,
     /// Extents along the length and height axes, from the host's section
@@ -313,6 +316,9 @@ struct Clearance {
 /// hosts are.
 type Placement = Result<Vec<Result<Placed, Unavailable>>, Unavailable>;
 
+/// Each host's body as read, or why it cannot be.
+type Bodies = BTreeMap<ObjectId, Result<Arc<Host>, Unavailable>>;
+
 struct Judge<'r, 'c> {
     context: &'r RuleContext<'c>,
     /// The rule its findings name (the reference's).
@@ -320,11 +326,13 @@ struct Judge<'r, 'c> {
     rule: &'r CompiledRule,
     config: &'r Config<'r>,
     hosts: &'r Population,
-    bodies: BTreeMap<ObjectId, Result<Rc<Host>, Unavailable>>,
-    placed: BTreeMap<ObjectId, Placement>,
+    /// The hosts' bodies and the openings' placements: owned while they
+    /// are read and placed, borrowed once a rule's are kept.
+    bodies: Cow<'r, Bodies>,
+    placed: Cow<'r, BTreeMap<ObjectId, Placement>>,
     supports: Option<Supports<'r, 'c>>,
     /// The selections of each row of the dimensioning table.
-    dimensions: dimensions::Selections,
+    dimensions: &'r dimensions::Selections,
 }
 
 /// The hosts `traversal` reaches from `object` among `hosts`, none when it
@@ -358,12 +366,12 @@ pub(crate) fn list(ids: &[ObjectId]) -> String {
 }
 
 impl Judge<'_, '_> {
-    fn host_body(&mut self, host: &ObjectId) -> Result<Rc<Host>, Unavailable> {
+    fn host_body(&mut self, host: &ObjectId) -> Result<Arc<Host>, Unavailable> {
         if let Some(known) = self.bodies.get(host) {
             return known.clone();
         }
-        let read = read_host(self.context, host).map(Rc::new);
-        self.bodies.insert(host.clone(), read.clone());
+        let read = read_host(self.context, host).map(Arc::new);
+        self.bodies.to_mut().insert(host.clone(), read.clone());
         read
     }
 
@@ -554,7 +562,7 @@ impl Judge<'_, '_> {
         placed: &Placed,
     ) -> Vec<(&'p ObjectId, Option<&'p Placed>)> {
         let mut neighbours = Vec::new();
-        for (other, state) in &self.placed {
+        for (other, state) in self.placed.iter() {
             if *other == opening.id {
                 continue;
             }

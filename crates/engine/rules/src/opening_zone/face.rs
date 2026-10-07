@@ -1,7 +1,7 @@
 //! A host's face and the extrusions placed in it, read from the reserved
 //! body set: the geometry `opening-zone` and `opening-area` share.
 
-use std::rc::Rc;
+use std::sync::Arc;
 
 use axioval_engine::{NotEvaluatedReason, RuleContext};
 use axioval_ir::{Evidence, Object, ObjectId};
@@ -138,7 +138,7 @@ pub(crate) struct Host {
     bounds: [Span; 3],
     /// The section's outline where it is a free polygon; `None` for a
     /// parameterised section, which fills its bounds.
-    pub(crate) outline: Option<Rc<Polygon>>,
+    pub(crate) outline: Option<Arc<Polygon>>,
     /// The part of `ProfileY` between the flanges, where the family has one.
     pub(crate) web: Option<Span>,
     /// Along `ProfileX`, the web of an L: the leg running the whole height.
@@ -237,7 +237,7 @@ pub(crate) fn read_host(context: &RuleContext<'_>, id: &ObjectId) -> Result<Host
                 outline.bounds(),
                 l.map(|l| l.web_zone),
                 l.map(|l| l.web),
-                Some(Rc::new(outline)),
+                Some(Arc::new(outline)),
             )
         } else {
             let ((half_x, half_y), web) = boxed_section(&mut body, &family, "host")?;
@@ -283,7 +283,7 @@ pub(crate) enum Shape {
         semi_x: f64,
         semi_y: f64,
     },
-    Polygon(Rc<Polygon>),
+    Polygon(Arc<Polygon>),
 }
 
 impl Shape {
@@ -708,7 +708,7 @@ fn exact_shape(
     role: &str,
 ) -> Result<Option<Shape>, Unavailable> {
     if ARBITRARY.contains(&family) {
-        return Ok(Some(Shape::Polygon(Rc::new(polygon(body, family, role)?))));
+        return Ok(Some(Shape::Polygon(Arc::new(polygon(body, family, role)?))));
     }
     Ok(Some(match family {
         "rectangle" | "rectangle-hollow" => Shape::Rectangle {

@@ -1,9 +1,8 @@
 //! A host's supports and connecting members, and where they lie in its
 //! face.
 
-use std::cell::RefCell;
 use std::collections::BTreeMap;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex, PoisonError};
 
 use axioval_engine::{
     NotEvaluatedReason, ParameterDescriptor, ParameterType, ProximityError, ProximityRequest,
@@ -257,13 +256,35 @@ pub(super) enum Decided {
     Finding(SupportFinding),
 }
 
+/// The supports found and read for each host, kept for a whole rule so
+/// that its openings, judged one at a time, find and read each once.
+#[derive(Default)]
+pub(super) struct SupportsRead {
+    found: Mutex<BTreeMap<ObjectId, Result<Arc<Found>, Unavailable>>>,
+    solids: Mutex<BTreeMap<ObjectId, Result<Arc<Solid>, Unavailable>>>,
+}
+
+/// What `known` holds for `key`, read with `read` the first time.
+fn once<T>(
+    known: &Mutex<BTreeMap<ObjectId, Result<Arc<T>, Unavailable>>>,
+    key: &ObjectId,
+    read: impl FnOnce() -> Result<T, Unavailable>,
+) -> Result<Arc<T>, Unavailable> {
+    let lock = || known.lock().unwrap_or_else(PoisonError::into_inner);
+    if let Some(known) = lock().get(key) {
+        return known.clone();
+    }
+    let read = read().map(Arc::new);
+    lock().insert(key.clone(), read.clone());
+    read
+}
+
 /// Finds and reads the supports of each host once.
 pub(super) struct Supports<'r, 'c> {
     context: &'r RuleContext<'c>,
     config: &'r SupportConfig<'r>,
     population: &'r Population,
-    found: RefCell<BTreeMap<ObjectId, Result<Rc<Found>, Unavailable>>>,
-    solids: RefCell<BTreeMap<ObjectId, Result<Rc<Solid>, Unavailable>>>,
+    read: &'r SupportsRead,
 }
 
 impl<'r, 'c> Supports<'r, 'c> {
@@ -271,23 +292,18 @@ impl<'r, 'c> Supports<'r, 'c> {
         context: &'r RuleContext<'c>,
         config: &'r SupportConfig<'r>,
         population: &'r Population,
+        read: &'r SupportsRead,
     ) -> Self {
         Self {
             context,
             config,
             population,
-            found: RefCell::new(BTreeMap::new()),
-            solids: RefCell::new(BTreeMap::new()),
+            read,
         }
     }
 
-    fn found(&self, host: &ObjectId) -> Result<Rc<Found>, Unavailable> {
-        if let Some(known) = self.found.borrow().get(host) {
-            return known.clone();
-        }
-        let read = self.find(host).map(Rc::new);
-        self.found.borrow_mut().insert(host.clone(), read.clone());
-        read
+    fn found(&self, host: &ObjectId) -> Result<Arc<Found>, Unavailable> {
+        once(&self.read.found, host, || self.find(host))
     }
 
     fn find(&self, host: &ObjectId) -> Result<Found, Unavailable> {
@@ -352,19 +368,14 @@ impl<'r, 'c> Supports<'r, 'c> {
         })
     }
 
-    fn solid(&self, id: &ObjectId) -> Result<Rc<Solid>, Unavailable> {
-        if let Some(known) = self.solids.borrow().get(id) {
-            return known.clone();
-        }
-        let read = self
-            .context
-            .project
-            .object(id)
-            .ok_or_else(|| invalid(format!("{id} is not in the project")))
-            .and_then(|object| Solid::member(self.context, object, "support"))
-            .map(Rc::new);
-        self.solids.borrow_mut().insert(id.clone(), read.clone());
-        read
+    fn solid(&self, id: &ObjectId) -> Result<Arc<Solid>, Unavailable> {
+        once(&self.read.solids, id, || {
+            self.context
+                .project
+                .object(id)
+                .ok_or_else(|| invalid(format!("{id} is not in the project")))
+                .and_then(|object| Solid::member(self.context, object, "support"))
+        })
     }
 
     /// Judges an opening against the supports of its host: its distance
@@ -471,7 +482,7 @@ impl<'r, 'c> Supports<'r, 'c> {
 /// A member with its footprint in the host's face, or why it has none.
 struct Measured<'m> {
     member: &'m Member,
-    footprint: Result<(Footprint, Rc<Solid>), String>,
+    footprint: Result<(Footprint, Arc<Solid>), String>,
 }
 
 /// One requirement an opening must meet against every member.

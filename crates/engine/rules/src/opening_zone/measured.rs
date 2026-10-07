@@ -3,6 +3,7 @@
 //! within the host, and its clear distances from the host's ends and edges
 //! (or flanges).
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 use axioval_engine::{
@@ -208,14 +209,14 @@ impl PlacementMeasures {
         let config = Config::parse(&rule)?;
         let hosts = Population::of(context, config.host_selector);
         let mut judge = Judge {
-            dimensions: dimensions::Selections::of(context, &config.dimensions),
+            dimensions: &dimensions::Selections::of(context, &config.dimensions),
             context,
             #[cfg(feature = "parity-reference")]
             rule: &rule,
             config: &config,
             hosts: &hosts,
-            bodies: BTreeMap::new(),
-            placed: BTreeMap::new(),
+            bodies: Cow::Owned(BTreeMap::new()),
+            placed: Cow::Owned(BTreeMap::new()),
             supports: None,
         };
         let placements = judge.place(opening)?;

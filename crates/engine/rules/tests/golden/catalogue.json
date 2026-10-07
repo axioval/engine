@@ -1336,7 +1336,203 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "accessible-route",
+        "declaration": [
+          {
+            "kind": "arguments",
+            "when": [],
+            "value": "route_verdicts;route_selector=@route_selector;start_selector=@start_selector;portal_selector=@portal_selector;lift_selector=@lift_selector;ramp_selector=@ramp_selector;stair_selector=@stair_selector;obstacle_selector=@obstacle_selector;subtract_door_swings=@subtract_door_swings;width_metres=@width_metres;clear_height_metres=@clear_height_metres;door_width_metres=@door_width_metres;ramp_width_metres=@ramp_width_metres;stair_width_metres=@stair_width_metres;forbid_stairs=@forbid_stairs;clear_width_property=@clear_width_property;obstruction_depth_metres=@obstruction_depth_metres;surface_gap_metres=@surface_gap_metres;passing_width_metres=@passing_width_metres;passing_length_metres=@passing_length_metres;passing_spacing_metres=@passing_spacing_metres;passing_reach_metres=@passing_reach_metres;selection=@selection"
+          }
+        ],
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "judged",
+                "expression": {
+                  "kind": "literal",
+                  "value": {
+                    "type": "integer",
+                    "value": 1
+                  },
+                  "label": "the routes are walked"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "judged",
+              "rounding": []
+            },
+            "fail": "",
+            "undecided": "",
+            "checks": [
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {},
+                  "list": "route_verdicts;route_selector=@route_selector;start_selector=@start_selector;portal_selector=@portal_selector;lift_selector=@lift_selector;ramp_selector=@ramp_selector;stair_selector=@stair_selector;obstacle_selector=@obstacle_selector;subtract_door_swings=@subtract_door_swings;width_metres=@width_metres;clear_height_metres=@clear_height_metres;door_width_metres=@door_width_metres;ramp_width_metres=@ramp_width_metres;stair_width_metres=@stair_width_metres;forbid_stairs=@forbid_stairs;clear_width_property=@clear_width_property;obstruction_depth_metres=@obstruction_depth_metres;surface_gap_metres=@surface_gap_metres;passing_width_metres=@passing_width_metres;passing_length_metres=@passing_length_metres;passing_spacing_metres=@passing_spacing_metres;passing_reach_metres=@passing_reach_metres;selection=@selection",
+                  "refused": "{why}",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "judge": {
+                        "kind": "truth",
+                        "value": "reached",
+                        "finding": false
+                      },
+                      "fail": "{words}",
+                      "undecided": "{why}",
+                      "related": "related"
+                    }
+                  ],
+                  "reason": "reason"
+                },
+                "fail": "",
+                "undecided": ""
+              }
+            ]
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "aggregate",
+                  "function": "none",
+                  "over": {
+                    "kind": "measured",
+                    "name": "route_verdicts;route_selector=@route_selector;start_selector=@start_selector;portal_selector=@portal_selector;lift_selector=@lift_selector;ramp_selector=@ramp_selector;stair_selector=@stair_selector;obstacle_selector=@obstacle_selector;subtract_door_swings=@subtract_door_swings;width_metres=@width_metres;clear_height_metres=@clear_height_metres;door_width_metres=@door_width_metres;ramp_width_metres=@ramp_width_metres;stair_width_metres=@stair_width_metres;forbid_stairs=@forbid_stairs;clear_width_property=@clear_width_property;obstruction_depth_metres=@obstruction_depth_metres;surface_gap_metres=@surface_gap_metres;passing_width_metres=@passing_width_metres;passing_length_metres=@passing_length_metres;passing_spacing_metres=@passing_spacing_metres;passing_reach_metres=@passing_reach_metres;selection=@selection"
+                  },
+                  "value": {
+                    "kind": "not",
+                    "operand": {
+                      "kind": "and",
+                      "operands": [
+                        {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "reached"
+                        }
+                      ]
+                    }
+                  },
+                  "label": "no item fails"
+                },
+                {
+                  "kind": "isDefined",
+                  "operand": {
+                    "kind": "literal",
+                    "value": {
+                      "type": "integer",
+                      "value": 1
+                    },
+                    "label": "the routes are walked"
+                  },
+                  "label": "read"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.aggregate",
+                      "label": "no item fails",
+                      "fields": {
+                        "function": "none"
+                      },
+                      "inputs": {
+                        "over": {
+                          "block": {
+                            "type": "members.route_verdicts",
+                            "fields": {
+                              "clear_height_metres": "@clear_height_metres",
+                              "clear_width_property": "@clear_width_property",
+                              "door_width_metres": "@door_width_metres",
+                              "forbid_stairs": "@forbid_stairs",
+                              "lift_selector": "@lift_selector",
+                              "obstacle_selector": "@obstacle_selector",
+                              "obstruction_depth_metres": "@obstruction_depth_metres",
+                              "passing_length_metres": "@passing_length_metres",
+                              "passing_reach_metres": "@passing_reach_metres",
+                              "passing_spacing_metres": "@passing_spacing_metres",
+                              "passing_width_metres": "@passing_width_metres",
+                              "portal_selector": "@portal_selector",
+                              "ramp_selector": "@ramp_selector",
+                              "ramp_width_metres": "@ramp_width_metres",
+                              "route_selector": "@route_selector",
+                              "selection": "@selection",
+                              "stair_selector": "@stair_selector",
+                              "stair_width_metres": "@stair_width_metres",
+                              "start_selector": "@start_selector",
+                              "subtract_door_swings": "@subtract_door_swings",
+                              "surface_gap_metres": "@surface_gap_metres",
+                              "width_metres": "@width_metres"
+                            }
+                          }
+                        },
+                        "value": {
+                          "block": {
+                            "type": "expression.not",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.and",
+                                  "inputs": {
+                                    "operands": {
+                                      "blocks": [
+                                        {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "reached",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.isDefined",
+                      "label": "read",
+                      "inputs": {
+                        "operand": {
+                          "block": {
+                            "type": "expression.literal",
+                            "label": "the routes are walked",
+                            "fields": {
+                              "value": {
+                                "type": "integer",
+                                "value": 1
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.allowed-profile",
@@ -103613,6 +103809,557 @@
             {
               "language": "de",
               "text": "Wie tief der Rücksprung hinter seine Öffnung reicht."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "route_verdicts",
+      "parameters": [
+        {
+          "key": "route_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `route_selector`, as `accessible-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `route_selector` der Regel, wie `accessible-route` ihn liest."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "start_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `start_selector`, as `accessible-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `start_selector` der Regel, wie `accessible-route` ihn liest."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "portal_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `portal_selector`, as `accessible-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `portal_selector` der Regel, wie `accessible-route` ihn liest."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "lift_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `lift_selector`, as `accessible-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `lift_selector` der Regel, wie `accessible-route` ihn liest."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "ramp_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `ramp_selector`, as `accessible-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `ramp_selector` der Regel, wie `accessible-route` ihn liest."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "stair_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `stair_selector`, as `accessible-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `stair_selector` der Regel, wie `accessible-route` ihn liest."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "obstacle_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `obstacle_selector`, as `accessible-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `obstacle_selector` der Regel, wie `accessible-route` ihn liest."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "subtract_door_swings",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `subtract_door_swings`, as `accessible-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `subtract_door_swings` der Regel, wie `accessible-route` ihn liest."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "width_metres",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `width_metres`, as `accessible-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `width_metres` der Regel, wie `accessible-route` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "clear_height_metres",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `clear_height_metres`, as `accessible-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `clear_height_metres` der Regel, wie `accessible-route` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "door_width_metres",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `door_width_metres`, as `accessible-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `door_width_metres` der Regel, wie `accessible-route` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "ramp_width_metres",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `ramp_width_metres`, as `accessible-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `ramp_width_metres` der Regel, wie `accessible-route` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "stair_width_metres",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `stair_width_metres`, as `accessible-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `stair_width_metres` der Regel, wie `accessible-route` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "forbid_stairs",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `forbid_stairs`, as `accessible-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `forbid_stairs` der Regel, wie `accessible-route` ihn liest."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "clear_width_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `clear_width_property`, as `accessible-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `clear_width_property` der Regel, wie `accessible-route` ihn liest."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "obstruction_depth_metres",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `obstruction_depth_metres`, as `accessible-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `obstruction_depth_metres` der Regel, wie `accessible-route` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "surface_gap_metres",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `surface_gap_metres`, as `accessible-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `surface_gap_metres` der Regel, wie `accessible-route` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "passing_width_metres",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `passing_width_metres`, as `accessible-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `passing_width_metres` der Regel, wie `accessible-route` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "passing_length_metres",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `passing_length_metres`, as `accessible-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `passing_length_metres` der Regel, wie `accessible-route` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "passing_spacing_metres",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `passing_spacing_metres`, as `accessible-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `passing_spacing_metres` der Regel, wie `accessible-route` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "passing_reach_metres",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `passing_reach_metres`, as `accessible-route` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `passing_reach_metres` der Regel, wie `accessible-route` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "selection",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects the rule selects, those it cannot decide possible members."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, die die Regel wählt, die unentschiedenen mögliche Mitglieder."
+            }
+          ],
+          "references": "selector"
+        }
+      ],
+      "services": [
+        "walkability",
+        "walking-surface",
+        "metric-routing",
+        "free-space",
+        "plan-span",
+        "vertical-extent"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the walkability service is not registered or takes no snapshot, or the scene cannot be selected"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Route verdicts"
+        },
+        {
+          "language": "de",
+          "text": "Wegurteile"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "One item: whether some start reaches the destination for the rule's body through the route spaces, with its passing spaces, as accessible-route walks it, and what blocks it where it is cut off."
+        },
+        {
+          "language": "de",
+          "text": "Ein Element: ob ein Start das Ziel für den Körper der Regel durch die Wegräume erreicht, mit seinen Ausweichstellen, wie accessible-route geht, und was es blockiert, wo es abgeschnitten ist."
+        }
+      ],
+      "fields": [
+        {
+          "name": "reached",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Reached"
+            },
+            {
+              "language": "de",
+              "text": "Erreicht"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether some start reaches the destination for the rule's body, with its passing spaces; undecided, with why, where the walk cannot tell."
+            },
+            {
+              "language": "de",
+              "text": "Ob ein Start das Ziel für den Körper der Regel erreicht, mit seinen Ausweichstellen; unentschieden, mit Grund, wo der Weg es nicht entscheidet."
+            }
+          ]
+        },
+        {
+          "name": "words",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Words"
+            },
+            {
+              "language": "de",
+              "text": "Worte"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "What cuts the destination off, or which route lacks its passing spaces, as findings word it."
+            },
+            {
+              "language": "de",
+              "text": "Was das Ziel abschneidet oder welchem Weg seine Ausweichstellen fehlen, wie Befunde es formulieren."
+            }
+          ]
+        },
+        {
+          "name": "related",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Related"
+            },
+            {
+              "language": "de",
+              "text": "Bezogen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The elements that block it, or the starts."
+            },
+            {
+              "language": "de",
+              "text": "Die Elemente, die es blockieren, oder die Starts."
+            }
+          ]
+        },
+        {
+          "name": "reason",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Reason"
+            },
+            {
+              "language": "de",
+              "text": "Grund"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Why an undecided answer is open, as a report writes it."
+            },
+            {
+              "language": "de",
+              "text": "Warum eine unentschiedene Antwort offen ist, wie ein Bericht es schreibt."
             }
           ]
         }

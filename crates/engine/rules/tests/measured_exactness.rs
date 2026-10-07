@@ -165,6 +165,11 @@ const COVERED: &[(&str, &str, &str)] = &[
         "a_turned_component_measures_its_volume_as_an_interval",
     ),
     (
+        "route_verdicts",
+        "tests/accessible_route.rs",
+        "a_route_blocked_by_a_tessellated_ramp_is_cited_inexactly",
+    ),
+    (
         "compositions",
         "tests/group_composition.rs",
         "a_composition_never_cites_an_approximate_answer",

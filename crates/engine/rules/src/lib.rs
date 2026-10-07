@@ -185,6 +185,7 @@ pub use wall_spacing::WallSpacing;
 /// Never register one: the capability id resolves to the template.
 #[cfg(feature = "parity-reference")]
 pub mod reference {
+    pub use crate::accessible_route::reference::AccessibleRoute;
     pub use crate::area_ratio::reference::AreaRatio;
     pub use crate::body_extent::reference::BodyExtent;
     pub use crate::centre_line_distance::reference::CentreLineDistance;
@@ -353,6 +354,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(table_allocation::AllocationMeasures))
         .and_then(|registry| registry.register_measured(group_composition::CompositionMeasures))
         .and_then(|registry| registry.register_measured(component_clearance::ClearanceMeasures))
+        .and_then(|registry| registry.register_measured(accessible_route::RouteMeasures))
         .and_then(|registry| registry.register_measured(parking_bay::BayMeasures))
         .and_then(|registry| registry.register_measured(parking_bay::BayItems))
         .and_then(|registry| registry.register_measured(wall_spacing::SpacingMeasures))

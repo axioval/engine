@@ -42,6 +42,7 @@ pub(crate) fn argument_check(name: &str) -> Option<ArgumentCheck> {
         "allocations" => Some(crate::table_allocation::check_arguments),
         "compositions" => Some(crate::group_composition::check_arguments),
         "clearance_checks" => Some(crate::component_clearance::check_arguments),
+        "route_verdicts" => Some(crate::accessible_route::check_arguments),
         "well_requirements" => Some(crate::light_well::check_arguments),
         "opening_area" | "opening_count" => Some(crate::measured_openings::check_arguments),
         _ => None,

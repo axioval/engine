@@ -344,6 +344,11 @@ const PAIRS: &[Pair] = &[
         case: "floors",
         reference: |registry| registry.replace(axioval::rules::reference::ComponentClearance),
     },
+    Pair {
+        capability: "axioval:capability.accessible-route",
+        case: "routes",
+        reference: |registry| registry.replace(axioval::rules::reference::AccessibleRoute),
+    },
 ];
 
 /// Warm-up runs per side before measuring.

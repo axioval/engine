@@ -42,7 +42,17 @@
 //! selection is undecided can only add routes or remove blocks, so they
 //! leave a verdict standing only where they cannot change it.
 
+mod measured;
+#[cfg(feature = "parity-reference")]
+pub(crate) mod reference;
+mod template;
+
+pub(crate) use measured::RouteMeasures;
+
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::LazyLock;
+
+use axioval_engine::template::Template;
 
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, LengthInterval, MeasuredInterval, NotEvaluatedReason,
@@ -53,25 +63,34 @@ use axioval_engine::{
     WalkingSurfaceServiceHandle,
 };
 use axioval_ir::contract::Selector;
+use axioval_ir::measured::MeasuredSelection;
 use axioval_ir::{Evidence, Object, ObjectId, PropertyValue, QuantityDimension};
 
 use crate::door_swing::Swings;
 use crate::passing_spaces::{self, Ground, PassingSpaces, Spacing};
 use crate::plan_area::shown;
-use crate::selection::{Selection, select_objects, selector_matches};
+use crate::selection::{Selection, selector_matches};
 use crate::support::{Parameters, PropertyRef, Unavailable, display, finding, invalid, resolve};
 
 /// Requires a route for a mobility profile from the start points to each
 /// selected destination.
 pub struct AccessibleRoute;
 
+/// What picks the objects of one role: a rule's selector, evaluated per
+/// object, or the objects a measured value's argument bound from it.
+#[derive(Clone, Copy)]
+enum Source<'a> {
+    Selector(&'a Selector),
+    Selected(&'a MeasuredSelection),
+}
+
 struct Declaration<'a> {
-    route: &'a Selector,
-    starts: &'a Selector,
-    portals: Option<&'a Selector>,
-    connectors: [(VerticalConnectorKind, Option<&'a Selector>); 3],
-    obstacles: Option<&'a Selector>,
-    swings: Option<&'a Selector>,
+    route: Source<'a>,
+    starts: Source<'a>,
+    portals: Option<Source<'a>>,
+    connectors: [(VerticalConnectorKind, Option<Source<'a>>); 3],
+    obstacles: Option<Source<'a>>,
+    swings: Option<Source<'a>>,
     width: f64,
     clear_height: Option<f64>,
     door_width: Option<f64>,
@@ -104,26 +123,20 @@ fn tolerance(parameters: &Parameters<'_>, name: &str) -> Result<f64, Unavailable
 fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
     let parameters = Parameters(rule);
     let clear_height = length(&parameters, "clear_height_metres")?;
+    let source = |name: &str| -> Result<Option<Source<'_>>, Unavailable> {
+        Ok(parameters.selector(name)?.map(Source::Selector))
+    };
     Ok(Declaration {
-        route: parameters.required_selector("route_selector")?,
-        starts: parameters.required_selector("start_selector")?,
-        portals: parameters.selector("portal_selector")?,
+        route: Source::Selector(parameters.required_selector("route_selector")?),
+        starts: Source::Selector(parameters.required_selector("start_selector")?),
+        portals: source("portal_selector")?,
         connectors: [
-            (
-                VerticalConnectorKind::Lift,
-                parameters.selector("lift_selector")?,
-            ),
-            (
-                VerticalConnectorKind::Ramp,
-                parameters.selector("ramp_selector")?,
-            ),
-            (
-                VerticalConnectorKind::Stair,
-                parameters.selector("stair_selector")?,
-            ),
+            (VerticalConnectorKind::Lift, source("lift_selector")?),
+            (VerticalConnectorKind::Ramp, source("ramp_selector")?),
+            (VerticalConnectorKind::Stair, source("stair_selector")?),
         ],
-        obstacles: parameters.selector("obstacle_selector")?,
-        swings: parameters.selector("subtract_door_swings")?,
+        obstacles: source("obstacle_selector")?,
+        swings: source("subtract_door_swings")?,
         width: length(&parameters, "width_metres")?
             .ok_or_else(|| invalid("parameter `width_metres` is required"))?,
         clear_height,
@@ -138,118 +151,145 @@ fn declaration(rule: &CompiledRule) -> Result<Declaration<'_>, Unavailable> {
     })
 }
 
+/// The capability's parameter descriptor.
+pub(crate) fn parameters() -> Vec<ParameterDescriptor> {
+    let mut parameters = vec![
+        ParameterDescriptor::required("route_selector", ParameterType::Selector),
+        ParameterDescriptor::required("start_selector", ParameterType::Selector),
+        ParameterDescriptor::optional("portal_selector", ParameterType::Selector),
+        ParameterDescriptor::optional("lift_selector", ParameterType::Selector),
+        ParameterDescriptor::optional("ramp_selector", ParameterType::Selector),
+        ParameterDescriptor::optional("stair_selector", ParameterType::Selector),
+        ParameterDescriptor::optional("obstacle_selector", ParameterType::Selector),
+        ParameterDescriptor::optional("subtract_door_swings", ParameterType::Selector),
+        ParameterDescriptor::required("width_metres", ParameterType::Number),
+        ParameterDescriptor::optional("clear_height_metres", ParameterType::Number),
+        ParameterDescriptor::optional("door_width_metres", ParameterType::Number),
+        ParameterDescriptor::optional("ramp_width_metres", ParameterType::Number),
+        ParameterDescriptor::optional("stair_width_metres", ParameterType::Number),
+        ParameterDescriptor::optional("forbid_stairs", ParameterType::Boolean),
+        ParameterDescriptor::optional("clear_width_property", ParameterType::PropertyReference),
+        ParameterDescriptor::optional("obstruction_depth_metres", ParameterType::Number),
+        ParameterDescriptor::optional("surface_gap_metres", ParameterType::Number),
+    ];
+    parameters.extend(passing_spaces::parameters());
+    parameters
+}
+
+static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
+
+/// The plans of the rules bound to it, kept across runs.
+static PLANS: crate::templates::Plans = crate::templates::Plans::new();
+
 impl RuleCapability for AccessibleRoute {
     fn id(&self) -> &'static str {
-        "axioval:capability.accessible-route"
+        TEMPLATE.id
     }
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
-        let mut parameters = vec![
-            ParameterDescriptor::required("route_selector", ParameterType::Selector),
-            ParameterDescriptor::required("start_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("portal_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("lift_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("ramp_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("stair_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("obstacle_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("subtract_door_swings", ParameterType::Selector),
-            ParameterDescriptor::required("width_metres", ParameterType::Number),
-            ParameterDescriptor::optional("clear_height_metres", ParameterType::Number),
-            ParameterDescriptor::optional("door_width_metres", ParameterType::Number),
-            ParameterDescriptor::optional("ramp_width_metres", ParameterType::Number),
-            ParameterDescriptor::optional("stair_width_metres", ParameterType::Number),
-            ParameterDescriptor::optional("forbid_stairs", ParameterType::Boolean),
-            ParameterDescriptor::optional("clear_width_property", ParameterType::PropertyReference),
-            ParameterDescriptor::optional("obstruction_depth_metres", ParameterType::Number),
-            ParameterDescriptor::optional("surface_gap_metres", ParameterType::Number),
-        ];
-        parameters.extend(passing_spaces::parameters());
-        parameters
+        TEMPLATE.parameters.clone()
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let declared = match declaration(rule) {
-            Ok(declared) => declared,
-            Err((reason, message)) => {
-                return CapabilityEvaluation::not_evaluated(
-                    reason,
-                    format!("accessible-route: {message}"),
-                );
-            }
-        };
-        let (destinations, mut evaluation) = select_objects(context, &rule.selector);
-        let refuse =
-            |evaluation: &mut CapabilityEvaluation, reason: NotEvaluatedReason, message: String| {
-                for destination in &destinations {
-                    evaluation.push_object_not_evaluated(
-                        destination.id.clone(),
-                        reason.clone(),
-                        message.clone(),
-                    );
-                }
-            };
-        if destinations.is_empty() {
-            return evaluation;
+        crate::templates::run((&TEMPLATE, &PLANS), context, rule)
+    }
+
+    fn template(&self) -> Option<&Template> {
+        Some(&TEMPLATE)
+    }
+}
+
+/// Checks the rule parameters `route_verdicts` names, as the rule states
+/// them: the declaration the capability refused, in its order and words.
+///
+/// # Errors
+///
+/// An invalid declaration.
+pub(crate) fn check_arguments(
+    stated: &BTreeMap<String, axioval_ir::contract::ParameterValue>,
+) -> Result<(), Unavailable> {
+    let rule = crate::light_area::synthesised(stated.clone());
+    declaration(&rule).map(|_| ())
+}
+
+/// `declared` with the selections a measured value's arguments bound in
+/// place of the stated rule's stand-ins.
+fn bound<'a>(
+    mut declared: Declaration<'a>,
+    call: &'a axioval_ir::measured::MeasuredCall,
+) -> Declaration<'a> {
+    let selected = |key: &str| match call.argument(key) {
+        Some(axioval_ir::measured::MeasuredArgument::Objects(selection)) => {
+            Some(Source::Selected(selection.as_ref()))
         }
-        let Some(service) = context.services.get::<WalkabilityServiceHandle>() else {
-            refuse(
-                &mut evaluation,
-                NotEvaluatedReason::MissingService,
-                "walkability service is not registered".into(),
-            );
-            return evaluation;
-        };
-        let scene = match Scene::select(context, &declared, &destinations) {
-            Ok(scene) => scene,
-            Err((reason, message)) => {
-                refuse(&mut evaluation, reason, message);
-                return evaluation;
-            }
-        };
-        let request = match scene.request(&declared) {
-            Ok(request) => request,
-            Err((reason, message)) => {
-                refuse(&mut evaluation, reason, message);
-                return evaluation;
-            }
-        };
-        let snapshot = match service.snapshot(&request) {
-            Ok(snapshot) => snapshot,
-            Err(error) => {
-                refuse(
-                    &mut evaluation,
-                    error_reason(&error),
-                    format!("no walkability snapshot: {error}"),
-                );
-                return evaluation;
-            }
-        };
-        let judge = Judge {
+        _ => None,
+    };
+    if let Some(route) = selected("route_selector") {
+        declared.route = route;
+    }
+    if let Some(starts) = selected("start_selector") {
+        declared.starts = starts;
+    }
+    declared.portals = selected("portal_selector");
+    declared.connectors = [
+        (VerticalConnectorKind::Lift, selected("lift_selector")),
+        (VerticalConnectorKind::Ramp, selected("ramp_selector")),
+        (VerticalConnectorKind::Stair, selected("stair_selector")),
+    ];
+    declared.obstacles = selected("obstacle_selector");
+    declared.swings = selected("subtract_door_swings");
+    declared
+}
+
+/// What a rule's walk reads once for all its destinations: the scene it
+/// selected and the walkability snapshot taken for its profile.
+pub(crate) struct Walked {
+    scene: Scene,
+    snapshot: WalkabilitySnapshot,
+}
+
+/// The scene and snapshot of `declared` for `destinations`, as the
+/// capability took them before judging any destination.
+fn walked(
+    context: &RuleContext<'_>,
+    declared: &Declaration<'_>,
+    destinations: &[&Object],
+) -> Result<Walked, Unavailable> {
+    let Some(service) = context.services.get::<WalkabilityServiceHandle>() else {
+        return Err((
+            NotEvaluatedReason::MissingService,
+            "walkability service is not registered".into(),
+        ));
+    };
+    let scene = Scene::select(context, declared, destinations)?;
+    let request = scene.request(declared)?;
+    let snapshot = service.snapshot(&request).map_err(|error| {
+        (
+            error_reason(&error),
+            format!("no walkability snapshot: {error}"),
+        )
+    })?;
+    Ok(Walked { scene, snapshot })
+}
+
+impl Walked {
+    fn judge<'a>(
+        &'a self,
+        context: &'a RuleContext<'a>,
+        declared: &'a Declaration<'a>,
+    ) -> Judge<'a> {
+        Judge {
             context,
-            declared: &declared,
-            scene: &scene,
-            snapshot: &snapshot,
-            regions: snapshot
+            declared,
+            scene: &self.scene,
+            snapshot: &self.snapshot,
+            regions: self
+                .snapshot
                 .regions()
                 .iter()
                 .map(|region| (region.id(), region.objects()))
                 .collect(),
-        };
-        for destination in destinations {
-            match judge.destination(&destination.id) {
-                Verdict::Reachable => {}
-                Verdict::Blocked(blocked) => {
-                    evaluation.push_finding(judge.finding(rule, &destination.id, blocked));
-                }
-                Verdict::Crowded(missed) => {
-                    evaluation.push_finding(judge.crowded(rule, &destination.id, missed));
-                }
-                Verdict::Undecided(reason, message) => {
-                    evaluation.push_object_not_evaluated(destination.id.clone(), reason, message);
-                }
-            }
         }
-        evaluation
     }
 }
 
@@ -274,10 +314,22 @@ struct Picked {
 }
 
 impl Picked {
-    fn select(context: &RuleContext<'_>, selector: Option<&Selector>) -> Self {
+    fn select(context: &RuleContext<'_>, source: Option<Source<'_>>) -> Self {
         let mut picked = Self::default();
-        let Some(selector) = selector else {
-            return picked;
+        let selector = match source {
+            None => return picked,
+            Some(Source::Selector(selector)) => selector,
+            Some(Source::Selected(selected)) => {
+                picked.decided.clone_from(&selected.matched);
+                for object in &selected.undecided {
+                    let why = selected.reasons.get(object).map_or_else(
+                        || "its selection is undecided".to_owned(),
+                        |(_, why)| why.clone(),
+                    );
+                    picked.undecided.insert(object.clone(), why);
+                }
+                return picked;
+            }
         };
         for object in context.project.objects() {
             match selector_matches(context, selector, object, &mut Vec::new()) {
@@ -341,7 +393,11 @@ impl Scene {
                 format!("whether {object} is an obstacle is undecided: {why}"),
             ));
         }
-        let swings = Swings::select(context, declared.swings)?;
+        let swings = match declared.swings {
+            Some(Source::Selected(doors)) => Swings::of_selection(context, doors),
+            Some(Source::Selector(selector)) => Swings::select(context, Some(selector))?,
+            None => Swings::default(),
+        };
         if let Some(why) = swings.undecided() {
             return Err((
                 NotEvaluatedReason::IncompleteEvidence,

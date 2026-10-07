@@ -22,6 +22,11 @@ use axioval_engine::{
 use axioval_ir::contract::{ParameterValue, Selector};
 use axioval_ir::{Evidence, NotEvaluatedReason, ObjectId, PropertyValue, QuantityDimension};
 use axioval_rules::AccessibleRoute;
+
+/// `accessible-route` as it runs, held to the implementation it replaced
+/// on every evaluation.
+static HELD: common::Held =
+    common::Held(&AccessibleRoute, &axioval_rules::reference::AccessibleRoute);
 use common::{
     Model, boolean, findings, id, kind, number, property, rule, selector, source, unevaluated,
 };
@@ -152,7 +157,7 @@ fn run(
 ) -> CapabilityEvaluation {
     let graph = graph.clone();
     model.evaluate_with(
-        &AccessibleRoute,
+        &HELD,
         &rule(ID, kind("room"), parameters(extra)),
         |services| {
             services
@@ -360,10 +365,7 @@ fn declarations_and_missing_evidence_are_not_evaluated() {
         "{twice:#?}"
     );
     assert_eq!(unevaluated(&twice).len(), 2);
-    let missing = model().evaluate(
-        &AccessibleRoute,
-        &rule(ID, kind("room"), parameters(vec![])),
-    );
+    let missing = model().evaluate(&HELD, &rule(ID, kind("room"), parameters(vec![])));
     assert_eq!(
         unevaluated(&missing),
         [
@@ -484,7 +486,7 @@ impl WalkabilityService for Pinched {
 fn pinched(limit: StretchLimit, obstacles: Vec<&'static str>) -> CapabilityEvaluation {
     let service = Arc::new(Pinched { limit, obstacles });
     model().evaluate_with(
-        &AccessibleRoute,
+        &HELD,
         &rule(ID, kind("room"), parameters(vec![])),
         |services| {
             services
@@ -538,6 +540,9 @@ fn a_block_inside_a_route_space_is_reported_where_it_lies() {
 /// Measures every ramp as one run of the given width.
 struct Ramps {
     width: f64,
+    /// Whether the runs are measured on exact evidence, or on a
+    /// tessellation within a centimetre.
+    exact: bool,
 }
 
 impl WalkingSurfaceService for Ramps {
@@ -561,11 +566,17 @@ impl WalkingSurfaceService for Ramps {
             at(6.0),
         )?
         .with_sides(at(0.0), at(self.width))?;
-        SlopedSurface::try_new(
-            object.clone(),
-            vec![run],
-            Evidence::exact(source(), format!("sloped-runs:{object}")),
-        )
+        let run = if self.exact {
+            run
+        } else {
+            run.with_sides(
+                at(0.0),
+                ElevationInterval::try_new(self.width - 0.01, self.width).unwrap(),
+            )?
+        };
+        let mut evidence = Evidence::exact(source(), format!("sloped-runs:{object}"));
+        evidence.exact = self.exact;
+        SlopedSurface::try_new(object.clone(), vec![run], evidence)
     }
 
     fn measure_headroom(&self, request: &HeadroomRequest) -> Result<Headroom, WalkingSurfaceError> {
@@ -578,13 +589,17 @@ impl WalkingSurfaceService for Ramps {
 
 /// `c` is reached from the lobby by `ramp` alone.
 fn ramped(measured: Option<f64>, stated: Option<f64>) -> CapabilityEvaluation {
+    ramped_on(measured, stated, true)
+}
+
+fn ramped_on(measured: Option<f64>, stated: Option<f64>, exact: bool) -> CapabilityEvaluation {
     let graph = Graph::new(vec![("a", "c", None, Some("ramp"), 0.0, OPEN)]);
     let mut model = model().object("ramp", "ramp");
     if let Some(stated) = stated {
         model = model.value("ramp", "Access", "ClearWidth", metres(stated));
     }
     model.evaluate_with(
-        &AccessibleRoute,
+        &HELD,
         &rule(
             ID,
             kind("room"),
@@ -599,7 +614,10 @@ fn ramped(measured: Option<f64>, stated: Option<f64>) -> CapabilityEvaluation {
                 .unwrap();
             if let Some(width) = measured {
                 services
-                    .register(WalkingSurfaceServiceHandle::new(Arc::new(Ramps { width })))
+                    .register(WalkingSurfaceServiceHandle::new(Arc::new(Ramps {
+                        width,
+                        exact,
+                    })))
                     .unwrap();
             }
         },
@@ -663,4 +681,23 @@ fn a_ramp_stating_no_width_is_judged_by_its_measured_runs() {
         "{}",
         open(&unmeasured)
     );
+}
+
+/// The measured list `route_verdicts` cites a finding as exactly as what it
+/// rests on: a ramp measured on a tessellation too narrow is found on
+/// inexact evidence, one measured exactly on exact evidence.
+#[test]
+fn a_route_blocked_by_a_tessellated_ramp_is_cited_inexactly() {
+    let finding = |outcome: &CapabilityEvaluation| {
+        outcome
+            .findings()
+            .iter()
+            .find(|finding| finding.message.contains("test:model/c "))
+            .cloned()
+            .unwrap()
+    };
+    let tessellated = finding(&ramped_on(Some(1.0), None, false));
+    assert!(tessellated.evidence.iter().any(|evidence| !evidence.exact));
+    let exact = finding(&ramped_on(Some(1.0), None, true));
+    assert!(exact.evidence.iter().all(|evidence| evidence.exact));
 }

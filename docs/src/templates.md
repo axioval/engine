@@ -2018,6 +2018,21 @@ true, false, or undecided with why and its `reason`; under `quantifier`
 finding worded `{label} {words}` relating the obstacles or spaces,
 undecided open as `{label}: {why}`.
 
+### `accessible-route`
+
+One form, judged by one check over the measured list
+`route_verdicts;route_selector=@route_selector;…;selection=@selection`,
+every parameter under its own name: the declaration is the list's argument
+check, refused for the rule. The walk stays the capability's: one
+walkability snapshot per run for the rule's body (`accessible_route::walked`),
+judged per destination (`Judge::destination`) with the passages' admission,
+the connectors' widths and the passing spaces. Its one item per destination
+states `reached`: true where some start reaches it, false where every start
+is cut off or every proven route lacks its passing spaces (with the words
+naming what blocks it, the objects that do and the evidence), undecided
+with why otherwise; a walk that cannot be taken refuses the list for every
+destination, for its reason. The template judges `reached`.
+
 ## Binding and running a rule
 
 The rules crate's `templates` module runs a template
@@ -2725,6 +2740,13 @@ under random entries and switches; and by the rules of the case
 on every scene of the facade's `tests/axiolid_component_clearance.rs` under
 `Parity::contract()`, and by the rules of the case `floors`, recorded
 before the switch (D39). It is never forked.
+
+`accessible-route` is held to `accessible_route/reference.rs`
+(`axioval_rules::reference::AccessibleRoute`), which shares the walk, on
+every fixture of `tests/accessible_route.rs` and of the facade's
+`tests/axiolid_accessible_route.rs` and `tests/axiolid_passing_spaces.rs`
+under `Parity::contract()`, and by the rules of the case `routes`, recorded
+before the switch. It is never forked.
 
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the

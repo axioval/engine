@@ -4446,6 +4446,7 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
             ),
         ],
     },
+    searches::ROUTE_VERDICTS,
     MemberDescriptor {
         list: MeasuredDescriptor {
             name: "runs",

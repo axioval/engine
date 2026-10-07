@@ -2,11 +2,6 @@
   "schemaVersion": "2.0.0",
   "description": "Every call site in the rules crate that measures through a service method marked `// gate: measures`, or computes inline geometry, outside a registered measured-value provider. Keyed `module::function::method`, with the number of such calls in that function. `providedBy` names the registered measured values (or member lists) that expose the quantity: each must be in the authoring catalogue, list the called service, and be of a kind the method's marker declares (a plain number may count or share any). `searchOnly` names a reviewed kind from `SEARCH_KINDS` in scripts/measurement_gate.py with a reason. A new call, a changed count or a stale entry fails the gate.",
   "callSites": {
-    "accessible_route::evaluate::snapshot": {
-      "count": 1,
-      "searchOnly": "route-search",
-      "reason": "builds the walkable network the accessible route search runs over; the runs' own measurements are the stair and ramp values"
-    },
     "accessible_route::measure_width::measure_sloped_runs": {
       "count": 1,
       "providedBy": [
@@ -20,6 +15,11 @@
         "flight_width",
         "steps"
       ]
+    },
+    "accessible_route::walked::snapshot": {
+      "count": 1,
+      "searchOnly": "route-search",
+      "reason": "builds the walkable network the accessible route search runs over; the runs' own measurements are the stair and ramp values"
     },
     "body_extent::reference::check::measure_directional_extent": {
       "count": 1,

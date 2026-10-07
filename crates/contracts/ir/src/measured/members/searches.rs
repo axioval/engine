@@ -1744,3 +1744,303 @@ pub(super) const CLEARANCE_CHECKS: MemberDescriptor = MemberDescriptor {
         ),
     ],
 };
+
+const ROUTE_VERDICTS_PARAMETERS: [MeasuredParameter; 22] = [
+    MeasuredParameter {
+        key: "route_selector",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `route_selector`, as `accessible-route` reads it.",
+            "Der Parameter `route_selector` der Regel, wie `accessible-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "start_selector",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `start_selector`, as `accessible-route` reads it.",
+            "Der Parameter `start_selector` der Regel, wie `accessible-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "portal_selector",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `portal_selector`, as `accessible-route` reads it.",
+            "Der Parameter `portal_selector` der Regel, wie `accessible-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "lift_selector",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `lift_selector`, as `accessible-route` reads it.",
+            "Der Parameter `lift_selector` der Regel, wie `accessible-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "ramp_selector",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `ramp_selector`, as `accessible-route` reads it.",
+            "Der Parameter `ramp_selector` der Regel, wie `accessible-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "stair_selector",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `stair_selector`, as `accessible-route` reads it.",
+            "Der Parameter `stair_selector` der Regel, wie `accessible-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "obstacle_selector",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `obstacle_selector`, as `accessible-route` reads it.",
+            "Der Parameter `obstacle_selector` der Regel, wie `accessible-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "subtract_door_swings",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `subtract_door_swings`, as `accessible-route` reads it.",
+            "Der Parameter `subtract_door_swings` der Regel, wie `accessible-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "width_metres",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `width_metres`, as `accessible-route` reads it.",
+            "Der Parameter `width_metres` der Regel, wie `accessible-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "clear_height_metres",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `clear_height_metres`, as `accessible-route` reads it.",
+            "Der Parameter `clear_height_metres` der Regel, wie `accessible-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "door_width_metres",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `door_width_metres`, as `accessible-route` reads it.",
+            "Der Parameter `door_width_metres` der Regel, wie `accessible-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "ramp_width_metres",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `ramp_width_metres`, as `accessible-route` reads it.",
+            "Der Parameter `ramp_width_metres` der Regel, wie `accessible-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "stair_width_metres",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `stair_width_metres`, as `accessible-route` reads it.",
+            "Der Parameter `stair_width_metres` der Regel, wie `accessible-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "forbid_stairs",
+        kind: MeasuredParameterKind::Truth,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `forbid_stairs`, as `accessible-route` reads it.",
+            "Der Parameter `forbid_stairs` der Regel, wie `accessible-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "clear_width_property",
+        kind: MeasuredParameterKind::Property,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `clear_width_property`, as `accessible-route` reads it.",
+            "Der Parameter `clear_width_property` der Regel, wie `accessible-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "obstruction_depth_metres",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `obstruction_depth_metres`, as `accessible-route` reads it.",
+            "Der Parameter `obstruction_depth_metres` der Regel, wie `accessible-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "surface_gap_metres",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `surface_gap_metres`, as `accessible-route` reads it.",
+            "Der Parameter `surface_gap_metres` der Regel, wie `accessible-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "passing_width_metres",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `passing_width_metres`, as `accessible-route` reads it.",
+            "Der Parameter `passing_width_metres` der Regel, wie `accessible-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "passing_length_metres",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `passing_length_metres`, as `accessible-route` reads it.",
+            "Der Parameter `passing_length_metres` der Regel, wie `accessible-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "passing_spacing_metres",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `passing_spacing_metres`, as `accessible-route` reads it.",
+            "Der Parameter `passing_spacing_metres` der Regel, wie `accessible-route` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "passing_reach_metres",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `passing_reach_metres`, as `accessible-route` reads it.",
+            "Der Parameter `passing_reach_metres` der Regel, wie `accessible-route` ihn liest.",
+        ),
+    },
+    SELECTION,
+];
+
+pub(super) const ROUTE_VERDICTS: MemberDescriptor = MemberDescriptor {
+    list: MeasuredDescriptor {
+        name: "route_verdicts",
+        parameters: &ROUTE_VERDICTS_PARAMETERS,
+        dimension: None,
+        services: &[
+            "walkability",
+            "walking-surface",
+            "metric-routing",
+            "free-space",
+            "plan-span",
+            "vertical-extent",
+        ],
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[
+            "the walkability service is not registered or takes no snapshot, or the scene cannot be selected",
+        ],
+        label: &en_de("Route verdicts", "Wegurteile"),
+        help: &en_de(
+            "One item: whether some start reaches the destination for the rule's body through the route spaces, with its passing spaces, as accessible-route walks it, and what blocks it where it is cut off.",
+            "Ein Element: ob ein Start das Ziel für den Körper der Regel durch die Wegräume erreicht, mit seinen Ausweichstellen, wie accessible-route geht, und was es blockiert, wo es abgeschnitten ist.",
+        ),
+    },
+    fields: &[
+        field(
+            "reached",
+            TRUTH,
+            &en_de("Reached", "Erreicht"),
+            &en_de(
+                "Whether some start reaches the destination for the rule's body, with its passing spaces; undecided, with why, where the walk cannot tell.",
+                "Ob ein Start das Ziel für den Körper der Regel erreicht, mit seinen Ausweichstellen; unentschieden, mit Grund, wo der Weg es nicht entscheidet.",
+            ),
+        ),
+        field(
+            "words",
+            TEXT,
+            &en_de("Words", "Worte"),
+            &en_de(
+                "What cuts the destination off, or which route lacks its passing spaces, as findings word it.",
+                "Was das Ziel abschneidet oder welchem Weg seine Ausweichstellen fehlen, wie Befunde es formulieren.",
+            ),
+        ),
+        field(
+            "related",
+            OBJECTS,
+            &en_de("Related", "Bezogen"),
+            &en_de(
+                "The elements that block it, or the starts.",
+                "Die Elemente, die es blockieren, oder die Starts.",
+            ),
+        ),
+        field(
+            "reason",
+            TEXT,
+            &en_de("Reason", "Grund"),
+            &en_de(
+                "Why an undecided answer is open, as a report writes it.",
+                "Warum eine unentschiedene Antwort offen ist, wie ein Bericht es schreibt.",
+            ),
+        ),
+    ],
+};

@@ -81,10 +81,13 @@ fn exact<'e>(evidence: impl IntoIterator<Item = &'e Evidence>) -> bool {
 fn refusal((reason, why): Unavailable) -> MeasuredMember {
     member(
         true,
-        vec![
-            ("cover", truth(true)),
-            ("uncovered", MemberValue::Refused { reason, why }),
-        ],
+        [("cover", truth(true))]
+            .into_iter()
+            .chain(crate::measured_kinds::refused_field(
+                "uncovered",
+                (reason, why),
+            ))
+            .collect(),
     )
 }
 

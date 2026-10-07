@@ -3850,6 +3850,15 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
                      die den Raum erreichen.",
                 ),
             ),
+            field(
+                "reason",
+                MemberFieldKind::Text,
+                &en_de("Reason", "Grund"),
+                &en_de(
+                    "Why the item is undecided where not for incomplete evidence, as a report writes it (`missing_service`).",
+                    "Warum das Element unentschieden ist, wo nicht wegen unvollständiger Belege, wie ein Bericht es schreibt (`missing_service`).",
+                ),
+            ),
         ],
     },
     walking::STAIR_CLEAR_WIDTHS,
@@ -4283,6 +4292,15 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
                 &en_de(
                     "The members bounding a sure band, and the footprint.",
                     "Die Mitglieder, die ein sicheres Band begrenzen, und der Grundriss.",
+                ),
+            ),
+            field(
+                "reason",
+                MemberFieldKind::Text,
+                &en_de("Reason", "Grund"),
+                &en_de(
+                    "Why the item is undecided where not for incomplete evidence, as a report writes it (`missing_service`).",
+                    "Warum das Element unentschieden ist, wo nicht wegen unvollständiger Belege, wie ein Bericht es schreibt (`missing_service`).",
                 ),
             ),
         ],
@@ -4744,6 +4762,15 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
                 &en_de(
                     "What a finding on the item relates: the host, and the objects it is measured to.",
                     "Worauf sich ein Befund zum Element bezieht: den Wirt und die Objekte, zu denen gemessen wurde.",
+                ),
+            ),
+            field(
+                "reason",
+                MemberFieldKind::Text,
+                &en_de("Reason", "Grund"),
+                &en_de(
+                    "Why the item is undecided where not for incomplete evidence, as a report writes it (`missing_service`).",
+                    "Warum das Element unentschieden ist, wo nicht wegen unvollständiger Belege, wie ein Bericht es schreibt (`missing_service`).",
                 ),
             ),
             field(

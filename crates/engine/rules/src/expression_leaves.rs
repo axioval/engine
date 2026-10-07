@@ -624,10 +624,6 @@ impl<'a> ObjectLeaves<'a> {
                     .push(NotEvaluatedReason::IncompleteEvidence);
                 Leaf::unreadable(format!("`{name}` is undecided: {why}"))
             }
-            Some(MemberValue::Refused { reason, why }) => {
-                self.reasons.borrow_mut().push(reason.clone());
-                Leaf::unreadable(format!("`{name}` is not evaluated: {why}"))
-            }
             Some(MemberValue::Truth { value, locator }) => Leaf {
                 value: Ok(Value::Boolean(*value)),
                 evidence: cited(locator),

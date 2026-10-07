@@ -34,20 +34,14 @@ enum Field<'m> {
     Text(&'m str),
     Objects(&'m [ObjectId]),
     Null,
-    /// Undecided, why and for what reason: incomplete evidence, or the
-    /// reason a field refused states.
-    Undecided(&'m str, &'m NotEvaluatedReason),
+    Undecided(&'m str),
     Missing,
 }
-
-/// The reason an undecided field states by default.
-const INCOMPLETE: NotEvaluatedReason = NotEvaluatedReason::IncompleteEvidence;
 
 fn field<'m>(member: &'m MeasuredMember, name: &str) -> Field<'m> {
     match member.fields.get(name) {
         None => Field::Missing,
-        Some(MemberValue::Undecided { why }) => Field::Undecided(why, &INCOMPLETE),
-        Some(MemberValue::Refused { reason, why }) => Field::Undecided(why, reason),
+        Some(MemberValue::Undecided { why }) => Field::Undecided(why),
         Some(MemberValue::Truth { value, .. }) => Field::Truth(*value),
         Some(MemberValue::Text { text }) => Field::Text(text),
         Some(MemberValue::Objects { objects }) => Field::Objects(objects),
@@ -131,7 +125,7 @@ impl<'p, 't> Scope<'_, 'p, 't> {
             When::Empty { field } => {
                 matches!(field_of(field), Field::Objects(objects) if objects.is_empty())
             }
-            When::Unknown { field } => matches!(field_of(field), Field::Undecided(..)),
+            When::Unknown { field } => matches!(field_of(field), Field::Undecided(_)),
         }
     }
 
@@ -528,16 +522,6 @@ fn cited(scope: &Scope<'_, '_, '_>, listed: &[Evidence], object: &Object) -> Vec
 
 fn open(message: String) -> Outcome {
     Outcome::Open(NotEvaluatedReason::IncompleteEvidence, message)
-}
-
-/// An outcome left open as incomplete evidence, open for `reason` instead.
-fn reasoned(outcome: Outcome, reason: &NotEvaluatedReason) -> Outcome {
-    match outcome {
-        Outcome::Open(NotEvaluatedReason::IncompleteEvidence, message) => {
-            Outcome::Open(reason.clone(), message)
-        }
-        outcome => outcome,
-    }
 }
 
 /// An item's outcomes as one ([`Items::joined`]): its findings joined by
@@ -1057,7 +1041,7 @@ fn guarded(scope: &Scope<'_, '_, '_>, guard: &Guard, listed: &[Evidence], object
         return Stop::On;
     };
     match field(member, guard.field) {
-        Field::Undecided(why, reason) => {
+        Field::Undecided(why) => {
             let message = match guard.undecided {
                 Some(message) => {
                     let mut worded = scope.with(Some(member));
@@ -1066,7 +1050,7 @@ fn guarded(scope: &Scope<'_, '_, '_>, guard: &Guard, listed: &[Evidence], object
                 }
                 None => why.to_owned(),
             };
-            Stop::Here(Some(Outcome::Open(reason.clone(), message)))
+            Stop::Here(Some(open(message)))
         }
         Field::Missing => Stop::Here(Some(Outcome::Open(
             NotEvaluatedReason::InvalidEvidence,
@@ -1164,9 +1148,9 @@ fn test_item(
             Field::Truth(held) if held == *fails => finding(&scope, None, false),
             Field::Truth(_) => passed(&scope),
             Field::Null => effect(&scope, &test.effects, &[On::Null]).unwrap_or(Outcome::Passed),
-            Field::Undecided(why, reason) => {
+            Field::Undecided(why) => {
                 scope.named("why", why.to_owned());
-                reasoned(straddles(&scope), reason)
+                straddles(&scope)
             }
             _ => Outcome::Open(
                 NotEvaluatedReason::InvalidEvidence,
@@ -1221,12 +1205,9 @@ fn test_item(
                         },
                     };
                 }
-                Field::Undecided(why, reason) => {
+                Field::Undecided(why) => {
                     scope.named("why", why.to_owned());
-                    return Outcome::Open(
-                        reason.clone(),
-                        scope.render(range.unmeasured.unwrap_or("{why}")),
-                    );
+                    return open(scope.render(range.unmeasured.unwrap_or("{why}")));
                 }
                 _ => {
                     return Outcome::Open(
@@ -1406,7 +1387,7 @@ fn judge_every(
         item.named("name", named.clone());
         let span = match field(member, range.value) {
             Field::Number(span) => span,
-            Field::Undecided(..) | Field::Null => {
+            Field::Undecided(_) | Field::Null => {
                 if let Some(message) = every.unmeasured_any {
                     return open(scope.render(message));
                 }
@@ -1555,7 +1536,7 @@ fn judge_any(
             continue;
         }
         if let Some(case) = any.open.iter().find(|case| item.holds(&case.when)) {
-            if let Some(Field::Undecided(why, _)) = case.why.map(|name| field(member, name)) {
+            if let Some(Field::Undecided(why)) = case.why.map(|name| field(member, name)) {
                 item.named("why", why.to_owned());
             }
             opened = Some(item.render(case.message));
@@ -1600,7 +1581,7 @@ fn judge_spread(
     for member in present {
         match field(member, spread.value) {
             Field::Number(span) => values.push(span),
-            Field::Undecided(why, reason) => return Outcome::Open(reason.clone(), why.to_owned()),
+            Field::Undecided(why) => return open(why.to_owned()),
             _ => {}
         }
     }
@@ -1698,7 +1679,7 @@ fn judge_least(
     for member in present {
         match field(member, least.value) {
             Field::Number(span) => known.push((member, span)),
-            Field::Undecided(why, _) => unknown.push(why.to_owned()),
+            Field::Undecided(why) => unknown.push(why.to_owned()),
             _ => {}
         }
     }
@@ -1902,11 +1883,11 @@ mod raised_and_merged {
 }
 
 #[cfg(test)]
-mod joined_and_refused {
+mod joined {
     use axioval_engine::Deviation;
     use axioval_ir::{NotEvaluatedReason, ObjectId, SourceId};
 
-    use super::{Outcome, joined, reasoned};
+    use super::{Outcome, joined};
 
     fn id(local: &str) -> ObjectId {
         ObjectId::new(SourceId::new("test", "model").unwrap(), local).unwrap()
@@ -1962,18 +1943,5 @@ mod joined_and_refused {
             Outcome::Open(_, message) if message == "first"
         ));
         assert!(matches!(joined(Vec::new(), "; "), Outcome::Passed));
-    }
-
-    /// A field refusing for a reason leaves its test open for that reason.
-    #[test]
-    fn a_refused_field_leaves_its_test_open_for_its_reason() {
-        assert!(matches!(
-            reasoned(open("why"), &NotEvaluatedReason::MissingService),
-            Outcome::Open(NotEvaluatedReason::MissingService, _)
-        ));
-        assert!(matches!(
-            reasoned(found("x", "a", None), &NotEvaluatedReason::MissingService),
-            Outcome::Finding { .. }
-        ));
     }
 }

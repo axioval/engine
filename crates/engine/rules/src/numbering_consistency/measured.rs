@@ -11,7 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use axioval_engine::{
-    MeasuredMember, MeasuredMemo, MeasuredProvider, Measurement, MemberValue, NotEvaluatedReason,
+    MeasuredMember, MeasuredMemo, MeasuredProvider, Measurement, MemberValue,
     PropertyResolutionError, RuleContext,
 };
 use axioval_ir::contract::ParameterValue;
@@ -117,16 +117,13 @@ fn measure(
         push(
             object,
             true,
-            vec![
-                ("unread", truth(true)),
-                (
+            [("unread", truth(true))]
+                .into_iter()
+                .chain(crate::measured_kinds::refused_field(
                     "number",
-                    MemberValue::Refused {
-                        reason: reason.clone(),
-                        why: why.clone(),
-                    },
-                ),
-            ],
+                    (reason.clone(), why.clone()),
+                ))
+                .collect(),
         );
     }
     let property = config.property;
@@ -146,8 +143,7 @@ fn measure(
                             ("prefixed", truth(true)),
                             (
                                 "lead",
-                                MemberValue::Refused {
-                                    reason: NotEvaluatedReason::IncompleteEvidence,
+                                MemberValue::Undecided {
                                     why: format!(
                                         "{property} {} has fewer than {length} digit(s), so it \
                                          has no prefix",

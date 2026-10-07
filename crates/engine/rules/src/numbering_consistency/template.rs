@@ -114,7 +114,7 @@ fn numbers() -> FormCheck {
             merged: false,
             once: false,
             combined: None,
-            reason: None,
+            reason: Some("reason"),
             at: None,
             joined: None,
         })),

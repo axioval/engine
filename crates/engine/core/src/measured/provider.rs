@@ -101,16 +101,6 @@ pub enum MemberValue {
         /// Why, in plain words.
         why: String,
     },
-    /// A field the measurement refused for a reason of its own (a missing
-    /// service, invalid evidence), as [`Self::Undecided`] does for
-    /// incomplete evidence: reading it leaves the expression, or the item,
-    /// not evaluated for that reason.
-    Refused {
-        /// Why it is not evaluated.
-        reason: crate::NotEvaluatedReason,
-        /// Why, in plain words.
-        why: String,
-    },
     /// Words naming what the member is, as messages name it (`the bottom
     /// of run 1 of 2`).
     Text {

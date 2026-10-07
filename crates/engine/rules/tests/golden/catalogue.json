@@ -23913,7 +23913,8 @@
                       ],
                       "related": "related"
                     }
-                  ]
+                  ],
+                  "reason": "reason"
                 },
                 "fail": "",
                 "undecided": ""
@@ -28204,7 +28205,8 @@
                         }
                       ]
                     }
-                  ]
+                  ],
+                  "reason": "reason"
                 },
                 "fail": "",
                 "undecided": ""
@@ -61263,7 +61265,8 @@
                       "undecided": "{what}, which straddles {uncovered_above:si} m²{unknown}",
                       "related": "related"
                     }
-                  ]
+                  ],
+                  "reason": "reason"
                 },
                 "fail": "",
                 "undecided": ""
@@ -89895,6 +89898,32 @@
               "text": "Die verbundenen Räume und Elemente, wo verbunden; sonst die Elemente, die den Raum erreichen."
             }
           ]
+        },
+        {
+          "name": "reason",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Reason"
+            },
+            {
+              "language": "de",
+              "text": "Grund"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Why the item is undecided where not for incomplete evidence, as a report writes it (`missing_service`)."
+            },
+            {
+              "language": "de",
+              "text": "Warum das Element unentschieden ist, wo nicht wegen unvollständiger Belege, wie ein Bericht es schreibt (`missing_service`)."
+            }
+          ]
         }
       ],
       "available": true
@@ -91962,6 +91991,32 @@
               "text": "Die Mitglieder, die ein sicheres Band begrenzen, und der Grundriss."
             }
           ]
+        },
+        {
+          "name": "reason",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Reason"
+            },
+            {
+              "language": "de",
+              "text": "Grund"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Why the item is undecided where not for incomplete evidence, as a report writes it (`missing_service`)."
+            },
+            {
+              "language": "de",
+              "text": "Warum das Element unentschieden ist, wo nicht wegen unvollständiger Belege, wie ein Bericht es schreibt (`missing_service`)."
+            }
+          ]
         }
       ],
       "available": true
@@ -93649,6 +93704,32 @@
             {
               "language": "de",
               "text": "Worauf sich ein Befund zum Element bezieht: den Wirt und die Objekte, zu denen gemessen wurde."
+            }
+          ]
+        },
+        {
+          "name": "reason",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Reason"
+            },
+            {
+              "language": "de",
+              "text": "Grund"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Why the item is undecided where not for incomplete evidence, as a report writes it (`missing_service`)."
+            },
+            {
+              "language": "de",
+              "text": "Warum das Element unentschieden ist, wo nicht wegen unvollständiger Belege, wie ein Bericht es schreibt (`missing_service`)."
             }
           ]
         },

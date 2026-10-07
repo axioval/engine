@@ -162,10 +162,10 @@ fn item(step: Matter, filtering: Option<&Filtering>, at: &str) -> Option<Measure
         ),
         Matter::Judged(Err((reason, why))) => member(
             true,
-            vec![
-                ("judged", truth(true)),
-                ("found", MemberValue::Refused { reason, why }),
-            ],
+            [("judged", truth(true))]
+                .into_iter()
+                .chain(crate::measured_kinds::refused_field("found", (reason, why)))
+                .collect(),
         ),
         Matter::Count(counting) => {
             #[allow(clippy::cast_precision_loss)]
@@ -214,10 +214,10 @@ fn item(step: Matter, filtering: Option<&Filtering>, at: &str) -> Option<Measure
                     };
                     return Some(member(
                         true,
-                        vec![
-                            ("sized", truth(true)),
-                            ("size", MemberValue::Refused { reason, why }),
-                        ],
+                        [("sized", truth(true))]
+                            .into_iter()
+                            .chain(crate::measured_kinds::refused_field("size", (reason, why)))
+                            .collect(),
                     ));
                 }
             };

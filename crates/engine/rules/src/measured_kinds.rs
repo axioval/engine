@@ -281,6 +281,32 @@ pub(crate) fn interval(
     }
 }
 
+/// A field left undecided for a reason of its own, and the item's
+/// `reason` field stating that reason as a report writes it
+/// (`missing_service`), read through [`axioval_engine::template::Items::reason`]:
+/// an item a capability left open for a missing service or invalid evidence.
+pub(crate) fn refused_field(
+    name: &'static str,
+    (reason, why): crate::support::Unavailable,
+) -> [(&'static str, axioval_engine::MemberValue); 2] {
+    [
+        (name, axioval_engine::MemberValue::Undecided { why }),
+        ("reason", stated_reason(&reason)),
+    ]
+}
+
+/// `reason` as a report writes it, as an item's text field.
+pub(crate) fn stated_reason(
+    reason: &axioval_ir::NotEvaluatedReason,
+) -> axioval_engine::MemberValue {
+    axioval_engine::MemberValue::Text {
+        text: match serde_json::to_value(reason) {
+            Ok(serde_json::Value::String(reason)) => reason,
+            _ => String::new(),
+        },
+    }
+}
+
 /// The traversal the call's arguments state, read as a rule states it:
 /// each traversal parameter under its own name.
 pub(crate) fn traversal(

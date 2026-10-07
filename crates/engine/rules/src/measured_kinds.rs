@@ -20,6 +20,7 @@ pub(crate) fn argument_check(name: &str) -> Option<ArgumentCheck> {
     match name {
         "light_area" | "light_size" | "light_step" => Some(crate::light_area::check_arguments),
         "space_connections" => Some(crate::space_connection::check_arguments),
+        "limited_values" => Some(crate::keyed_limit::check_arguments),
         "connected_spaces" => Some(crate::opening_spaces::check_arguments),
         "effective_reaching" | "effective_area" | "effective_covered" | "effective_share"
         | "effective_capacity" | "effective_unread" | "effective_missing" => {

@@ -18835,7 +18835,898 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "grades": true,
+        "name": "keyed-limit",
+        "declaration": [
+          {
+            "kind": "arguments",
+            "when": [],
+            "value": "limited_values;limits=@limits;key_1=@key_1;key_1_path=@key_1_path;key_2=@key_2;key_2_path=@key_2_path;key_3=@key_3;key_3_path=@key_3_path;key_4=@key_4;key_4_path=@key_4_path;pair_key=@pair_key;case_sensitive=@case_sensitive;quantity=@quantity;quantity_property=@quantity_property;measured_value=@measured_value;floor_path=@floor_path;overall_width=@overall_width;width_deduction=@width_deduction;clear_width_from_leaves=@clear_width_from_leaves;overall_height=@overall_height;lining_thickness=@lining_thickness;threshold_thickness=@threshold_thickness;ramp_selector=@ramp_selector;ramp_reach=@ramp_reach;member_selector=@member_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;door_type_defaults=@door_type_defaults"
+          }
+        ],
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "judged",
+                "expression": {
+                  "kind": "literal",
+                  "value": {
+                    "type": "boolean",
+                    "value": true
+                  }
+                }
+              }
+            ],
+            "decision": {
+              "kind": "holds",
+              "value": "judged"
+            },
+            "fail": "",
+            "undecided": "",
+            "checks": [
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {},
+                  "list": "limit_row;limits=@limits;key_1=@key_1;key_1_path=@key_1_path;key_2=@key_2;key_2_path=@key_2_path;key_3=@key_3;key_3_path=@key_3_path;key_4=@key_4;key_4_path=@key_4_path;pair_key=@pair_key;case_sensitive=@case_sensitive",
+                  "refused": "{why}",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "judge": {
+                        "kind": "truth",
+                        "value": "listed",
+                        "finding": false
+                      },
+                      "fail": "no limit defined for {keys}",
+                      "undecided": "{why}",
+                      "related": "related"
+                    }
+                  ]
+                },
+                "fail": "",
+                "undecided": ""
+              },
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {
+                    "condition": {
+                      "kind": "oneOf",
+                      "parameter": "quantity",
+                      "values": [
+                        "plan-area",
+                        "member-plan-area",
+                        "property",
+                        "measured",
+                        "clear-width",
+                        "clear-height",
+                        "glazing-ratio"
+                      ]
+                    }
+                  },
+                  "list": "limited_values;limits=@limits;key_1=@key_1;key_1_path=@key_1_path;key_2=@key_2;key_2_path=@key_2_path;key_3=@key_3;key_3_path=@key_3_path;key_4=@key_4;key_4_path=@key_4_path;pair_key=@pair_key;case_sensitive=@case_sensitive;quantity=@quantity;quantity_property=@quantity_property;measured_value=@measured_value;floor_path=@floor_path;overall_width=@overall_width;width_deduction=@width_deduction;clear_width_from_leaves=@clear_width_from_leaves;overall_height=@overall_height;lining_thickness=@lining_thickness;threshold_thickness=@threshold_thickness;ramp_selector=@ramp_selector;ramp_reach=@ramp_reach;member_selector=@member_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;door_type_defaults=@door_type_defaults",
+                  "refused": "{why}",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "judge": {
+                        "kind": "range",
+                        "value": "value",
+                        "unit": "area",
+                        "atLeast": [
+                          {
+                            "name": "minimum",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "value",
+                                    "name": "minimum"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "atMost": [
+                          {
+                            "name": "maximum",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "value",
+                                    "name": "maximum"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "none"
+                        },
+                        "grade": true,
+                        "null": {
+                          "kind": "judge"
+                        },
+                        "unmeasured": "{why}"
+                      },
+                      "fail": "{what} is {value:area}{unit}; required {bound:plain}{unit} (limit row {row:fixed0}: {keys})",
+                      "undecided": "{what} is {value:area}{unit}, which straddles the bound {bound:plain}{unit} (limit row {row:fixed0})",
+                      "related": "related"
+                    }
+                  ]
+                },
+                "fail": "",
+                "undecided": ""
+              },
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {
+                    "condition": {
+                      "kind": "equals",
+                      "parameter": "quantity",
+                      "value": "sill-height"
+                    }
+                  },
+                  "list": "limited_values;limits=@limits;key_1=@key_1;key_1_path=@key_1_path;key_2=@key_2;key_2_path=@key_2_path;key_3=@key_3;key_3_path=@key_3_path;key_4=@key_4;key_4_path=@key_4_path;pair_key=@pair_key;case_sensitive=@case_sensitive;quantity=@quantity;quantity_property=@quantity_property;measured_value=@measured_value;floor_path=@floor_path;overall_width=@overall_width;width_deduction=@width_deduction;clear_width_from_leaves=@clear_width_from_leaves;overall_height=@overall_height;lining_thickness=@lining_thickness;threshold_thickness=@threshold_thickness;ramp_selector=@ramp_selector;ramp_reach=@ramp_reach;member_selector=@member_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;door_type_defaults=@door_type_defaults",
+                  "refused": "{why}",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "judge": {
+                        "kind": "range",
+                        "value": "value",
+                        "unit": "area",
+                        "atLeast": [
+                          {
+                            "name": "minimum",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "value",
+                                    "name": "minimum"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "atMost": [
+                          {
+                            "name": "maximum",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "value",
+                                    "name": "maximum"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "none"
+                        },
+                        "grade": true,
+                        "null": {
+                          "kind": "judge"
+                        },
+                        "unmeasured": "{why}"
+                      },
+                      "fail": "{what} is {value:area} m; required {bound:plain} m",
+                      "undecided": "{what} is {value:area} m, which straddles the bound {bound:plain} m",
+                      "related": "related"
+                    }
+                  ],
+                  "combined": {
+                    "separator": "; ",
+                    "fail": "{findings} (limit row {row:fixed0}: {keys})",
+                    "open": "{opens} (limit row {row:fixed0}: {keys})"
+                  }
+                },
+                "fail": "",
+                "undecided": ""
+              },
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {
+                    "condition": {
+                      "kind": "equals",
+                      "parameter": "quantity",
+                      "value": "threshold-step"
+                    }
+                  },
+                  "list": "limited_values;limits=@limits;key_1=@key_1;key_1_path=@key_1_path;key_2=@key_2;key_2_path=@key_2_path;key_3=@key_3;key_3_path=@key_3_path;key_4=@key_4;key_4_path=@key_4_path;pair_key=@pair_key;case_sensitive=@case_sensitive;quantity=@quantity;quantity_property=@quantity_property;measured_value=@measured_value;floor_path=@floor_path;overall_width=@overall_width;width_deduction=@width_deduction;clear_width_from_leaves=@clear_width_from_leaves;overall_height=@overall_height;lining_thickness=@lining_thickness;threshold_thickness=@threshold_thickness;ramp_selector=@ramp_selector;ramp_reach=@ramp_reach;member_selector=@member_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;door_type_defaults=@door_type_defaults",
+                  "refused": "{why}",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "judge": {
+                        "kind": "range",
+                        "value": "value",
+                        "unit": "area",
+                        "atLeast": [
+                          {
+                            "name": "minimum",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "value",
+                                    "name": "minimum"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "atMost": [
+                          {
+                            "name": "maximum",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "value",
+                                    "name": "maximum"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "none"
+                        },
+                        "grade": true,
+                        "null": {
+                          "kind": "judge"
+                        },
+                        "unmeasured": "{why}"
+                      },
+                      "fail": "{named}; required {bound:plain} m",
+                      "undecided": "{named}, which straddles the bound {bound:plain} m",
+                      "related": "related"
+                    }
+                  ],
+                  "combined": {
+                    "separator": "; ",
+                    "fail": "{findings} (limit row {row:fixed0}: {keys})",
+                    "open": "{opens} (limit row {row:fixed0}: {keys})",
+                    "alternatives": {
+                      "group": "side",
+                      "sure": "sure",
+                      "open": "the floor beside {side} may be any of several, and not every one fails"
+                    }
+                  }
+                },
+                "fail": "",
+                "undecided": ""
+              }
+            ]
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "aggregate",
+                  "function": "none",
+                  "over": {
+                    "kind": "measured",
+                    "name": "limit_row;limits=@limits;key_1=@key_1;key_1_path=@key_1_path;key_2=@key_2;key_2_path=@key_2_path;key_3=@key_3;key_3_path=@key_3_path;key_4=@key_4;key_4_path=@key_4_path;pair_key=@pair_key;case_sensitive=@case_sensitive"
+                  },
+                  "value": {
+                    "kind": "not",
+                    "operand": {
+                      "kind": "and",
+                      "operands": [
+                        {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "listed"
+                        }
+                      ]
+                    }
+                  },
+                  "label": "no item fails"
+                },
+                {
+                  "kind": "aggregate",
+                  "function": "none",
+                  "over": {
+                    "kind": "measured",
+                    "name": "limited_values;limits=@limits;key_1=@key_1;key_1_path=@key_1_path;key_2=@key_2;key_2_path=@key_2_path;key_3=@key_3;key_3_path=@key_3_path;key_4=@key_4;key_4_path=@key_4_path;pair_key=@pair_key;case_sensitive=@case_sensitive;quantity=@quantity;quantity_property=@quantity_property;measured_value=@measured_value;floor_path=@floor_path;overall_width=@overall_width;width_deduction=@width_deduction;clear_width_from_leaves=@clear_width_from_leaves;overall_height=@overall_height;lining_thickness=@lining_thickness;threshold_thickness=@threshold_thickness;ramp_selector=@ramp_selector;ramp_reach=@ramp_reach;member_selector=@member_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;door_type_defaults=@door_type_defaults"
+                  },
+                  "value": {
+                    "kind": "not",
+                    "operand": {
+                      "kind": "and",
+                      "operands": [
+                        {
+                          "kind": "compare",
+                          "operator": "greaterThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "value"
+                          },
+                          "right": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "minimum"
+                          }
+                        },
+                        {
+                          "kind": "compare",
+                          "operator": "lessThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "value"
+                          },
+                          "right": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "maximum"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "label": "no item fails"
+                },
+                {
+                  "kind": "aggregate",
+                  "function": "none",
+                  "over": {
+                    "kind": "measured",
+                    "name": "limited_values;limits=@limits;key_1=@key_1;key_1_path=@key_1_path;key_2=@key_2;key_2_path=@key_2_path;key_3=@key_3;key_3_path=@key_3_path;key_4=@key_4;key_4_path=@key_4_path;pair_key=@pair_key;case_sensitive=@case_sensitive;quantity=@quantity;quantity_property=@quantity_property;measured_value=@measured_value;floor_path=@floor_path;overall_width=@overall_width;width_deduction=@width_deduction;clear_width_from_leaves=@clear_width_from_leaves;overall_height=@overall_height;lining_thickness=@lining_thickness;threshold_thickness=@threshold_thickness;ramp_selector=@ramp_selector;ramp_reach=@ramp_reach;member_selector=@member_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;door_type_defaults=@door_type_defaults"
+                  },
+                  "value": {
+                    "kind": "not",
+                    "operand": {
+                      "kind": "and",
+                      "operands": [
+                        {
+                          "kind": "compare",
+                          "operator": "greaterThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "value"
+                          },
+                          "right": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "minimum"
+                          }
+                        },
+                        {
+                          "kind": "compare",
+                          "operator": "lessThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "value"
+                          },
+                          "right": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "maximum"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "label": "no item fails"
+                },
+                {
+                  "kind": "aggregate",
+                  "function": "none",
+                  "over": {
+                    "kind": "measured",
+                    "name": "limited_values;limits=@limits;key_1=@key_1;key_1_path=@key_1_path;key_2=@key_2;key_2_path=@key_2_path;key_3=@key_3;key_3_path=@key_3_path;key_4=@key_4;key_4_path=@key_4_path;pair_key=@pair_key;case_sensitive=@case_sensitive;quantity=@quantity;quantity_property=@quantity_property;measured_value=@measured_value;floor_path=@floor_path;overall_width=@overall_width;width_deduction=@width_deduction;clear_width_from_leaves=@clear_width_from_leaves;overall_height=@overall_height;lining_thickness=@lining_thickness;threshold_thickness=@threshold_thickness;ramp_selector=@ramp_selector;ramp_reach=@ramp_reach;member_selector=@member_selector;relationship=@relationship;direction=@direction;follow_chain=@follow_chain;path=@path;skip_absent_relationship_ends=@skip_absent_relationship_ends;door_type_defaults=@door_type_defaults"
+                  },
+                  "value": {
+                    "kind": "not",
+                    "operand": {
+                      "kind": "and",
+                      "operands": [
+                        {
+                          "kind": "compare",
+                          "operator": "greaterThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "value"
+                          },
+                          "right": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "minimum"
+                          }
+                        },
+                        {
+                          "kind": "compare",
+                          "operator": "lessThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "value"
+                          },
+                          "right": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "maximum"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "label": "no item fails"
+                },
+                {
+                  "kind": "literal",
+                  "value": {
+                    "type": "boolean",
+                    "value": true
+                  }
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.aggregate",
+                      "label": "no item fails",
+                      "fields": {
+                        "function": "none"
+                      },
+                      "inputs": {
+                        "over": {
+                          "block": {
+                            "type": "members.limit_row",
+                            "fields": {
+                              "case_sensitive": "@case_sensitive",
+                              "key_1": "@key_1",
+                              "key_1_path": "@key_1_path",
+                              "key_2": "@key_2",
+                              "key_2_path": "@key_2_path",
+                              "key_3": "@key_3",
+                              "key_3_path": "@key_3_path",
+                              "key_4": "@key_4",
+                              "key_4_path": "@key_4_path",
+                              "limits": "@limits",
+                              "pair_key": "@pair_key"
+                            }
+                          }
+                        },
+                        "value": {
+                          "block": {
+                            "type": "expression.not",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.and",
+                                  "inputs": {
+                                    "operands": {
+                                      "blocks": [
+                                        {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "listed",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.aggregate",
+                      "label": "no item fails",
+                      "fields": {
+                        "function": "none"
+                      },
+                      "inputs": {
+                        "over": {
+                          "block": {
+                            "type": "members.limited_values",
+                            "fields": {
+                              "case_sensitive": "@case_sensitive",
+                              "clear_width_from_leaves": "@clear_width_from_leaves",
+                              "direction": "@direction",
+                              "door_type_defaults": "@door_type_defaults",
+                              "floor_path": "@floor_path",
+                              "follow_chain": "@follow_chain",
+                              "key_1": "@key_1",
+                              "key_1_path": "@key_1_path",
+                              "key_2": "@key_2",
+                              "key_2_path": "@key_2_path",
+                              "key_3": "@key_3",
+                              "key_3_path": "@key_3_path",
+                              "key_4": "@key_4",
+                              "key_4_path": "@key_4_path",
+                              "limits": "@limits",
+                              "lining_thickness": "@lining_thickness",
+                              "measured_value": "@measured_value",
+                              "member_selector": "@member_selector",
+                              "overall_height": "@overall_height",
+                              "overall_width": "@overall_width",
+                              "pair_key": "@pair_key",
+                              "path": "@path",
+                              "quantity": "@quantity",
+                              "quantity_property": "@quantity_property",
+                              "ramp_reach": "@ramp_reach",
+                              "ramp_selector": "@ramp_selector",
+                              "relationship": "@relationship",
+                              "skip_absent_relationship_ends": "@skip_absent_relationship_ends",
+                              "threshold_thickness": "@threshold_thickness",
+                              "width_deduction": "@width_deduction"
+                            }
+                          }
+                        },
+                        "value": {
+                          "block": {
+                            "type": "expression.not",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.and",
+                                  "inputs": {
+                                    "operands": {
+                                      "blocks": [
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "greaterThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "value",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "minimum",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "lessThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "value",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "maximum",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.aggregate",
+                      "label": "no item fails",
+                      "fields": {
+                        "function": "none"
+                      },
+                      "inputs": {
+                        "over": {
+                          "block": {
+                            "type": "members.limited_values",
+                            "fields": {
+                              "case_sensitive": "@case_sensitive",
+                              "clear_width_from_leaves": "@clear_width_from_leaves",
+                              "direction": "@direction",
+                              "door_type_defaults": "@door_type_defaults",
+                              "floor_path": "@floor_path",
+                              "follow_chain": "@follow_chain",
+                              "key_1": "@key_1",
+                              "key_1_path": "@key_1_path",
+                              "key_2": "@key_2",
+                              "key_2_path": "@key_2_path",
+                              "key_3": "@key_3",
+                              "key_3_path": "@key_3_path",
+                              "key_4": "@key_4",
+                              "key_4_path": "@key_4_path",
+                              "limits": "@limits",
+                              "lining_thickness": "@lining_thickness",
+                              "measured_value": "@measured_value",
+                              "member_selector": "@member_selector",
+                              "overall_height": "@overall_height",
+                              "overall_width": "@overall_width",
+                              "pair_key": "@pair_key",
+                              "path": "@path",
+                              "quantity": "@quantity",
+                              "quantity_property": "@quantity_property",
+                              "ramp_reach": "@ramp_reach",
+                              "ramp_selector": "@ramp_selector",
+                              "relationship": "@relationship",
+                              "skip_absent_relationship_ends": "@skip_absent_relationship_ends",
+                              "threshold_thickness": "@threshold_thickness",
+                              "width_deduction": "@width_deduction"
+                            }
+                          }
+                        },
+                        "value": {
+                          "block": {
+                            "type": "expression.not",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.and",
+                                  "inputs": {
+                                    "operands": {
+                                      "blocks": [
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "greaterThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "value",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "minimum",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "lessThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "value",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "maximum",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.aggregate",
+                      "label": "no item fails",
+                      "fields": {
+                        "function": "none"
+                      },
+                      "inputs": {
+                        "over": {
+                          "block": {
+                            "type": "members.limited_values",
+                            "fields": {
+                              "case_sensitive": "@case_sensitive",
+                              "clear_width_from_leaves": "@clear_width_from_leaves",
+                              "direction": "@direction",
+                              "door_type_defaults": "@door_type_defaults",
+                              "floor_path": "@floor_path",
+                              "follow_chain": "@follow_chain",
+                              "key_1": "@key_1",
+                              "key_1_path": "@key_1_path",
+                              "key_2": "@key_2",
+                              "key_2_path": "@key_2_path",
+                              "key_3": "@key_3",
+                              "key_3_path": "@key_3_path",
+                              "key_4": "@key_4",
+                              "key_4_path": "@key_4_path",
+                              "limits": "@limits",
+                              "lining_thickness": "@lining_thickness",
+                              "measured_value": "@measured_value",
+                              "member_selector": "@member_selector",
+                              "overall_height": "@overall_height",
+                              "overall_width": "@overall_width",
+                              "pair_key": "@pair_key",
+                              "path": "@path",
+                              "quantity": "@quantity",
+                              "quantity_property": "@quantity_property",
+                              "ramp_reach": "@ramp_reach",
+                              "ramp_selector": "@ramp_selector",
+                              "relationship": "@relationship",
+                              "skip_absent_relationship_ends": "@skip_absent_relationship_ends",
+                              "threshold_thickness": "@threshold_thickness",
+                              "width_deduction": "@width_deduction"
+                            }
+                          }
+                        },
+                        "value": {
+                          "block": {
+                            "type": "expression.not",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.and",
+                                  "inputs": {
+                                    "operands": {
+                                      "blocks": [
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "greaterThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "value",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "minimum",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "lessThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "value",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "maximum",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.literal",
+                      "fields": {
+                        "value": {
+                          "type": "boolean",
+                          "value": true
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.level-spacing",
@@ -78978,6 +79869,1226 @@
             {
               "language": "de",
               "text": "Der größte Betrag unter den gemessenen Lagen, in Metern: die binäre Rundung dezimaler Koordinaten wächst mit ihm."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "limit_row",
+      "parameters": [
+        {
+          "key": "limits",
+          "kind": {
+            "type": "table"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's limit rows: a text pattern per key (`key_1` … `key_4`, `other_side` for the pair key), and an optional `minimum` and `maximum`."
+            },
+            {
+              "language": "de",
+              "text": "Die Grenzzeilen der Regel: je Schlüssel ein Textmuster (`key_1` … `key_4`, `other_side` für den Paarschlüssel) und ein optionales `minimum` und `maximum`."
+            }
+          ],
+          "references": "table"
+        },
+        {
+          "key": "key_1",
+          "kind": {
+            "type": "property"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The property key 1 is read from, written `set/name`."
+            },
+            {
+              "language": "de",
+              "text": "Die Eigenschaft, aus der Schlüssel 1 gelesen wird, geschrieben `set/name`."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "key_1_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps to the objects key 1 is read on; the object itself without it."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte zu den Objekten, an denen Schlüssel 1 gelesen wird; ohne Angabe das Objekt selbst."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "key_2",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The property key 2 is read from, written `set/name`."
+            },
+            {
+              "language": "de",
+              "text": "Die Eigenschaft, aus der Schlüssel 2 gelesen wird, geschrieben `set/name`."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "key_2_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps to the objects key 2 is read on; the object itself without it."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte zu den Objekten, an denen Schlüssel 2 gelesen wird; ohne Angabe das Objekt selbst."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "key_3",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The property key 3 is read from, written `set/name`."
+            },
+            {
+              "language": "de",
+              "text": "Die Eigenschaft, aus der Schlüssel 3 gelesen wird, geschrieben `set/name`."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "key_3_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps to the objects key 3 is read on; the object itself without it."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte zu den Objekten, an denen Schlüssel 3 gelesen wird; ohne Angabe das Objekt selbst."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "key_4",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The property key 4 is read from, written `set/name`."
+            },
+            {
+              "language": "de",
+              "text": "Die Eigenschaft, aus der Schlüssel 4 gelesen wird, geschrieben `set/name`."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "key_4_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps to the objects key 4 is read on; the object itself without it."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte zu den Objekten, an denen Schlüssel 4 gelesen wird; ohne Angabe das Objekt selbst."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "pair_key",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The key read on each face of the object along the derived adjacency: `key_1` … `key_4`."
+            },
+            {
+              "language": "de",
+              "text": "Der Schlüssel, der an jeder Seite des Objekts entlang der abgeleiteten Nachbarschaft gelesen wird: `key_1` … `key_4`."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "case_sensitive",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the rows' patterns match case; they do without it."
+            },
+            {
+              "language": "de",
+              "text": "Ob die Muster der Zeilen Groß- und Kleinschreibung unterscheiden; ohne Angabe tun sie es."
+            }
+          ],
+          "references": "boolean"
+        }
+      ],
+      "services": [
+        "property-resolution",
+        "relationship-selection"
+      ],
+      "exactness": "stated",
+      "notEvaluated": [
+        "a key a row tests cannot be read",
+        "rows tie for most specific"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Limit row"
+        },
+        {
+          "language": "de",
+          "text": "Grenzzeile"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "One item: the most specific row of `limits` the object's keys select, as `keyed-limit` selects it, or that none matches."
+        },
+        {
+          "language": "de",
+          "text": "Ein Element: die spezifischste Zeile von `limits`, die die Schlüssel des Objekts wählen, wie `keyed-limit` sie wählt, oder dass keine passt."
+        }
+      ],
+      "fields": [
+        {
+          "name": "listed",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Listed"
+            },
+            {
+              "language": "de",
+              "text": "Gelistet"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether a row matches the object's keys."
+            },
+            {
+              "language": "de",
+              "text": "Ob eine Zeile zu den Schlüsseln des Objekts passt."
+            }
+          ]
+        },
+        {
+          "name": "row",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Row"
+            },
+            {
+              "language": "de",
+              "text": "Zeile"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The index of the row the object's keys select, from 0; `null` where none matches."
+            },
+            {
+              "language": "de",
+              "text": "Der Index der Zeile, die die Schlüssel des Objekts wählen, ab 0; `null`, wo keine passt."
+            }
+          ]
+        },
+        {
+          "name": "keys",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Keys"
+            },
+            {
+              "language": "de",
+              "text": "Schlüssel"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The keys as a message describes them: each property and its value."
+            },
+            {
+              "language": "de",
+              "text": "Die Schlüssel, wie eine Meldung sie beschreibt: jede Eigenschaft und ihr Wert."
+            }
+          ]
+        },
+        {
+          "name": "related",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Related"
+            },
+            {
+              "language": "de",
+              "text": "Bezogen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects a key was read on along its path."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, an denen ein Schlüssel entlang seines Pfads gelesen wurde."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "limited_values",
+      "parameters": [
+        {
+          "key": "limits",
+          "kind": {
+            "type": "table"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's limit rows: a text pattern per key (`key_1` … `key_4`, `other_side` for the pair key), and an optional `minimum` and `maximum`."
+            },
+            {
+              "language": "de",
+              "text": "Die Grenzzeilen der Regel: je Schlüssel ein Textmuster (`key_1` … `key_4`, `other_side` für den Paarschlüssel) und ein optionales `minimum` und `maximum`."
+            }
+          ],
+          "references": "table"
+        },
+        {
+          "key": "key_1",
+          "kind": {
+            "type": "property"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The property key 1 is read from, written `set/name`."
+            },
+            {
+              "language": "de",
+              "text": "Die Eigenschaft, aus der Schlüssel 1 gelesen wird, geschrieben `set/name`."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "key_1_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps to the objects key 1 is read on; the object itself without it."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte zu den Objekten, an denen Schlüssel 1 gelesen wird; ohne Angabe das Objekt selbst."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "key_2",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The property key 2 is read from, written `set/name`."
+            },
+            {
+              "language": "de",
+              "text": "Die Eigenschaft, aus der Schlüssel 2 gelesen wird, geschrieben `set/name`."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "key_2_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps to the objects key 2 is read on; the object itself without it."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte zu den Objekten, an denen Schlüssel 2 gelesen wird; ohne Angabe das Objekt selbst."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "key_3",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The property key 3 is read from, written `set/name`."
+            },
+            {
+              "language": "de",
+              "text": "Die Eigenschaft, aus der Schlüssel 3 gelesen wird, geschrieben `set/name`."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "key_3_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps to the objects key 3 is read on; the object itself without it."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte zu den Objekten, an denen Schlüssel 3 gelesen wird; ohne Angabe das Objekt selbst."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "key_4",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The property key 4 is read from, written `set/name`."
+            },
+            {
+              "language": "de",
+              "text": "Die Eigenschaft, aus der Schlüssel 4 gelesen wird, geschrieben `set/name`."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "key_4_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps to the objects key 4 is read on; the object itself without it."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte zu den Objekten, an denen Schlüssel 4 gelesen wird; ohne Angabe das Objekt selbst."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "pair_key",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The key read on each face of the object along the derived adjacency: `key_1` … `key_4`."
+            },
+            {
+              "language": "de",
+              "text": "Der Schlüssel, der an jeder Seite des Objekts entlang der abgeleiteten Nachbarschaft gelesen wird: `key_1` … `key_4`."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "case_sensitive",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the rows' patterns match case; they do without it."
+            },
+            {
+              "language": "de",
+              "text": "Ob die Muster der Zeilen Groß- und Kleinschreibung unterscheiden; ohne Angabe tun sie es."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "quantity",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "clear-height",
+              "clear-width",
+              "glazing-ratio",
+              "measured",
+              "member-plan-area",
+              "plan-area",
+              "property",
+              "sill-height",
+              "threshold-step"
+            ]
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "What the rows bound, as `keyed-limit`'s `quantity` names it."
+            },
+            {
+              "language": "de",
+              "text": "Was die Zeilen begrenzen, wie `quantity` von `keyed-limit` es nennt."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "quantity_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The property a stated quantity, clear width or height or glazing ratio is read from."
+            },
+            {
+              "language": "de",
+              "text": "Die Eigenschaft, aus der eine angegebene Größe, lichte Breite oder Höhe oder ein Verglasungsanteil gelesen wird."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "measured_value",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The measured value `measured` reads, as written."
+            },
+            {
+              "language": "de",
+              "text": "Der Messwert, den `measured` liest, wie geschrieben."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "floor_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps to the spaces whose floors a sill height or threshold step is measured from."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte zu den Räumen, von deren Böden eine Brüstungshöhe oder Schwellenstufe gemessen wird."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "overall_width",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The door's overall width, less a deduction for its clear width."
+            },
+            {
+              "language": "de",
+              "text": "Die Gesamtbreite der Tür, abzüglich eines Abzugs für ihre lichte Breite."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "width_deduction",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's deduction from the overall width, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Der Abzug der Regel von der Gesamtbreite, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "clear_width_from_leaves",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "passage",
+              "widest-leaf"
+            ]
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether, and how, a clear width is derived from the door's leaves."
+            },
+            {
+              "language": "de",
+              "text": "Ob und wie eine lichte Breite aus den Flügeln der Tür abgeleitet wird."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "overall_height",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The door's overall height, less its lining and threshold for its clear height."
+            },
+            {
+              "language": "de",
+              "text": "Die Gesamthöhe der Tür, abzüglich Futter und Schwelle für ihre lichte Höhe."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "lining_thickness",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The head lining's thickness the door states."
+            },
+            {
+              "language": "de",
+              "text": "Die Dicke des oberen Futters, die die Tür angibt."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "threshold_thickness",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The threshold's thickness the door states."
+            },
+            {
+              "language": "de",
+              "text": "Die Dicke der Schwelle, die die Tür angibt."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "ramp_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The ramps that may be a door side's floor: source kinds, `,`-separated, or `@` a selector parameter of the rule."
+            },
+            {
+              "language": "de",
+              "text": "Die Rampen, die der Boden einer Türseite sein können: Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "ramp_reach",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How near the door a ramp must lie in plan, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Wie nah an der Tür eine Rampe im Grundriss liegen muss, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "member_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The members whose footprints `member-plan-area` sums."
+            },
+            {
+              "language": "de",
+              "text": "Die Glieder, deren Grundflächen `member-plan-area` summiert."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "relationship",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship to the members, as `relationship` declares it."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehung zu den Gliedern, wie `relationship` sie angibt."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "direction",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The direction the relationship is followed in."
+            },
+            {
+              "language": "de",
+              "text": "Die Richtung, in der die Beziehung verfolgt wird."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "follow_chain",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the relationship is followed as a chain."
+            },
+            {
+              "language": "de",
+              "text": "Ob die Beziehung als Kette verfolgt wird."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps to the members."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte zu den Gliedern."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "skip_absent_relationship_ends",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether a relationship end that is absent is skipped."
+            },
+            {
+              "language": "de",
+              "text": "Ob ein fehlendes Beziehungsende übersprungen wird."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "door_type_defaults",
+          "kind": {
+            "type": "table"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's defaults per door type, used where the door states no value."
+            },
+            {
+              "language": "de",
+              "text": "Die Vorgaben der Regel je Türtyp, verwendet, wo die Tür keinen Wert angibt."
+            }
+          ],
+          "references": "table"
+        }
+      ],
+      "services": [
+        "property-resolution",
+        "relationship-selection",
+        "vertical-extent"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "a key a row tests cannot be read, or rows tie for most specific",
+        "the quantity cannot be measured"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Limited values"
+        },
+        {
+          "language": "de",
+          "text": "Begrenzte Werte"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "What the row the object's keys select bounds, with its bounds, as `keyed-limit` measures it: one item for a quantity of the object, one per floor for a sill height, one per floor a side of a door may step onto for a threshold step; none where no row with a bound applies."
+        },
+        {
+          "language": "de",
+          "text": "Was die Zeile, die die Schlüssel des Objekts wählen, begrenzt, mit ihren Grenzen, wie `keyed-limit` es misst: ein Element für eine Größe des Objekts, eines je Boden für eine Brüstungshöhe, eines je Boden, auf den eine Türseite treten kann, für eine Schwellenstufe; keines, wo keine Zeile mit Grenze gilt."
+        }
+      ],
+      "fields": [
+        {
+          "name": "row",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Row"
+            },
+            {
+              "language": "de",
+              "text": "Zeile"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The index of the row the object's keys select, from 0."
+            },
+            {
+              "language": "de",
+              "text": "Der Index der Zeile, die die Schlüssel des Objekts wählen, ab 0."
+            }
+          ]
+        },
+        {
+          "name": "keys",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Keys"
+            },
+            {
+              "language": "de",
+              "text": "Schlüssel"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The keys as a message describes them: each property and its value."
+            },
+            {
+              "language": "de",
+              "text": "Die Schlüssel, wie eine Meldung sie beschreibt: jede Eigenschaft und ihr Wert."
+            }
+          ]
+        },
+        {
+          "name": "value",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Value"
+            },
+            {
+              "language": "de",
+              "text": "Wert"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The bounded value in coherent SI units, as displayed against the bounds for a door's values and steps; undecided where it cannot be measured."
+            },
+            {
+              "language": "de",
+              "text": "Der begrenzte Wert in kohärenten SI-Einheiten, für Türwerte und Stufen wie gegen die Grenzen angezeigt; unentschieden, wo er nicht messbar ist."
+            }
+          ]
+        },
+        {
+          "name": "minimum",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Minimum"
+            },
+            {
+              "language": "de",
+              "text": "Minimum"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The row's minimum; `null` where none."
+            },
+            {
+              "language": "de",
+              "text": "Das Minimum der Zeile; `null`, wo keines."
+            }
+          ]
+        },
+        {
+          "name": "maximum",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Maximum"
+            },
+            {
+              "language": "de",
+              "text": "Maximum"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The row's maximum; `null` where none."
+            },
+            {
+              "language": "de",
+              "text": "Das Maximum der Zeile; `null`, wo keines."
+            }
+          ]
+        },
+        {
+          "name": "what",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "What"
+            },
+            {
+              "language": "de",
+              "text": "Was"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "How a message names the value and how it was read."
+            },
+            {
+              "language": "de",
+              "text": "Wie eine Meldung den Wert nennt und wie er gelesen wurde."
+            }
+          ]
+        },
+        {
+          "name": "unit",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Unit"
+            },
+            {
+              "language": "de",
+              "text": "Einheit"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The value's unit after a space; empty for a plain number."
+            },
+            {
+              "language": "de",
+              "text": "Die Einheit des Werts nach einem Leerzeichen; leer für eine reine Zahl."
+            }
+          ]
+        },
+        {
+          "name": "named",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Step"
+            },
+            {
+              "language": "de",
+              "text": "Stufe"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "A threshold step as a message names it, its floor and measure included."
+            },
+            {
+              "language": "de",
+              "text": "Eine Schwellenstufe, wie eine Meldung sie nennt, mit Boden und Maß."
+            }
+          ]
+        },
+        {
+          "name": "side",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Side"
+            },
+            {
+              "language": "de",
+              "text": "Seite"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The space a threshold step's side lies beside."
+            },
+            {
+              "language": "de",
+              "text": "Der Raum, neben dem die Seite einer Schwellenstufe liegt."
+            }
+          ]
+        },
+        {
+          "name": "sure",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Sure floor"
+            },
+            {
+              "language": "de",
+              "text": "Sicherer Boden"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the side surely steps onto this floor; it is one of several possible ones otherwise."
+            },
+            {
+              "language": "de",
+              "text": "Ob die Seite sicher auf diesen Boden tritt; sonst ist er einer von mehreren möglichen."
+            }
+          ]
+        },
+        {
+          "name": "related",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Related"
+            },
+            {
+              "language": "de",
+              "text": "Bezogen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects a key was read on, and the floor or members the value was measured with."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, an denen ein Schlüssel gelesen wurde, und der Boden oder die Glieder, mit denen der Wert gemessen wurde."
             }
           ]
         }

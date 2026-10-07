@@ -617,6 +617,23 @@ open outcomes only the first is reported, and none where an earlier check
 of the form already left the object open, as a capability reporting one
 doubt per object did.
 
+With `combined` (`Combined`), every item's outcome is one outcome on the
+object: where any item fails, one finding whose message reads
+`{findings}`, the failing items' messages joined by its separator, graded
+by the worst and relating every object they relate; otherwise, where any
+is open, one open outcome (`{opens}`) for the first one's reason;
+otherwise a pass. Its words read the first item's fields, which every
+item shares (a window's limit row, judged against each floor beside it).
+With `alternatives` (`Alternatives`), the items of one group (a text
+field) are the candidates for one unknown (the floor a door's side steps
+onto), those whose truth `sure` holds surely among them: the group fails
+where a sure item fails, or where none is sure and every item surely
+fails; it passes where every item passes; otherwise it is open with its
+items' open outcomes, or with its own words where none is open. A measured
+member may carry evidence of its own (`MeasuredMember::evidence`, the
+floor it was measured above): an outcome on that member cites it, an
+outcome on another never does.
+
 With `merged`, the findings of several items worded alike are one
 finding on the object, relating every object each related (sorted, each
 once): one finding per distinct defect, not one per item. A form's check
@@ -1487,6 +1504,35 @@ capability's order and words; the tolerance defaults to 0 m². The finding
 reads `host is empty: its openings ({voided:cited_ids}) void {voided:m2} of
 its {face:m2} face` and relates the counted openings.
 
+### `keyed-limit`
+
+One form, judged by its checks (`Holds` over the literal `judged`). The
+row comes first, over the measured list `limit_row;limits=@limits;key_1=@key_1;key_1_path=@key_1_path;…;pair_key=@pair_key;case_sensitive=@case_sensitive`:
+one item, the most specific row the object's keys select (`listed`, its
+index `row`, the keys as a message describes them `keys`, the objects a
+path key was read on `related`). No matching row is a finding (`no limit
+defined for {keys}`); keys that cannot decide the row (a path key whose
+objects disagree or reach none is unknown, never no row: D16) or rows
+tying leave the object open with the list's refusal. Then the measured
+list `limited_values` (the row's arguments and every parameter a quantity
+reads) states what the row bounds with its `minimum` and `maximum`, one
+check per form of `quantity`:
+
+| Check | When `quantity` is | Items | Judgement |
+| --- | --- | --- | --- |
+| value | `plan-area`, `member-plan-area`, `property`, `measured`, `clear-width`, `clear-height`, `glazing-ratio` | one value of the object (`what`, `unit`) | a range against the row's bounds, graded: `{what} is {value:area}{unit}; required {bound:plain}{unit} (limit row {row:fixed0}: {keys})`, straddling it open |
+| sill | `sill-height` | the sill height above each floor beside a window, each citing that floor's extent | `combined`: every failing floor in one finding, `(limit row …)` appended; any failing floor a finding beside an unknown one (D15) |
+| step | `threshold-step` | the step onto each floor a side of a door may step onto (`side`, `sure`) | `combined` with `alternatives` per side: a side fails where a floor it surely steps onto fails, or every floor it may |
+
+The list reads displayed values as the capability did: a clear width or
+height, glazing ratio or measured value snapped to the precision it is
+shown at before it is judged. A member area with members the selection
+cannot decide is known only from below, an undecided value. The list is
+read with the run's resolver, so a key a classification derives is read
+as derived. The declaration is the list's own argument check
+(`Check::Arguments`): the keys, the rows, then the quantity, in the
+capability's order and words.
+
 ## Binding and running a rule
 
 The rules crate's `templates` module runs a template
@@ -2036,6 +2082,19 @@ and place (overlapping, side by side, reaching past the wall, small)
 under random tolerances, minimum areas and faces; by the `empty-host`
 rules of the case `openings`, recorded before the switch; and by its fork,
 the truth itself, on the fixtures.
+
+`keyed-limit` is held to `keyed_limit/reference.rs`
+(`axioval_rules::reference::KeyedLimit`) on every fixture of
+`tests/keyed_limit.rs` and `tests/keyed_limit_pairs.rs` under
+`Parity::contract()`, its messages asserted literally (every quantity,
+path and pair keys, derived groups and classifications, no row, ties,
+refused declarations, sill heights above unknown and tessellated floors,
+threshold steps with and without ramps); by generated doors keyed by
+operation types a row selects, none selects or that cannot be read, with
+stated, unreadable and overall widths under random deductions and
+bounds, and generated windows beside random spaces, some unmeasured, some
+tessellated; and by the `keyed-limit` rules of the case `openings`,
+recorded before the switch. It is never forked.
 
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the

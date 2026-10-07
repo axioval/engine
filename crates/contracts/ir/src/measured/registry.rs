@@ -1491,6 +1491,439 @@ macro_rules! plain {
     };
 }
 
+/// The rows of a keyed table and the keys an object selects one by, as
+/// `keyed-limit` reads them.
+pub(super) const LIMIT_ROWS: [MeasuredParameter; 11] = [
+    MeasuredParameter {
+        key: "limits",
+        kind: MeasuredParameterKind::Table,
+        required: true,
+        default: None,
+        help: &en_de(
+            "The rule's limit rows: a text pattern per key (`key_1` … `key_4`, `other_side` for the pair key), and an optional `minimum` and `maximum`.",
+            "Die Grenzzeilen der Regel: je Schlüssel ein Textmuster (`key_1` … `key_4`, `other_side` für den Paarschlüssel) und ein optionales `minimum` und `maximum`.",
+        ),
+    },
+    MeasuredParameter {
+        key: "key_1",
+        kind: MeasuredParameterKind::Property,
+        required: true,
+        default: None,
+        help: &en_de(
+            "The property key 1 is read from, written `set/name`.",
+            "Die Eigenschaft, aus der Schlüssel 1 gelesen wird, geschrieben `set/name`.",
+        ),
+    },
+    MeasuredParameter {
+        key: "key_1_path",
+        kind: MeasuredParameterKind::Path,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The relationship steps to the objects key 1 is read on; the object itself without it.",
+            "Die Beziehungsschritte zu den Objekten, an denen Schlüssel 1 gelesen wird; ohne Angabe das Objekt selbst.",
+        ),
+    },
+    MeasuredParameter {
+        key: "key_2",
+        kind: MeasuredParameterKind::Property,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The property key 2 is read from, written `set/name`.",
+            "Die Eigenschaft, aus der Schlüssel 2 gelesen wird, geschrieben `set/name`.",
+        ),
+    },
+    MeasuredParameter {
+        key: "key_2_path",
+        kind: MeasuredParameterKind::Path,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The relationship steps to the objects key 2 is read on; the object itself without it.",
+            "Die Beziehungsschritte zu den Objekten, an denen Schlüssel 2 gelesen wird; ohne Angabe das Objekt selbst.",
+        ),
+    },
+    MeasuredParameter {
+        key: "key_3",
+        kind: MeasuredParameterKind::Property,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The property key 3 is read from, written `set/name`.",
+            "Die Eigenschaft, aus der Schlüssel 3 gelesen wird, geschrieben `set/name`.",
+        ),
+    },
+    MeasuredParameter {
+        key: "key_3_path",
+        kind: MeasuredParameterKind::Path,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The relationship steps to the objects key 3 is read on; the object itself without it.",
+            "Die Beziehungsschritte zu den Objekten, an denen Schlüssel 3 gelesen wird; ohne Angabe das Objekt selbst.",
+        ),
+    },
+    MeasuredParameter {
+        key: "key_4",
+        kind: MeasuredParameterKind::Property,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The property key 4 is read from, written `set/name`.",
+            "Die Eigenschaft, aus der Schlüssel 4 gelesen wird, geschrieben `set/name`.",
+        ),
+    },
+    MeasuredParameter {
+        key: "key_4_path",
+        kind: MeasuredParameterKind::Path,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The relationship steps to the objects key 4 is read on; the object itself without it.",
+            "Die Beziehungsschritte zu den Objekten, an denen Schlüssel 4 gelesen wird; ohne Angabe das Objekt selbst.",
+        ),
+    },
+    MeasuredParameter {
+        key: "pair_key",
+        kind: MeasuredParameterKind::Text,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The key read on each face of the object along the derived adjacency: `key_1` … `key_4`.",
+            "Der Schlüssel, der an jeder Seite des Objekts entlang der abgeleiteten Nachbarschaft gelesen wird: `key_1` … `key_4`.",
+        ),
+    },
+    MeasuredParameter {
+        key: "case_sensitive",
+        kind: MeasuredParameterKind::Truth,
+        required: false,
+        default: None,
+        help: &en_de(
+            "Whether the rows' patterns match case; they do without it.",
+            "Ob die Muster der Zeilen Groß- und Kleinschreibung unterscheiden; ohne Angabe tun sie es.",
+        ),
+    },
+];
+
+/// [`LIMIT_ROWS`] and what the rows bound, as `keyed-limit` reads it.
+pub(super) const LIMITED: [MeasuredParameter; 30] = [
+    MeasuredParameter {
+        key: "limits",
+        kind: MeasuredParameterKind::Table,
+        required: true,
+        default: None,
+        help: &en_de(
+            "The rule's limit rows: a text pattern per key (`key_1` … `key_4`, `other_side` for the pair key), and an optional `minimum` and `maximum`.",
+            "Die Grenzzeilen der Regel: je Schlüssel ein Textmuster (`key_1` … `key_4`, `other_side` für den Paarschlüssel) und ein optionales `minimum` und `maximum`.",
+        ),
+    },
+    MeasuredParameter {
+        key: "key_1",
+        kind: MeasuredParameterKind::Property,
+        required: true,
+        default: None,
+        help: &en_de(
+            "The property key 1 is read from, written `set/name`.",
+            "Die Eigenschaft, aus der Schlüssel 1 gelesen wird, geschrieben `set/name`.",
+        ),
+    },
+    MeasuredParameter {
+        key: "key_1_path",
+        kind: MeasuredParameterKind::Path,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The relationship steps to the objects key 1 is read on; the object itself without it.",
+            "Die Beziehungsschritte zu den Objekten, an denen Schlüssel 1 gelesen wird; ohne Angabe das Objekt selbst.",
+        ),
+    },
+    MeasuredParameter {
+        key: "key_2",
+        kind: MeasuredParameterKind::Property,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The property key 2 is read from, written `set/name`.",
+            "Die Eigenschaft, aus der Schlüssel 2 gelesen wird, geschrieben `set/name`.",
+        ),
+    },
+    MeasuredParameter {
+        key: "key_2_path",
+        kind: MeasuredParameterKind::Path,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The relationship steps to the objects key 2 is read on; the object itself without it.",
+            "Die Beziehungsschritte zu den Objekten, an denen Schlüssel 2 gelesen wird; ohne Angabe das Objekt selbst.",
+        ),
+    },
+    MeasuredParameter {
+        key: "key_3",
+        kind: MeasuredParameterKind::Property,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The property key 3 is read from, written `set/name`.",
+            "Die Eigenschaft, aus der Schlüssel 3 gelesen wird, geschrieben `set/name`.",
+        ),
+    },
+    MeasuredParameter {
+        key: "key_3_path",
+        kind: MeasuredParameterKind::Path,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The relationship steps to the objects key 3 is read on; the object itself without it.",
+            "Die Beziehungsschritte zu den Objekten, an denen Schlüssel 3 gelesen wird; ohne Angabe das Objekt selbst.",
+        ),
+    },
+    MeasuredParameter {
+        key: "key_4",
+        kind: MeasuredParameterKind::Property,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The property key 4 is read from, written `set/name`.",
+            "Die Eigenschaft, aus der Schlüssel 4 gelesen wird, geschrieben `set/name`.",
+        ),
+    },
+    MeasuredParameter {
+        key: "key_4_path",
+        kind: MeasuredParameterKind::Path,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The relationship steps to the objects key 4 is read on; the object itself without it.",
+            "Die Beziehungsschritte zu den Objekten, an denen Schlüssel 4 gelesen wird; ohne Angabe das Objekt selbst.",
+        ),
+    },
+    MeasuredParameter {
+        key: "pair_key",
+        kind: MeasuredParameterKind::Text,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The key read on each face of the object along the derived adjacency: `key_1` … `key_4`.",
+            "Der Schlüssel, der an jeder Seite des Objekts entlang der abgeleiteten Nachbarschaft gelesen wird: `key_1` … `key_4`.",
+        ),
+    },
+    MeasuredParameter {
+        key: "case_sensitive",
+        kind: MeasuredParameterKind::Truth,
+        required: false,
+        default: None,
+        help: &en_de(
+            "Whether the rows' patterns match case; they do without it.",
+            "Ob die Muster der Zeilen Groß- und Kleinschreibung unterscheiden; ohne Angabe tun sie es.",
+        ),
+    },
+    MeasuredParameter {
+        key: "quantity",
+        kind: MeasuredParameterKind::Choice {
+            options: &[
+                "clear-height",
+                "clear-width",
+                "glazing-ratio",
+                "measured",
+                "member-plan-area",
+                "plan-area",
+                "property",
+                "sill-height",
+                "threshold-step",
+            ],
+        },
+        required: true,
+        default: None,
+        help: &en_de(
+            "What the rows bound, as `keyed-limit`'s `quantity` names it.",
+            "Was die Zeilen begrenzen, wie `quantity` von `keyed-limit` es nennt.",
+        ),
+    },
+    MeasuredParameter {
+        key: "quantity_property",
+        kind: MeasuredParameterKind::Property,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The property a stated quantity, clear width or height or glazing ratio is read from.",
+            "Die Eigenschaft, aus der eine angegebene Größe, lichte Breite oder Höhe oder ein Verglasungsanteil gelesen wird.",
+        ),
+    },
+    MeasuredParameter {
+        key: "measured_value",
+        kind: MeasuredParameterKind::Text,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The measured value `measured` reads, as written.",
+            "Der Messwert, den `measured` liest, wie geschrieben.",
+        ),
+    },
+    MeasuredParameter {
+        key: "floor_path",
+        kind: MeasuredParameterKind::Path,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The relationship steps to the spaces whose floors a sill height or threshold step is measured from.",
+            "Die Beziehungsschritte zu den Räumen, von deren Böden eine Brüstungshöhe oder Schwellenstufe gemessen wird.",
+        ),
+    },
+    MeasuredParameter {
+        key: "overall_width",
+        kind: MeasuredParameterKind::Property,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The door's overall width, less a deduction for its clear width.",
+            "Die Gesamtbreite der Tür, abzüglich eines Abzugs für ihre lichte Breite.",
+        ),
+    },
+    MeasuredParameter {
+        key: "width_deduction",
+        kind: MeasuredParameterKind::Length { minimum: 0.0 },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's deduction from the overall width, in metres.",
+            "Der Abzug der Regel von der Gesamtbreite, in Metern.",
+        ),
+    },
+    MeasuredParameter {
+        key: "clear_width_from_leaves",
+        kind: MeasuredParameterKind::Choice {
+            options: &["passage", "widest-leaf"],
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "Whether, and how, a clear width is derived from the door's leaves.",
+            "Ob und wie eine lichte Breite aus den Flügeln der Tür abgeleitet wird.",
+        ),
+    },
+    MeasuredParameter {
+        key: "overall_height",
+        kind: MeasuredParameterKind::Property,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The door's overall height, less its lining and threshold for its clear height.",
+            "Die Gesamthöhe der Tür, abzüglich Futter und Schwelle für ihre lichte Höhe.",
+        ),
+    },
+    MeasuredParameter {
+        key: "lining_thickness",
+        kind: MeasuredParameterKind::Property,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The head lining's thickness the door states.",
+            "Die Dicke des oberen Futters, die die Tür angibt.",
+        ),
+    },
+    MeasuredParameter {
+        key: "threshold_thickness",
+        kind: MeasuredParameterKind::Property,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The threshold's thickness the door states.",
+            "Die Dicke der Schwelle, die die Tür angibt.",
+        ),
+    },
+    MeasuredParameter {
+        key: "ramp_selector",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The ramps that may be a door side's floor: source kinds, `,`-separated, or `@` a selector parameter of the rule.",
+            "Die Rampen, die der Boden einer Türseite sein können: Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel.",
+        ),
+    },
+    MeasuredParameter {
+        key: "ramp_reach",
+        kind: MeasuredParameterKind::Length { minimum: 0.0 },
+        required: false,
+        default: None,
+        help: &en_de(
+            "How near the door a ramp must lie in plan, in metres.",
+            "Wie nah an der Tür eine Rampe im Grundriss liegen muss, in Metern.",
+        ),
+    },
+    MeasuredParameter {
+        key: "member_selector",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The members whose footprints `member-plan-area` sums.",
+            "Die Glieder, deren Grundflächen `member-plan-area` summiert.",
+        ),
+    },
+    MeasuredParameter {
+        key: "relationship",
+        kind: MeasuredParameterKind::Text,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The relationship to the members, as `relationship` declares it.",
+            "Die Beziehung zu den Gliedern, wie `relationship` sie angibt.",
+        ),
+    },
+    MeasuredParameter {
+        key: "direction",
+        kind: MeasuredParameterKind::Text,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The direction the relationship is followed in.",
+            "Die Richtung, in der die Beziehung verfolgt wird.",
+        ),
+    },
+    MeasuredParameter {
+        key: "follow_chain",
+        kind: MeasuredParameterKind::Truth,
+        required: false,
+        default: None,
+        help: &en_de(
+            "Whether the relationship is followed as a chain.",
+            "Ob die Beziehung als Kette verfolgt wird.",
+        ),
+    },
+    MeasuredParameter {
+        key: "path",
+        kind: MeasuredParameterKind::Path,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The relationship steps to the members.",
+            "Die Beziehungsschritte zu den Gliedern.",
+        ),
+    },
+    MeasuredParameter {
+        key: "skip_absent_relationship_ends",
+        kind: MeasuredParameterKind::Truth,
+        required: false,
+        default: None,
+        help: &en_de(
+            "Whether a relationship end that is absent is skipped.",
+            "Ob ein fehlendes Beziehungsende übersprungen wird.",
+        ),
+    },
+    MeasuredParameter {
+        key: "door_type_defaults",
+        kind: MeasuredParameterKind::Table,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's defaults per door type, used where the door states no value.",
+            "Die Vorgaben der Regel je Türtyp, verwendet, wo die Tür keinen Wert angibt.",
+        ),
+    },
+];
+
 /// The host axes a face is measured in, as `opening-area` reads them.
 pub(super) const FACE_AXES: [MeasuredParameter; 2] = [
     MeasuredParameter {

@@ -1659,6 +1659,201 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
     walking::LANDINGS,
     MemberDescriptor {
         list: MeasuredDescriptor {
+            name: "limit_row",
+            parameters: &super::registry::LIMIT_ROWS,
+            dimension: None,
+            services: &["property-resolution", "relationship-selection"],
+            exactness: MeasuredExactness::Stated,
+            subject: MeasuredSubject::Object,
+            not_evaluated: &[
+                "a key a row tests cannot be read",
+                "rows tie for most specific",
+            ],
+            label: &en_de("Limit row", "Grenzzeile"),
+            help: &en_de(
+                "One item: the most specific row of `limits` the object's keys select, as \
+                 `keyed-limit` selects it, or that none matches.",
+                "Ein Element: die spezifischste Zeile von `limits`, die die Schlüssel des \
+                 Objekts wählen, wie `keyed-limit` sie wählt, oder dass keine passt.",
+            ),
+        },
+        fields: &[
+            field(
+                "listed",
+                TRUTH,
+                &en_de("Listed", "Gelistet"),
+                &en_de(
+                    "Whether a row matches the object's keys.",
+                    "Ob eine Zeile zu den Schlüsseln des Objekts passt.",
+                ),
+            ),
+            field(
+                "row",
+                RATIO,
+                &en_de("Row", "Zeile"),
+                &en_de(
+                    "The index of the row the object's keys select, from 0; `null` where none \
+                     matches.",
+                    "Der Index der Zeile, die die Schlüssel des Objekts wählen, ab 0; `null`, \
+                     wo keine passt.",
+                ),
+            ),
+            field(
+                "keys",
+                MemberFieldKind::Text,
+                &en_de("Keys", "Schlüssel"),
+                &en_de(
+                    "The keys as a message describes them: each property and its value.",
+                    "Die Schlüssel, wie eine Meldung sie beschreibt: jede Eigenschaft und ihr \
+                     Wert.",
+                ),
+            ),
+            field(
+                "related",
+                MemberFieldKind::Objects,
+                &en_de("Related", "Bezogen"),
+                &en_de(
+                    "The objects a key was read on along its path.",
+                    "Die Objekte, an denen ein Schlüssel entlang seines Pfads gelesen wurde.",
+                ),
+            ),
+        ],
+    },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
+            name: "limited_values",
+            parameters: &super::registry::LIMITED,
+            dimension: None,
+            services: &[
+                "property-resolution",
+                "relationship-selection",
+                "vertical-extent",
+            ],
+            exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
+            not_evaluated: &[
+                "a key a row tests cannot be read, or rows tie for most specific",
+                "the quantity cannot be measured",
+            ],
+            label: &en_de("Limited values", "Begrenzte Werte"),
+            help: &en_de(
+                "What the row the object's keys select bounds, with its bounds, as \
+                 `keyed-limit` measures it: one item for a quantity of the object, one per \
+                 floor for a sill height, one per floor a side of a door may step onto for a \
+                 threshold step; none where no row with a bound applies.",
+                "Was die Zeile, die die Schlüssel des Objekts wählen, begrenzt, mit ihren \
+                 Grenzen, wie `keyed-limit` es misst: ein Element für eine Größe des Objekts, \
+                 eines je Boden für eine Brüstungshöhe, eines je Boden, auf den eine Türseite \
+                 treten kann, für eine Schwellenstufe; keines, wo keine Zeile mit Grenze gilt.",
+            ),
+        },
+        fields: &[
+            field(
+                "row",
+                RATIO,
+                &en_de("Row", "Zeile"),
+                &en_de(
+                    "The index of the row the object's keys select, from 0.",
+                    "Der Index der Zeile, die die Schlüssel des Objekts wählen, ab 0.",
+                ),
+            ),
+            field(
+                "keys",
+                MemberFieldKind::Text,
+                &en_de("Keys", "Schlüssel"),
+                &en_de(
+                    "The keys as a message describes them: each property and its value.",
+                    "Die Schlüssel, wie eine Meldung sie beschreibt: jede Eigenschaft und ihr \
+                     Wert.",
+                ),
+            ),
+            field(
+                "value",
+                RATIO,
+                &en_de("Value", "Wert"),
+                &en_de(
+                    "The bounded value in coherent SI units, as displayed against the bounds \
+                     for a door's values and steps; undecided where it cannot be measured.",
+                    "Der begrenzte Wert in kohärenten SI-Einheiten, für Türwerte und Stufen wie \
+                     gegen die Grenzen angezeigt; unentschieden, wo er nicht messbar ist.",
+                ),
+            ),
+            field(
+                "minimum",
+                RATIO,
+                &en_de("Minimum", "Minimum"),
+                &en_de(
+                    "The row's minimum; `null` where none.",
+                    "Das Minimum der Zeile; `null`, wo keines.",
+                ),
+            ),
+            field(
+                "maximum",
+                RATIO,
+                &en_de("Maximum", "Maximum"),
+                &en_de(
+                    "The row's maximum; `null` where none.",
+                    "Das Maximum der Zeile; `null`, wo keines.",
+                ),
+            ),
+            field(
+                "what",
+                MemberFieldKind::Text,
+                &en_de("What", "Was"),
+                &en_de(
+                    "How a message names the value and how it was read.",
+                    "Wie eine Meldung den Wert nennt und wie er gelesen wurde.",
+                ),
+            ),
+            field(
+                "unit",
+                MemberFieldKind::Text,
+                &en_de("Unit", "Einheit"),
+                &en_de(
+                    "The value's unit after a space; empty for a plain number.",
+                    "Die Einheit des Werts nach einem Leerzeichen; leer für eine reine Zahl.",
+                ),
+            ),
+            field(
+                "named",
+                MemberFieldKind::Text,
+                &en_de("Step", "Stufe"),
+                &en_de(
+                    "A threshold step as a message names it, its floor and measure included.",
+                    "Eine Schwellenstufe, wie eine Meldung sie nennt, mit Boden und Maß.",
+                ),
+            ),
+            field(
+                "side",
+                MemberFieldKind::Text,
+                &en_de("Side", "Seite"),
+                &en_de(
+                    "The space a threshold step's side lies beside.",
+                    "Der Raum, neben dem die Seite einer Schwellenstufe liegt.",
+                ),
+            ),
+            field(
+                "sure",
+                TRUTH,
+                &en_de("Sure floor", "Sicherer Boden"),
+                &en_de(
+                    "Whether the side surely steps onto this floor; it is one of several possible ones otherwise.",
+                    "Ob die Seite sicher auf diesen Boden tritt; sonst ist er einer von mehreren möglichen.",
+                ),
+            ),
+            field(
+                "related",
+                MemberFieldKind::Objects,
+                &en_de("Related", "Bezogen"),
+                &en_de(
+                    "The objects a key was read on, and the floor or members the value was measured with.",
+                    "Die Objekte, an denen ein Schlüssel gelesen wurde, und der Boden oder die Glieder, mit denen der Wert gemessen wurde.",
+                ),
+            ),
+        ],
+    },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
             name: "opening_placements",
             parameters: &[
                 MeasuredParameter {

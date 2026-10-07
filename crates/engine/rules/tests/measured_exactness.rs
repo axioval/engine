@@ -45,6 +45,11 @@ const COVERED: &[(&str, &str, &str)] = &[
         "a_sill_height_measured_on_a_tessellation_is_inexact",
     ),
     (
+        "limited_values",
+        "tests/keyed_limit.rs",
+        "a_judged_sill_height_on_a_tessellation_is_inexact",
+    ),
+    (
         "corridor_end_openings",
         "tests/corridor_end_openings.rs",
         "openings_searched_at_approximate_ends_are_never_exact",

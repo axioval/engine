@@ -199,6 +199,7 @@ pub mod reference {
     pub use crate::empty_host::reference::EmptyHost;
     pub use crate::external_wall_validation::reference::ExternalWallValidation;
     pub use crate::horizontal_guard::reference::HorizontalGuard;
+    pub use crate::keyed_limit::reference::KeyedLimit;
     pub use crate::level_spacing::reference::LevelSpacing;
     pub use crate::light_well::reference::LightWell;
     pub use crate::object_count::reference::ObjectCount;
@@ -312,6 +313,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(keyed_limit::DoorMeasures))
         .and_then(|registry| registry.register_measured(door_swing_direction::SwingMeasures))
         .and_then(|registry| registry.register_measured(space_connection::ConnectionMeasures))
+        .and_then(|registry| registry.register_measured(keyed_limit::LimitMeasures))
         .and_then(|registry| registry.register_measured(opening_spaces::HostMeasures))
         .and_then(|registry| registry.register_measured(corridor_end_openings::CorridorEndSearch))
         .and_then(|registry| registry.register_measured(opening_zone::PlacementMeasures))

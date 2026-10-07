@@ -65,13 +65,13 @@ impl Item {
 }
 
 /// One row of the defaults table.
-struct Row<'a> {
+struct Row {
     operation: Option<TextPattern>,
-    applies_to: Option<&'a Selector>,
+    applies_to: Option<Selector>,
     values: [Option<f64>; 4],
 }
 
-impl Row<'_> {
+impl Row {
     fn value(&self, which: Item) -> Option<f64> {
         let slot = match which {
             Item::WidthDeduction => 0,
@@ -84,8 +84,8 @@ impl Row<'_> {
 }
 
 /// The declared defaults per door type.
-pub(crate) struct DoorDefaults<'a> {
-    rows: Vec<Row<'a>>,
+pub(crate) struct DoorDefaults {
+    rows: Vec<Row>,
 }
 
 /// A default a door's type row gave: the value, how a message words it and
@@ -96,10 +96,10 @@ pub(crate) struct Used {
     pub(crate) evidence: Vec<Evidence>,
 }
 
-impl<'a> DoorDefaults<'a> {
+impl DoorDefaults {
     /// The declared table, `None` when `door_type_defaults` is not declared.
     pub(crate) fn parse(
-        parameters: &Parameters<'a>,
+        parameters: &Parameters<'_>,
         case_sensitive: bool,
     ) -> Result<Option<Self>, Unavailable> {
         let Some(table) = parameters.table("door_type_defaults")? else {
@@ -108,7 +108,7 @@ impl<'a> DoorDefaults<'a> {
         let mut rows = Vec::with_capacity(table.len());
         for (index, row) in table.iter().enumerate() {
             let operation = row.pattern("operation", case_sensitive)?;
-            let applies_to = row.selector("applies_to")?;
+            let applies_to = row.selector("applies_to")?.cloned();
             let mut values = [None; 4];
             for (slot, which) in [
                 Item::WidthDeduction,
@@ -177,7 +177,7 @@ impl<'a> DoorDefaults<'a> {
                 }
                 (Some(_), None) => RowTest::Undecided,
             };
-            let by_selector = match row.applies_to {
+            let by_selector = match &row.applies_to {
                 None => RowTest::Match(0),
                 Some(selector) => match selector_matches(context, selector, door, &mut evidence) {
                     Selection::Match => RowTest::Match(0),

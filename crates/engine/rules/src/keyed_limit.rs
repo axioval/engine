@@ -2,17 +2,30 @@
 //! values read from the object or from objects related to it.
 
 mod defaults;
+mod limits;
 mod measured;
+#[cfg(feature = "parity-reference")]
+pub(crate) mod reference;
+mod template;
 mod threshold;
 
+pub(crate) use limits::LimitMeasures;
 pub(crate) use measured::DoorMeasures;
 
+use std::collections::BTreeMap;
+use std::sync::LazyLock;
+
+use axioval_engine::template::Template;
+use axioval_ir::contract::ParameterValue;
+
 use axioval_engine::{
-    AdjacentSide, CapabilityEvaluation, ColumnKind, CompiledRule, Deviation, DoorLeaf, DoorLeaves,
+    AdjacentSide, CapabilityEvaluation, ColumnKind, CompiledRule, DoorLeaf, DoorLeaves,
     DoorLeavesError, LeafMotion, NotEvaluatedReason, ObjectFrameServiceHandle, ParameterDescriptor,
     ParameterType, RuleCapability, RuleContext, TableColumn, TraversalDirection, VerticalExtent,
     adjacent_side,
 };
+use std::sync::Arc;
+
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId, PropertyValue, QuantityDimension};
 
@@ -22,11 +35,10 @@ use crate::door_swing;
 use crate::level_spacing::{extent, extents};
 use crate::light_area::{LightArea, length};
 use crate::opening_spaces::is_adjacency;
-use crate::plan_area::{Measure, Verdict, deviation, footprint, judge, member_areas, shown};
-use crate::selection::select_objects;
+use crate::plan_area::{Measure, Verdict, footprint, judge, member_areas, shown};
 use crate::support::table::{Matched, RowSelection, RowTest, TextPattern, match_rows};
 use crate::support::{
-    Parameters, PropertyRef, Traversal, Unavailable, display, exact_f64, finding, invalid, resolve,
+    Parameters, PropertyRef, Traversal, Unavailable, display, exact_f64, invalid, resolve,
     traversal_parameters, undefined,
 };
 
@@ -154,7 +166,7 @@ struct ClearWidth<'a> {
     derived: Option<(PropertyRef<'a>, Option<f64>)>,
     /// The defaults per door type, whose width deduction comes before the
     /// rule's.
-    defaults: Option<DoorDefaults<'a>>,
+    defaults: Option<Arc<DoorDefaults>>,
 }
 
 impl<'a> ClearWidth<'a> {
@@ -166,7 +178,7 @@ impl<'a> ClearWidth<'a> {
         leaves: Option<LeafMode>,
         overall: Option<PropertyRef<'a>>,
         deduction: Option<f64>,
-        defaults: Option<DoorDefaults<'a>>,
+        defaults: Option<Arc<DoorDefaults>>,
     ) -> Result<Self, Unavailable> {
         let derived = match (overall, deduction) {
             (Some(overall), deduction) if deduction.is_some() || defaults.is_some() => {
@@ -581,7 +593,7 @@ struct ClearHeight<'a> {
     overall: Option<PropertyRef<'a>>,
     lining: Option<PropertyRef<'a>>,
     threshold: Option<PropertyRef<'a>>,
-    defaults: Option<DoorDefaults<'a>>,
+    defaults: Option<Arc<DoorDefaults>>,
 }
 
 impl ClearHeight<'_> {
@@ -673,7 +685,7 @@ impl ClearHeight<'_> {
 /// (absent or null) takes the default.
 struct GlazingRatio<'a> {
     stated: Option<PropertyRef<'a>>,
-    defaults: Option<DoorDefaults<'a>>,
+    defaults: Option<Arc<DoorDefaults>>,
 }
 
 impl GlazingRatio<'_> {
@@ -890,9 +902,14 @@ impl Key {
 /// agree.
 pub struct KeyedLimit;
 
+static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
+
+/// The plans of the rules bound to it, kept across runs.
+static PLANS: crate::templates::Plans = crate::templates::Plans::new();
+
 impl RuleCapability for KeyedLimit {
     fn id(&self) -> &'static str {
-        "axioval:capability.keyed-limit"
+        template::ID
     }
 
     fn grades_deviation(&self) -> bool {
@@ -900,81 +917,85 @@ impl RuleCapability for KeyedLimit {
     }
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
-        let mut parameters = vec![
-            ParameterDescriptor::required("limits", ParameterType::Table(COLUMNS)).per_object(),
-            ParameterDescriptor::required("quantity", ParameterType::String),
-            ParameterDescriptor::optional("quantity_property", ParameterType::PropertyReference),
-            ParameterDescriptor::optional("measured_value", ParameterType::String),
-            ParameterDescriptor::optional("floor_path", ParameterType::StringList),
-            ParameterDescriptor::optional("overall_width", ParameterType::PropertyReference),
-            ParameterDescriptor::optional("width_deduction", ParameterType::Quantity),
-            ParameterDescriptor::optional("clear_width_from_leaves", ParameterType::String),
-            ParameterDescriptor::optional("overall_height", ParameterType::PropertyReference),
-            ParameterDescriptor::optional("lining_thickness", ParameterType::PropertyReference),
-            ParameterDescriptor::optional("threshold_thickness", ParameterType::PropertyReference),
-            ParameterDescriptor::optional("ramp_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("ramp_reach", ParameterType::Quantity),
-            ParameterDescriptor::optional("case_sensitive", ParameterType::Boolean),
-            ParameterDescriptor::optional("member_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("pair_key", ParameterType::String),
-            ParameterDescriptor::optional(
-                "door_type_defaults",
-                ParameterType::Table(defaults::COLUMNS),
-            ),
-        ];
-        parameters.extend(traversal_parameters());
-        for (index, (key, path)) in KEY_COLUMNS.iter().zip(KEY_PATHS).enumerate() {
-            parameters.push(if index == 0 {
-                ParameterDescriptor::required(*key, ParameterType::PropertyReference)
-            } else {
-                ParameterDescriptor::optional(*key, ParameterType::PropertyReference)
-            });
-            parameters.push(ParameterDescriptor::optional(
-                path,
-                ParameterType::StringList,
-            ));
-        }
-        parameters
+        TEMPLATE.parameters.clone()
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
         if crate::object_parameters::has_object_parameters(rule) {
             return crate::object_parameters::per_object(self, context, rule);
         }
-        let (keys, limits, quantity) = match parse(&Parameters(rule)) {
-            Ok(parsed) => parsed,
-            Err((reason, message)) => {
-                return CapabilityEvaluation::not_evaluated(
-                    reason,
-                    format!("keyed-limit: {message}"),
-                );
-            }
-        };
-        let population = match &quantity {
-            Quantity::MemberPlanArea { members, .. } => Some(Population::of(context, members)),
-            _ => None,
-        };
-        let (subjects, mut evaluation) = select_objects(context, &rule.selector);
-        for subject in subjects {
-            let measuring = Measuring {
-                quantity: &quantity,
-                members: population.as_ref(),
-            };
-            match check(context, rule, &keys, &limits, &measuring, subject) {
-                Ok(Some((found, deviation))) => evaluation.push_finding_deviating(found, deviation),
-                Ok(None) => {}
-                Err((reason, message)) => {
-                    evaluation.push_object_not_evaluated(subject.id.clone(), reason, message);
-                }
-            }
-        }
-        evaluation
+        crate::templates::run((&TEMPLATE, &PLANS), context, rule)
     }
+
+    fn template(&self) -> Option<&Template> {
+        Some(&TEMPLATE)
+    }
+}
+
+/// The capability's parameter descriptor.
+pub(crate) fn parameters() -> Vec<ParameterDescriptor> {
+    let mut parameters = vec![
+        ParameterDescriptor::required("limits", ParameterType::Table(COLUMNS)).per_object(),
+        ParameterDescriptor::required("quantity", ParameterType::String),
+        ParameterDescriptor::optional("quantity_property", ParameterType::PropertyReference),
+        ParameterDescriptor::optional("measured_value", ParameterType::String),
+        ParameterDescriptor::optional("floor_path", ParameterType::StringList),
+        ParameterDescriptor::optional("overall_width", ParameterType::PropertyReference),
+        ParameterDescriptor::optional("width_deduction", ParameterType::Quantity),
+        ParameterDescriptor::optional("clear_width_from_leaves", ParameterType::String),
+        ParameterDescriptor::optional("overall_height", ParameterType::PropertyReference),
+        ParameterDescriptor::optional("lining_thickness", ParameterType::PropertyReference),
+        ParameterDescriptor::optional("threshold_thickness", ParameterType::PropertyReference),
+        ParameterDescriptor::optional("ramp_selector", ParameterType::Selector),
+        ParameterDescriptor::optional("ramp_reach", ParameterType::Quantity),
+        ParameterDescriptor::optional("case_sensitive", ParameterType::Boolean),
+        ParameterDescriptor::optional("member_selector", ParameterType::Selector),
+        ParameterDescriptor::optional("pair_key", ParameterType::String),
+        ParameterDescriptor::optional(
+            "door_type_defaults",
+            ParameterType::Table(defaults::COLUMNS),
+        ),
+    ];
+    parameters.extend(traversal_parameters());
+    for (index, (key, path)) in KEY_COLUMNS.iter().zip(KEY_PATHS).enumerate() {
+        parameters.push(if index == 0 {
+            ParameterDescriptor::required(*key, ParameterType::PropertyReference)
+        } else {
+            ParameterDescriptor::optional(*key, ParameterType::PropertyReference)
+        });
+        parameters.push(ParameterDescriptor::optional(
+            path,
+            ParameterType::StringList,
+        ));
+    }
+    parameters
+}
+
+/// The declaration the capability refused, in its order and words: the
+/// keys, the rows, then the quantity. `stated` holds the rule's
+/// parameters the list names, by the list's keys (the parameters' own
+/// names).
+pub(crate) fn check_arguments(
+    stated: &BTreeMap<String, ParameterValue>,
+) -> Result<(), Unavailable> {
+    let rule = crate::light_area::synthesised(stated.clone());
+    parse(&Parameters(&rule)).map(|_| ())
 }
 
 type Parsed<'a> = (Declared<'a>, Vec<Limit>, Quantity<'a>);
 
 fn parse<'a>(parameters: &Parameters<'a>) -> Result<Parsed<'a>, Unavailable> {
+    let declared = declared(parameters)?;
+    let limits = limits(parameters, &declared)?;
+    Ok((
+        declared,
+        limits,
+        quantity(parameters, || door_defaults(parameters))?,
+    ))
+}
+
+/// The declared keys, checked in the capability's order.
+fn declared<'a>(parameters: &Parameters<'a>) -> Result<Declared<'a>, Unavailable> {
     let mut keys = Vec::with_capacity(KEYS);
     for (key, path) in KEY_COLUMNS.iter().zip(KEY_PATHS) {
         let property = parameters.property(key)?;
@@ -994,6 +1015,16 @@ fn parse<'a>(parameters: &Parameters<'a>) -> Result<Parsed<'a>, Unavailable> {
         return Err(invalid("parameter `key_1` is required"));
     }
     let pair = pair_key(parameters, &keys)?;
+    Ok(Declared {
+        sources: keys,
+        pair,
+    })
+}
+
+/// The rows of `limits`, their patterns compiled, checked against the
+/// declared keys.
+fn limits(parameters: &Parameters<'_>, declared: &Declared<'_>) -> Result<Vec<Limit>, Unavailable> {
+    let (keys, pair) = (&declared.sources, declared.pair);
     let case_sensitive = parameters.boolean("case_sensitive")?.unwrap_or(true);
     let rows = parameters
         .table("limits")?
@@ -1029,11 +1060,7 @@ fn parse<'a>(parameters: &Parameters<'a>) -> Result<Parsed<'a>, Unavailable> {
             maximum,
         });
     }
-    let declared = Declared {
-        sources: keys,
-        pair,
-    };
-    Ok((declared, limits, quantity(parameters)?))
+    Ok(limits)
 }
 
 /// The slot of the key `pair_key` names, read as the unordered pair of the
@@ -1114,8 +1141,15 @@ fn measured_quantity<'a>(parameters: &Parameters<'a>) -> Result<Quantity<'a>, Un
     }))
 }
 
-/// The declared quantity, its own parameters checked against it.
-fn quantity<'a>(parameters: &Parameters<'a>) -> Result<Quantity<'a>, Unavailable> {
+/// The rule's `door_type_defaults` table, if it states one.
+fn door_defaults(parameters: &Parameters<'_>) -> Result<Option<Arc<DoorDefaults>>, Unavailable> {
+    let case_sensitive = parameters.boolean("case_sensitive")?.unwrap_or(true);
+    Ok(DoorDefaults::parse(parameters, case_sensitive)?.map(Arc::new))
+}
+
+/// The declared quantity's name, each parameter that applies only to
+/// other quantities refused.
+fn quantity_name<'a>(parameters: &Parameters<'a>) -> Result<&'a str, Unavailable> {
     let named = parameters.required_string("quantity")?;
     if !matches!(
         named,
@@ -1143,10 +1177,20 @@ fn quantity<'a>(parameters: &Parameters<'a>) -> Result<Quantity<'a>, Unavailable
             )));
         }
     }
+    Ok(named)
+}
+
+/// The declared quantity, its own parameters checked against it, with the
+/// rule's `door_type_defaults` table (`door_defaults`, or the table already
+/// read), read where the capability read it.
+fn quantity<'a>(
+    parameters: &Parameters<'a>,
+    defaults: impl FnOnce() -> Result<Option<Arc<DoorDefaults>>, Unavailable>,
+) -> Result<Quantity<'a>, Unavailable> {
+    let named = quantity_name(parameters)?;
     let property = parameters.property("quantity_property")?;
     let floor = parameters.strings("floor_path")?;
-    let case_sensitive = parameters.boolean("case_sensitive")?.unwrap_or(true);
-    let defaults = DoorDefaults::parse(parameters, case_sensitive)?;
+    let defaults = defaults()?;
     Ok(match named {
         "plan-area" => Quantity::PlanArea,
         "member-plan-area" => Quantity::MemberPlanArea {
@@ -1650,31 +1694,6 @@ impl Measuring<'_, '_> {
     }
 }
 
-/// Undecided members can only add area: with any, only a sum already
-/// above the maximum stands.
-fn only_an_excess(
-    measured: &Measured,
-    undecided: usize,
-    limit: &Limit,
-    index: usize,
-) -> Result<(), Unavailable> {
-    if undecided > 0
-        && !limit
-            .maximum
-            .is_some_and(|maximum| measured.lower > maximum)
-    {
-        return Err((
-            NotEvaluatedReason::IncompleteEvidence,
-            format!(
-                "{undecided} reached object(s) may be members, so the {} is known only from \
-                 below (limit row {index})",
-                measured.what
-            ),
-        ));
-    }
-    Ok(())
-}
-
 /// The single row that applies to `keys`, `None` when no row matches.
 /// Rows tied for most specific are refused, unless the pair key is
 /// declared and their bounds agree.
@@ -1706,94 +1725,32 @@ fn select<'l>(
     }
 }
 
-fn check(
+/// The row an object's keys select, as the measured values read it: its
+/// index (none where no row matches), the keys as a message describes them,
+/// and what they were read from.
+pub(crate) struct Selected {
+    pub(crate) index: Option<usize>,
+    pub(crate) described: String,
+    pub(crate) evidence: Vec<Evidence>,
+    pub(crate) sources: Vec<ObjectId>,
+}
+
+/// The row `subject`'s keys select among `limits`; refused where the keys
+/// cannot decide it or rows tie, as the capability refused it.
+fn selected(
     context: &RuleContext<'_>,
-    rule: &CompiledRule,
     declared: &Declared<'_>,
     limits: &[Limit],
-    measuring: &Measuring<'_, '_>,
     subject: &Object,
-) -> Result<Option<Graded>, Unavailable> {
-    let quantity = measuring.quantity;
+) -> Result<Selected, Unavailable> {
     let keys = Keys::read(context, declared, subject)?;
-    let Some((index, limit)) = select(limits, declared, &keys)? else {
-        return Ok(Some((
-            finding(
-                rule,
-                &subject.id,
-                format!("no limit defined for {}", keys.describe(declared)),
-                keys.evidence,
-                keys.sources,
-            ),
-            None,
-        )));
-    };
-    if limit.minimum.is_none() && limit.maximum.is_none() {
-        return Ok(None);
-    }
-    if let Quantity::SillHeight(floor) = quantity {
-        let described = format!("limit row {index}: {}", keys.describe(declared));
-        return sill_height(context, rule, floor, subject, limit, &described, keys);
-    }
-    if let Quantity::ThresholdStep(step) = quantity {
-        let described = format!("limit row {index}: {}", keys.describe(declared));
-        let limit = (limit.minimum, limit.maximum);
-        return step.judge(
-            context,
-            rule,
-            subject,
-            limit,
-            &described,
-            keys.evidence,
-            keys.sources,
-        );
-    }
-    let (measured, members, undecided) = measuring.measure(context, subject)?;
-    only_an_excess(&measured, undecided, limit, index)?;
-    let unit = &measured.unit;
-    let verdict = if matches!(
-        quantity,
-        Quantity::ClearWidth(_)
-            | Quantity::ClearHeight(_)
-            | Quantity::GlazingRatio(_)
-            | Quantity::Measured(_)
-    ) {
-        judge_as_displayed(measured.lower, measured.upper, limit.minimum, limit.maximum)
-    } else {
-        judge(measured.lower, measured.upper, limit.minimum, limit.maximum)
-    };
-    match verdict {
-        Verdict::Pass => Ok(None),
-        Verdict::Fail(bound) => {
-            let described = keys.describe(declared);
-            let mut evidence = keys.evidence;
-            evidence.extend(measured.evidence);
-            let mut related = keys.sources;
-            related.extend(members);
-            Ok(Some((
-                finding(
-                    rule,
-                    &subject.id,
-                    format!(
-                        "{} is {}{unit}; required {bound}{unit} (limit row {index}: {described})",
-                        measured.what,
-                        shown(measured.lower, measured.upper),
-                    ),
-                    evidence,
-                    related,
-                ),
-                deviation(measured.lower, measured.upper, limit.minimum, limit.maximum),
-            )))
-        }
-        Verdict::Undecided(bound) => Err((
-            NotEvaluatedReason::IncompleteEvidence,
-            format!(
-                "{} is {}{unit}, which straddles the bound {bound}{unit} (limit row {index})",
-                measured.what,
-                shown(measured.lower, measured.upper),
-            ),
-        )),
-    }
+    let index = select(limits, declared, &keys)?.map(|(index, _)| index);
+    Ok(Selected {
+        index,
+        described: keys.describe(declared),
+        evidence: keys.evidence,
+        sources: keys.sources,
+    })
 }
 
 /// `minuend - subtrahend` as an interval sure to hold the exact difference: the
@@ -1822,6 +1779,18 @@ fn judge_as_displayed(
     minimum: Option<f64>,
     maximum: Option<f64>,
 ) -> Verdict {
+    let (lower, upper) = snapped(lower, upper, minimum, maximum);
+    judge(lower, upper, minimum, maximum)
+}
+
+/// `(lower, upper)` read as the decimals they display: an end within a few
+/// units in the last place of a bound is the bound.
+pub(crate) fn snapped(
+    lower: f64,
+    upper: f64,
+    minimum: Option<f64>,
+    maximum: Option<f64>,
+) -> (f64, f64) {
     let snap = |value: f64| {
         [minimum, maximum]
             .into_iter()
@@ -1832,7 +1801,7 @@ fn judge_as_displayed(
             })
             .unwrap_or(value)
     };
-    judge(snap(lower), snap(upper), minimum, maximum)
+    (snap(lower), snap(upper))
 }
 
 /// The sill height of `window` above the bottom of `floor`, as an interval.
@@ -1848,18 +1817,27 @@ fn sill_interval(window: &VerticalExtent, floor: &VerticalExtent) -> (f64, f64) 
     (lower, upper)
 }
 
-/// Judges the sill height of `subject` above each floor `path` reaches from
-/// it against `limit`. One failing floor is a finding; otherwise a floor that
-/// cannot be measured or straddles a bound leaves the subject not evaluated.
-fn sill_height(
+/// The sill height above one floor with the floor's evidence, or why the
+/// floor cannot be measured.
+pub(crate) type Sill = Result<((f64, f64), Evidence), String>;
+
+/// A window's sill height above each floor a path reaches from it.
+pub(crate) struct Sills {
+    /// Each floor, and the sill height above it with the floor's evidence,
+    /// or why the floor cannot be measured.
+    pub(crate) floors: Vec<(ObjectId, Sill)>,
+    /// The window's extent's evidence.
+    pub(crate) window: Evidence,
+    /// What the path was followed by.
+    pub(crate) cited: Vec<Evidence>,
+}
+
+/// The sill height of `subject` above each floor `path` reaches from it.
+pub(crate) fn sills(
     context: &RuleContext<'_>,
-    rule: &CompiledRule,
     path: &Traversal,
     subject: &Object,
-    limit: &Limit,
-    described: &str,
-    keys: Keys,
-) -> Result<Option<Graded>, Unavailable> {
+) -> Result<Sills, Unavailable> {
     let service = extents(context)?;
     let window = extent(service, &subject.id)?;
     let everything: Vec<&Object> = context.project.objects().collect();
@@ -1870,69 +1848,26 @@ fn sill_height(
             format!("{} reaches no floor to measure from", path.relationship),
         ));
     }
-    let mut failed = Vec::new();
-    let mut worst: Option<Deviation> = None;
-    let mut undecided = Vec::new();
-    let mut evidence = keys.evidence;
-    let mut related = keys.sources;
-    for floor in floors {
-        let measured = match extent(service, &floor) {
-            Ok(measured) => measured,
-            Err((_, why)) => {
-                undecided.push(format!("the floor of {floor} cannot be measured: {why}"));
-                continue;
-            }
-        };
-        let (lower, upper) = sill_interval(&window, &measured);
-        let height = shown(lower, upper);
-        match judge(lower, upper, limit.minimum, limit.maximum) {
-            Verdict::Pass => {}
-            Verdict::Fail(bound) => {
-                failed.push(format!(
-                    "sill height above the floor of {floor} is {height} m; required {bound} m"
-                ));
-                let missed = deviation(lower, upper, limit.minimum, limit.maximum);
-                worst = match (worst, missed) {
-                    (Some(worst), Some(missed)) => Some(worst.worst(missed)),
-                    (worst, missed) => worst.or(missed),
-                };
-                evidence.push(measured.evidence().clone());
-                related.push(floor);
-            }
-            Verdict::Undecided(bound) => undecided.push(format!(
-                "sill height above the floor of {floor} is {height} m, which straddles the \
-                 bound {bound} m"
-            )),
-        }
-    }
-    if failed.is_empty() {
-        return if undecided.is_empty() {
-            Ok(None)
-        } else {
-            Err((
-                NotEvaluatedReason::IncompleteEvidence,
-                format!("{} ({described})", undecided.join("; ")),
-            ))
-        };
-    }
-    evidence.push(window.evidence().clone());
-    evidence.extend(cited);
-    related.sort();
-    related.dedup();
-    Ok(Some((
-        finding(
-            rule,
-            &subject.id,
-            format!("{} ({described})", failed.join("; ")),
-            evidence,
-            related,
-        ),
-        worst,
-    )))
+    let floors = floors
+        .into_iter()
+        .map(|floor| {
+            let measured = extent(service, &floor)
+                .map(|measured| {
+                    (
+                        sill_interval(&window, &measured),
+                        measured.evidence().clone(),
+                    )
+                })
+                .map_err(|(_, why)| format!("the floor of {floor} cannot be measured: {why}"));
+            (floor, measured)
+        })
+        .collect();
+    Ok(Sills {
+        floors,
+        window: window.evidence().clone(),
+        cited,
+    })
 }
-
-/// A finding and how far its value misses the bound, when it has one.
-type Graded = (axioval_ir::Finding, Option<Deviation>);
 
 #[cfg(test)]
 mod tests {

@@ -10,27 +10,30 @@
 //! a ramp steps onto the ramp, not onto the space's floor below it.
 
 use axioval_engine::{
-    Deviation, NotEvaluatedReason, ProximityProjection, ProximityRequest, ProximityServiceHandle,
-    RuleContext, VerticalExtentServiceHandle,
+    NotEvaluatedReason, ProximityProjection, ProximityRequest, ProximityServiceHandle, RuleContext,
+    VerticalExtentServiceHandle,
 };
 use axioval_ir::contract::Selector;
-use axioval_ir::{Evidence, Finding, Object, ObjectId};
+use axioval_ir::{Evidence, Object, ObjectId};
 
 use super::defaults::{DoorDefaults, Item};
-use super::{difference, judge_as_displayed, thickness};
+use super::{difference, thickness};
 use crate::counts::Population;
 use crate::level_spacing::{extent, extents};
 use crate::light_area::length;
-use crate::plan_area::{Verdict, deviation, shown};
-use crate::support::{Parameters, PropertyRef, Traversal, Unavailable, finding, invalid};
+use crate::plan_area::shown;
+use crate::support::{Parameters, PropertyRef, Traversal, Unavailable, invalid};
 
 /// The threshold-step quantity's declaration.
 pub(crate) struct ThresholdStep<'a> {
-    floor: Traversal,
+    pub(super) floor: Traversal,
     threshold: Option<PropertyRef<'a>>,
     ramps: Option<(&'a Selector, f64)>,
     /// The door type's default threshold, for a door that states none.
-    defaults: Option<DoorDefaults<'a>>,
+    defaults: Option<std::sync::Arc<DoorDefaults>>,
+    /// The ramps a measured value's bound selection picks, in place of
+    /// those the rule's selector picks.
+    picked: Option<std::sync::Arc<Population>>,
 }
 
 /// Whether something holds: surely, possibly, or surely not.
@@ -49,15 +52,15 @@ impl Tri {
 
 /// One floor a side may step onto: how a finding names it, its elevation
 /// interval or why it is unknown, and the objects it relates.
-struct Floor {
-    name: String,
-    elevation: Result<(f64, f64), String>,
-    evidence: Vec<Evidence>,
-    related: ObjectId,
+pub(super) struct Floor {
+    pub(super) name: String,
+    pub(super) elevation: Result<(f64, f64), String>,
+    pub(super) evidence: Vec<Evidence>,
+    pub(super) related: ObjectId,
 }
 
 /// A ramp near the door, and its top.
-struct Ramp {
+pub(super) struct Ramp {
     id: ObjectId,
     near: Tri,
     top: Result<((f64, f64), Evidence), String>,
@@ -67,7 +70,7 @@ impl<'a> ThresholdStep<'a> {
     pub(crate) fn parse(
         parameters: &Parameters<'a>,
         floor: Traversal,
-        defaults: Option<DoorDefaults<'a>>,
+        defaults: Option<std::sync::Arc<DoorDefaults>>,
     ) -> Result<Self, Unavailable> {
         let threshold = parameters.property("threshold_thickness")?;
         let ramps = match (
@@ -87,29 +90,26 @@ impl<'a> ThresholdStep<'a> {
             threshold,
             ramps,
             defaults,
+            picked: None,
         })
     }
 
-    /// Judges the step on every side of `subject` against `(minimum,
-    /// maximum)`: one side failing is a finding naming its floor;
-    /// otherwise a side that cannot be decided leaves the door not
-    /// evaluated.
-    #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
-    pub(crate) fn judge(
+    /// The same declaration, its ramps those `picked` picks.
+    pub(crate) fn with_ramps(mut self, picked: std::sync::Arc<Population>) -> Self {
+        self.picked = Some(picked);
+        self
+    }
+
+    /// The door's threshold as the rule and the door state it.
+    pub(super) fn threshold(
         &self,
         context: &RuleContext<'_>,
-        rule: &axioval_engine::CompiledRule,
         subject: &Object,
-        (minimum, maximum): (Option<f64>, Option<f64>),
-        described: &str,
-        mut evidence: Vec<Evidence>,
-        mut related: Vec<ObjectId>,
-    ) -> Result<Option<(Finding, Option<Deviation>)>, Unavailable> {
-        let service = extents(context)?;
-        let door = extent(service, &subject.id)?;
-        let threshold = match self.threshold {
+        evidence: &mut Vec<Evidence>,
+    ) -> Result<Threshold, Unavailable> {
+        Ok(match self.threshold {
             None => Threshold::None,
-            Some(property) => match thickness(context, subject, property, &mut evidence)? {
+            Some(property) => match thickness(context, subject, property, evidence)? {
                 Some(value) => Threshold::Stated(value),
                 None => match &self.defaults {
                     Some(defaults) => {
@@ -124,7 +124,23 @@ impl<'a> ThresholdStep<'a> {
                     None => Threshold::Unknown(property.to_string()),
                 },
             },
-        };
+        })
+    }
+
+    /// Every floor each side of `subject` may step onto, as the
+    /// alternatives of that side's floor ([`Alternative`]), each step read
+    /// as displayed against `(minimum, maximum)`; and the evidence the door,
+    /// its threshold and its spaces were read from.
+    pub(crate) fn alternatives(
+        &self,
+        context: &RuleContext<'_>,
+        subject: &Object,
+        (minimum, maximum): (Option<f64>, Option<f64>),
+    ) -> Result<(Vec<Alternative>, Vec<Evidence>), Unavailable> {
+        let service = extents(context)?;
+        let door = extent(service, &subject.id)?;
+        let mut evidence = Vec::new();
+        let threshold = self.threshold(context, subject, &mut evidence)?;
         let everything: Vec<&Object> = context.project.objects().collect();
         let (spaces, cited) = self.floor.related(context, &subject.id, &everything)?;
         if spaces.is_empty() {
@@ -137,99 +153,31 @@ impl<'a> ThresholdStep<'a> {
             ));
         }
         evidence.extend(cited);
+        evidence.push(door.evidence().clone());
         let ramps = self.ramps(context, service, &subject.id, &spaces);
         let proximity = context.services.get::<ProximityServiceHandle>();
         let bottom = (door.bottom().lower_metres(), door.bottom().upper_metres());
-        let mut failed = Vec::new();
-        let mut worst: Option<Deviation> = None;
-        let mut open = Vec::new();
+        let mut alternatives = Vec::new();
         for space in &spaces {
             let (sure, possible) = sides(proximity, service, space, &ramps);
-            let mut fails = Vec::new();
-            let mut passes = true;
-            let mut undecided = Vec::new();
-            let judged: Vec<(bool, &Floor, Judged)> = sure
-                .iter()
-                .map(|floor| {
-                    (
-                        true,
-                        floor,
-                        step(bottom, &threshold, floor, minimum, maximum),
-                    )
-                })
-                .chain(possible.iter().map(|floor| {
-                    (
-                        false,
-                        floor,
-                        step(bottom, &threshold, floor, minimum, maximum),
-                    )
-                }))
-                .collect();
-            for (is_sure, floor, judged) in &judged {
-                match judged {
-                    Judged::Pass => {}
-                    Judged::Fail(message, missed) => {
-                        passes = false;
-                        fails.push((*is_sure, *floor, message.clone(), *missed));
-                    }
-                    Judged::Undecided(message) => {
-                        passes = false;
-                        undecided.push(message.clone());
-                    }
-                }
-            }
-            let sure_fails: Vec<_> = fails.iter().filter(|(is_sure, ..)| *is_sure).collect();
-            let all_fail = sure.is_empty()
-                && !possible.is_empty()
-                && fails.len() == possible.len()
-                && undecided.is_empty();
-            if !sure_fails.is_empty() || all_fail {
-                let chosen: Vec<_> = if sure_fails.is_empty() {
-                    fails.iter().collect()
-                } else {
-                    sure_fails
-                };
-                for (_, floor, message, missed) in chosen {
-                    failed.push(message.clone());
-                    worst = match (worst, *missed) {
-                        (Some(worst), Some(missed)) => Some(worst.worst(missed)),
-                        (worst, missed) => worst.or(missed),
-                    };
-                    evidence.extend(floor.evidence.iter().cloned());
-                    related.push(floor.related.clone());
-                }
-            } else if !passes {
-                if undecided.is_empty() {
-                    undecided.push(format!(
-                        "the floor beside {space} may be any of several, and not every one fails"
-                    ));
-                }
-                open.extend(undecided);
+            for (is_sure, floor) in sure
+                .into_iter()
+                .map(|floor| (true, floor))
+                .chain(possible.into_iter().map(|floor| (false, floor)))
+            {
+                let step = named_step(bottom, &threshold, &floor)
+                    .map(|((low, high), named)| (snapped((low, high), minimum, maximum), named));
+                alternatives.push(Alternative {
+                    side: space.to_string(),
+                    sure: is_sure,
+                    step,
+                    related: floor.related,
+                    exact: floor.evidence.iter().all(|evidence| evidence.exact),
+                    evidence: floor.evidence,
+                });
             }
         }
-        if failed.is_empty() {
-            return if open.is_empty() {
-                Ok(None)
-            } else {
-                Err((
-                    NotEvaluatedReason::IncompleteEvidence,
-                    format!("{} ({described})", open.join("; ")),
-                ))
-            };
-        }
-        evidence.push(door.evidence().clone());
-        related.sort();
-        related.dedup();
-        Ok(Some((
-            finding(
-                rule,
-                &subject.id,
-                format!("{} ({described})", failed.join("; ")),
-                evidence,
-                related,
-            ),
-            worst,
-        )))
+        Ok((alternatives, evidence))
     }
 
     /// The step on every side of `subject` as one interval, as
@@ -319,7 +267,7 @@ impl<'a> ThresholdStep<'a> {
 
     /// The selected ramps near the door and their tops; none without
     /// `ramp_selector`.
-    fn ramps(
+    pub(super) fn ramps(
         &self,
         context: &RuleContext<'_>,
         service: &VerticalExtentServiceHandle,
@@ -329,7 +277,10 @@ impl<'a> ThresholdStep<'a> {
         let Some((selector, reach)) = self.ramps else {
             return Vec::new();
         };
-        let population = Population::of(context, selector);
+        let population = match &self.picked {
+            Some(picked) => std::sync::Arc::clone(picked),
+            None => std::sync::Arc::new(Population::of(context, selector)),
+        };
         let proximity = context.services.get::<ProximityServiceHandle>();
         let door_box = proximity.and_then(|proximity| proximity.bounds(door).ok());
         let mut ramps = Vec::new();
@@ -429,7 +380,7 @@ fn overlaps(proximity: Option<&ProximityServiceHandle>, ramp: &ObjectId, space: 
 /// The floors beside `space`: those it surely steps onto, and those it may.
 /// A ramp surely near and surely over the space replaces its floor; one
 /// that only may leaves both possible.
-fn sides(
+pub(super) fn sides(
     proximity: Option<&ProximityServiceHandle>,
     service: &VerticalExtentServiceHandle,
     space: &ObjectId,
@@ -494,7 +445,7 @@ fn sides(
 }
 
 /// The door's threshold as the rule and the door state it.
-enum Threshold {
+pub(super) enum Threshold {
     /// The rule declares none: the door's bottom is its threshold.
     None,
     Stated(f64),
@@ -503,13 +454,6 @@ enum Threshold {
     Default(f64, String),
     /// Declared, and the door does not state it: at least zero.
     Unknown(String),
-}
-
-enum Judged {
-    Pass,
-    /// A failing step and how far it misses its bound.
-    Fail(String, Option<Deviation>),
-    Undecided(String),
 }
 
 /// The unsigned step of a signed interval: its distance from zero.
@@ -537,18 +481,38 @@ fn step_interval(
     )
 }
 
-/// The step from `floor` to the door's `bottom` and threshold against the
-/// bounds.
-fn step(
+/// One floor a side of a door may step onto, as the measured alternatives
+/// read it.
+pub(crate) struct Alternative {
+    /// The side: the space it lies beside.
+    pub(crate) side: String,
+    /// Whether the side surely steps onto it.
+    pub(crate) sure: bool,
+    /// The step as displayed and how a message names it, or why the floor
+    /// cannot be measured.
+    pub(crate) step: Result<((f64, f64), String), String>,
+    pub(crate) related: ObjectId,
+    pub(crate) exact: bool,
+    /// What the floor was measured from.
+    pub(crate) evidence: Vec<Evidence>,
+}
+
+/// `(lower, upper)` with an end within a few units in the last place of a
+/// bound read as the bound, as [`judge_as_displayed`] reads it.
+fn snapped((lower, upper): (f64, f64), minimum: Option<f64>, maximum: Option<f64>) -> (f64, f64) {
+    super::snapped(lower, upper, minimum, maximum)
+}
+
+/// The step from `floor` to the door's `bottom` and threshold, and how a
+/// message names it; why the floor cannot be measured otherwise.
+pub(super) fn named_step(
     (low, high): (f64, f64),
     threshold: &Threshold,
     floor: &Floor,
-    minimum: Option<f64>,
-    maximum: Option<f64>,
-) -> Judged {
+) -> Result<((f64, f64), String), String> {
     let (floor_low, floor_high) = match &floor.elevation {
         Ok(elevation) => *elevation,
-        Err(why) => return Judged::Undecided(why.clone()),
+        Err(why) => return Err(why.clone()),
     };
     let ((step_low, step_high), note) = match threshold {
         Threshold::None => (
@@ -577,14 +541,5 @@ fn step(
         "the step from {} to the door's bottom{note} is {measured}",
         floor.name
     );
-    match judge_as_displayed(step_low, step_high, minimum, maximum) {
-        Verdict::Pass => Judged::Pass,
-        Verdict::Fail(bound) => Judged::Fail(
-            format!("{named}; required {bound} m"),
-            deviation(step_low, step_high, minimum, maximum),
-        ),
-        Verdict::Undecided(bound) => {
-            Judged::Undecided(format!("{named}, which straddles the bound {bound} m"))
-        }
-    }
+    Ok(((step_low, step_high), named))
 }

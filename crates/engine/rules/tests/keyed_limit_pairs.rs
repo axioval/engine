@@ -17,6 +17,10 @@ use axioval_ir::{Evidence, NotEvaluatedReason, ObjectId, PropertyValue, Quantity
 use axioval_rules::KeyedLimit;
 use common::{Model, findings, id, kind, number, property, rule, source, string, strings};
 
+/// `keyed-limit` as it runs, held to the implementation it replaced on
+/// every evaluation.
+static HELD: common::Held = common::Held(&KeyedLimit, &axioval_rules::reference::KeyedLimit);
+
 const ID: &str = "axioval:capability.keyed-limit";
 const ADJACENT: &str = "axioval:derived.adjacent-space";
 
@@ -126,7 +130,7 @@ fn width(model: Model, door: &str, metres: f64) -> Model {
 }
 
 fn judge(model: Model, parameters: Vec<(&str, ParameterValue)>) -> CapabilityEvaluation {
-    model.evaluate(&KeyedLimit, &rule(ID, kind("door"), parameters))
+    model.evaluate(&HELD, &rule(ID, kind("door"), parameters))
 }
 
 fn unevaluated(evaluation: &CapabilityEvaluation) -> Vec<(String, NotEvaluatedReason, String)> {
@@ -401,15 +405,12 @@ fn a_window_between_differently_typed_spaces_takes_its_pair_row() {
         .with("k", 0.0)
         .with("w1", 1.2)
         .with("w2", 0.9);
-    let evaluation = model.evaluate_with(
-        &KeyedLimit,
-        &rule(ID, kind("window"), parameters),
-        |services| {
+    let evaluation =
+        model.evaluate_with(&HELD, &rule(ID, kind("window"), parameters), |services| {
             services
                 .register(VerticalExtentServiceHandle::new(Arc::new(bottoms)))
                 .unwrap();
-        },
-    );
+        });
     let found = findings(&evaluation);
     assert_eq!(found.len(), 1, "{found:?}");
     assert_eq!(found[0].0, "w1");

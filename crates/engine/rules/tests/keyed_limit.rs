@@ -22,6 +22,10 @@ use common::{
     source, string, strings, unevaluated,
 };
 
+/// `keyed-limit` as it runs, held to the implementation it replaced on
+/// every evaluation.
+static HELD: common::Held = common::Held(&KeyedLimit, &axioval_rules::reference::KeyedLimit);
+
 const ID: &str = "axioval:capability.keyed-limit";
 
 /// Plan areas per object, with an optional uncertainty around each.
@@ -141,7 +145,7 @@ fn run(
     parameters: Vec<(&str, ParameterValue)>,
 ) -> CapabilityEvaluation {
     model.evaluate_with(
-        &KeyedLimit,
+        &HELD,
         &rule(ID, kind("compartment"), parameters),
         |services| {
             services
@@ -387,7 +391,7 @@ fn a_stated_quantity_is_checked_against_the_row() {
         row([Some("Assembly"), None, None], Some(20.0), None),
     ];
     let evaluation = model.evaluate(
-        &KeyedLimit,
+        &HELD,
         &rule(
             ID,
             kind("room"),
@@ -480,7 +484,7 @@ fn declarations_are_checked() {
 fn without_geometry_nothing_is_judged() {
     let model = building(Some("1"), &[("c1", "dry", "Office")]);
     let evaluation = model.evaluate(
-        &KeyedLimit,
+        &HELD,
         &rule(ID, kind("compartment"), fire_keys(fire_limits())),
     );
     assert_eq!(
@@ -694,15 +698,11 @@ fn sill(
     bottoms: Bottoms,
     parameters: Vec<(&str, ParameterValue)>,
 ) -> CapabilityEvaluation {
-    model.evaluate_with(
-        &KeyedLimit,
-        &rule(ID, kind("window"), parameters),
-        |services| {
-            services
-                .register(VerticalExtentServiceHandle::new(Arc::new(bottoms)))
-                .unwrap();
-        },
-    )
+    model.evaluate_with(&HELD, &rule(ID, kind("window"), parameters), |services| {
+        services
+            .register(VerticalExtentServiceHandle::new(Arc::new(bottoms)))
+            .unwrap();
+    })
 }
 
 #[test]
@@ -792,6 +792,25 @@ fn a_sill_height_measured_on_a_tessellation_is_inexact() {
     }
 }
 
+/// A sill height the rule judges above a tessellated window cites inexact
+/// evidence; above an exact one every citation is exact.
+#[test]
+fn a_judged_sill_height_on_a_tessellation_is_inexact() {
+    let model = rooms(&[("w1", &["o1"]), ("w2", &["o1"])]);
+    let bottoms = floors().with("w1", 1.2, 0.01).with("w2", 1.2, 0.0);
+    let evaluation = sill(model, bottoms, sill_keys(sill_limits()));
+    assert_eq!(flagged(&evaluation), ["w1", "w2"]);
+    for finding in evaluation.findings() {
+        let exact = finding.evidence.iter().all(|evidence| evidence.exact);
+        assert_eq!(
+            exact,
+            common::subject(finding) == "w2",
+            "{:?}",
+            finding.evidence
+        );
+    }
+}
+
 #[test]
 fn an_unmeasured_floor_is_not_evaluated_unless_another_floor_fails() {
     let model = rooms(&[("w1", &["o1", "o3"]), ("w2", &["o1", "o3"])]);
@@ -847,7 +866,7 @@ fn a_sill_below_a_minimum_is_found_and_without_geometry_nothing_is_judged() {
             )
         )]
     );
-    let evaluation = model().evaluate(&KeyedLimit, &rule(ID, kind("window"), sill_keys(limits)));
+    let evaluation = model().evaluate(&HELD, &rule(ID, kind("window"), sill_keys(limits)));
     assert_eq!(
         unevaluated(&evaluation),
         [("w1".to_owned(), NotEvaluatedReason::MissingService)]
@@ -933,7 +952,7 @@ fn doors(doors: &[Door<'_>]) -> Model {
 }
 
 fn clear(model: Model, parameters: Vec<(&str, ParameterValue)>) -> CapabilityEvaluation {
-    model.evaluate(&KeyedLimit, &rule(ID, kind("door"), parameters))
+    model.evaluate(&HELD, &rule(ID, kind("door"), parameters))
 }
 
 #[test]
@@ -1159,13 +1178,9 @@ fn a_clear_width_is_derived_from_the_lining_and_leaves() {
         .handle();
     let mut parameters = door_keys(Some(0.2));
     parameters.push(("clear_width_from_leaves", string("passage")));
-    let evaluation = model.evaluate_with(
-        &KeyedLimit,
-        &rule(ID, kind("door"), parameters),
-        |services| {
-            services.register(frames).unwrap();
-        },
-    );
+    let evaluation = model.evaluate_with(&HELD, &rule(ID, kind("door"), parameters), |services| {
+        services.register(frames).unwrap();
+    });
     let found = findings(&evaluation);
     assert_eq!(
         found
@@ -1241,13 +1256,9 @@ fn a_widest_leaf_too_narrow_is_found_although_the_passage_is_wide() {
             ("key_1", property(Some("Attributes"), "OperationType")),
             ("clear_width_from_leaves", string(mode)),
         ];
-        model().evaluate_with(
-            &KeyedLimit,
-            &rule(ID, kind("door"), parameters),
-            |services| {
-                services.register(frames()).unwrap();
-            },
-        )
+        model().evaluate_with(&HELD, &rule(ID, kind("door"), parameters), |services| {
+            services.register(frames()).unwrap();
+        })
     };
     let evaluation = evaluate("widest-leaf");
     assert_eq!(
@@ -1346,7 +1357,7 @@ fn a_door_too_low_after_its_lining_and_threshold_is_found() {
             ("d5", 2.1, Some(0.05), Some(0.02), Some(2.06)),
         ])
     };
-    let evaluation = model().evaluate(&KeyedLimit, &rule(ID, kind("door"), height_keys(true)));
+    let evaluation = model().evaluate(&HELD, &rule(ID, kind("door"), height_keys(true)));
     assert_eq!(
         findings(&evaluation),
         [
@@ -1394,7 +1405,7 @@ fn a_door_too_low_after_its_lining_and_threshold_is_found() {
         parameters
     };
     for parameters in [without_overall, with_deduction] {
-        let evaluation = model().evaluate(&KeyedLimit, &rule(ID, kind("door"), parameters));
+        let evaluation = model().evaluate(&HELD, &rule(ID, kind("door"), parameters));
         assert_eq!(
             unevaluated(&evaluation),
             [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
@@ -1498,18 +1509,14 @@ fn step(
     ramps: Ramps,
     parameters: Vec<(&str, ParameterValue)>,
 ) -> CapabilityEvaluation {
-    model.evaluate_with(
-        &KeyedLimit,
-        &rule(ID, kind("door"), parameters),
-        |services| {
-            services
-                .register(VerticalExtentServiceHandle::new(Arc::new(bottoms)))
-                .unwrap();
-            services
-                .register(ProximityServiceHandle::new(Arc::new(ramps)))
-                .unwrap();
-        },
-    )
+    model.evaluate_with(&HELD, &rule(ID, kind("door"), parameters), |services| {
+        services
+            .register(VerticalExtentServiceHandle::new(Arc::new(bottoms)))
+            .unwrap();
+        services
+            .register(ProximityServiceHandle::new(Arc::new(ramps)))
+            .unwrap();
+    })
 }
 
 /// A threshold step is measured from geometry: a sill 4 cm above the
@@ -1660,7 +1667,7 @@ fn storey_area_limits() -> Vec<(&'static str, ParameterValue)> {
 
 fn per_storey(model: Model, areas: Areas) -> CapabilityEvaluation {
     model.evaluate_with(
-        &KeyedLimit,
+        &HELD,
         &rule(ID, kind("storey"), storey_area_limits()),
         |services| {
             services
@@ -1722,7 +1729,7 @@ fn member_areas_need_a_member_selector_and_nothing_else_takes_one() {
     other[1] = ("quantity", string("plan-area"));
     for parameters in [without, other] {
         let evaluation = named_storeys(&[("eg", "EG", &["e1"])])
-            .evaluate(&KeyedLimit, &rule(ID, kind("storey"), parameters));
+            .evaluate(&HELD, &rule(ID, kind("storey"), parameters));
         assert_eq!(
             unevaluated(&evaluation),
             [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
@@ -1888,7 +1895,7 @@ fn a_type_row_keyed_on_the_operation_needs_the_doors_leaves() {
         defaults_row(&[("width_deduction", metres(0.01))]),
     ];
     let evaluation = model.evaluate_with(
-        &KeyedLimit,
+        &HELD,
         &rule(ID, kind("door"), typed_widths(defaults)),
         |services| {
             services.register(frames).unwrap();
@@ -1934,7 +1941,7 @@ fn a_clear_height_takes_the_types_default_lining_and_threshold() {
             ("threshold_height", metres(0.02)),
         ])]),
     ));
-    let evaluation = model.evaluate(&KeyedLimit, &rule(ID, kind("door"), parameters));
+    let evaluation = model.evaluate(&HELD, &rule(ID, kind("door"), parameters));
     assert_eq!(
         findings(&evaluation),
         [(
@@ -2211,7 +2218,7 @@ fn the_built_in_quantities_read_from_the_registry_judge_alike() {
     let keys = door_keys(Some(0.1));
     let built_in = clear(widths(), keys.clone());
     let measured = widths().evaluate_measured(
-        &KeyedLimit,
+        &HELD,
         &rule(
             ID,
             kind("door"),
@@ -2235,9 +2242,9 @@ fn the_built_in_quantities_read_from_the_registry_judge_alike() {
         ])
     };
     let keys = height_keys(true);
-    let built_in = heights().evaluate(&KeyedLimit, &rule(ID, kind("door"), keys.clone()));
+    let built_in = heights().evaluate(&HELD, &rule(ID, kind("door"), keys.clone()));
     let measured = heights().evaluate_measured(
-        &KeyedLimit,
+        &HELD,
         &rule(
             ID,
             kind("door"),
@@ -2262,7 +2269,7 @@ fn the_built_in_quantities_read_from_the_registry_judge_alike() {
     let keys = sill_keys(sill_limits());
     let built_in = sill(windows(), bottoms(), keys.clone());
     let measured = windows().evaluate_measured(
-        &KeyedLimit,
+        &HELD,
         &rule(
             ID,
             kind("window"),
@@ -2295,7 +2302,7 @@ fn the_built_in_quantities_read_from_the_registry_judge_alike() {
     ));
     let built_in = step(thresholds(), levels(), Ramps::default(), keys.clone());
     let measured = thresholds().evaluate_measured(
-        &KeyedLimit,
+        &HELD,
         &rule(
             ID,
             kind("door"),
@@ -2534,13 +2541,10 @@ mod as_expressions {
         };
         let mut parameters = door_keys(Some(0.2));
         parameters.push(("clear_width_from_leaves", string("passage")));
-        let evaluated = model().evaluate_with(
-            &KeyedLimit,
-            &rule(ID, kind("door"), parameters),
-            |services| {
+        let evaluated =
+            model().evaluate_with(&HELD, &rule(ID, kind("door"), parameters), |services| {
                 services.register(frames()).unwrap();
-            },
-        );
+            });
         let passage = parity(
             &evaluated,
             model(),
@@ -2585,13 +2589,10 @@ mod as_expressions {
                 ("key_1", property(Some("Attributes"), "OperationType")),
                 ("clear_width_from_leaves", string(mode)),
             ];
-            let evaluated = model().evaluate_with(
-                &KeyedLimit,
-                &rule(ID, kind("door"), parameters),
-                |services| {
+            let evaluated =
+                model().evaluate_with(&HELD, &rule(ID, kind("door"), parameters), |services| {
                     services.register(frames()).unwrap();
-                },
-            );
+                });
             let rewritten = parity(
                 &evaluated,
                 model(),
@@ -2622,7 +2623,7 @@ mod as_expressions {
             ])
         };
         let limits = vec![row([Some("*"), None, None], Some(2.05), None)];
-        let evaluated = model().evaluate(&KeyedLimit, &rule(ID, kind("door"), height_keys(true)));
+        let evaluated = model().evaluate(&HELD, &rule(ID, kind("door"), height_keys(true)));
         let height = measured(
             "door_clear_height;stated=Lining/ClearHeight;overall=Attributes/OverallHeight;\
              lining=Lining/LiningThickness;threshold=Lining/ThresholdThickness",
@@ -2875,5 +2876,112 @@ mod as_expressions {
             step_keys(true),
         );
         assert_eq!(holds(&ramped, "ramps"), (2, 0));
+    }
+}
+
+mod generated {
+    use super::*;
+    use proptest::prelude::*;
+
+    /// An operation type one of two rows selects, one no row selects, one
+    /// that cannot be read, or none stated.
+    fn operation() -> impl Strategy<Value = u8> {
+        0u8..5
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(96))]
+
+        /// Clear widths from stated values and overall widths less a
+        /// deduction, keys that select no row or cannot be read: the
+        /// template holds to the reference on every door.
+        #[test]
+        fn generated_doors_hold_parity(
+            doors in proptest::collection::vec(
+                (operation(), proptest::option::of(14u8..30), proptest::option::of(0u8..4)),
+                1..6,
+            ),
+            deduction in proptest::option::of(0u8..4),
+            maximum in any::<bool>(),
+        ) {
+            let mut model = Model::default();
+            for (index, (operation, overall, stated)) in doors.iter().enumerate() {
+                let door = format!("d{index}");
+                model = model.object(&door, "door");
+                model = match operation {
+                    0 => model.text(&door, "Attributes", "OperationType", "SINGLE_SWING_LEFT"),
+                    1 => model.text(
+                        &door,
+                        "Attributes",
+                        "OperationType",
+                        "DOUBLE_DOOR_SINGLE_SWING",
+                    ),
+                    2 => model.text(&door, "Attributes", "OperationType", "SLIDING_TO_LEFT"),
+                    3 => model.unreadable_value(&door, "Attributes", "OperationType", "IFCLABEL"),
+                    _ => model,
+                };
+                if let Some(overall) = overall {
+                    model = model.value(
+                        &door,
+                        "Attributes",
+                        "OverallWidth",
+                        length(f64::from(*overall) * 0.05),
+                    );
+                }
+                model = match stated {
+                    Some(0) => model.value(&door, "Pset", "ClearWidth", length(0.9)),
+                    Some(1) => model.value(&door, "Pset", "ClearWidth", length(1.15)),
+                    Some(2) => model.text(&door, "Pset", "ClearWidth", "wide"),
+                    _ => model,
+                };
+            }
+            let mut parameters = door_keys(deduction.map(|step| f64::from(step) * 0.05));
+            if maximum {
+                parameters[0] = (
+                    "limits",
+                    table(vec![
+                        row([Some("SINGLE_SWING_*"), None, None], Some(0.9), Some(1.1)),
+                        row([Some("DOUBLE_DOOR_*"), None, None], None, Some(1.3)),
+                    ]),
+                );
+            }
+            // The held evaluation compares the template with the reference.
+            clear(model, parameters);
+        }
+
+        /// Sill heights above the floors of every space a window adjoins,
+        /// some floors unmeasured, some windows tessellated.
+        #[test]
+        fn generated_sills_hold_parity(
+            windows in proptest::collection::vec(
+                (proptest::collection::vec(0usize..4, 0..4), 0u8..30, any::<bool>()),
+                1..5,
+            ),
+        ) {
+            let spaces = ["o1", "o2", "k", "o3"];
+            let named: Vec<(String, Vec<&str>)> = windows
+                .iter()
+                .enumerate()
+                .map(|(index, (adjoining, ..))| {
+                    (
+                        format!("w{index}"),
+                        adjoining.iter().map(|space| spaces[*space]).collect(),
+                    )
+                })
+                .collect();
+            let listed: Vec<(&str, &[&str])> = named
+                .iter()
+                .map(|(window, adjoining)| (window.as_str(), adjoining.as_slice()))
+                .collect();
+            let mut bottoms = floors();
+            for ((window, _), (_, height, tessellated)) in named.iter().zip(&windows) {
+                bottoms = bottoms.with(
+                    window,
+                    f64::from(*height) * 0.05,
+                    if *tessellated { 0.01 } else { 0.0 },
+                );
+            }
+            sill(rooms(&listed), bottoms, sill_keys(sill_limits()));
+        }
     }
 }

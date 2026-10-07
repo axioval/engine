@@ -1860,7 +1860,13 @@ One form, judged by one check over the measured list
 (every parameter by its own name, and the openings the rule selects, so
 each opening's neighbours are the capability's): what the capability
 checks of the opening in each host its path reaches, in its order, host by
-host (`check` names each item), every opening placed once per run.
+host (`check` names each item). Every opening is placed once per rule,
+and what the openings share (the hosts' bodies, the placements, the
+table's selections, the supports read) is kept for the rule; each
+opening's items are measured from it when its list is read, so only one
+opening's items are held at a time. Each host's body and each opening's
+solid are read once per run, shared by the rules (and by
+`opening_placements`).
 
 | Item | Fields | Judgement |
 | --- | --- | --- |

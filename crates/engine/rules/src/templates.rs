@@ -185,6 +185,9 @@ struct Bound {
     /// Each of the form's checks of the project's value expressions, bound
     /// likewise.
     project: Vec<Vec<Expression>>,
+    /// Whether the form names `@selection` anywhere: only then is the
+    /// rule's selection made a bound selection.
+    reads_selection: bool,
 }
 
 impl std::ops::Deref for Plan<'_> {
@@ -1395,6 +1398,9 @@ fn bind(template: &Template, rule: &CompiledRule) -> Result<Bound, Unavailable> 
         grading,
         once,
         project,
+        reads_selection: serde_json::to_string(form).map_or(true, |written| {
+            written.contains(&format!("@{}", axioval_engine::template::SELECTION))
+        }),
     })
 }
 
@@ -1680,21 +1686,25 @@ fn property_read(expression: &Expression) -> Option<(Option<&str>, &str)> {
 /// A refusal as the measured value words it: without the property
 /// resolution's prefix and the call and object a measured value names
 /// (the object itself, or the member of an aggregate whose value it is).
+/// Matched without formatting: a refusal is worded for every object a
+/// guard refuses.
 fn refusal(message: &str, expression: &Expression, object: &Object) -> String {
+    let message = message
+        .strip_prefix("property evidence conflicts: ")
+        .unwrap_or(message);
+    // An engine-measured value's refusal names the set too.
+    let message = message
+        .strip_prefix('`')
+        .and_then(|rest| rest.strip_prefix(axioval_ir::MEASURED_SET))
+        .and_then(|rest| rest.strip_prefix("` value "))
+        .unwrap_or(message);
     let Some(name) = measured_read(expression) else {
         // A composition: worded as the measured value that refused it
         // words it, whichever of those it reads that was.
-        let message = message
-            .strip_prefix("property evidence conflicts: ")
-            .unwrap_or(message);
-        let message = message
-            .strip_prefix(&format!("`{}` value ", axioval_ir::MEASURED_SET))
-            .unwrap_or(message);
-        let named = format!("` of {}: ", object.id);
-        return match message
-            .strip_prefix('`')
-            .and_then(|rest| rest.split_once(&named))
-        {
+        return match message.strip_prefix('`').and_then(|rest| {
+            let (name, rest) = rest.split_once("` of ")?;
+            Some((name, of_object(rest, &object.id)?))
+        }) {
             // A measured value's name: snake case, as the registry names
             // them.
             Some((name, why))
@@ -1708,22 +1718,29 @@ fn refusal(message: &str, expression: &Expression, object: &Object) -> String {
             _ => message.to_owned(),
         };
     };
-    let message = message
-        .strip_prefix("property evidence conflicts: ")
-        .unwrap_or(message);
-    // An engine-measured value's refusal names the set too.
-    let message = message
-        .strip_prefix(&format!("`{}` value ", axioval_ir::MEASURED_SET))
-        .unwrap_or(message);
-    if let Some(rest) = message.strip_prefix(&format!("`{name}` of {}: ", object.id)) {
-        return rest.to_owned();
-    }
-    // A member's refusal, read through an aggregate.
-    message
-        .strip_prefix(&format!("`{name}` of "))
-        .and_then(|rest| rest.split_once(": "))
-        .map_or(message, |(_, why)| why)
+    let Some(rest) = message
+        .strip_prefix('`')
+        .and_then(|rest| rest.strip_prefix(name))
+        .and_then(|rest| rest.strip_prefix("` of "))
+    else {
+        return message.to_owned();
+    };
+    // The object itself, or a member's refusal read through an aggregate.
+    of_object(rest, &object.id)
+        .or_else(|| rest.split_once(": ").map(|(_, why)| why))
+        .unwrap_or(message)
         .to_owned()
+}
+
+/// What follows `<object>: ` at the start of `text`, `object` as it
+/// displays (`system:document/local`), matched without formatting it.
+fn of_object<'t>(text: &'t str, object: &ObjectId) -> Option<&'t str> {
+    text.strip_prefix(object.source.system.as_str())?
+        .strip_prefix(':')?
+        .strip_prefix(object.source.document.as_str())?
+        .strip_prefix('/')?
+        .strip_prefix(object.local_id.as_str())?
+        .strip_prefix(": ")
 }
 
 /// `template` with its placeholders rendered.
@@ -3793,8 +3810,12 @@ pub(crate) fn run(
     let decision = effective(&plan);
     let mut table = report_table(&plan, rule);
     let (selected, mut evaluation) = ran.selection(context, rule);
-    // `@selection` is the selection just made.
-    let arguments = Arguments::of_rule(rule).selected(&selected, &evaluation);
+    // `@selection` is the selection just made, where the form names it.
+    let arguments = if plan.reads_selection {
+        Arguments::of_rule(rule).selected(&selected, &evaluation)
+    } else {
+        Arguments::of_rule(rule)
+    };
     let (batched, bound) = read_ahead(&plan, context, &arguments, selected.first().copied());
     for chunk in selected.chunks(BATCH) {
         let prefetched = prefetch(context, &batched, chunk);

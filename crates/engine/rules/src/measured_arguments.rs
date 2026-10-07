@@ -50,6 +50,38 @@ type Prepared = Option<Result<axioval_engine::PreparedRead, Unavailable>>;
 /// where it does not parse or names no reference.
 type Anchored = Option<Result<MeasuredCall, Unavailable>>;
 
+/// How many parsed names [`parsed`] keeps before it starts over.
+const PARSED_KEPT: usize = 1024;
+
+/// The measured name `name` (a member list where `list`) as parsed, its
+/// references unbound; `None` where it does not parse. Parsing is a pure
+/// function of the name, so each is parsed once and kept for every run
+/// (at most [`PARSED_KEPT`], all dropped when full).
+fn parsed(name: &str, list: bool) -> Option<MeasuredCall> {
+    type Kept = std::collections::HashMap<(bool, String), Option<MeasuredCall>>;
+    static KEPT: std::sync::LazyLock<std::sync::Mutex<Kept>> =
+        std::sync::LazyLock::new(|| std::sync::Mutex::new(Kept::new()));
+    let key = (list, name.to_owned());
+    if let Ok(kept) = KEPT.lock()
+        && let Some(call) = kept.get(&key)
+    {
+        return call.clone();
+    }
+    let call = if list {
+        axioval_ir::measured::parse_members(name)
+    } else {
+        axioval_ir::measured::parse(name)
+    }
+    .ok();
+    if let Ok(mut kept) = KEPT.lock() {
+        if kept.len() >= PARSED_KEPT {
+            kept.clear();
+        }
+        kept.insert(key, call.clone());
+    }
+    call
+}
+
 /// The objects `selector`, the rule's parameter `parameter`, picks: those
 /// surely picked and those it cannot decide, each sorted. A source whose
 /// objects cannot all be listed leaves the whole selection unknown.
@@ -213,14 +245,11 @@ impl Arguments {
         if let Some(call) = self.anchored.borrow().get(&key) {
             return call.clone();
         }
-        let parsed = if list {
-            axioval_ir::measured::parse_members(name)
-        } else {
-            axioval_ir::measured::parse(name)
-        };
-        let call = parsed.ok().filter(|call| !call.is_bound()).map(|mut call| {
-            bind_references(context, parameters, Some(self), None, &mut call).map(|()| call)
-        });
+        let call = parsed(name, list)
+            .filter(|call| !call.is_bound())
+            .map(|mut call| {
+                bind_references(context, parameters, Some(self), None, &mut call).map(|()| call)
+            });
         self.anchored.borrow_mut().insert(key, call.clone());
         call
     }

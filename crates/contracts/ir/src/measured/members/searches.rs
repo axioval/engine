@@ -1161,3 +1161,586 @@ pub(super) const COMPOSITIONS: MemberDescriptor = MemberDescriptor {
         ),
     ],
 };
+
+const CLEARANCE_CHECKS_PARAMETERS: [MeasuredParameter; 46] = [
+    MeasuredParameter {
+        key: "side",
+        kind: MeasuredParameterKind::Text,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `side`, as `component-clearance` reads it.",
+            "Der Parameter `side` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "sides",
+        kind: MeasuredParameterKind::Path,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `sides`, as `component-clearance` reads it.",
+            "Der Parameter `sides` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "quantifier",
+        kind: MeasuredParameterKind::Text,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `quantifier`, as `component-clearance` reads it.",
+            "Der Parameter `quantifier` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "front_axis",
+        kind: MeasuredParameterKind::Text,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `front_axis`, as `component-clearance` reads it.",
+            "Der Parameter `front_axis` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "both_sides",
+        kind: MeasuredParameterKind::Truth,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `both_sides`, as `component-clearance` reads it.",
+            "Der Parameter `both_sides` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "width",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `width`, as `component-clearance` reads it.",
+            "Der Parameter `width` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "width_mode",
+        kind: MeasuredParameterKind::Text,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `width_mode`, as `component-clearance` reads it.",
+            "Der Parameter `width_mode` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "width_minimum",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `width_minimum`, as `component-clearance` reads it.",
+            "Der Parameter `width_minimum` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "width_maximum",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `width_maximum`, as `component-clearance` reads it.",
+            "Der Parameter `width_maximum` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "depth",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `depth`, as `component-clearance` reads it.",
+            "Der Parameter `depth` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "depth_mode",
+        kind: MeasuredParameterKind::Text,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `depth_mode`, as `component-clearance` reads it.",
+            "Der Parameter `depth_mode` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "depth_minimum",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `depth_minimum`, as `component-clearance` reads it.",
+            "Der Parameter `depth_minimum` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "depth_maximum",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `depth_maximum`, as `component-clearance` reads it.",
+            "Der Parameter `depth_maximum` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "depth_from",
+        kind: MeasuredParameterKind::Text,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `depth_from`, as `component-clearance` reads it.",
+            "Der Parameter `depth_from` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "radius",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `radius`, as `component-clearance` reads it.",
+            "Der Parameter `radius` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "height",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `height`, as `component-clearance` reads it.",
+            "Der Parameter `height` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "height_mode",
+        kind: MeasuredParameterKind::Text,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `height_mode`, as `component-clearance` reads it.",
+            "Der Parameter `height_mode` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "height_minimum",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `height_minimum`, as `component-clearance` reads it.",
+            "Der Parameter `height_minimum` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "height_maximum",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `height_maximum`, as `component-clearance` reads it.",
+            "Der Parameter `height_maximum` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "size_mode",
+        kind: MeasuredParameterKind::Text,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `size_mode`, as `component-clearance` reads it.",
+            "Der Parameter `size_mode` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "size_tolerance",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `size_tolerance`, as `component-clearance` reads it.",
+            "Der Parameter `size_tolerance` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "offset",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `offset`, as `component-clearance` reads it.",
+            "Der Parameter `offset` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "lateral_offset",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `lateral_offset`, as `component-clearance` reads it.",
+            "Der Parameter `lateral_offset` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "align",
+        kind: MeasuredParameterKind::Text,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `align`, as `component-clearance` reads it.",
+            "Der Parameter `align` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "slide_from",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `slide_from`, as `component-clearance` reads it.",
+            "Der Parameter `slide_from` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "slide_to",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `slide_to`, as `component-clearance` reads it.",
+            "Der Parameter `slide_to` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "depth_slide_from",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `depth_slide_from`, as `component-clearance` reads it.",
+            "Der Parameter `depth_slide_from` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "depth_slide_to",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `depth_slide_to`, as `component-clearance` reads it.",
+            "Der Parameter `depth_slide_to` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "height_reference",
+        kind: MeasuredParameterKind::Text,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `height_reference`, as `component-clearance` reads it.",
+            "Der Parameter `height_reference` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "vertical_offset",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `vertical_offset`, as `component-clearance` reads it.",
+            "Der Parameter `vertical_offset` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "top_datum",
+        kind: MeasuredParameterKind::Text,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `top_datum`, as `component-clearance` reads it.",
+            "Der Parameter `top_datum` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "top_offset",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `top_offset`, as `component-clearance` reads it.",
+            "Der Parameter `top_offset` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "obstacles",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `obstacles`, as `component-clearance` reads it.",
+            "Der Parameter `obstacles` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "allowed_intruders",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `allowed_intruders`, as `component-clearance` reads it.",
+            "Der Parameter `allowed_intruders` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "protrusion",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `protrusion`, as `component-clearance` reads it.",
+            "Der Parameter `protrusion` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "within_space",
+        kind: MeasuredParameterKind::Truth,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `within_space`, as `component-clearance` reads it.",
+            "Der Parameter `within_space` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "space_path",
+        kind: MeasuredParameterKind::Path,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `space_path`, as `component-clearance` reads it.",
+            "Der Parameter `space_path` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "wall_selector",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `wall_selector`, as `component-clearance` reads it.",
+            "Der Parameter `wall_selector` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "wall_reach",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `wall_reach`, as `component-clearance` reads it.",
+            "Der Parameter `wall_reach` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "wall_inset",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `wall_inset`, as `component-clearance` reads it.",
+            "Der Parameter `wall_inset` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "support_selector",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `support_selector`, as `component-clearance` reads it.",
+            "Der Parameter `support_selector` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "support_tolerance",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `support_tolerance`, as `component-clearance` reads it.",
+            "Der Parameter `support_tolerance` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "clear_width_property",
+        kind: MeasuredParameterKind::Property,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `clear_width_property`, as `component-clearance` reads it.",
+            "Der Parameter `clear_width_property` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "clear_width_from_leaves",
+        kind: MeasuredParameterKind::Text,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `clear_width_from_leaves`, as `component-clearance` reads it.",
+            "Der Parameter `clear_width_from_leaves` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "overall_width",
+        kind: MeasuredParameterKind::Property,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `overall_width`, as `component-clearance` reads it.",
+            "Der Parameter `overall_width` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+    MeasuredParameter {
+        key: "width_deduction",
+        kind: MeasuredParameterKind::Length {
+            minimum: f64::NEG_INFINITY,
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's `width_deduction`, as `component-clearance` reads it.",
+            "Der Parameter `width_deduction` der Regel, wie `component-clearance` ihn liest.",
+        ),
+    },
+];
+
+pub(super) const CLEARANCE_CHECKS: MemberDescriptor = MemberDescriptor {
+    list: MeasuredDescriptor {
+        name: "clearance_checks",
+        parameters: &CLEARANCE_CHECKS_PARAMETERS,
+        dimension: None,
+        services: &[
+            "free-space",
+            "object-frame",
+            "vertical-extent",
+            "plan-span",
+            "relationship-selection",
+        ],
+        exactness: MeasuredExactness::Measured,
+        subject: MeasuredSubject::Object,
+        not_evaluated: &[
+            "the component's frame, extents or spaces cannot be read, or a service is not registered",
+        ],
+        label: &en_de("Clearance checks", "Freiraumprüfungen"),
+        help: &en_de(
+            "Each question component-clearance asks of a side of the component, as its search answers it: the volume free less its tolerance, each larger volume obstructed, the volume inside its spaces, its base supported (the support coverage); or, with quantifier any, one answer for every side.",
+            "Jede Frage, die component-clearance an eine Seite des Bauteils stellt, wie ihre Suche sie beantwortet: das Volumen abzüglich Toleranz frei, jedes größere verstellt, das Volumen in seinen Räumen, seine Basis getragen (die Auflagerdeckung); oder, mit quantifier any, eine Antwort für alle Seiten.",
+        ),
+    },
+    fields: &[
+        field(
+            "label",
+            TEXT,
+            &en_de("Side", "Seite"),
+            &en_de(
+                "The side or sides the answer is about, as findings name them.",
+                "Die Seite oder Seiten, um die es geht, wie Befunde sie nennen.",
+            ),
+        ),
+        field(
+            "met",
+            TRUTH,
+            &en_de("Met", "Erfüllt"),
+            &en_de(
+                "Whether the question is met: the volume free, a larger one obstructed, inside its spaces, supported; undecided, with why, where the positions or selections leave it open.",
+                "Ob die Frage erfüllt ist: das Volumen frei, ein größeres verstellt, innerhalb seiner Räume, getragen; unentschieden, mit Grund, wo Lagen oder Auswahlen es offenlassen.",
+            ),
+        ),
+        field(
+            "words",
+            TEXT,
+            &en_de("Words", "Worte"),
+            &en_de(
+                "What an unmet question comes to, as findings word it after the side.",
+                "Was eine nicht erfüllte Frage ergibt, wie Befunde es nach der Seite formulieren.",
+            ),
+        ),
+        field(
+            "related",
+            OBJECTS,
+            &en_de("Related", "Bezogen"),
+            &en_de(
+                "The obstacles, or the spaces the volume leaves.",
+                "Die Hindernisse oder die Räume, die das Volumen verlässt.",
+            ),
+        ),
+        field(
+            "reason",
+            TEXT,
+            &en_de("Reason", "Grund"),
+            &en_de(
+                "Why an undecided answer is open, as a report writes it.",
+                "Warum eine unentschiedene Antwort offen ist, wie ein Bericht es schreibt.",
+            ),
+        ),
+    ],
+};

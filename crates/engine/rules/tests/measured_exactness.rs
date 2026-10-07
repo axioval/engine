@@ -160,6 +160,11 @@ const COVERED: &[(&str, &str, &str)] = &[
         "an_area_summed_over_tessellated_footprints_is_cited_inexactly",
     ),
     (
+        "clearance_checks",
+        "../../facade/axioval/tests/axiolid_component_clearance.rs",
+        "a_turned_component_measures_its_volume_as_an_interval",
+    ),
+    (
         "compositions",
         "tests/group_composition.rs",
         "a_composition_never_cites_an_approximate_answer",

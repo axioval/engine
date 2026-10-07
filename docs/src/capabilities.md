@@ -1517,6 +1517,8 @@ The volume starts at the component's outermost point on the side, whatever the p
 
 **Any of several sides.** With `sides` and `quantifier` `any`, a side passes when every question on it passes (clear, and inside the space or supported when asked); the component passes when one side does, is one finding when every side surely fails a question (`left or right clearance has no free side: left (…) is obstructed by …; right (…) …`, relating every obstacle named), and is not evaluated otherwise.
 
+The capability runs as a [template](./templates.md#component-clearance) judging each side's answers, which the search states as the measured list `clearance_checks`, the support coverage among them.
+
 **Supported.** With `support_selector` the declared volume's plan must lie on the tops of the selected bodies: the upward faces of their meshes, clipped to the band within `support_tolerance` of the volume's base (`FreeSpaceService::assess_support_coverage`, see [Free space and clearance](./free-space.md#support-coverage)). Supported needs the union of the volume's positions covered by sure supports within the tolerance of every elevation the base may have; unsupported, a finding (`… is not wholly supported: part of it lies over no top of the supports within … of its base`), needs part of the common part outside the tops of every possible support within the tolerance of any of them. An external door's clear area overhanging the slab edge is found this way. A floating volume has no support check.
 
 **A front against a wall.**

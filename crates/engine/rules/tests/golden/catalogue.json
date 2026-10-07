@@ -10218,7 +10218,236 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "component-clearance",
+        "declaration": [
+          {
+            "kind": "arguments",
+            "when": [],
+            "value": "clearance_checks;side=@side;sides=@sides;quantifier=@quantifier;front_axis=@front_axis;both_sides=@both_sides;width=@width;width_mode=@width_mode;width_minimum=@width_minimum;width_maximum=@width_maximum;depth=@depth;depth_mode=@depth_mode;depth_minimum=@depth_minimum;depth_maximum=@depth_maximum;depth_from=@depth_from;radius=@radius;height=@height;height_mode=@height_mode;height_minimum=@height_minimum;height_maximum=@height_maximum;size_mode=@size_mode;size_tolerance=@size_tolerance;offset=@offset;lateral_offset=@lateral_offset;align=@align;slide_from=@slide_from;slide_to=@slide_to;depth_slide_from=@depth_slide_from;depth_slide_to=@depth_slide_to;height_reference=@height_reference;vertical_offset=@vertical_offset;top_datum=@top_datum;top_offset=@top_offset;obstacles=@obstacles;allowed_intruders=@allowed_intruders;protrusion=@protrusion;within_space=@within_space;space_path=@space_path;wall_selector=@wall_selector;wall_reach=@wall_reach;wall_inset=@wall_inset;support_selector=@support_selector;support_tolerance=@support_tolerance;clear_width_property=@clear_width_property;clear_width_from_leaves=@clear_width_from_leaves;overall_width=@overall_width;width_deduction=@width_deduction"
+          }
+        ],
+        "services": {
+          "needs": [
+            "object-frame",
+            "vertical-extent",
+            "free-space"
+          ],
+          "message": "component-clearance needs the object-frame, vertical-extent and free-space services",
+          "whole": true
+        },
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "judged",
+                "expression": {
+                  "kind": "literal",
+                  "value": {
+                    "type": "integer",
+                    "value": 1
+                  },
+                  "label": "the clearances are searched"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "judged",
+              "rounding": []
+            },
+            "fail": "",
+            "undecided": "",
+            "checks": [
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {},
+                  "list": "clearance_checks;side=@side;sides=@sides;quantifier=@quantifier;front_axis=@front_axis;both_sides=@both_sides;width=@width;width_mode=@width_mode;width_minimum=@width_minimum;width_maximum=@width_maximum;depth=@depth;depth_mode=@depth_mode;depth_minimum=@depth_minimum;depth_maximum=@depth_maximum;depth_from=@depth_from;radius=@radius;height=@height;height_mode=@height_mode;height_minimum=@height_minimum;height_maximum=@height_maximum;size_mode=@size_mode;size_tolerance=@size_tolerance;offset=@offset;lateral_offset=@lateral_offset;align=@align;slide_from=@slide_from;slide_to=@slide_to;depth_slide_from=@depth_slide_from;depth_slide_to=@depth_slide_to;height_reference=@height_reference;vertical_offset=@vertical_offset;top_datum=@top_datum;top_offset=@top_offset;obstacles=@obstacles;allowed_intruders=@allowed_intruders;protrusion=@protrusion;within_space=@within_space;space_path=@space_path;wall_selector=@wall_selector;wall_reach=@wall_reach;wall_inset=@wall_inset;support_selector=@support_selector;support_tolerance=@support_tolerance;clear_width_property=@clear_width_property;clear_width_from_leaves=@clear_width_from_leaves;overall_width=@overall_width;width_deduction=@width_deduction",
+                  "refused": "{why}",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "judge": {
+                        "kind": "truth",
+                        "value": "met",
+                        "finding": false
+                      },
+                      "fail": "{label} {words}",
+                      "undecided": "{label}: {why}",
+                      "related": "related"
+                    }
+                  ],
+                  "reason": "reason"
+                },
+                "fail": "",
+                "undecided": ""
+              }
+            ]
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "aggregate",
+                  "function": "none",
+                  "over": {
+                    "kind": "measured",
+                    "name": "clearance_checks;side=@side;sides=@sides;quantifier=@quantifier;front_axis=@front_axis;both_sides=@both_sides;width=@width;width_mode=@width_mode;width_minimum=@width_minimum;width_maximum=@width_maximum;depth=@depth;depth_mode=@depth_mode;depth_minimum=@depth_minimum;depth_maximum=@depth_maximum;depth_from=@depth_from;radius=@radius;height=@height;height_mode=@height_mode;height_minimum=@height_minimum;height_maximum=@height_maximum;size_mode=@size_mode;size_tolerance=@size_tolerance;offset=@offset;lateral_offset=@lateral_offset;align=@align;slide_from=@slide_from;slide_to=@slide_to;depth_slide_from=@depth_slide_from;depth_slide_to=@depth_slide_to;height_reference=@height_reference;vertical_offset=@vertical_offset;top_datum=@top_datum;top_offset=@top_offset;obstacles=@obstacles;allowed_intruders=@allowed_intruders;protrusion=@protrusion;within_space=@within_space;space_path=@space_path;wall_selector=@wall_selector;wall_reach=@wall_reach;wall_inset=@wall_inset;support_selector=@support_selector;support_tolerance=@support_tolerance;clear_width_property=@clear_width_property;clear_width_from_leaves=@clear_width_from_leaves;overall_width=@overall_width;width_deduction=@width_deduction"
+                  },
+                  "value": {
+                    "kind": "not",
+                    "operand": {
+                      "kind": "and",
+                      "operands": [
+                        {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "met"
+                        }
+                      ]
+                    }
+                  },
+                  "label": "no item fails"
+                },
+                {
+                  "kind": "isDefined",
+                  "operand": {
+                    "kind": "literal",
+                    "value": {
+                      "type": "integer",
+                      "value": 1
+                    },
+                    "label": "the clearances are searched"
+                  },
+                  "label": "read"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.aggregate",
+                      "label": "no item fails",
+                      "fields": {
+                        "function": "none"
+                      },
+                      "inputs": {
+                        "over": {
+                          "block": {
+                            "type": "members.clearance_checks",
+                            "fields": {
+                              "align": "@align",
+                              "allowed_intruders": "@allowed_intruders",
+                              "both_sides": "@both_sides",
+                              "clear_width_from_leaves": "@clear_width_from_leaves",
+                              "clear_width_property": "@clear_width_property",
+                              "depth": "@depth",
+                              "depth_from": "@depth_from",
+                              "depth_maximum": "@depth_maximum",
+                              "depth_minimum": "@depth_minimum",
+                              "depth_mode": "@depth_mode",
+                              "depth_slide_from": "@depth_slide_from",
+                              "depth_slide_to": "@depth_slide_to",
+                              "front_axis": "@front_axis",
+                              "height": "@height",
+                              "height_maximum": "@height_maximum",
+                              "height_minimum": "@height_minimum",
+                              "height_mode": "@height_mode",
+                              "height_reference": "@height_reference",
+                              "lateral_offset": "@lateral_offset",
+                              "obstacles": "@obstacles",
+                              "offset": "@offset",
+                              "overall_width": "@overall_width",
+                              "protrusion": "@protrusion",
+                              "quantifier": "@quantifier",
+                              "radius": "@radius",
+                              "side": "@side",
+                              "sides": "@sides",
+                              "size_mode": "@size_mode",
+                              "size_tolerance": "@size_tolerance",
+                              "slide_from": "@slide_from",
+                              "slide_to": "@slide_to",
+                              "space_path": "@space_path",
+                              "support_selector": "@support_selector",
+                              "support_tolerance": "@support_tolerance",
+                              "top_datum": "@top_datum",
+                              "top_offset": "@top_offset",
+                              "vertical_offset": "@vertical_offset",
+                              "wall_inset": "@wall_inset",
+                              "wall_reach": "@wall_reach",
+                              "wall_selector": "@wall_selector",
+                              "width": "@width",
+                              "width_deduction": "@width_deduction",
+                              "width_maximum": "@width_maximum",
+                              "width_minimum": "@width_minimum",
+                              "width_mode": "@width_mode",
+                              "within_space": "@within_space"
+                            }
+                          }
+                        },
+                        "value": {
+                          "block": {
+                            "type": "expression.not",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.and",
+                                  "inputs": {
+                                    "operands": {
+                                      "blocks": [
+                                        {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "met",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.isDefined",
+                      "label": "read",
+                      "inputs": {
+                        "operand": {
+                          "block": {
+                            "type": "expression.literal",
+                            "label": "the clearances are searched",
+                            "fields": {
+                              "value": {
+                                "type": "integer",
+                                "value": 1
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.component-visibility",
@@ -87099,6 +87328,1027 @@
             {
               "language": "de",
               "text": "`stretch` für einen Lauf, `landing` für ein Podest."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "clearance_checks",
+      "parameters": [
+        {
+          "key": "side",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `side`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `side` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "sides",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `sides`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `sides` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "quantifier",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `quantifier`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `quantifier` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "front_axis",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `front_axis`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `front_axis` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "both_sides",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `both_sides`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `both_sides` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "width",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `width`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `width` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "width_mode",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `width_mode`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `width_mode` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "width_minimum",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `width_minimum`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `width_minimum` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "width_maximum",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `width_maximum`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `width_maximum` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "depth",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `depth`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `depth` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "depth_mode",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `depth_mode`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `depth_mode` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "depth_minimum",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `depth_minimum`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `depth_minimum` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "depth_maximum",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `depth_maximum`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `depth_maximum` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "depth_from",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `depth_from`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `depth_from` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "radius",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `radius`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `radius` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "height",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `height`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `height` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "height_mode",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `height_mode`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `height_mode` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "height_minimum",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `height_minimum`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `height_minimum` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "height_maximum",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `height_maximum`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `height_maximum` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "size_mode",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `size_mode`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `size_mode` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "size_tolerance",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `size_tolerance`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `size_tolerance` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "offset",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `offset`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `offset` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "lateral_offset",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `lateral_offset`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `lateral_offset` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "align",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `align`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `align` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "slide_from",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `slide_from`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `slide_from` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "slide_to",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `slide_to`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `slide_to` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "depth_slide_from",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `depth_slide_from`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `depth_slide_from` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "depth_slide_to",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `depth_slide_to`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `depth_slide_to` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "height_reference",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `height_reference`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `height_reference` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "vertical_offset",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `vertical_offset`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `vertical_offset` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "top_datum",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `top_datum`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `top_datum` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "top_offset",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `top_offset`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `top_offset` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "obstacles",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `obstacles`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `obstacles` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "allowed_intruders",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `allowed_intruders`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `allowed_intruders` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "protrusion",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `protrusion`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `protrusion` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "within_space",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `within_space`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `within_space` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "space_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `space_path`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `space_path` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "wall_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `wall_selector`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `wall_selector` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "wall_reach",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `wall_reach`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `wall_reach` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "wall_inset",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `wall_inset`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `wall_inset` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "support_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `support_selector`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `support_selector` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "support_tolerance",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `support_tolerance`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `support_tolerance` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "clear_width_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `clear_width_property`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `clear_width_property` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "clear_width_from_leaves",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `clear_width_from_leaves`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `clear_width_from_leaves` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "overall_width",
+          "kind": {
+            "type": "property"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `overall_width`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `overall_width` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "width_deduction",
+          "kind": {
+            "type": "length",
+            "minimum": null
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's `width_deduction`, as `component-clearance` reads it."
+            },
+            {
+              "language": "de",
+              "text": "Der Parameter `width_deduction` der Regel, wie `component-clearance` ihn liest."
+            }
+          ],
+          "references": "length"
+        }
+      ],
+      "services": [
+        "free-space",
+        "object-frame",
+        "vertical-extent",
+        "plan-span",
+        "relationship-selection"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the component's frame, extents or spaces cannot be read, or a service is not registered"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Clearance checks"
+        },
+        {
+          "language": "de",
+          "text": "Freiraumprüfungen"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "Each question component-clearance asks of a side of the component, as its search answers it: the volume free less its tolerance, each larger volume obstructed, the volume inside its spaces, its base supported (the support coverage); or, with quantifier any, one answer for every side."
+        },
+        {
+          "language": "de",
+          "text": "Jede Frage, die component-clearance an eine Seite des Bauteils stellt, wie ihre Suche sie beantwortet: das Volumen abzüglich Toleranz frei, jedes größere verstellt, das Volumen in seinen Räumen, seine Basis getragen (die Auflagerdeckung); oder, mit quantifier any, eine Antwort für alle Seiten."
+        }
+      ],
+      "fields": [
+        {
+          "name": "label",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Side"
+            },
+            {
+              "language": "de",
+              "text": "Seite"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The side or sides the answer is about, as findings name them."
+            },
+            {
+              "language": "de",
+              "text": "Die Seite oder Seiten, um die es geht, wie Befunde sie nennen."
+            }
+          ]
+        },
+        {
+          "name": "met",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Met"
+            },
+            {
+              "language": "de",
+              "text": "Erfüllt"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the question is met: the volume free, a larger one obstructed, inside its spaces, supported; undecided, with why, where the positions or selections leave it open."
+            },
+            {
+              "language": "de",
+              "text": "Ob die Frage erfüllt ist: das Volumen frei, ein größeres verstellt, innerhalb seiner Räume, getragen; unentschieden, mit Grund, wo Lagen oder Auswahlen es offenlassen."
+            }
+          ]
+        },
+        {
+          "name": "words",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Words"
+            },
+            {
+              "language": "de",
+              "text": "Worte"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "What an unmet question comes to, as findings word it after the side."
+            },
+            {
+              "language": "de",
+              "text": "Was eine nicht erfüllte Frage ergibt, wie Befunde es nach der Seite formulieren."
+            }
+          ]
+        },
+        {
+          "name": "related",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Related"
+            },
+            {
+              "language": "de",
+              "text": "Bezogen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The obstacles, or the spaces the volume leaves."
+            },
+            {
+              "language": "de",
+              "text": "Die Hindernisse oder die Räume, die das Volumen verlässt."
+            }
+          ]
+        },
+        {
+          "name": "reason",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Reason"
+            },
+            {
+              "language": "de",
+              "text": "Grund"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Why an undecided answer is open, as a report writes it."
+            },
+            {
+              "language": "de",
+              "text": "Warum eine unentschiedene Antwort offen ist, wie ein Bericht es schreibt."
             }
           ]
         }

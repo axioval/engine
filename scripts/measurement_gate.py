@@ -80,7 +80,7 @@ INLINE_ONLY_KINDS = frozenset({"derivation"})
 MIN_REASON_WORDS = 4
 # Known measurements still to be registered as values. Lower it as each is
 # registered; it never rises.
-UNREGISTERED_BUDGET = 1
+UNREGISTERED_BUDGET = 0
 ISSUE_REFERENCE = re.compile(r"#\d+\b")
 
 PROVIDER_IMPL = re.compile(r"\bimpl\s+MeasuredProvider\s+for\s+(\w+)")
@@ -582,9 +582,11 @@ def self_test() -> None:
         "reason": "searches the flight's free zone for obstructions"}}}
     assert gate(book=both)
     # A known unregistered measurement names the issue registering it, and
-    # their number never exceeds the budget.
-    assert gate(book=searching("unregistered", "the width is not registered yet (#225)")) == []
-    assert gate(book=searching("unregistered", "the width is not registered yet"))
+    # their number never exceeds the budget (which may be none at all).
+    named = gate(book=searching("unregistered", "the width is not registered yet (#225)"))
+    assert all("over the budget" in failure for failure in named), named
+    unnamed = gate(book=searching("unregistered", "the width is not registered yet"))
+    assert any("over the budget" not in failure for failure in unnamed), unnamed
     many = {"callSites": {**ledger["callSites"], **{
         f"stair::check::m{index}": {"count": 1, "searchOnly": "unregistered",
                                     "reason": "not registered yet (#225)"}

@@ -755,6 +755,7 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
     clash::CLASH_MATRIX_PAIRS,
     clash::CLASH_PAIRS,
     walking::CLEAR_WIDTHS,
+    searches::CLEARANCE_CHECKS,
     walking::CLEARANCES,
     searches::COMPOSITIONS,
     MemberDescriptor {

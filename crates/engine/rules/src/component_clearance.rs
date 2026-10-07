@@ -2,7 +2,17 @@
 //! beside each selected component, placed in the component's own frame on
 //! a side the rule states, fixed or sliding sideways and away from it.
 
+mod measured;
+#[cfg(feature = "parity-reference")]
+pub(crate) mod reference;
+mod template;
+
+pub(crate) use measured::ClearanceMeasures;
+
 use std::collections::BTreeSet;
+use std::sync::LazyLock;
+
+use axioval_engine::template::Template;
 
 use axioval_engine::{
     BoxClearance, CapabilityEvaluation, ClearanceOutcome, ClearanceRequest, ClearanceShape,
@@ -21,8 +31,9 @@ use crate::body_extent::{extent_error, frame_error};
 use crate::door_swing;
 use crate::keyed_limit::{CLEAR_WIDTH_SOURCES, DoorClearWidth, difference as rounded};
 use crate::level_spacing::{extent, metres, shown};
+#[cfg(feature = "parity-reference")]
 use crate::selection::select_objects;
-use crate::support::{Parameters, Traversal, Unavailable, finding, invalid};
+use crate::support::{Parameters, Traversal, Unavailable, invalid};
 use crate::wall_sides::Walls;
 
 /// Requires a free volume on a stated side of each selected component.
@@ -520,7 +531,9 @@ struct Config<'a> {
     vertical_offset: f64,
     /// The top datum and the offset above it, instead of a height.
     top: Option<(Reference, f64)>,
+    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
     obstacles: &'a Selector,
+    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
     allowed: Option<&'a Selector>,
     protrusion: f64,
     within_space: bool,
@@ -998,134 +1011,112 @@ fn slide_depth(parameters: &Parameters<'_>) -> Result<Option<(f64, f64)>, Unavai
     Ok(depth)
 }
 
+/// The capability's parameter descriptor.
+pub(crate) fn parameters() -> Vec<ParameterDescriptor> {
+    vec![
+        ParameterDescriptor::optional("side", ParameterType::String),
+        ParameterDescriptor::optional("sides", ParameterType::StringList),
+        ParameterDescriptor::optional("quantifier", ParameterType::String),
+        ParameterDescriptor::required("front_axis", ParameterType::String),
+        ParameterDescriptor::optional("both_sides", ParameterType::Boolean),
+        ParameterDescriptor::optional("width", ParameterType::Quantity),
+        ParameterDescriptor::optional("width_mode", ParameterType::String),
+        ParameterDescriptor::optional("width_minimum", ParameterType::Quantity),
+        ParameterDescriptor::optional("width_maximum", ParameterType::Quantity),
+        ParameterDescriptor::optional("depth", ParameterType::Quantity),
+        ParameterDescriptor::optional("depth_mode", ParameterType::String),
+        ParameterDescriptor::optional("depth_minimum", ParameterType::Quantity),
+        ParameterDescriptor::optional("depth_maximum", ParameterType::Quantity),
+        ParameterDescriptor::optional("depth_from", ParameterType::String),
+        ParameterDescriptor::optional("radius", ParameterType::Quantity),
+        ParameterDescriptor::optional("height", ParameterType::Quantity),
+        ParameterDescriptor::optional("height_mode", ParameterType::String),
+        ParameterDescriptor::optional("height_minimum", ParameterType::Quantity),
+        ParameterDescriptor::optional("height_maximum", ParameterType::Quantity),
+        ParameterDescriptor::optional("size_mode", ParameterType::String),
+        ParameterDescriptor::optional("size_tolerance", ParameterType::Quantity),
+        ParameterDescriptor::optional("offset", ParameterType::Quantity),
+        ParameterDescriptor::optional("lateral_offset", ParameterType::Quantity),
+        ParameterDescriptor::optional("align", ParameterType::String),
+        ParameterDescriptor::optional("slide_from", ParameterType::Quantity),
+        ParameterDescriptor::optional("slide_to", ParameterType::Quantity),
+        ParameterDescriptor::optional("depth_slide_from", ParameterType::Quantity),
+        ParameterDescriptor::optional("depth_slide_to", ParameterType::Quantity),
+        ParameterDescriptor::required("height_reference", ParameterType::String),
+        ParameterDescriptor::optional("vertical_offset", ParameterType::Quantity),
+        ParameterDescriptor::optional("top_datum", ParameterType::String),
+        ParameterDescriptor::optional("top_offset", ParameterType::Quantity),
+        ParameterDescriptor::required("obstacles", ParameterType::Selector),
+        ParameterDescriptor::optional("allowed_intruders", ParameterType::Selector),
+        ParameterDescriptor::optional("protrusion", ParameterType::Quantity),
+        ParameterDescriptor::optional("within_space", ParameterType::Boolean),
+        ParameterDescriptor::optional("space_path", ParameterType::StringList),
+        ParameterDescriptor::optional("wall_selector", ParameterType::Selector),
+        ParameterDescriptor::optional("wall_reach", ParameterType::Quantity),
+        ParameterDescriptor::optional("wall_inset", ParameterType::Quantity),
+        ParameterDescriptor::optional("support_selector", ParameterType::Selector),
+        ParameterDescriptor::optional("support_tolerance", ParameterType::Quantity),
+        ParameterDescriptor::optional("clear_width_property", ParameterType::PropertyReference),
+        ParameterDescriptor::optional(CLEAR_WIDTH_SOURCES[0], ParameterType::String),
+        ParameterDescriptor::optional(CLEAR_WIDTH_SOURCES[1], ParameterType::PropertyReference),
+        ParameterDescriptor::optional(CLEAR_WIDTH_SOURCES[2], ParameterType::Quantity),
+    ]
+}
+
+static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
+
+/// The plans of the rules bound to it, kept across runs.
+static PLANS: crate::templates::Plans = crate::templates::Plans::new();
+
 impl RuleCapability for ComponentClearance {
     fn id(&self) -> &'static str {
         ID
     }
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
-        vec![
-            ParameterDescriptor::optional("side", ParameterType::String),
-            ParameterDescriptor::optional("sides", ParameterType::StringList),
-            ParameterDescriptor::optional("quantifier", ParameterType::String),
-            ParameterDescriptor::required("front_axis", ParameterType::String),
-            ParameterDescriptor::optional("both_sides", ParameterType::Boolean),
-            ParameterDescriptor::optional("width", ParameterType::Quantity),
-            ParameterDescriptor::optional("width_mode", ParameterType::String),
-            ParameterDescriptor::optional("width_minimum", ParameterType::Quantity),
-            ParameterDescriptor::optional("width_maximum", ParameterType::Quantity),
-            ParameterDescriptor::optional("depth", ParameterType::Quantity),
-            ParameterDescriptor::optional("depth_mode", ParameterType::String),
-            ParameterDescriptor::optional("depth_minimum", ParameterType::Quantity),
-            ParameterDescriptor::optional("depth_maximum", ParameterType::Quantity),
-            ParameterDescriptor::optional("depth_from", ParameterType::String),
-            ParameterDescriptor::optional("radius", ParameterType::Quantity),
-            ParameterDescriptor::optional("height", ParameterType::Quantity),
-            ParameterDescriptor::optional("height_mode", ParameterType::String),
-            ParameterDescriptor::optional("height_minimum", ParameterType::Quantity),
-            ParameterDescriptor::optional("height_maximum", ParameterType::Quantity),
-            ParameterDescriptor::optional("size_mode", ParameterType::String),
-            ParameterDescriptor::optional("size_tolerance", ParameterType::Quantity),
-            ParameterDescriptor::optional("offset", ParameterType::Quantity),
-            ParameterDescriptor::optional("lateral_offset", ParameterType::Quantity),
-            ParameterDescriptor::optional("align", ParameterType::String),
-            ParameterDescriptor::optional("slide_from", ParameterType::Quantity),
-            ParameterDescriptor::optional("slide_to", ParameterType::Quantity),
-            ParameterDescriptor::optional("depth_slide_from", ParameterType::Quantity),
-            ParameterDescriptor::optional("depth_slide_to", ParameterType::Quantity),
-            ParameterDescriptor::required("height_reference", ParameterType::String),
-            ParameterDescriptor::optional("vertical_offset", ParameterType::Quantity),
-            ParameterDescriptor::optional("top_datum", ParameterType::String),
-            ParameterDescriptor::optional("top_offset", ParameterType::Quantity),
-            ParameterDescriptor::required("obstacles", ParameterType::Selector),
-            ParameterDescriptor::optional("allowed_intruders", ParameterType::Selector),
-            ParameterDescriptor::optional("protrusion", ParameterType::Quantity),
-            ParameterDescriptor::optional("within_space", ParameterType::Boolean),
-            ParameterDescriptor::optional("space_path", ParameterType::StringList),
-            ParameterDescriptor::optional("wall_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("wall_reach", ParameterType::Quantity),
-            ParameterDescriptor::optional("wall_inset", ParameterType::Quantity),
-            ParameterDescriptor::optional("support_selector", ParameterType::Selector),
-            ParameterDescriptor::optional("support_tolerance", ParameterType::Quantity),
-            ParameterDescriptor::optional("clear_width_property", ParameterType::PropertyReference),
-            ParameterDescriptor::optional(CLEAR_WIDTH_SOURCES[0], ParameterType::String),
-            ParameterDescriptor::optional(CLEAR_WIDTH_SOURCES[1], ParameterType::PropertyReference),
-            ParameterDescriptor::optional(CLEAR_WIDTH_SOURCES[2], ParameterType::Quantity),
-        ]
+        TEMPLATE.parameters.clone()
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let config = match Config::parse(rule) {
-            Ok(config) => config,
-            Err((reason, message)) => {
-                return CapabilityEvaluation::not_evaluated(
-                    reason,
-                    format!("component-clearance: {message}"),
-                );
-            }
-        };
-        let (Some(frames), Some(extents), Some(free_space)) = (
-            context.services.get::<ObjectFrameServiceHandle>(),
-            context.services.get::<VerticalExtentServiceHandle>(),
-            context.services.get::<FreeSpaceServiceHandle>(),
-        ) else {
-            return CapabilityEvaluation::not_evaluated(
-                NotEvaluatedReason::MissingService,
-                "component-clearance needs the object-frame, vertical-extent and free-space \
-                 services",
-            );
-        };
-        let spans = context.services.get::<PlanSpanServiceHandle>();
-        if config.walls.is_some() && spans.is_none() {
-            return CapabilityEvaluation::not_evaluated(
-                NotEvaluatedReason::MissingService,
-                "component-clearance with `front_axis` `against-wall` needs the plan-span service",
-            );
-        }
-        let walls = config
-            .walls
-            .map(|(selector, _, _)| Walls::select(context, selector));
-        let supports = config
-            .support
-            .map(|(selector, _)| Split::select(context, selector, "support"));
-        let services = Services {
-            frames,
-            extents,
-            free_space,
-            spans,
-            walls: walls.as_ref(),
-            supports: supports.as_ref(),
-        };
-        let obstacles = Obstacles::select(context, &config);
-        let (selected, mut evaluation) = select_objects(context, &rule.selector);
-        for object in selected {
-            let results = check(context, &config, &services, &obstacles, object);
-            let results = match config.quantifier {
-                Quantifier::All => results
-                    .into_iter()
-                    .map(|(side, result)| (format!("{} clearance", side.name()), result))
-                    .collect(),
-                Quantifier::Any => vec![any_side(&config, &results)],
-            };
-            for (label, result) in results {
-                match result {
-                    Ok(None) => {}
-                    Ok(Some((message, evidence, related))) => evaluation.push_finding(finding(
-                        rule,
-                        &object.id,
-                        format!("{label} {message}"),
-                        evidence,
-                        related,
-                    )),
-                    Err((reason, message)) => evaluation.push_object_not_evaluated(
-                        object.id.clone(),
-                        reason,
-                        format!("{label}: {message}"),
-                    ),
-                }
-            }
-        }
-        evaluation
+        crate::templates::run((&TEMPLATE, &PLANS), context, rule)
+    }
+
+    fn template(&self) -> Option<&Template> {
+        Some(&TEMPLATE)
+    }
+}
+
+/// Checks the rule parameters `clearance_checks` names, as the rule
+/// states them: the declaration the capability refused, in its order and
+/// words.
+///
+/// # Errors
+///
+/// An invalid declaration.
+pub(crate) fn check_arguments(
+    stated: &std::collections::BTreeMap<String, axioval_ir::contract::ParameterValue>,
+) -> Result<(), Unavailable> {
+    let rule = crate::light_area::synthesised(stated.clone());
+    Config::parse(&rule).map(|_| ())
+}
+
+/// Every result one component's checks come to, each with the label a
+/// message starts with: each side's questions on their own, or, with
+/// `quantifier` `any`, one result for every side.
+fn judged(
+    context: &RuleContext<'_>,
+    config: &Config<'_>,
+    services: &Services<'_>,
+    obstacles: &Obstacles,
+    object: &Object,
+) -> Vec<(String, Judged)> {
+    let results = check(context, config, services, obstacles, object);
+    match config.quantifier {
+        Quantifier::All => results
+            .into_iter()
+            .map(|(side, result)| (format!("{} clearance", side.name()), result))
+            .collect(),
+        Quantifier::Any => vec![any_side(config, &results)],
     }
 }
 
@@ -1219,6 +1210,7 @@ struct Split {
 }
 
 impl Split {
+    #[cfg(feature = "parity-reference")]
     fn select(context: &RuleContext<'_>, selector: &Selector, what: &str) -> Self {
         let (objects, outcomes) = select_objects(context, selector);
         let mut maybe = BTreeSet::new();
@@ -1246,6 +1238,17 @@ impl Split {
     }
 }
 
+impl Split {
+    /// The objects a measured value's argument bound.
+    fn of(selection: &axioval_ir::measured::MeasuredSelection) -> Self {
+        Self {
+            sure: selection.matched.clone(),
+            maybe: selection.undecided.clone(),
+            failed: None,
+        }
+    }
+}
+
 /// The obstacle selection, split by how sure it is.
 struct Obstacles {
     /// Selected obstacles surely not allowed to intrude.
@@ -1257,11 +1260,16 @@ struct Obstacles {
 }
 
 impl Obstacles {
+    #[cfg(feature = "parity-reference")]
     fn select(context: &RuleContext<'_>, config: &Config<'_>) -> Self {
         let selected = Split::select(context, config.obstacles, "obstacle");
         let allowed = config
             .allowed
             .map(|selector| Split::select(context, selector, "allowed-intruder"));
+        Self::split(selected, allowed)
+    }
+
+    fn split(selected: Split, allowed: Option<Split>) -> Self {
         let empty = BTreeSet::new();
         let (allowed_sure, allowed_maybe) = allowed
             .as_ref()
@@ -1287,6 +1295,15 @@ impl Obstacles {
             maybe,
             failed,
         }
+    }
+
+    /// The obstacles measured values' arguments bound, less the allowed
+    /// intruders, as [`Obstacles::select`] reads the selectors.
+    fn of(
+        obstacles: &axioval_ir::measured::MeasuredSelection,
+        allowed: Option<&axioval_ir::measured::MeasuredSelection>,
+    ) -> Self {
+        Self::split(Split::of(obstacles), allowed.map(Split::of))
     }
 
     /// Sure and possible obstacles, less `excluded`.

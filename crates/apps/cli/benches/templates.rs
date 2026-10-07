@@ -339,6 +339,11 @@ const PAIRS: &[Pair] = &[
         case: "programmes",
         reference: |registry| registry.replace(axioval::rules::reference::GroupComposition),
     },
+    Pair {
+        capability: "axioval:capability.component-clearance",
+        case: "floors",
+        reference: |registry| registry.replace(axioval::rules::reference::ComponentClearance),
+    },
 ];
 
 /// Warm-up runs per side before measuring.

@@ -189,6 +189,7 @@ pub mod reference {
     pub use crate::body_extent::reference::BodyExtent;
     pub use crate::centre_line_distance::reference::CentreLineDistance;
     pub use crate::clash::reference::{Clash, ClashMatrix};
+    pub use crate::component_clearance::reference::ComponentClearance;
     pub use crate::component_visibility::reference::ComponentVisibility;
     pub use crate::conformance::reference::SelectorConformance;
     pub use crate::consistent_value::reference::ConsistentValue;
@@ -351,6 +352,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(space_distance::RowMeasures))
         .and_then(|registry| registry.register_measured(table_allocation::AllocationMeasures))
         .and_then(|registry| registry.register_measured(group_composition::CompositionMeasures))
+        .and_then(|registry| registry.register_measured(component_clearance::ClearanceMeasures))
         .and_then(|registry| registry.register_measured(parking_bay::BayMeasures))
         .and_then(|registry| registry.register_measured(parking_bay::BayItems))
         .and_then(|registry| registry.register_measured(wall_spacing::SpacingMeasures))

@@ -2002,6 +2002,22 @@ the project's stand-in) and an object no group reaches are findings of
 their own; what the matching cannot decide is open on the group, the member
 or the project for its reason.
 
+### `component-clearance`
+
+One form, judged by one check over the measured list
+`clearance_checks;side=@side;…;width_deduction=@width_deduction`, every
+parameter under its own name: the declaration is the list's argument check,
+refused for the rule, and the object-frame, vertical-extent and free-space
+services are needed for the rule as a whole (`Services::whole`). The search
+stays the capability's (`component_clearance::judged`): for each side, in
+order, the volume free less its tolerance, each volume larger by it
+obstructed, the volume inside its spaces and its base supported (the
+support coverage, `assess_support_coverage`), each one item whose `met` is
+true, false, or undecided with why and its `reason`; under `quantifier`
+`any` one item for every side. The template judges `met`: false is a
+finding worded `{label} {words}` relating the obstacles or spaces,
+undecided open as `{label}: {why}`.
+
 ## Binding and running a rule
 
 The rules crate's `templates` module runs a template
@@ -2703,6 +2719,12 @@ storeys of spaces of random types and areas, some unreadable, under random
 rows, modes and groupings, and generated groups of members, some undecided,
 under random entries and switches; and by the rules of the case
 `programmes`, recorded before the switch. They are never forked.
+
+`component-clearance` is held to `component_clearance/reference.rs`
+(`axioval_rules::reference::ComponentClearance`), which shares the checks,
+on every scene of the facade's `tests/axiolid_component_clearance.rs` under
+`Parity::contract()`, and by the rules of the case `floors`, recorded
+before the switch (D39). It is never forked.
 
 The reference is kept, rather than deleted, because generated inputs need
 a live implementation to compare with; recorded outcomes outlive it on the

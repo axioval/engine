@@ -148,8 +148,9 @@
     },
     "component_clearance::support::assess_support_coverage": {
       "count": 1,
-      "searchOnly": "unregistered",
-      "reason": "how much of a zone's base the supports cover is measured but no value exposes it yet (#225)"
+      "providedBy": [
+        "clearance_checks"
+      ]
     },
     "component_visibility::of::assess_sight": {
       "count": 1,

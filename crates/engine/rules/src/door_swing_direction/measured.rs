@@ -180,6 +180,7 @@ impl SwingMeasures {
                     ]
                     .into_iter()
                     .collect(),
+                    evidence: Vec::new(),
                 })
             })
             .collect())

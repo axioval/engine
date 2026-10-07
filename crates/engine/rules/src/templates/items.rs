@@ -11,9 +11,9 @@
 
 use axioval_engine::Deviation;
 use axioval_engine::template::{
-    Allowance, Any, Applies, Bound, Count, Effect, End, Every, Group, Guard, ItemCheck, ItemTest,
-    ItemUnit, Items, Judge, Least, On, OnNull, OpenItems, Operand, Requirement, Rows, Spread,
-    TogetherJudge, Truths, When,
+    Allowance, Alternatives, Any, Applies, Bound, Combined, Count, Effect, End, Every, Group,
+    Guard, ItemCheck, ItemTest, ItemUnit, Items, Judge, Least, On, OnNull, OpenItems, Operand,
+    Requirement, Rows, Spread, TogetherJudge, Truths, When,
 };
 use axioval_engine::{MeasuredMember, Measurement, MemberValue};
 use axioval_ir::contract::{ParameterValue, ScalarValue};
@@ -506,6 +506,7 @@ fn cited(scope: &Scope<'_, '_, '_>, listed: &[Evidence], object: &Object) -> Vec
     let mut evidence = scope.read.evidence.clone();
     evidence.extend(listed.iter().cloned());
     if let Some(member) = scope.member {
+        evidence.extend(member.evidence.iter().cloned());
         evidence.push(Evidence {
             source: object.id.source.clone(),
             locator: format!(
@@ -620,6 +621,8 @@ pub(super) fn judge_items(
         .as_ref()
         .and_then(|passing| passing.groups.as_ref())
         .map(|groups| groups.key);
+    // Where each item's outcomes lie, for combining them.
+    let mut ranges: Vec<(usize, usize)> = Vec::with_capacity(count);
     for (index, member) in members.iter().enumerate() {
         let mut item = scope.with(Some(member));
         item.place = Some((index + 1, count));
@@ -646,6 +649,10 @@ pub(super) fn judge_items(
             .iter()
             .any(|outcome| !matches!(outcome, Outcome::Passed));
         keyed.push((key, failed));
+        ranges.push((before, outcomes.len()));
+    }
+    if let Some(combined) = &items.combined {
+        return combine(&scope, combined, members, &ranges, outcomes);
     }
     if items.merged {
         outcomes = merged(outcomes);
@@ -681,6 +688,176 @@ pub(super) fn judge_items(
         }
     }
     outcomes
+}
+
+/// The items' outcomes as one ([`Combined`]): `outcomes` lie item by item
+/// in `ranges`.
+fn combine(
+    scope: &Scope<'_, '_, '_>,
+    combined: &Combined,
+    members: &[MeasuredMember],
+    ranges: &[(usize, usize)],
+    outcomes: Vec<Outcome>,
+) -> Vec<Outcome> {
+    let mut per_item: Vec<Vec<Outcome>> = ranges.iter().map(|_| Vec::new()).collect();
+    for (index, outcome) in outcomes.into_iter().enumerate() {
+        if let Some(item) = ranges
+            .iter()
+            .position(|(from, to)| (*from..*to).contains(&index))
+        {
+            per_item[item].push(outcome);
+        }
+    }
+    let kept: Vec<Outcome> = match &combined.alternatives {
+        None => per_item.into_iter().flatten().collect(),
+        Some(alternatives) => alternative(scope, alternatives, members, per_item),
+    };
+    let mut messages = Vec::new();
+    let mut cited: Vec<Evidence> = Vec::new();
+    let mut related: Vec<ObjectId> = Vec::new();
+    let mut worst: Option<Deviation> = None;
+    let mut opened: Vec<(NotEvaluatedReason, String)> = Vec::new();
+    for outcome in kept {
+        match outcome {
+            Outcome::Finding {
+                message,
+                evidence,
+                related: objects,
+                deviation,
+                ..
+            } => {
+                messages.push(message);
+                cited.extend(evidence);
+                related.extend(objects);
+                worst = match (worst, deviation) {
+                    (Some(worst), Some(missed)) => Some(worst.worst(missed)),
+                    (worst, missed) => worst.or(missed),
+                };
+            }
+            Outcome::Open(reason, message) => opened.push((reason, message)),
+            Outcome::Passed | Outcome::Placed(..) => {}
+        }
+    }
+    // Worded over the first item: what every item shares (its row).
+    let mut whole = scope.with(members.first());
+    if !messages.is_empty() {
+        whole.named("findings", messages.join(combined.separator));
+        related.sort();
+        related.dedup();
+        return vec![Outcome::Finding {
+            message: whole.render(combined.fail),
+            evidence: cited,
+            related,
+            deviation: worst,
+            severity: None,
+        }];
+    }
+    let Some((reason, _)) = opened.first() else {
+        return Vec::new();
+    };
+    let reason = reason.clone();
+    whole.named(
+        "opens",
+        opened
+            .into_iter()
+            .map(|(_, message)| message)
+            .collect::<Vec<_>>()
+            .join(combined.separator),
+    );
+    vec![Outcome::Open(reason, whole.render(combined.open))]
+}
+
+/// Whether `outcomes` hold a finding.
+fn fails(outcomes: &[Outcome]) -> bool {
+    outcomes
+        .iter()
+        .any(|outcome| matches!(outcome, Outcome::Finding { .. }))
+}
+
+/// Whether `outcomes` hold an open outcome.
+fn opens(outcomes: &[Outcome]) -> bool {
+    outcomes
+        .iter()
+        .any(|outcome| matches!(outcome, Outcome::Open(..)))
+}
+
+/// The outcomes each group of items keeps as alternatives
+/// ([`Alternatives`]), `per_item` the items' outcomes in order.
+fn alternative(
+    scope: &Scope<'_, '_, '_>,
+    alternatives: &Alternatives,
+    members: &[MeasuredMember],
+    mut per_item: Vec<Vec<Outcome>>,
+) -> Vec<Outcome> {
+    // The groups in the order their first items come.
+    let mut groups: Vec<(&str, Vec<usize>)> = Vec::new();
+    for (index, member) in members.iter().enumerate() {
+        let key = match field(member, alternatives.group) {
+            Field::Text(text) => text,
+            _ => "",
+        };
+        match groups.iter_mut().find(|(group, _)| *group == key) {
+            Some((_, items)) => items.push(index),
+            None => groups.push((key, vec![index])),
+        }
+    }
+    let mut kept = Vec::new();
+    for (_, group) in groups {
+        let sure: Vec<usize> = group
+            .iter()
+            .copied()
+            .filter(|index| {
+                matches!(
+                    field(&members[*index], alternatives.sure),
+                    Field::Truth(true)
+                )
+            })
+            .collect();
+        let sure_failing: Vec<usize> = sure
+            .iter()
+            .copied()
+            .filter(|index| fails(&per_item[*index]))
+            .collect();
+        let every_fails = sure.is_empty()
+            && group
+                .iter()
+                .all(|index| fails(&per_item[*index]) && !opens(&per_item[*index]));
+        if !sure_failing.is_empty() || every_fails {
+            let chosen = if sure_failing.is_empty() {
+                group
+            } else {
+                sure_failing
+            };
+            for index in chosen {
+                kept.extend(
+                    std::mem::take(&mut per_item[index])
+                        .into_iter()
+                        .filter(|outcome| matches!(outcome, Outcome::Finding { .. })),
+                );
+            }
+        } else if group
+            .iter()
+            .any(|index| fails(&per_item[*index]) || opens(&per_item[*index]))
+        {
+            let mut open_ones = Vec::new();
+            for index in &group {
+                open_ones.extend(
+                    std::mem::take(&mut per_item[*index])
+                        .into_iter()
+                        .filter(|outcome| matches!(outcome, Outcome::Open(..))),
+                );
+            }
+            if open_ones.is_empty() {
+                open_ones.push(open(
+                    scope
+                        .with(Some(&members[group[0]]))
+                        .render(alternatives.open),
+                ));
+            }
+            kept.extend(open_ones);
+        }
+    }
+    kept
 }
 
 /// `outcomes` with the findings worded alike made one, in the place of the

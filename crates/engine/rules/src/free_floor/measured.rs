@@ -145,6 +145,7 @@ impl MeasuredProvider for PlacementMeasures {
             certain,
             exact: certain,
             fields: BTreeMap::new(),
+            evidence: Vec::new(),
         };
         if !evaluation.findings().is_empty() {
             return Ok(Vec::new());

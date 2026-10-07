@@ -346,6 +346,7 @@ impl PlanMeasures {
                         ("sure", sure),
                         ("wall", MemberValue::Objects { objects: wall }),
                     ]),
+                    evidence: Vec::new(),
                 }
             })
             .collect())
@@ -399,6 +400,7 @@ impl PlanMeasures {
                         ),
                         ("members", members.clone()),
                     ]),
+                    evidence: Vec::new(),
                 }
             })
             .collect())
@@ -531,6 +533,7 @@ impl PlanMeasures {
                     },
                 ),
             ]),
+            evidence: Vec::new(),
         }])
     }
 
@@ -632,6 +635,7 @@ impl PlanMeasures {
                         ("row", row),
                         ("required", required),
                     ]),
+                    evidence: Vec::new(),
                 }
             })
             .collect())
@@ -684,6 +688,7 @@ impl PlanMeasures {
                     certain: true,
                     exact: ends.evidence().exact,
                     fields,
+                    evidence: Vec::new(),
                 });
             }
         }
@@ -735,6 +740,7 @@ impl PlanMeasures {
                     certain: true,
                     exact,
                     fields: BTreeMap::from([("separation", separation)]),
+                    evidence: Vec::new(),
                 }
             })
             .collect())

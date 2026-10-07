@@ -413,6 +413,7 @@ fn item(found: Option<bool>, words: &str, recorded: bool, exact: bool) -> Measur
             ),
         ]
         .into(),
+        evidence: Vec::new(),
     }
 }
 

@@ -195,6 +195,7 @@ fn steps(flight: &TreadFlight, object: &ObjectId) -> Vec<MeasuredMember> {
                 certain: true,
                 exact: flight.evidence().exact,
                 fields,
+                evidence: Vec::new(),
             }
         })
         .collect()
@@ -349,6 +350,7 @@ fn rails_along(
             certain: true,
             exact: measured.evidence().exact,
             fields,
+            evidence: Vec::new(),
         });
     }
     members
@@ -812,6 +814,7 @@ impl MeasuredProvider for StairMeasures {
                 certain: true,
                 exact,
                 fields,
+                evidence: Vec::new(),
             });
         }
         Ok((members, vec![measured.evidence().clone()]))

@@ -75,6 +75,50 @@ pub struct Items {
     /// reported one doubt per object).
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub once: bool,
+    /// Every item's outcome one outcome on the object ([`Combined`]).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub combined: Option<Combined>,
+}
+
+/// The items' outcomes as one: where any item fails, one finding whose
+/// message (`fail`) reads `{findings}`, the failing items' messages joined
+/// by `separator`, graded by the worst, relating every object they relate;
+/// otherwise, where any is open, one open outcome (`open`, `{opens}` their
+/// messages joined), for the first one's reason; otherwise a pass. Its
+/// messages read the first item's fields (`{row}`), which every item
+/// shares. A capability judging a window against each floor beside it and
+/// reporting every failing floor in one finding.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Combined {
+    /// What joins the items' messages.
+    pub separator: &'static str,
+    /// The finding's message, `{findings}` the failing items' messages.
+    pub fail: &'static str,
+    /// The open outcome's message, `{opens}` the open items' messages.
+    pub open: &'static str,
+    /// The items as alternatives of what each group stands for.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alternatives: Option<Alternatives>,
+}
+
+/// Items as the alternatives of one unknown per group: the items of a
+/// group (a text field) are the candidates for what it stands for (the
+/// floor a door's side steps onto), those whose truth `sure` holds surely
+/// among them. A group fails where a sure item fails, or where it has no
+/// sure item and every item surely fails (each failing item's finding
+/// standing); it passes where every item passes; otherwise it is open with
+/// its items' open outcomes, or with `open` (worded over its first item)
+/// where none is open.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Alternatives {
+    /// The text field naming an item's group.
+    pub group: &'static str,
+    /// The truth field holding where an item surely stands for its group.
+    pub sure: &'static str,
+    /// A group's open message where none of its items is open.
+    pub open: &'static str,
 }
 
 /// A named message part of [`Items`].

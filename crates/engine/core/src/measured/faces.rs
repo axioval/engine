@@ -273,6 +273,7 @@ impl FacePieceMeasures {
                     ("area", area),
                     ("gradient_direction", direction),
                 ]),
+                evidence: Vec::new(),
             });
         }
         Ok((members, vec![pieces.evidence().clone()]))

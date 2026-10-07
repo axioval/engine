@@ -123,6 +123,7 @@ impl CorridorEndSearch {
                     ]
                     .into_iter()
                     .collect(),
+                    evidence: Vec::new(),
                 }
             })
             .collect();

@@ -106,6 +106,7 @@ fn items(applies: Applies, list: &'static str) -> Items {
         merged: false,
         at: None,
         once: false,
+        combined: None,
     }
 }
 

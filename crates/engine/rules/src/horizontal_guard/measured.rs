@@ -365,6 +365,7 @@ fn edge_member(
             ),
             ("climbable", objects(defeating.as_ref())),
         ]),
+        evidence: Vec::new(),
     }
 }
 

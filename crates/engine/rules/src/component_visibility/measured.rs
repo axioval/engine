@@ -99,6 +99,7 @@ fn view(
             ("within", MemberValue::Text { text: within }),
             ("undecided", MemberValue::Text { text: undecided }),
         ]),
+        evidence: Vec::new(),
     }])
 }
 

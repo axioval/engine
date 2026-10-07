@@ -39,9 +39,10 @@ mod items;
 mod parts;
 
 pub use items::{
-    Allowance, Any, Bound, Choice, Count, Effect, Every, Group, Groups, Guard, ItemCheck, ItemTest,
-    ItemText, ItemUnit, Items, Judge, Least, On, OnNull, OpenCase, OpenItems, Passing, Range,
-    Requirement, RowColumn, Rows, Spread, Together, TogetherJudge, Truths, When,
+    Allowance, Alternatives, Any, Bound, Choice, Combined, Count, Effect, Every, Group, Groups,
+    Guard, ItemCheck, ItemTest, ItemText, ItemUnit, Items, Judge, Least, On, OnNull, OpenCase,
+    OpenItems, Passing, Range, Requirement, RowColumn, Rows, Spread, Together, TogetherJudge,
+    Truths, When,
 };
 pub use parts::Parts;
 

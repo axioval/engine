@@ -240,16 +240,19 @@ impl PlacementMeasures {
                         certain: true,
                         exact: placed.evidence.iter().all(|evidence| evidence.exact),
                         fields: judge.fields(host, placed),
+                        evidence: Vec::new(),
                     },
                     (Err((_, why)), _) => MeasuredMember {
                         certain: true,
                         exact: false,
                         fields: undecided(why),
+                        evidence: Vec::new(),
                     },
                     (Ok(_), None) => MeasuredMember {
                         certain: true,
                         exact: false,
                         fields: undecided("its host was not read"),
+                        evidence: Vec::new(),
                     },
                 }
             })

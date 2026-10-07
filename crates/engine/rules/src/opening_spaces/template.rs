@@ -143,6 +143,7 @@ fn elements() -> FormCheck {
             once: false,
             at: None,
             merged: false,
+            combined: None,
         })),
         fail: "",
         undecided: "",

@@ -163,6 +163,7 @@ impl Item {
             ]
             .into_iter()
             .collect(),
+            evidence: Vec::new(),
         }
     }
 }

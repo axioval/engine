@@ -121,6 +121,7 @@ fn openings() -> FormCheck {
             once: false,
             at: Some("opening"),
             merged: false,
+            combined: None,
         })),
         fail: "",
         undecided: "",

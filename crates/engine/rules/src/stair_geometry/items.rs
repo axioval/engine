@@ -150,6 +150,7 @@ fn member(exact: bool, fields: BTreeMap<&'static str, MemberValue>) -> MeasuredM
         certain: true,
         exact,
         fields,
+        evidence: Vec::new(),
     }
 }
 

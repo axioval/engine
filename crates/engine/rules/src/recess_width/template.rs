@@ -93,6 +93,7 @@ fn recesses() -> FormCheck {
             merged: false,
             at: None,
             once: false,
+            combined: None,
         })),
         fail: "",
         undecided: "",

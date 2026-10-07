@@ -162,6 +162,7 @@ fn sides() -> FormCheck {
             merged: false,
             at: None,
             once: false,
+            combined: None,
         })),
         fail: "",
         undecided: "",

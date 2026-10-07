@@ -224,6 +224,7 @@ impl HostMeasures {
             ]
             .into_iter()
             .collect(),
+            evidence: Vec::new(),
         };
         evidence.extend(cited);
         Ok((vec![item], evidence))

@@ -181,6 +181,7 @@ impl BayMeasures {
                 ("angle", MemberValue::Undecided { why: why.clone() }),
                 ("centre_angle", MemberValue::Undecided { why }),
             ]),
+            evidence: Vec::new(),
         };
         let mut members: Vec<MeasuredMember> = near
             .blind
@@ -205,6 +206,7 @@ impl BayMeasures {
                 certain: within == Tri::Yes,
                 exact,
                 fields: BTreeMap::from([("angle", angle), ("centre_angle", centre_angle)]),
+                evidence: Vec::new(),
             });
         }
         Ok(members)

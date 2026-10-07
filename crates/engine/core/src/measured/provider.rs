@@ -129,6 +129,11 @@ pub struct MeasuredMember {
     pub exact: bool,
     /// Every field its list declares, by name.
     pub fields: BTreeMap<&'static str, MemberValue>,
+    /// What the member itself was measured from, beside what the whole
+    /// list was (a window's sill height above one floor: that floor's
+    /// extent): an outcome on the member cites it, an outcome on another
+    /// member never does.
+    pub evidence: Vec<Evidence>,
 }
 
 /// What a measurement was made against, beside its value: the objects a

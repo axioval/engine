@@ -65,8 +65,20 @@ impl RuleCapability for Held {
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let template = self.0.evaluate(context, rule);
-        let reference = self.1.evaluate(context, rule);
+        // A template reads measured values: where the test registered none,
+        // the built-in ones are installed over the model, as a run does.
+        let mut services = context.services.clone();
+        if services.get::<axioval_engine::MeasuredValues>().is_none() {
+            axioval_rules::register_builtins(axioval_engine::CapabilityRegistry::new())
+                .unwrap()
+                .install_measured(&mut services, context.project);
+        }
+        let context = RuleContext {
+            project: context.project,
+            services: &services,
+        };
+        let template = self.0.evaluate(&context, rule);
+        let reference = self.1.evaluate(&context, rule);
         hold_to_reference(self.0.id(), &reference, &template);
         template
     }

@@ -328,6 +328,7 @@ fn edges() -> FormCheck {
             merged: true,
             at: None,
             once: false,
+            combined: None,
         })),
         fail: "",
         undecided: "",

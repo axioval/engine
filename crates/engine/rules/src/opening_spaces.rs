@@ -75,16 +75,26 @@ impl RuleCapability for OpeningSpaces {
 /// A host's declared exposure and the facts behind it.
 pub(crate) type Declaration = Result<(bool, Vec<Evidence>), Unavailable>;
 
-/// The declaration a rule states, read as the capability read it.
+/// The declaration a rule states, read as the capability read it. Only
+/// the parity reference keeps it; `check_arguments` reads it to refuse a
+/// bad declaration.
 pub(crate) struct Config<'a> {
+    #[cfg(feature = "parity-reference")]
     pub(crate) hosts: Traversal,
+    #[cfg(feature = "parity-reference")]
     pub(crate) host_selector: &'a Selector,
+    #[cfg(feature = "parity-reference")]
     pub(crate) external: PropertyRef<'a>,
+    #[cfg(feature = "parity-reference")]
     pub(crate) spaces: Traversal,
+    #[cfg(feature = "parity-reference")]
     pub(crate) space_selector: &'a Selector,
     /// Whether the spaces come from the derived adjacency, whose evidence
     /// records sides.
+    #[cfg(feature = "parity-reference")]
     pub(crate) sided: bool,
+    /// The declaration's lifetime, which only the parity reference reads.
+    marker: std::marker::PhantomData<&'a Selector>,
 }
 
 impl<'a> Config<'a> {
@@ -97,15 +107,35 @@ impl<'a> Config<'a> {
             .strings("space_path")?
             .ok_or_else(|| invalid("parameter `space_path` is required"))?;
         let (spaces, sided) = space_traversal(space_path)?;
-        Ok(Self {
-            hosts: Traversal::path(host_path)?,
-            host_selector: parameters.required_selector("host_selector")?,
-            external: parameters.required_property("external_property")?,
+        let hosts = Traversal::path(host_path)?;
+        let host_selector = parameters.required_selector("host_selector")?;
+        let external = parameters.required_property("external_property")?;
+        let space_selector = parameters
+            .selector("space_selector")?
+            .unwrap_or(&Selector::All);
+        #[cfg(not(feature = "parity-reference"))]
+        let _ = (
+            hosts,
+            host_selector,
+            external,
             spaces,
-            space_selector: parameters
-                .selector("space_selector")?
-                .unwrap_or(&Selector::All),
+            space_selector,
             sided,
+        );
+        Ok(Self {
+            #[cfg(feature = "parity-reference")]
+            hosts,
+            #[cfg(feature = "parity-reference")]
+            host_selector,
+            #[cfg(feature = "parity-reference")]
+            external,
+            #[cfg(feature = "parity-reference")]
+            spaces,
+            #[cfg(feature = "parity-reference")]
+            space_selector,
+            #[cfg(feature = "parity-reference")]
+            sided,
+            marker: std::marker::PhantomData,
         })
     }
 }

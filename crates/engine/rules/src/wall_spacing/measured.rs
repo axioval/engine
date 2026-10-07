@@ -9,6 +9,7 @@ use axioval_engine::{
     MeasuredMember, MeasuredProvider, Measurement, MemberValue, NotEvaluatedReason,
     PlanAreaServiceHandle, PropertyResolutionError, RuleContext,
 };
+#[cfg(feature = "parity-reference")]
 use axioval_ir::contract::Selector;
 use axioval_ir::measured::{MeasuredArgument, MeasuredCall};
 use axioval_ir::{Object, ObjectId, QuantityDimension};
@@ -67,9 +68,9 @@ fn pairs(
     if tolerance >= 45.0 {
         return Err(invalid("angle_tolerance must lie in [0, 45) degrees"));
     }
-    let every = Selector::All;
     let config = Config {
-        members: &every,
+        #[cfg(feature = "parity-reference")]
+        members: &Selector::All,
         member_path: path(call, "member_path")?,
         tolerance,
         minimum: None,
@@ -78,9 +79,11 @@ fn pairs(
     let services = Services::of(context, &config)?;
     let (matched, universe) = kinds(context, call, "members", &object.id)?;
     let storey = Storey {
+        #[cfg(feature = "parity-reference")]
         context,
         config: &config,
         services: &services,
+        #[cfg(feature = "parity-reference")]
         object,
     };
     let (reached, _) = config.member_path.related(context, &object.id, &universe)?;
@@ -88,6 +91,7 @@ fn pairs(
         &reached,
         &Members {
             matched: &matched,
+            #[cfg(feature = "parity-reference")]
             universe: &universe,
         },
         reach,

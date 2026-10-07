@@ -239,8 +239,6 @@ fn parse<'a>(parameters: &Parameters<'a>) -> Result<Config<'a>, Unavailable> {
     // Only the parity reference keeps the bounds and the space checks; the
     // template reads its own, and they are read here to refuse a bad
     // declaration.
-    #[cfg(not(feature = "parity-reference"))]
-    let _ = (spaces, space_height, space_elevation);
     Ok(Config {
         members,
         order,

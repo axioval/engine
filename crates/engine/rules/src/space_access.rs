@@ -18,7 +18,9 @@
 
 use std::collections::BTreeMap;
 
-use axioval_engine::{AdjacentSide, NotEvaluatedReason, RuleContext, TraversalDirection};
+#[cfg(feature = "parity-reference")]
+use axioval_engine::NotEvaluatedReason;
+use axioval_engine::{AdjacentSide, RuleContext, TraversalDirection};
 use axioval_ir::contract::Selector;
 use axioval_ir::measured::MeasuredSelection;
 use axioval_ir::{Evidence, Object, ObjectId};
@@ -620,6 +622,7 @@ impl AccessIndex {
 }
 
 /// The not-evaluated reason for an unknown link.
+#[cfg(feature = "parity-reference")]
 pub(crate) fn unknown(message: String) -> Unavailable {
     (NotEvaluatedReason::IncompleteEvidence, message)
 }

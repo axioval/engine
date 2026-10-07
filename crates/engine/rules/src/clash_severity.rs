@@ -226,7 +226,7 @@ pub(crate) fn severities(parameters: &Parameters<'_>) -> Result<Severities, Unav
     // Only the parity reference keeps the classes and grades (the template
     // reads its own); they are read here to refuse a bad declaration.
     #[cfg(not(feature = "parity-reference"))]
-    let _ = (by_class, grades);
+    let _ = grades;
     Ok(Severities {
         #[cfg(feature = "parity-reference")]
         by_class,

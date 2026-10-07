@@ -13,6 +13,7 @@ use axioval_engine::{
     PlanSpanServiceHandle, PropertyResolutionError, ProximityServiceHandle, RuleContext,
     VerticalExtentServiceHandle,
 };
+#[cfg(feature = "parity-reference")]
 use axioval_ir::contract::Selector;
 use axioval_ir::measured::{MeasuredArgument, MeasuredCall};
 use axioval_ir::{Object, ObjectId, QuantityDimension};
@@ -123,10 +124,11 @@ impl BayMeasures {
             services: &services,
             object: bay,
         };
-        let every = Selector::All;
         let counted = judged.count(
             &Obstructions {
-                obstacles: &every,
+                #[cfg(feature = "parity-reference")]
+                obstacles: &Selector::All,
+                marker: std::marker::PhantomData,
                 reach,
                 ends: None,
                 sides: None,

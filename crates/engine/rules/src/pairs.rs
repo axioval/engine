@@ -34,6 +34,7 @@ impl Unevaluated {
     pub(crate) fn iter(&self) -> impl Iterator<Item = &(ObjectId, NotEvaluatedReason, String)> {
         self.0.iter()
     }
+    #[cfg(feature = "parity-reference")]
     pub(crate) fn drain_into(self, evaluation: &mut CapabilityEvaluation) {
         for (object, reason, message) in self.0 {
             evaluation.push_object_not_evaluated(object, reason, message);
@@ -83,6 +84,7 @@ pub(crate) fn reason(error: ProximityError) -> NotEvaluatedReason {
 }
 
 /// Refuses every selected subject because the declaration is unusable.
+#[cfg(feature = "parity-reference")]
 pub(crate) fn refuse_declaration(
     context: &RuleContext<'_>,
     rule: &CompiledRule,

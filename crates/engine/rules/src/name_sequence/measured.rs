@@ -49,6 +49,7 @@ fn declared(call: &MeasuredCall) -> Result<Config<'_>, Unavailable> {
         _ => None,
     };
     Ok(Config {
+        #[cfg(feature = "parity-reference")]
         members: None,
         name: property("name")?,
         order: property("order")?,

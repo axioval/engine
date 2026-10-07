@@ -20,7 +20,9 @@ use crate::orientation::{
     rectangle_service,
 };
 use crate::pairs::reason as proximity_reason;
+#[cfg(feature = "parity-reference")]
 use crate::plan_area::{Verdict, judge, shown};
+#[cfg(feature = "parity-reference")]
 use crate::selection::select_objects;
 use crate::support::{Parameters, Unavailable, invalid};
 
@@ -246,7 +248,13 @@ pub(crate) enum Applies {
 /// The objects a bay's orientation is read against.
 pub(crate) enum Reference<'a> {
     /// Aisles within `reach`.
-    Aisles { aisles: &'a Selector, reach: f64 },
+    Aisles {
+        #[cfg(feature = "parity-reference")]
+        aisles: &'a Selector,
+        reach: f64,
+        /// The selector's lifetime, which only the parity reference reads.
+        marker: std::marker::PhantomData<&'a Selector>,
+    },
     /// Neighbouring bays within `reach`.
     Neighbours { reach: f64 },
 }
@@ -259,7 +267,10 @@ pub(crate) struct Orientation<'a> {
 }
 
 pub(crate) struct Obstructions<'a> {
+    #[cfg(feature = "parity-reference")]
     pub(crate) obstacles: &'a Selector,
+    /// The selector's lifetime, which only the parity reference reads.
+    pub(crate) marker: std::marker::PhantomData<&'a Selector>,
     pub(crate) reach: f64,
     /// How many may be obstructed, in findings mode.
     pub(crate) ends: Option<Allowed>,
@@ -435,10 +446,16 @@ fn orientation<'a>(
         return Err(invalid("`aisle_reach` needs `aisles`"));
     }
     let reference = match (aisles, neighbour_reach) {
-        (Some(aisles), None) => Some(Reference::Aisles {
-            aisles,
-            reach: aisle_reach.unwrap_or(0.0),
-        }),
+        (Some(aisles), None) => {
+            #[cfg(not(feature = "parity-reference"))]
+            let _ = aisles;
+            Some(Reference::Aisles {
+                #[cfg(feature = "parity-reference")]
+                aisles,
+                reach: aisle_reach.unwrap_or(0.0),
+                marker: std::marker::PhantomData,
+            })
+        }
         (None, Some(reach)) => Some(Reference::Neighbours { reach }),
         _ => None,
     };
@@ -482,13 +499,19 @@ fn obstructions<'a>(
     let obstructions = match applies {
         Applies::Findings => match (obstacles, reach, ends, sides) {
             (None, None, None, None) => None,
-            (Some(obstacles), Some(reach), Some(ends), Some(sides)) => Some(Obstructions {
-                obstacles,
-                reach,
-                ends: Some(ends),
-                sides: Some(sides),
-                side_zone,
-            }),
+            (Some(obstacles), Some(reach), Some(ends), Some(sides)) => {
+                #[cfg(not(feature = "parity-reference"))]
+                let _ = obstacles;
+                Some(Obstructions {
+                    #[cfg(feature = "parity-reference")]
+                    obstacles,
+                    marker: std::marker::PhantomData,
+                    reach,
+                    ends: Some(ends),
+                    sides: Some(sides),
+                    side_zone,
+                })
+            }
             _ => {
                 return Err(invalid(
                     "`obstacles`, `obstruction_reach`, `end_obstructions` and \
@@ -505,13 +528,19 @@ fn obstructions<'a>(
             }
             match (obstacles, reach) {
                 (None, None) if !counted => None,
-                (Some(obstacles), Some(reach)) if counted => Some(Obstructions {
-                    obstacles,
-                    reach,
-                    ends: None,
-                    sides: None,
-                    side_zone,
-                }),
+                (Some(obstacles), Some(reach)) if counted => {
+                    #[cfg(not(feature = "parity-reference"))]
+                    let _ = obstacles;
+                    Some(Obstructions {
+                        #[cfg(feature = "parity-reference")]
+                        obstacles,
+                        marker: std::marker::PhantomData,
+                        reach,
+                        ends: None,
+                        sides: None,
+                        side_zone,
+                    })
+                }
                 _ => {
                     return Err(invalid(
                         "`end_states` and `side_states` need `obstacles` and \
@@ -589,6 +618,7 @@ pub(crate) struct Nearby {
 }
 
 impl Nearby {
+    #[cfg(feature = "parity-reference")]
     fn find(
         context: &RuleContext<'_>,
         services: &Services<'_>,
@@ -748,6 +778,7 @@ pub(crate) struct Filtering {
 }
 
 /// A count judged: a finding above what is allowed, open where it may be.
+#[cfg(feature = "parity-reference")]
 pub(crate) fn judge_count(counting: &Counting) -> Check {
     let (surely, most) = counting.counted;
     if surely > counting.allowed {
@@ -1616,6 +1647,7 @@ fn rectangle_of(
 }
 
 /// A measured length against inclusive bounds.
+#[cfg(feature = "parity-reference")]
 pub(crate) fn bounded(
     what: &str,
     (low, high): (f64, f64),

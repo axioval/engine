@@ -7,6 +7,7 @@ use axioval_engine::{
     CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ObjectFrameServiceHandle,
     ParameterDescriptor, ParameterType, RuleCapability, RuleContext,
 };
+#[cfg(feature = "parity-reference")]
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId, PropertyValue};
 
@@ -98,6 +99,7 @@ pub(crate) fn parameters() -> Vec<ParameterDescriptor> {
 
 pub(crate) struct Config<'a> {
     /// The member selector, where the declaration was read from a rule.
+    #[cfg(feature = "parity-reference")]
     pub(crate) members: Option<&'a Selector>,
     pub(crate) name: PropertyRef<'a>,
     pub(crate) order: PropertyRef<'a>,
@@ -126,12 +128,18 @@ impl<'a> Config<'a> {
                 )));
             }
         };
+        let members = if selector {
+            Some(parameters.required_selector("member_selector")?)
+        } else {
+            None
+        };
+        // Only the parity reference keeps the member selector; the measured
+        // values take it as an argument.
+        #[cfg(not(feature = "parity-reference"))]
+        let _ = members;
         Ok(Config {
-            members: if selector {
-                Some(parameters.required_selector("member_selector")?)
-            } else {
-                None
-            },
+            #[cfg(feature = "parity-reference")]
+            members,
             name: parameters.required_property("name")?,
             order: parameters.required_property("order")?,
             first: parameters.integer("first")?.unwrap_or(1),

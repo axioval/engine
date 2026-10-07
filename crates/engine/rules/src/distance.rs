@@ -65,11 +65,14 @@ use axioval_engine::{
     ProximityServiceHandle, RegionDistanceRequest, RuleCapability, RuleContext, SubjectSurface,
     VerticalDirection, VerticalExtent, VerticalExtentServiceHandle, VerticalSurfaces,
 };
-use axioval_ir::contract::{ParameterValue, Selector};
+use axioval_ir::contract::ParameterValue;
+#[cfg(feature = "parity-reference")]
+use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId};
 
 use crate::door_swing::{self, Footprint, box_gap};
 use crate::pairs::{Prepared, Unevaluated, fidelity_note, reason};
+#[cfg(feature = "parity-reference")]
 use crate::selection::select_objects;
 use crate::support::{Parameters, Traversal, Unavailable, invalid, traversal_parameters};
 
@@ -168,6 +171,7 @@ pub(crate) struct Declaration {
     pub(crate) projection: ProximityProjection,
     pub(crate) scope: Option<Traversal>,
     /// Which reached objects count as containers; every one without it.
+    #[cfg(feature = "parity-reference")]
     pub(crate) containers: Option<Selector>,
     /// With `elevation_overlap` `overlapping`, the height gap a counterpart
     /// must stay under (zero: the heights overlap).
@@ -307,7 +311,7 @@ pub(crate) fn declaration(rule: &CompiledRule) -> Result<Declaration, Unavailabl
         ));
     }
     let scope = parameters.traversal()?;
-    let containers = parameters.selector("container_selector")?.cloned();
+    let containers = parameters.selector("container_selector")?;
     if containers.is_some() && scope.is_none() {
         return Err(invalid(
             "`container_selector` picks among the containers `relationship` or `path` reaches; \
@@ -322,7 +326,8 @@ pub(crate) fn declaration(rule: &CompiledRule) -> Result<Declaration, Unavailabl
         elevation: elevation(&parameters, projection)?,
         projection,
         scope,
-        containers,
+        #[cfg(feature = "parity-reference")]
+        containers: containers.cloned(),
     })
 }
 
@@ -739,6 +744,7 @@ pub(crate) struct Kinds {
 }
 
 impl Kinds {
+    #[cfg(feature = "parity-reference")]
     pub(crate) fn of(context: &RuleContext<'_>, selector: &Selector) -> Self {
         let (matched, selection) = select_objects(context, selector);
         Self {
@@ -918,6 +924,7 @@ impl<'r, 'c> Scope<'r, 'c> {
 /// Subjects and counterparts measured by their bodies, after the broad
 /// phase.
 pub(crate) struct Bodies {
+    #[cfg(feature = "parity-reference")]
     subjects: Vec<ObjectId>,
     unmeasurable_subjects: BTreeSet<ObjectId>,
     counterparts: BTreeSet<ObjectId>,
@@ -929,6 +936,7 @@ pub(crate) struct Bodies {
 impl From<Prepared<'_>> for Bodies {
     fn from(prepared: Prepared<'_>) -> Self {
         Self {
+            #[cfg(feature = "parity-reference")]
             subjects: prepared.subjects,
             unmeasurable_subjects: prepared.unmeasurable_subjects,
             counterparts: prepared.counterparts,
@@ -1042,6 +1050,7 @@ impl Extent {
 /// Subjects and counterparts measured by door swings on at least one side,
 /// with their extents read.
 pub(crate) struct Swings {
+    #[cfg(feature = "parity-reference")]
     subjects: Vec<ObjectId>,
     unmeasurable_subjects: BTreeSet<ObjectId>,
     counterparts: Vec<ObjectId>,
@@ -1143,6 +1152,7 @@ impl Swings {
         kept.0
             .retain(|object| !unmeasurable_subjects.contains(object));
         Ok(Self {
+            #[cfg(feature = "parity-reference")]
             subjects: kept.0,
             unmeasurable_subjects,
             counterparts: kept.1,
@@ -1319,6 +1329,7 @@ impl Pairs {
     }
 
     /// The subjects judged, in the selection's order.
+    #[cfg(feature = "parity-reference")]
     pub(crate) fn subjects(&self) -> &[ObjectId] {
         match self {
             Self::Bodies(bodies) => &bodies.subjects,

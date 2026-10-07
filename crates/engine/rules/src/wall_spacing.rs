@@ -11,8 +11,10 @@ use axioval_engine::{
     ProximityProjection, ProximityRequest, ProximityServiceHandle, RuleCapability, RuleContext,
     VerticalExtentServiceHandle, projected_candidate_pairs,
 };
+#[cfg(feature = "parity-reference")]
+use axioval_ir::Object;
 use axioval_ir::contract::Selector;
-use axioval_ir::{Evidence, Object, ObjectId, QuantityDimension};
+use axioval_ir::{Evidence, ObjectId, QuantityDimension};
 
 use crate::orientation::{
     Alignment, Tri, aligned, along, angle_tolerance, rectangle, rectangle_service,
@@ -114,12 +116,17 @@ pub(crate) fn check_arguments(
 
 pub(crate) struct Coverage<'a> {
     pub(crate) maximum: f64,
+    #[cfg(feature = "parity-reference")]
     pub(crate) footprints: &'a Selector,
     pub(crate) footprint_path: Traversal,
+    #[cfg(feature = "parity-reference")]
     pub(crate) threshold: f64,
+    /// The selector's lifetime, which only the parity reference reads.
+    pub(crate) marker: std::marker::PhantomData<&'a Selector>,
 }
 
 pub(crate) struct Config<'a> {
+    #[cfg(feature = "parity-reference")]
     pub(crate) members: &'a Selector,
     pub(crate) member_path: Traversal,
     pub(crate) tolerance: f64,
@@ -154,11 +161,16 @@ pub(crate) fn parse<'a>(parameters: &Parameters<'a>) -> Result<Config<'a>, Unava
     let coverage = match (maximum, footprints, footprint_path, threshold) {
         (None, None, None, None) => None,
         (Some(maximum), Some(footprints), Some(footprint_path), Some(threshold)) => {
+            #[cfg(not(feature = "parity-reference"))]
+            let _ = (footprints, threshold);
             Some(Coverage {
                 maximum,
+                #[cfg(feature = "parity-reference")]
                 footprints,
                 footprint_path,
+                #[cfg(feature = "parity-reference")]
                 threshold,
+                marker: std::marker::PhantomData,
             })
         }
         _ => {
@@ -171,8 +183,14 @@ pub(crate) fn parse<'a>(parameters: &Parameters<'a>) -> Result<Config<'a>, Unava
     if minimum.is_none() && coverage.is_none() {
         return Err(invalid("declare `minimum`, `maximum` or both"));
     }
+    let members = parameters.required_selector("members")?;
+    // Only the parity reference keeps the member selector; the measured
+    // values take it as an argument.
+    #[cfg(not(feature = "parity-reference"))]
+    let _ = members;
     Ok(Config {
-        members: parameters.required_selector("members")?,
+        #[cfg(feature = "parity-reference")]
+        members,
         member_path: Traversal::path(
             parameters
                 .strings("member_path")?
@@ -226,10 +244,12 @@ impl<'a> Services<'a> {
 /// The candidate members: selected or undecided.
 pub(crate) struct Members<'m> {
     pub(crate) matched: &'m BTreeSet<ObjectId>,
+    #[cfg(feature = "parity-reference")]
     pub(crate) universe: &'m [&'m Object],
 }
 
 /// A finding (message, evidence, related objects).
+#[cfg(feature = "parity-reference")]
 pub(crate) type Found = (String, Vec<Evidence>, Vec<ObjectId>);
 
 /// One pair of members as far as it was judged.
@@ -247,9 +267,11 @@ pub(crate) struct Pair {
 }
 
 pub(crate) struct Storey<'s, 'a> {
+    #[cfg(feature = "parity-reference")]
     pub(crate) context: &'s RuleContext<'a>,
     pub(crate) config: &'s Config<'s>,
     pub(crate) services: &'s Services<'a>,
+    #[cfg(feature = "parity-reference")]
     pub(crate) object: &'s Object,
 }
 

@@ -218,6 +218,7 @@ fn flag<'a>(parameters: &Parameters<'a>) -> Result<Option<Flag<'a>>, Unavailable
 pub(crate) struct Declaration<'a> {
     pub(crate) exits: Traversal,
     /// The exit selector, where the declaration was read from a rule.
+    #[cfg(feature = "parity-reference")]
     pub(crate) exit_selector: Option<&'a Selector>,
     pub(crate) fraction: f64,
     pub(crate) flag: Option<Flag<'a>>,
@@ -273,8 +274,13 @@ pub(crate) fn declaration<'a>(
                 .ok_or_else(|| invalid("`minimum_exits` must be at least one"))
         })
         .transpose()?;
+    // Only the parity reference keeps the exit selector; the measured
+    // values take it as an argument.
+    #[cfg(not(feature = "parity-reference"))]
+    let _ = exit_selector;
     Ok(Declaration {
         exits,
+        #[cfg(feature = "parity-reference")]
         exit_selector,
         fraction: fraction(parameters, "fraction")?.unwrap_or(0.5),
         flag,

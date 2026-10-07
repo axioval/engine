@@ -48,7 +48,7 @@ impl RuleCapability for ParkingBay {
             Nearby::find(context, &services, selector, &bays, reach)
         };
         let references = match config.orientation.as_ref().map(|o| match &o.reference {
-            Reference::Aisles { aisles, reach } => near(aisles, *reach),
+            Reference::Aisles { aisles, reach, .. } => near(aisles, *reach),
             Reference::Neighbours { reach } => near(&rule.selector, *reach),
         }) {
             Some(Err((reason, message))) => {

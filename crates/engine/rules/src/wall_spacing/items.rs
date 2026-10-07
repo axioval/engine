@@ -17,6 +17,7 @@ use axioval_engine::{
     MeasuredMember, MeasuredMemo, MeasuredProvider, Measurement, MemberValue, NotEvaluatedReason,
     PropertyResolutionError, RuleContext,
 };
+#[cfg(feature = "parity-reference")]
 use axioval_ir::contract::Selector;
 use axioval_ir::measured::{MeasuredArgument, MeasuredCall, MeasuredSelection, SelectionIdentity};
 use axioval_ir::{Evidence, ObjectId, QuantityDimension};
@@ -128,7 +129,6 @@ fn items(
     object: &ObjectId,
     context: &RuleContext<'_>,
 ) -> Result<Vec<MeasuredMember>, Unavailable> {
-    let every = Selector::All;
     let member_path =
         path(call, "member_path")?.ok_or_else(|| invalid("`member_path` is required"))?;
     let minimum = number(call, "minimum");
@@ -137,16 +137,24 @@ fn items(
         path(call, "footprint_path")?,
         number(call, "uncovered_above"),
     ) {
-        (Some(maximum), Some(footprint_path), Some(threshold)) => Some(Coverage {
-            maximum,
-            footprints: &every,
-            footprint_path,
-            threshold,
-        }),
+        (Some(maximum), Some(footprint_path), Some(threshold)) => {
+            #[cfg(not(feature = "parity-reference"))]
+            let _ = threshold;
+            Some(Coverage {
+                maximum,
+                #[cfg(feature = "parity-reference")]
+                footprints: &Selector::All,
+                footprint_path,
+                #[cfg(feature = "parity-reference")]
+                threshold,
+                marker: std::marker::PhantomData,
+            })
+        }
         _ => None,
     };
     let config = Config {
-        members: &every,
+        #[cfg(feature = "parity-reference")]
+        members: &Selector::All,
         member_path,
         tolerance: number(call, "angle_tolerance").unwrap_or(0.0),
         minimum,
@@ -162,12 +170,17 @@ fn items(
     // The pairs read only which members are matched.
     let members = Members {
         matched: &picked.matched,
+        #[cfg(feature = "parity-reference")]
         universe: &[],
     };
+    #[cfg(not(feature = "parity-reference"))]
+    let _ = storey_object;
     let storey = Storey {
+        #[cfg(feature = "parity-reference")]
         context,
         config: &config,
         services: &services,
+        #[cfg(feature = "parity-reference")]
         object: storey_object,
     };
     let (reached, mut evidence) =

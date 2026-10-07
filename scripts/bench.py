@@ -13,7 +13,10 @@ The budget is `scripts/bench_budget.json`: a template's median run time and
 median peak heap, each over its reference's, may not exceed `time` and
 `memory`. Time is judged per input where the reference's median is at least
 `floor_ns`, and over the sum of the medians of the inputs below it; memory
-per input. A record whose two sides differ under the parity contract fails,
+per input. Small inputs may also exceed the summed reference medians by
+`small_slack_ns` each, and any input the reference's peak heap by
+`slack_bytes`: a fixed cost that small is no regression. A record whose two
+sides differ under the parity contract fails,
 and so, in a gate, does a public model that was not fetched
 (`scripts/parity_models.py fetch`): a gate never passes on less evidence than
 it names.
@@ -41,7 +44,7 @@ DEFAULT_OUT = ROOT / "target" / "bench" / "templates.jsonl"
 
 def load_budget(path: Path = BUDGET) -> dict:
     budget = json.loads(path.read_text(encoding="utf-8"))
-    for key in ("time", "memory", "floor_ns"):
+    for key in ("time", "memory", "floor_ns", "small_slack_ns", "slack_bytes"):
         value = budget.get(key)
         if not isinstance(value, (int, float)) or value <= 0:
             raise SystemExit(f"{path}: `{key}` must be a positive number")
@@ -83,7 +86,9 @@ def judge(records: list[dict], budget: dict, gate: bool) -> list[str]:
         if not record.get("parity", False):
             failures.append(f"{name}: template and reference differ under the parity contract")
         allowed = allowance(budget, record)
-        if record["memory_ratio"] > allowed["memory"]:
+        heap = record["template"].get("peak_bytes")
+        within_slack = heap is not None and heap <= record["reference"].get("peak_bytes", 0) + budget["slack_bytes"]
+        if record["memory_ratio"] > allowed["memory"] and not within_slack:
             failures.append(
                 f"{name}: peak heap {record['memory_ratio']:.2f}x the reference's "
                 f"exceeds {allowed['memory']}x"
@@ -100,7 +105,8 @@ def judge(records: list[dict], budget: dict, gate: bool) -> list[str]:
         template = sum(record["template"]["median_ns"] for record in group)
         reference = sum(record["reference"]["median_ns"] for record in group)
         ratio = template / max(reference, 1)
-        if ratio > budget["time"]:
+        slack = budget["small_slack_ns"] * len(group)
+        if ratio > budget["time"] and template > reference + slack:
             failures.append(
                 f"{capability} on {len(group)} inputs under the floor: run time "
                 f"{ratio:.2f}x the reference's exceeds {budget['time']}x"

@@ -8,7 +8,13 @@ import unittest
 
 import bench
 
-BUDGET = {"time": 1.25, "memory": 1.5, "floor_ns": 100_000}
+BUDGET = {
+    "time": 1.25,
+    "memory": 1.5,
+    "floor_ns": 100_000,
+    "small_slack_ns": 20_000,
+    "slack_bytes": 65_536,
+}
 
 
 def record(input: str = "fixture-400-walls.ifc", **changes: object) -> dict:
@@ -49,9 +55,16 @@ class JudgeTest(unittest.TestCase):
         self.assertIn("run time", failures[0])
 
     def test_a_heavy_template_fails_even_on_a_small_input(self) -> None:
-        small = {"median_ns": 10_000, "peak_bytes": 1_000}
         failures = self.failures(
-            [record(), public(template=small, reference=small, time_ratio=1.0, memory_ratio=1.6)]
+            [
+                record(),
+                public(
+                    template={"median_ns": 10_000, "peak_bytes": 200_000},
+                    reference={"median_ns": 10_000, "peak_bytes": 100_000},
+                    time_ratio=1.0,
+                    memory_ratio=2.0,
+                ),
+            ]
         )
         self.assertEqual(len(failures), 1)
         self.assertIn("peak heap", failures[0])
@@ -67,8 +80,34 @@ class JudgeTest(unittest.TestCase):
 
         # One noisy small input alone does not fail ...
         self.assertEqual(self.failures([record(), small(30_000, 20_000), small(20_000, 40_000)]), [])
-        # ... but small inputs slow together do.
-        failures = self.failures([record(), small(30_000, 20_000), small(30_000, 20_000)])
+        # ... but small inputs slow together, beyond their slack, do.
+        failures = self.failures([record(), small(90_000, 60_000), small(90_000, 60_000)])
+        self.assertEqual(len(failures), 1)
+        self.assertIn("under the floor", failures[0])
+
+    def test_a_heap_within_the_slack_passes(self) -> None:
+        # 2x of a few kibibytes is a fixed cost, not a regression.
+        tiny = public(
+            template={"median_ns": 10_000, "peak_bytes": 40_000},
+            reference={"median_ns": 10_000, "peak_bytes": 20_000},
+            time_ratio=1.0,
+            memory_ratio=2.0,
+        )
+        self.assertEqual(self.failures([record(), tiny]), [])
+
+    def test_small_inputs_within_the_slack_pass(self) -> None:
+        def small(template: int, reference: int) -> dict:
+            return public(
+                template={"median_ns": template, "peak_bytes": 1},
+                reference={"median_ns": reference, "peak_bytes": 1},
+                time_ratio=template / reference,
+                memory_ratio=1.0,
+            )
+
+        # 1.8x of 20 us is 16 us over: within 20 us per input ...
+        self.assertEqual(self.failures([record(), small(36_000, 20_000)]), [])
+        # ... while 60 us over two small inputs is not.
+        failures = self.failures([record(), small(80_000, 50_000), small(80_000, 50_000)])
         self.assertEqual(len(failures), 1)
         self.assertIn("under the floor", failures[0])
 
@@ -88,7 +127,17 @@ class JudgeTest(unittest.TestCase):
 
     def test_only_run_times_are_measured_again(self) -> None:
         self.assertTrue(bench.retimed(self.failures([record(time_ratio=1.3), public()])))
-        heavy = self.failures([record(time_ratio=1.3, memory_ratio=1.6), public()])
+        heavy = self.failures(
+            [
+                record(
+                    template={"median_ns": 1_300_000, "peak_bytes": 200_000},
+                    reference={"median_ns": 1_000_000, "peak_bytes": 100_000},
+                    time_ratio=1.3,
+                    memory_ratio=2.0,
+                ),
+                public(),
+            ]
+        )
         self.assertFalse(bench.retimed(heavy))
         self.assertFalse(bench.retimed([]))
 

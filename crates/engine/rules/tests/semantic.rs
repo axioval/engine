@@ -1827,6 +1827,13 @@ mod numbering {
 
     const ID: &str = "axioval:capability.numbering-consistency";
 
+    /// The template, held to the implementation it replaced on every
+    /// evaluation.
+    static HELD: common::Held = common::Held(
+        &NumberingConsistency,
+        &axioval_rules::reference::NumberingConsistency,
+    );
+
     /// Storey 1: B-101, B-102, B-104, a lobby and a bare `101`; storey 2:
     /// B-201, B-202, B-301.
     fn spaces() -> Model {
@@ -1862,7 +1869,7 @@ mod numbering {
             ("direction", string("backward")),
         ];
         parameters.extend(extra);
-        model.evaluate(&NumberingConsistency, &rule(ID, kind("space"), parameters))
+        model.evaluate_measured(&HELD, &rule(ID, kind("space"), parameters), |_| {})
     }
 
     #[test]
@@ -1891,6 +1898,13 @@ mod numbering {
         );
         // The gap names the object below it.
         assert_eq!(evaluation.findings()[0].related[0].local_id, "s2");
+        // Cited as exactly as the stated numbers they rest on.
+        assert!(
+            evaluation
+                .findings()
+                .iter()
+                .all(|finding| finding.evidence.iter().all(|evidence| evidence.exact))
+        );
         // Values the pattern does not number are not evaluated, never passed.
         assert_eq!(
             unevaluated(&evaluation),
@@ -1935,9 +1949,9 @@ mod numbering {
             unevaluated(&evaluation),
             [
                 ("s2".to_owned(), NotEvaluatedReason::BackendUnavailable),
+                ("s3".to_owned(), NotEvaluatedReason::IncompleteEvidence),
                 ("s4".to_owned(), NotEvaluatedReason::IncompleteEvidence),
                 ("s5".to_owned(), NotEvaluatedReason::IncompleteEvidence),
-                ("s3".to_owned(), NotEvaluatedReason::IncompleteEvidence),
             ]
         );
         // Storey 2 is unaffected.
@@ -1998,6 +2012,121 @@ mod numbering {
                 [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
             );
         }
+        // Worded as the capability worded them.
+        let refused = |extra| {
+            check(spaces(), extra).not_evaluated_outcomes()[0]
+                .message()
+                .to_owned()
+        };
+        assert_eq!(
+            refused(vec![]),
+            "numbering-consistency: declare `prefix_length`, `gap_free` or both; nothing is \
+             checked otherwise"
+        );
+        assert_eq!(
+            refused(vec![
+                ("gap_free", boolean(true)),
+                ("pattern", string(r"B-\d+"))
+            ]),
+            r#"numbering-consistency: pattern "B-\\d+" must have exactly one group, the number"#
+        );
+        assert_eq!(
+            refused(vec![("prefix_length", integer(0))]),
+            "numbering-consistency: prefix_length must be positive"
+        );
+    }
+
+    /// A pattern is matched exactly as stated: its spaces match spaces.
+    #[test]
+    fn a_pattern_keeps_its_spaces() {
+        let evaluation = check(
+            spaces(),
+            vec![
+                ("gap_free", boolean(true)),
+                ("pattern", string(r" B-(\d+)")),
+            ],
+        );
+        // No name starts with a space: none is numbered.
+        assert!(evaluation.findings().is_empty());
+        assert_eq!(unevaluated(&evaluation).len(), 8);
+    }
+
+    /// Generated storeys of spaces named by numbers with and without the
+    /// pattern's prefix, of fewer digits, too large, blank, integers or
+    /// unreadable, some on no storey, some in another source, checked for
+    /// prefixes and gaps per storey, per source or across sources; each held
+    /// to the implementation the template replaced.
+    #[test]
+    fn generated_storeys_hold_parity() {
+        let names = [
+            "B-101",
+            "B-102",
+            "B-104",
+            "B-201",
+            "B-202",
+            "B-301",
+            "B-9",
+            "B-1001",
+            "B-",
+            "",
+            "Lobby",
+            "B-99999999999999999999999",
+        ];
+        let mut judged = 0;
+        for spaces in 0..7_usize {
+            for pattern in 0..30_usize {
+                let mut model = Model::default()
+                    .object("st1", "storey")
+                    .object("st2", "storey")
+                    .object_in("other", "x1", "space")
+                    .value_of(
+                        axioval_ir::ObjectId::new(
+                            axioval_ir::SourceId::new("test", "other").unwrap(),
+                            "x1",
+                        )
+                        .unwrap(),
+                        ATTR,
+                        "Name",
+                        PropertyValue::String("B-103".into()),
+                    );
+                for space in 0..spaces {
+                    let local: &'static str = ["s0", "s1", "s2", "s3", "s4", "s5", "s6"][space];
+                    model = model.object(local, "space");
+                    match (pattern + space) % 5 {
+                        0 => {}
+                        1 | 2 => model = model.edge("aggregates", "st1", local),
+                        _ => model = model.edge("aggregates", "st2", local),
+                    }
+                    model = match (pattern * 3 + space * 7) % 13 {
+                        12 => model.unreadable(local),
+                        11 => model.value(local, ATTR, "Name", PropertyValue::Integer(105)),
+                        index => model.text(local, ATTR, "Name", names[index % names.len()]),
+                    };
+                }
+                let mut extra = vec![("pattern", string(r"B-(\d+)"))];
+                match pattern % 3 {
+                    0 => extra.push(("prefix_length", integer(1))),
+                    1 => extra.push(("gap_free", boolean(true))),
+                    _ => {
+                        extra.push(("prefix_length", integer(2)));
+                        extra.push(("gap_free", boolean(true)));
+                    }
+                }
+                if pattern % 4 == 1 {
+                    extra.push(("across_sources", boolean(true)));
+                }
+                let mut parameters = vec![("property", property(Some(ATTR), "Name"))];
+                if pattern % 2 == 0 {
+                    parameters.push(("relationship", string("aggregates")));
+                    parameters.push(("direction", string("backward")));
+                }
+                parameters.extend(extra);
+                let evaluation =
+                    model.evaluate_measured(&HELD, &rule(ID, kind("space"), parameters), |_| {});
+                judged += evaluation.findings().len() + evaluation.not_evaluated_outcomes().len();
+            }
+        }
+        assert!(judged > 0);
     }
 }
 

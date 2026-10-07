@@ -253,6 +253,11 @@ const PAIRS: &[Pair] = &[
         reference: |registry| registry.replace(axioval::rules::reference::NameSequence),
     },
     Pair {
+        capability: "axioval:capability.numbering-consistency",
+        case: "numbering",
+        reference: |registry| registry.replace(axioval::rules::reference::NumberingConsistency),
+    },
+    Pair {
         capability: "axioval:capability.coordinate-consistency",
         case: "storeys",
         reference: |registry| {

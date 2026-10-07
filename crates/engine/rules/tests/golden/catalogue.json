@@ -23756,7 +23756,371 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "numbering-consistency",
+        "declaration": [
+          {
+            "kind": "arguments",
+            "when": [],
+            "value": "numbering;property=@property;pattern=@pattern;prefix_length=@prefix_length;gap_free=@gap_free;across_sources=@across_sources;relationship=@relationship;direction=@direction;path=@path;follow_chain=@follow_chain;skip_absent_relationship_ends=@skip_absent_relationship_ends;selection=@selection"
+          }
+        ],
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "judged",
+                "expression": {
+                  "kind": "literal",
+                  "value": {
+                    "type": "integer",
+                    "value": 1
+                  },
+                  "label": "the numbers are judged"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "judged",
+              "rounding": []
+            },
+            "fail": "",
+            "undecided": "",
+            "checks": [
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {},
+                  "list": "numbering;property=@property;pattern=@pattern;prefix_length=@prefix_length;gap_free=@gap_free;across_sources=@across_sources;relationship=@relationship;direction=@direction;path=@path;follow_chain=@follow_chain;skip_absent_relationship_ends=@skip_absent_relationship_ends;selection=@selection",
+                  "refused": "{why}",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "unread",
+                          "value": true
+                        }
+                      ],
+                      "judge": {
+                        "kind": "range",
+                        "value": "number",
+                        "unit": "count",
+                        "allowance": {
+                          "kind": "none"
+                        },
+                        "grade": false,
+                        "null": {
+                          "kind": "skip"
+                        }
+                      },
+                      "fail": "",
+                      "undecided": ""
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "prefixed",
+                          "value": true
+                        }
+                      ],
+                      "judge": {
+                        "kind": "range",
+                        "value": "lead",
+                        "unit": "count",
+                        "atLeast": [
+                          {
+                            "name": "lead",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "literal",
+                                  "value": 1.0
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "none"
+                        },
+                        "grade": false,
+                        "null": {
+                          "kind": "skip"
+                        }
+                      },
+                      "fail": "{departs}",
+                      "undecided": "",
+                      "related": "related"
+                    },
+                    {
+                      "kind": "test",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "stepped",
+                          "value": true
+                        }
+                      ],
+                      "judge": {
+                        "kind": "range",
+                        "value": "step",
+                        "unit": "count",
+                        "atMost": [
+                          {
+                            "name": "step",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "literal",
+                                  "value": 1.0
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "none"
+                        },
+                        "grade": false,
+                        "null": {
+                          "kind": "skip"
+                        }
+                      },
+                      "fail": "{property} {shown} follows {below}; {missing}",
+                      "undecided": "",
+                      "effects": [
+                        {
+                          "when": [
+                            {
+                              "kind": "field",
+                              "field": "fillable",
+                              "value": true
+                            }
+                          ],
+                          "on": "fail",
+                          "message": "{property} {shown} follows {below}, but an object whose number could not be read may fill the gap"
+                        }
+                      ],
+                      "related": "related"
+                    }
+                  ]
+                },
+                "fail": "",
+                "undecided": ""
+              }
+            ]
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "aggregate",
+                  "function": "none",
+                  "over": {
+                    "kind": "measured",
+                    "name": "numbering;property=@property;pattern=@pattern;prefix_length=@prefix_length;gap_free=@gap_free;across_sources=@across_sources;relationship=@relationship;direction=@direction;path=@path;follow_chain=@follow_chain;skip_absent_relationship_ends=@skip_absent_relationship_ends;selection=@selection"
+                  },
+                  "value": {
+                    "kind": "not",
+                    "operand": {
+                      "kind": "and",
+                      "operands": [
+                        {
+                          "kind": "compare",
+                          "operator": "greaterThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "lead"
+                          },
+                          "right": {
+                            "kind": "literal",
+                            "value": {
+                              "type": "number",
+                              "value": 1.0
+                            }
+                          }
+                        },
+                        {
+                          "kind": "compare",
+                          "operator": "lessThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "step"
+                          },
+                          "right": {
+                            "kind": "literal",
+                            "value": {
+                              "type": "number",
+                              "value": 1.0
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "label": "no item fails"
+                },
+                {
+                  "kind": "isDefined",
+                  "operand": {
+                    "kind": "literal",
+                    "value": {
+                      "type": "integer",
+                      "value": 1
+                    },
+                    "label": "the numbers are judged"
+                  },
+                  "label": "read"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.aggregate",
+                      "label": "no item fails",
+                      "fields": {
+                        "function": "none"
+                      },
+                      "inputs": {
+                        "over": {
+                          "block": {
+                            "type": "members.numbering",
+                            "fields": {
+                              "across_sources": "@across_sources",
+                              "direction": "@direction",
+                              "follow_chain": "@follow_chain",
+                              "gap_free": "@gap_free",
+                              "path": "@path",
+                              "pattern": "@pattern",
+                              "prefix_length": "@prefix_length",
+                              "property": "@property",
+                              "relationship": "@relationship",
+                              "selection": "@selection",
+                              "skip_absent_relationship_ends": "@skip_absent_relationship_ends"
+                            }
+                          }
+                        },
+                        "value": {
+                          "block": {
+                            "type": "expression.not",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.and",
+                                  "inputs": {
+                                    "operands": {
+                                      "blocks": [
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "greaterThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "lead",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.literal",
+                                                "fields": {
+                                                  "value": {
+                                                    "type": "number",
+                                                    "value": 1.0
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "lessThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "step",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.literal",
+                                                "fields": {
+                                                  "value": {
+                                                    "type": "number",
+                                                    "value": 1.0
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.isDefined",
+                      "label": "read",
+                      "inputs": {
+                        "operand": {
+                          "block": {
+                            "type": "expression.literal",
+                            "label": "the numbers are judged",
+                            "fields": {
+                              "value": {
+                                "type": "integer",
+                                "value": 1
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.object-count",
@@ -83891,6 +84255,554 @@
             {
               "language": "de",
               "text": "Das Mitglied darunter in der Folge."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "numbering",
+      "parameters": [
+        {
+          "key": "property",
+          "kind": {
+            "type": "property"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The property holding each object's number."
+            },
+            {
+              "language": "de",
+              "text": "Die Eigenschaft, die die Nummer jedes Objekts trägt."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "pattern",
+          "kind": {
+            "type": "pattern"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The XML Schema pattern over the whole value, its one group capturing the number."
+            },
+            {
+              "language": "de",
+              "text": "Das XML-Schema-Muster über den ganzen Wert, dessen eine Gruppe die Nummer erfasst."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "prefix_length",
+          "kind": {
+            "type": "number",
+            "minimum": 1.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How many leading digits the objects of a scope must share."
+            },
+            {
+              "language": "de",
+              "text": "Wie viele führende Ziffern die Objekte eines Bereichs teilen müssen."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "gap_free",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the numbers of a scope must leave no gap."
+            },
+            {
+              "language": "de",
+              "text": "Ob die Nummern eines Bereichs keine Lücke lassen dürfen."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "across_sources",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the scopes span the sources."
+            },
+            {
+              "language": "de",
+              "text": "Ob die Bereiche die Quellen übergreifen."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "relationship",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship walked from the object."
+            },
+            {
+              "language": "de",
+              "text": "Die vom Objekt aus begangene Beziehung."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "direction",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship's direction: `forward` (the default), `backward` or `either`."
+            },
+            {
+              "language": "de",
+              "text": "Die Richtung der Beziehung: `forward` (Vorgabe), `backward` oder `either`."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Relationship steps walked instead of one relationship."
+            },
+            {
+              "language": "de",
+              "text": "Beziehungsschritte statt einer Beziehung."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "follow_chain",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether chains of the relationship are followed."
+            },
+            {
+              "language": "de",
+              "text": "Ob Ketten der Beziehung verfolgt werden."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "skip_absent_relationship_ends",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether a relationship end the source does not state is skipped."
+            },
+            {
+              "language": "de",
+              "text": "Ob ein von der Quelle nicht angegebenes Beziehungsende übersprungen wird."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "selection",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects numbered: the rule's own selection (`@selection`)."
+            },
+            {
+              "language": "de",
+              "text": "Die nummerierten Objekte: die eigene Auswahl der Regel (`@selection`)."
+            }
+          ],
+          "references": "selector"
+        }
+      ],
+      "services": [
+        "property-resolution",
+        "relationship-selection"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the object's number cannot be read",
+        "its number has too few digits for a prefix"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Numbering"
+        },
+        {
+          "language": "de",
+          "text": "Nummerierung"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "What `numbering-consistency` judges of an object's number among the numbers of its scope: why it cannot be read, its prefix's lead over the other prefixes and its step from the next lower number."
+        },
+        {
+          "language": "de",
+          "text": "Was `numbering-consistency` an der Nummer eines Objekts unter den Nummern seines Bereichs beurteilt: warum sie nicht gelesen werden kann, den Vorsprung ihres Präfixes vor den anderen und ihren Schritt von der nächstniedrigeren Nummer."
+        }
+      ],
+      "fields": [
+        {
+          "name": "unread",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Unread"
+            },
+            {
+              "language": "de",
+              "text": "Ungelesen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "True on the item stating why the object's number cannot be read."
+            },
+            {
+              "language": "de",
+              "text": "Wahr am Element, das angibt, warum die Nummer des Objekts nicht gelesen werden kann."
+            }
+          ]
+        },
+        {
+          "name": "number",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Number"
+            },
+            {
+              "language": "de",
+              "text": "Nummer"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Not evaluated, for why the number cannot be read."
+            },
+            {
+              "language": "de",
+              "text": "Nicht ausgewertet, mit dem Grund, warum die Nummer nicht gelesen werden kann."
+            }
+          ]
+        },
+        {
+          "name": "prefixed",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Prefixed"
+            },
+            {
+              "language": "de",
+              "text": "Präfix"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "True on the item judging the object's prefix."
+            },
+            {
+              "language": "de",
+              "text": "Wahr am Element, das das Präfix des Objekts beurteilt."
+            }
+          ]
+        },
+        {
+          "name": "lead",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Lead"
+            },
+            {
+              "language": "de",
+              "text": "Vorsprung"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "How many more objects of the scope share its prefix than any other, less the objects not read; not evaluated for a number with too few digits."
+            },
+            {
+              "language": "de",
+              "text": "Wie viele Objekte des Bereichs mehr sein Präfix teilen als irgendein anderes, abzüglich der nicht gelesenen; nicht ausgewertet für eine Nummer mit zu wenigen Ziffern."
+            }
+          ]
+        },
+        {
+          "name": "departs",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Departs"
+            },
+            {
+              "language": "de",
+              "text": "Abweichung"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Words naming how the object departs from its scope's prefix."
+            },
+            {
+              "language": "de",
+              "text": "Worte, die nennen, wie das Objekt vom Präfix seines Bereichs abweicht."
+            }
+          ]
+        },
+        {
+          "name": "stepped",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Stepped"
+            },
+            {
+              "language": "de",
+              "text": "Schritt"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "True on the item judging the object's step from the next lower number."
+            },
+            {
+              "language": "de",
+              "text": "Wahr am Element, das den Schritt des Objekts von der nächstniedrigeren Nummer beurteilt."
+            }
+          ]
+        },
+        {
+          "name": "step",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Step"
+            },
+            {
+              "language": "de",
+              "text": "Schritt"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "How far its number lies above the next lower number of its scope."
+            },
+            {
+              "language": "de",
+              "text": "Wie weit seine Nummer über der nächstniedrigeren Nummer seines Bereichs liegt."
+            }
+          ]
+        },
+        {
+          "name": "fillable",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Fillable"
+            },
+            {
+              "language": "de",
+              "text": "Füllbar"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether an object whose number could not be read may fill the gap below."
+            },
+            {
+              "language": "de",
+              "text": "Ob ein Objekt, dessen Nummer nicht gelesen werden konnte, die Lücke darunter füllen kann."
+            }
+          ]
+        },
+        {
+          "name": "shown",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Stated"
+            },
+            {
+              "language": "de",
+              "text": "Angegeben"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "What the object states, as findings show it."
+            },
+            {
+              "language": "de",
+              "text": "Was das Objekt angibt, wie Befunde es zeigen."
+            }
+          ]
+        },
+        {
+          "name": "below",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Below"
+            },
+            {
+              "language": "de",
+              "text": "Darunter"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The next lower number of its scope."
+            },
+            {
+              "language": "de",
+              "text": "Die nächstniedrigere Nummer seines Bereichs."
+            }
+          ]
+        },
+        {
+          "name": "missing",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Missing"
+            },
+            {
+              "language": "de",
+              "text": "Fehlend"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Words naming the numbers missing below."
+            },
+            {
+              "language": "de",
+              "text": "Worte, die die fehlenden Nummern darunter nennen."
+            }
+          ]
+        },
+        {
+          "name": "related",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Related"
+            },
+            {
+              "language": "de",
+              "text": "Bezogen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects its prefix or step is judged against."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, gegen die sein Präfix oder Schritt beurteilt wird."
             }
           ]
         }

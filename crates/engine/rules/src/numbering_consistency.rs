@@ -1,19 +1,30 @@
 //! Numbers read from a pattern that must agree within a scope.
 
 use std::collections::BTreeMap;
+use std::sync::LazyLock;
 
+use axioval_engine::template::Template;
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor, ParameterType,
     RuleCapability, RuleContext,
 };
-use axioval_ir::{Evidence, Object, PropertyValue};
+use axioval_ir::contract::ParameterValue;
+use axioval_ir::{Evidence, Object, ObjectId, PropertyValue};
 use regex::Regex;
 
-use crate::selection::select_objects;
 use crate::support::{
-    Parameters, PropertyRef, Unavailable, display, finding, invalid, resolve, scope_key, undefined,
+    Parameters, PropertyRef, Unavailable, display, invalid, resolve, scope_key, undefined,
 };
 use crate::xsd_pattern;
+
+mod measured;
+#[cfg(feature = "parity-reference")]
+pub(crate) mod reference;
+mod template;
+
+pub(crate) use measured::NumberingMeasures;
+
+pub(crate) const NAME: &str = "numbering-consistency";
 
 /// Requires the numbers of one scope to share a prefix and leave no gaps.
 ///
@@ -35,154 +46,61 @@ use crate::xsd_pattern;
 /// passed. An object whose value or scope cannot be read might fill a gap or
 /// shift the predominant prefix, so a gap it could fill is not evaluated
 /// rather than reported.
+///
+/// It runs as a template ([`axioval_engine::template`]): the items of the
+/// measured `numbering` list of each object, its prefix's lead over the
+/// other prefixes of its scope and its number's step from the one below,
+/// judged by the template.
 pub struct NumberingConsistency;
+
+static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
+
+/// The plans of the rules bound to it, kept across runs.
+static PLANS: crate::templates::Plans = crate::templates::Plans::new();
 
 impl RuleCapability for NumberingConsistency {
     fn id(&self) -> &'static str {
-        "axioval:capability.numbering-consistency"
+        template::ID
     }
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
-        vec![
-            ParameterDescriptor::required("property", ParameterType::PropertyReference),
-            ParameterDescriptor::required("pattern", ParameterType::String),
-            ParameterDescriptor::optional("prefix_length", ParameterType::Integer),
-            ParameterDescriptor::optional("gap_free", ParameterType::Boolean),
-            ParameterDescriptor::optional("across_sources", ParameterType::Boolean),
-        ]
-        .into_iter()
-        .chain(crate::support::traversal_parameters())
-        .collect()
+        TEMPLATE.parameters.clone()
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let config = match Config::read(&Parameters(rule)) {
-            Ok(config) => config,
-            Err((reason, message)) => {
-                return CapabilityEvaluation::not_evaluated(
-                    reason,
-                    format!("numbering-consistency: {message}"),
-                );
-            }
-        };
-        let (selected, mut evaluation) = select_objects(context, &rule.selector);
-        let mut scopes: BTreeMap<String, Scope<'_>> = BTreeMap::new();
-        // Objects in no known scope, by source key, with their number if read.
-        let mut stray: Vec<(String, Option<u64>)> = Vec::new();
-        for object in selected {
-            let source = if config.across_sources {
-                String::new()
-            } else {
-                object.id.source.to_string()
-            };
-            let scope = |context: &RuleContext<'_>| {
-                scope_key(
-                    context,
-                    config.traversal.as_ref(),
-                    config.across_sources,
-                    object,
-                )
-            };
-            let resolved = match resolve(context, object, config.property) {
-                Ok(resolved) => resolved,
-                Err((reason, message)) => {
-                    evaluation.push_object_not_evaluated(object.id.clone(), reason, message);
-                    match scope(context) {
-                        Ok((key, _)) => {
-                            scopes
-                                .entry(key)
-                                .or_insert_with(|| Scope::new(source))
-                                .undecided += 1;
-                        }
-                        Err(_) => stray.push((source, None)),
-                    }
-                    continue;
-                }
-            };
-            let value = resolved.value();
-            let digits = match config.digits(value) {
-                Ok(digits) => digits,
-                Err(message) => {
-                    evaluation.push_object_not_evaluated(
-                        object.id.clone(),
-                        NotEvaluatedReason::IncompleteEvidence,
-                        format!("{} {} {message}", config.property, display(value)),
-                    );
-                    continue;
-                }
-            };
-            let Ok(number) = digits.parse::<u64>() else {
-                evaluation.push_object_not_evaluated(
-                    object.id.clone(),
-                    NotEvaluatedReason::IncompleteEvidence,
-                    format!(
-                        "{} {} holds a number too large to compare",
-                        config.property,
-                        display(value)
-                    ),
-                );
-                continue;
-            };
-            let (key, mut evidence) = match scope(context) {
-                Ok(scope) => scope,
-                Err((reason, message)) => {
-                    evaluation.push_object_not_evaluated(object.id.clone(), reason, message);
-                    stray.push((source, Some(number)));
-                    continue;
-                }
-            };
-            evidence.extend(resolved.evidence());
-            scopes
-                .entry(key)
-                .or_insert_with(|| Scope::new(source))
-                .members
-                .push(Member {
-                    object,
-                    shown: display(value),
-                    digits,
-                    number,
-                    evidence,
-                });
-        }
-        judge(rule, &config, &scopes, &stray, &mut evaluation);
-        evaluation
+        crate::templates::run((&TEMPLATE, &PLANS), context, rule)
+    }
+
+    fn template(&self) -> Option<&Template> {
+        Some(&TEMPLATE)
     }
 }
 
-/// Runs the declared checks on every scope.
-fn judge(
-    rule: &CompiledRule,
-    config: &Config<'_>,
-    scopes: &BTreeMap<String, Scope<'_>>,
-    stray: &[(String, Option<u64>)],
-    evaluation: &mut CapabilityEvaluation,
-) {
-    for scope in scopes.values() {
-        let strays: Vec<Option<u64>> = stray
-            .iter()
-            .filter(|(source, _)| *source == scope.source)
-            .map(|(_, number)| *number)
-            .collect();
-        if let Some(length) = config.prefix_length {
-            check_prefix(rule, config, scope, length, strays.len(), evaluation);
-        }
-        if config.gap_free {
-            check_gaps(rule, config, scope, &strays, evaluation);
-        }
-    }
+/// The capability's parameter descriptor.
+pub(crate) fn parameters() -> Vec<ParameterDescriptor> {
+    vec![
+        ParameterDescriptor::required("property", ParameterType::PropertyReference),
+        ParameterDescriptor::required("pattern", ParameterType::String),
+        ParameterDescriptor::optional("prefix_length", ParameterType::Integer),
+        ParameterDescriptor::optional("gap_free", ParameterType::Boolean),
+        ParameterDescriptor::optional("across_sources", ParameterType::Boolean),
+    ]
+    .into_iter()
+    .chain(crate::support::traversal_parameters())
+    .collect()
 }
 
-struct Config<'a> {
-    property: PropertyRef<'a>,
-    pattern: Regex,
-    prefix_length: Option<usize>,
-    gap_free: bool,
-    across_sources: bool,
-    traversal: Option<crate::support::Traversal>,
+pub(crate) struct Config<'a> {
+    pub(crate) property: PropertyRef<'a>,
+    pub(crate) pattern: Regex,
+    pub(crate) prefix_length: Option<usize>,
+    pub(crate) gap_free: bool,
+    pub(crate) across_sources: bool,
+    pub(crate) traversal: Option<crate::support::Traversal>,
 }
 
 impl<'a> Config<'a> {
-    fn read(parameters: &Parameters<'a>) -> Result<Self, Unavailable> {
+    pub(crate) fn read(parameters: &Parameters<'a>) -> Result<Self, Unavailable> {
         let source = parameters.required_string("pattern")?;
         let pattern = xsd_pattern::compile(source)
             .map_err(|error| invalid(format!("pattern {source:?}: {error}")))?;
@@ -240,19 +158,28 @@ impl<'a> Config<'a> {
     }
 }
 
-struct Member<'a> {
-    object: &'a Object,
-    shown: String,
-    digits: String,
-    number: u64,
-    evidence: Vec<Evidence>,
+/// Checks the rule parameters the measured `numbering` is handed, as the
+/// rule states them: the capability's declaration, in its order and words.
+pub(crate) fn check_arguments(
+    arguments: &BTreeMap<String, ParameterValue>,
+) -> Result<(), Unavailable> {
+    let rule = crate::light_area::synthesised(arguments.clone());
+    Config::read(&Parameters(&rule)).map(|_| ())
 }
 
-struct Scope<'a> {
-    source: String,
-    members: Vec<Member<'a>>,
+pub(crate) struct Member<'a> {
+    pub(crate) object: &'a Object,
+    pub(crate) shown: String,
+    pub(crate) digits: String,
+    pub(crate) number: u64,
+    pub(crate) evidence: Vec<Evidence>,
+}
+
+pub(crate) struct Scope<'a> {
+    pub(crate) source: String,
+    pub(crate) members: Vec<Member<'a>>,
     /// Objects of this scope whose number could not be read.
-    undecided: usize,
+    pub(crate) undecided: usize,
 }
 
 impl Scope<'_> {
@@ -265,154 +192,115 @@ impl Scope<'_> {
     }
 }
 
-fn report(
-    rule: &CompiledRule,
-    member: &Member<'_>,
-    message: String,
-    related: &[&Member<'_>],
-) -> axioval_ir::Finding {
-    let mut evidence = member.evidence.clone();
-    evidence.extend(
-        related
-            .iter()
-            .flat_map(|other| other.evidence.iter().cloned()),
-    );
-    finding(
-        rule,
-        &member.object.id,
-        message,
-        evidence,
-        related
-            .iter()
-            .filter(|other| other.object.id != member.object.id)
-            .map(|other| other.object.id.clone())
-            .collect(),
-    )
+/// The numbers of the selected objects, read as the capability reads them:
+/// each scope's members, the objects in no known scope by source key (with
+/// their number where read), and why each object whose number or scope
+/// cannot be read is left open.
+pub(crate) struct Collected<'a> {
+    pub(crate) scopes: BTreeMap<String, Scope<'a>>,
+    pub(crate) stray: Vec<(String, Option<u64>)>,
+    pub(crate) open: Vec<(ObjectId, NotEvaluatedReason, String)>,
 }
 
-fn check_prefix(
-    rule: &CompiledRule,
-    config: &Config<'_>,
-    scope: &Scope<'_>,
-    length: usize,
-    strays: usize,
-    evaluation: &mut CapabilityEvaluation,
-) {
-    let property = config.property;
-    let mut by_prefix: BTreeMap<&str, Vec<&Member<'_>>> = BTreeMap::new();
-    for member in &scope.members {
-        match member.digits.get(..length) {
-            Some(prefix) if member.digits.len() >= length => {
-                by_prefix.entry(prefix).or_default().push(member);
-            }
-            _ => evaluation.push_object_not_evaluated(
-                member.object.id.clone(),
-                NotEvaluatedReason::IncompleteEvidence,
-                format!(
-                    "{property} {} has fewer than {length} digit(s), so it has no prefix",
-                    member.shown
-                ),
-            ),
-        }
-    }
-    if by_prefix.len() < 2 {
-        return;
-    }
-    let mut counts: Vec<usize> = by_prefix.values().map(Vec::len).collect();
-    counts.sort_unstable_by(|a, b| b.cmp(a));
-    let undecided = scope.undecided + strays;
-    let predominant = (counts[0] - counts[1] > undecided)
-        .then(|| {
-            by_prefix
-                .iter()
-                .find(|(_, members)| members.len() == counts[0])
-        })
-        .flatten();
-    if let Some((prefix, holders)) = predominant {
-        for (_, members) in by_prefix.iter().filter(|(other, _)| *other != prefix) {
-            for member in members {
-                evaluation.push_finding(report(
-                        rule,
-                        member,
-                        format!(
-                            "{property} {} does not start with {prefix}, the prefix of {} other object(s)",
-                            member.shown,
-                            holders.len()
-                        ),
-                        holders,
+impl<'a> Collected<'a> {
+    /// Reads `selected`, in order.
+    pub(crate) fn of(
+        context: &RuleContext<'_>,
+        config: &Config<'_>,
+        selected: &[&'a Object],
+    ) -> Self {
+        let mut collected = Self {
+            scopes: BTreeMap::new(),
+            stray: Vec::new(),
+            open: Vec::new(),
+        };
+        for object in selected {
+            let object: &'a Object = object;
+            let source = if config.across_sources {
+                String::new()
+            } else {
+                object.id.source.to_string()
+            };
+            let scope = |context: &RuleContext<'_>| {
+                scope_key(
+                    context,
+                    config.traversal.as_ref(),
+                    config.across_sources,
+                    object,
+                )
+            };
+            let resolved = match resolve(context, object, config.property) {
+                Ok(resolved) => resolved,
+                Err((reason, message)) => {
+                    collected.open.push((object.id.clone(), reason, message));
+                    match scope(context) {
+                        Ok((key, _)) => {
+                            collected
+                                .scopes
+                                .entry(key)
+                                .or_insert_with(|| Scope::new(source))
+                                .undecided += 1;
+                        }
+                        Err(_) => collected.stray.push((source, None)),
+                    }
+                    continue;
+                }
+            };
+            let value = resolved.value();
+            let digits = match config.digits(value) {
+                Ok(digits) => digits,
+                Err(message) => {
+                    collected.open.push((
+                        object.id.clone(),
+                        NotEvaluatedReason::IncompleteEvidence,
+                        format!("{} {} {message}", config.property, display(value)),
                     ));
-            }
-        }
-    } else {
-        let prefixes = by_prefix
-            .iter()
-            .map(|(prefix, members)| format!("{prefix} ({})", members.len()))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let everyone: Vec<&Member<'_>> = by_prefix.values().flatten().copied().collect();
-        for member in &everyone {
-            evaluation.push_finding(report(
-                rule,
-                member,
-                format!(
-                    "{property} {}: its scope mixes the prefixes {prefixes}",
-                    member.shown
-                ),
-                &everyone,
-            ));
-        }
-    }
-}
-
-fn check_gaps(
-    rule: &CompiledRule,
-    config: &Config<'_>,
-    scope: &Scope<'_>,
-    strays: &[Option<u64>],
-    evaluation: &mut CapabilityEvaluation,
-) {
-    let property = config.property;
-    let mut by_number: BTreeMap<u64, Vec<&Member<'_>>> = BTreeMap::new();
-    for member in &scope.members {
-        by_number.entry(member.number).or_default().push(member);
-    }
-    let numbers: Vec<(&u64, &Vec<&Member<'_>>)> = by_number.iter().collect();
-    for pair in numbers.windows(2) {
-        let [(below, under), (above, over)] = pair else {
-            continue;
-        };
-        let (below, above) = (**below, **above);
-        if above - below < 2 {
-            continue;
-        }
-        let missing = if above - below == 2 {
-            format!("{} is missing", below + 1)
-        } else {
-            format!("{} to {} are missing", below + 1, above - 1)
-        };
-        // An unread number might be one of the missing ones.
-        let fillable = scope.undecided > 0
-            || strays
-                .iter()
-                .any(|number| number.is_none_or(|number| below < number && number < above));
-        for member in *over {
-            if fillable {
-                evaluation.push_object_not_evaluated(
-                    member.object.id.clone(),
+                    continue;
+                }
+            };
+            let Ok(number) = digits.parse::<u64>() else {
+                collected.open.push((
+                    object.id.clone(),
                     NotEvaluatedReason::IncompleteEvidence,
                     format!(
-                        "{property} {} follows {below}, but an object whose number could not be read may fill the gap",
-                        member.shown
+                        "{} {} holds a number too large to compare",
+                        config.property,
+                        display(value)
                     ),
-                );
-            } else {
-                evaluation.push_finding(report(
-                    rule,
-                    member,
-                    format!("{property} {} follows {below}; {missing}", member.shown),
-                    under,
                 ));
-            }
+                continue;
+            };
+            let (key, mut evidence) = match scope(context) {
+                Ok(scope) => scope,
+                Err((reason, message)) => {
+                    collected.open.push((object.id.clone(), reason, message));
+                    collected.stray.push((source, Some(number)));
+                    continue;
+                }
+            };
+            evidence.extend(resolved.evidence());
+            collected
+                .scopes
+                .entry(key)
+                .or_insert_with(|| Scope::new(source))
+                .members
+                .push(Member {
+                    object,
+                    shown: display(value),
+                    digits,
+                    number,
+                    evidence,
+                });
         }
+        collected
+    }
+
+    /// The strays of `scope`'s source.
+    pub(crate) fn strays(&self, scope: &Scope<'_>) -> Vec<Option<u64>> {
+        self.stray
+            .iter()
+            .filter(|(source, _)| *source == scope.source)
+            .map(|(_, number)| *number)
+            .collect()
     }
 }

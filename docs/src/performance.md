@@ -399,3 +399,8 @@ binds the member selection once per rule, where the capability selected
 the members again for each anchor, and reads the declaration from the
 bound list rather than re-reading the rule; what remains is the
 template's fixed cost per anchor, on models of few anchors and members.
+
+`numbering-consistency` runs the `numbering` case's four number rules:
+0.67 to 1.21× its reference's run time and 0.93 to 1.07× its peak heap.
+Its list reads the whole selection's numbers and scopes once per rule,
+compiling the pattern once, and hands each object its own items.

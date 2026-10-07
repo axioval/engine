@@ -2545,6 +2545,205 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
     },
     MemberDescriptor {
         list: MeasuredDescriptor {
+            name: "numbering",
+            parameters: &[
+                MeasuredParameter {
+                    key: "property",
+                    kind: MeasuredParameterKind::Property,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The property holding each object's number.",
+                        "Die Eigenschaft, die die Nummer jedes Objekts trägt.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "pattern",
+                    kind: MeasuredParameterKind::Pattern,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The XML Schema pattern over the whole value, its one group capturing the number.",
+                        "Das XML-Schema-Muster über den ganzen Wert, dessen eine Gruppe die Nummer erfasst.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "prefix_length",
+                    kind: MeasuredParameterKind::Number { minimum: 1.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "How many leading digits the objects of a scope must share.",
+                        "Wie viele führende Ziffern die Objekte eines Bereichs teilen müssen.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "gap_free",
+                    kind: MeasuredParameterKind::Truth,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "Whether the numbers of a scope must leave no gap.",
+                        "Ob die Nummern eines Bereichs keine Lücke lassen dürfen.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "across_sources",
+                    kind: MeasuredParameterKind::Truth,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "Whether the scopes span the sources.",
+                        "Ob die Bereiche die Quellen übergreifen.",
+                    ),
+                },
+                TRAVERSAL[0],
+                TRAVERSAL[1],
+                TRAVERSAL[2],
+                TRAVERSAL[3],
+                TRAVERSAL[4],
+                MeasuredParameter {
+                    key: "selection",
+                    kind: MeasuredParameterKind::Objects,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The objects numbered: the rule's own selection (`@selection`).",
+                        "Die nummerierten Objekte: die eigene Auswahl der Regel (`@selection`).",
+                    ),
+                },
+            ],
+            dimension: None,
+            services: &["property-resolution", "relationship-selection"],
+            exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
+            not_evaluated: &[
+                "the object's number cannot be read",
+                "its number has too few digits for a prefix",
+            ],
+            label: &en_de("Numbering", "Nummerierung"),
+            help: &en_de(
+                "What `numbering-consistency` judges of an object's number among the numbers of \
+                 its scope: why it cannot be read, its prefix's lead over the other prefixes and \
+                 its step from the next lower number.",
+                "Was `numbering-consistency` an der Nummer eines Objekts unter den Nummern seines \
+                 Bereichs beurteilt: warum sie nicht gelesen werden kann, den Vorsprung ihres \
+                 Präfixes vor den anderen und ihren Schritt von der nächstniedrigeren Nummer.",
+            ),
+        },
+        fields: &[
+            field(
+                "unread",
+                TRUTH,
+                &en_de("Unread", "Ungelesen"),
+                &en_de(
+                    "True on the item stating why the object's number cannot be read.",
+                    "Wahr am Element, das angibt, warum die Nummer des Objekts nicht gelesen werden kann.",
+                ),
+            ),
+            field(
+                "number",
+                RATIO,
+                &en_de("Number", "Nummer"),
+                &en_de(
+                    "Not evaluated, for why the number cannot be read.",
+                    "Nicht ausgewertet, mit dem Grund, warum die Nummer nicht gelesen werden kann.",
+                ),
+            ),
+            field(
+                "prefixed",
+                TRUTH,
+                &en_de("Prefixed", "Präfix"),
+                &en_de(
+                    "True on the item judging the object's prefix.",
+                    "Wahr am Element, das das Präfix des Objekts beurteilt.",
+                ),
+            ),
+            field(
+                "lead",
+                RATIO,
+                &en_de("Lead", "Vorsprung"),
+                &en_de(
+                    "How many more objects of the scope share its prefix than any other, less the objects not read; not evaluated for a number with too few digits.",
+                    "Wie viele Objekte des Bereichs mehr sein Präfix teilen als irgendein anderes, abzüglich der nicht gelesenen; nicht ausgewertet für eine Nummer mit zu wenigen Ziffern.",
+                ),
+            ),
+            field(
+                "departs",
+                MemberFieldKind::Text,
+                &en_de("Departs", "Abweichung"),
+                &en_de(
+                    "Words naming how the object departs from its scope's prefix.",
+                    "Worte, die nennen, wie das Objekt vom Präfix seines Bereichs abweicht.",
+                ),
+            ),
+            field(
+                "stepped",
+                TRUTH,
+                &en_de("Stepped", "Schritt"),
+                &en_de(
+                    "True on the item judging the object's step from the next lower number.",
+                    "Wahr am Element, das den Schritt des Objekts von der nächstniedrigeren Nummer beurteilt.",
+                ),
+            ),
+            field(
+                "step",
+                RATIO,
+                &en_de("Step", "Schritt"),
+                &en_de(
+                    "How far its number lies above the next lower number of its scope.",
+                    "Wie weit seine Nummer über der nächstniedrigeren Nummer seines Bereichs liegt.",
+                ),
+            ),
+            field(
+                "fillable",
+                TRUTH,
+                &en_de("Fillable", "Füllbar"),
+                &en_de(
+                    "Whether an object whose number could not be read may fill the gap below.",
+                    "Ob ein Objekt, dessen Nummer nicht gelesen werden konnte, die Lücke darunter füllen kann.",
+                ),
+            ),
+            field(
+                "shown",
+                MemberFieldKind::Text,
+                &en_de("Stated", "Angegeben"),
+                &en_de(
+                    "What the object states, as findings show it.",
+                    "Was das Objekt angibt, wie Befunde es zeigen.",
+                ),
+            ),
+            field(
+                "below",
+                MemberFieldKind::Text,
+                &en_de("Below", "Darunter"),
+                &en_de(
+                    "The next lower number of its scope.",
+                    "Die nächstniedrigere Nummer seines Bereichs.",
+                ),
+            ),
+            field(
+                "missing",
+                MemberFieldKind::Text,
+                &en_de("Missing", "Fehlend"),
+                &en_de(
+                    "Words naming the numbers missing below.",
+                    "Worte, die die fehlenden Nummern darunter nennen.",
+                ),
+            ),
+            field(
+                "related",
+                MemberFieldKind::Objects,
+                &en_de("Related", "Bezogen"),
+                &en_de(
+                    "The objects its prefix or step is judged against.",
+                    "Die Objekte, gegen die sein Präfix oder Schritt beurteilt wird.",
+                ),
+            ),
+        ],
+    },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
             name: "opening_placements",
             parameters: &[
                 MeasuredParameter {

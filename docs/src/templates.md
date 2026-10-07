@@ -44,7 +44,8 @@ of a measured list against a row its provider selects from the rule's
 table, and `light-well`, `centre-line-distance`, `component-visibility`
 and `exit-separation` (whose required separation stays an interval over
 both shares where its flag is unknown) follow, and `name-sequence` is the
-first judging the items of a list on objects of their own (`at`); `coordinate-consistency` is the first judging the sources themselves,
+first judging the items of a list on objects of their own (`at`), and
+`numbering-consistency` follows; `coordinate-consistency` is the first judging the sources themselves,
 against a reference read once per rule, and `external-wall-validation`
 the first leading one measurement to outcomes at source and at object
 level ([#291](https://github.com/axioval/engine/issues/291)): every
@@ -1337,6 +1338,30 @@ member the object-frame service cannot place refuse the list, leaving the
 anchor open for their reason. The declaration is the capability's own
 (`arguments`, `name_sequence::check_arguments`), refused once for the rule.
 
+### `numbering-consistency`
+
+| Form | When | Values | Checks |
+| --- | --- | --- | --- |
+| one | always | `judged` = 1 | `Items` over `numbering;property=@property;pattern=@pattern;…;selection=@selection` (every parameter under its own name, unstated ones dropped, the rule's own selection bound) |
+
+The list is the capability's own reading (`Collected`): the number the
+pattern (`MeasuredParameterKind::Pattern`, bound as the rule states it,
+never trimmed) reads from each selected object, and the scope it lies in,
+read once per rule for the whole selection. An object's items are: why its
+number or scope cannot be read (`number`, refused for that reason, as the
+capability left it open); with `prefix_length`, where the scope holds at
+least two prefixes, its prefix's `lead` (how many more objects share it
+than any other prefix, less the objects of the scope not read), at least 1
+or a finding worded by `departs` (`… does not start with 2, the prefix of 2
+other object(s)`, or `…: its scope mixes the prefixes 2 (2), 3 (2)`), a
+number of fewer digits open (`… has fewer than 1 digit(s), so it has no
+prefix`); with `gap_free`, its number's `step` from the next lower number
+of the scope, at most 1 or a finding (`{property} {shown} follows {below};
+{missing}`), open where an object not read may fill the gap (`fillable`).
+Findings relate the objects the prefix or step is judged against. The
+declaration is the capability's own (`arguments`,
+`numbering_consistency::check_arguments`), refused once for the rule.
+
 ### `coordinate-consistency`
 
 | Form | When | Once | Scopes | Decision |
@@ -2103,6 +2128,17 @@ nothing, some unreadable, at stated, missing or placed elevations, numbered
 from a random start by a random increment, along the relationship or in the
 whole source; and by the `name-sequence` rules of the `numbering` case,
 recorded before the switch. It is never forked (D32).
+
+`numbering-consistency` is held to `numbering_consistency/reference.rs`
+(`axioval_rules::reference::NumberingConsistency`, which reads the numbers
+through the same `Collected`) through `common::Held` on every fixture of
+its module in `tests/semantic.rs`, its refusals asserted literally; by
+generated storeys of spaces named with and without the pattern's prefix,
+by too few or too many digits, blanks, integers or unreadable values, some
+on no storey and one in another source, checked for prefixes and gaps per
+storey, per source and across sources; and by the `numbering-consistency`
+rules of the `numbering` case, recorded before the switch. It is never
+forked (D33).
 `coordinate-consistency` is held to `coordinate_consistency/reference.rs`
 (`axioval_rules::reference::CoordinateConsistencyCheck`, which shares the
 comparison and the choice of the reference) through `common::Held` on

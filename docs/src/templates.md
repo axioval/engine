@@ -625,8 +625,11 @@ check already did. Each item is judged by
 
 An `Items` check naming `at` (an objects field) reports each item's
 outcomes on the object it names, in place of the checked object: an
-opening a corridor reaches. A list that cannot be measured leaves the
-check open for the list's own reason.
+opening a corridor reaches. A source's or the project's stand-in
+(`template::scope_stand_in`, the local id `axioval:scope`, which no source
+states) places them on that source or on the project instead: a table's
+row judged per source, in a check of the project. A list that cannot be
+measured leaves the check open for the list's own reason.
 
 An `Items` check with `once` leaves the object open at most once: of its
 open outcomes only the first is reported, and none where an earlier check

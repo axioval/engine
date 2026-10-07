@@ -66,7 +66,9 @@ pub struct Items {
     pub merged: bool,
     /// The objects field naming the object each item's outcomes are on (its
     /// first object), where not the object checked: a storey's region of
-    /// floor judged in a check of the project.
+    /// floor judged in a check of the project. A source's or the project's
+    /// stand-in ([`scope_stand_in`](super::scope_stand_in)) places them on
+    /// that source or the project: a table's row judged per source.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub at: Option<&'static str>,
     /// Whether the object is left open at most once: of this check's open

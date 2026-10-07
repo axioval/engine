@@ -3668,7 +3668,9 @@ fn push(
     push_on(evaluation, rule, &object.id, outcome);
 }
 
-/// Pushes one outcome about the object `id` into `evaluation`.
+/// Pushes one outcome about the object `id` into `evaluation`: on the
+/// source or the project a scope's stand-in names
+/// ([`axioval_engine::template::placed_scope`]).
 fn push_on(
     evaluation: &mut CapabilityEvaluation,
     rule: &CompiledRule,
@@ -3691,14 +3693,21 @@ fn push_on(
                 }
             }
             let mut found = finding(rule, id, message, cited, related);
+            found.scope = axioval_engine::template::placed_scope(id);
             if let Some(severity) = severity {
                 found.severity = severity;
             }
             evaluation.push_finding_deviating(found, deviation);
         }
-        Outcome::Open(reason, message) => {
-            evaluation.push_object_not_evaluated(id.clone(), reason, message);
-        }
+        Outcome::Open(reason, message) => match axioval_engine::template::placed_scope(id) {
+            axioval_ir::Scope::Source(source) => {
+                evaluation.push_source_not_evaluated(source, reason, message);
+            }
+            axioval_ir::Scope::Project => evaluation.push_not_evaluated(reason, message),
+            axioval_ir::Scope::Object(_) => {
+                evaluation.push_object_not_evaluated(id.clone(), reason, message);
+            }
+        },
         Outcome::Placed(placed, outcome) => push_on(evaluation, rule, &placed, *outcome),
     }
 }
@@ -4814,6 +4823,68 @@ mod tests {
 
     use axioval_ir::RuleId;
     use axioval_ir::contract::{ParameterValue, Selector, Severity};
+
+    /// An outcome an item places on a scope's stand-in goes to that source
+    /// or to the project; one placed on an object stays on it.
+    #[test]
+    fn an_outcome_placed_on_a_stand_in_goes_to_its_scope() {
+        use axioval_engine::template::scope_stand_in;
+        use axioval_ir::{ObjectId, Scope, SourceId};
+        let rule = axioval_engine::CompiledRule {
+            id: RuleId::new("placed").unwrap(),
+            capability: "axioval:capability.table-allocation".into(),
+            severity: Severity::Warning,
+            selector: Selector::All,
+            parameters: BTreeMap::new(),
+        };
+        let source = SourceId::new("test", "model").unwrap();
+        let mut evaluation = axioval_engine::CapabilityEvaluation::default();
+        let found = |message: &str| super::Outcome::Finding {
+            message: message.to_owned(),
+            evidence: Vec::new(),
+            related: Vec::new(),
+            deviation: None,
+            severity: None,
+        };
+        super::push_on(
+            &mut evaluation,
+            &rule,
+            &scope_stand_in(Some(&source)),
+            found("of the source"),
+        );
+        super::push_on(
+            &mut evaluation,
+            &rule,
+            &scope_stand_in(None),
+            found("of all"),
+        );
+        let object = ObjectId::new(source.clone(), "o1").unwrap();
+        super::push_on(&mut evaluation, &rule, &object, found("of o1"));
+        super::push_on(
+            &mut evaluation,
+            &rule,
+            &scope_stand_in(None),
+            super::Outcome::Open(
+                axioval_ir::NotEvaluatedReason::IncompleteEvidence,
+                "open".into(),
+            ),
+        );
+        let scopes: Vec<&Scope> = evaluation
+            .findings()
+            .iter()
+            .map(|finding| &finding.scope)
+            .collect();
+        assert_eq!(
+            scopes,
+            [
+                &Scope::Source(source),
+                &Scope::Project,
+                &Scope::Object(object)
+            ]
+        );
+        assert_eq!(evaluation.not_evaluated_outcomes().len(), 1);
+        assert_eq!(evaluation.not_evaluated_outcomes()[0].object_id(), None);
+    }
 
     /// An argument check sees the rule parameters a list names under the
     /// list's keys, and the options the list chooses itself beside them.

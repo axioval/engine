@@ -998,6 +998,40 @@ impl Scopes {
 /// of any capability, only a block editor's name for it.
 pub const SELECTION: &str = "selection";
 
+/// The local id of the stand-in an item names (`Items::at`) to place its
+/// outcomes on a source or on the project rather than on an object: a
+/// source's stand-in is `<source>/axioval:scope` ([`scope_stand_in`]),
+/// the project's `axioval:project/axioval:scope`. No source states it.
+pub const SCOPE_STAND_IN: &str = "axioval:scope";
+
+/// The stand-in placing an item's outcomes on `source`, or on the project
+/// without one.
+///
+/// # Panics
+///
+/// Never: the identities are valid by construction.
+#[must_use]
+pub fn scope_stand_in(source: Option<&axioval_ir::SourceId>) -> axioval_ir::ObjectId {
+    let source = source.cloned().unwrap_or_else(|| {
+        axioval_ir::SourceId::new("axioval", "project").expect("a valid source id")
+    });
+    axioval_ir::ObjectId::new(source, SCOPE_STAND_IN).expect("a valid object id")
+}
+
+/// The scope an outcome placed on `id` goes to: the source or the project a
+/// stand-in ([`scope_stand_in`]) names, else the object.
+#[must_use]
+pub fn placed_scope(id: &axioval_ir::ObjectId) -> axioval_ir::Scope {
+    if id.local_id != SCOPE_STAND_IN {
+        return axioval_ir::Scope::Object(id.clone());
+    }
+    if id.source.system == "axioval" && id.source.document == "project" {
+        axioval_ir::Scope::Project
+    } else {
+        axioval_ir::Scope::Source(id.source.clone())
+    }
+}
+
 /// The members of an anchor: the objects a selector parameter picks that
 /// the rule's traversal (`relationship` or `path`) reaches from the
 /// anchor, or, without one, every such object of the anchor's own source

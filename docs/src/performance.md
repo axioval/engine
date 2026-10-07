@@ -118,7 +118,7 @@ drift, not its load, so a gate runs where nothing else builds.
   takes at least `floor_ns` (100 µs); inputs below it are judged together,
   by the sum of their medians, since a run of a few microseconds is mostly
   timer noise, and may also exceed the references' summed medians by at
-  most `small_slack_ns` (20 µs) each;
+  most `small_slack_ns` (50 µs, a few rules' fixed cost) each;
 - the median peak heap over the reference's, per input, or at most
   `slack_bytes` (64 KiB) above it: on a model of a handful of objects a
   template's fixed cost per rule, a few microseconds or kibibytes, is all

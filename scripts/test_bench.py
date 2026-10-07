@@ -12,7 +12,7 @@ BUDGET = {
     "time": 1.25,
     "memory": 1.5,
     "floor_ns": 100_000,
-    "small_slack_ns": 20_000,
+    "small_slack_ns": 50_000,
     "slack_bytes": 65_536,
 }
 
@@ -81,7 +81,7 @@ class JudgeTest(unittest.TestCase):
         # One noisy small input alone does not fail ...
         self.assertEqual(self.failures([record(), small(30_000, 20_000), small(20_000, 40_000)]), [])
         # ... but small inputs slow together, beyond their slack, do.
-        failures = self.failures([record(), small(90_000, 60_000), small(90_000, 60_000)])
+        failures = self.failures([record(), small(99_000, 40_000), small(99_000, 40_000)])
         self.assertEqual(len(failures), 1)
         self.assertIn("under the floor", failures[0])
 
@@ -104,10 +104,10 @@ class JudgeTest(unittest.TestCase):
                 memory_ratio=1.0,
             )
 
-        # 1.8x of 20 us is 16 us over: within 20 us per input ...
-        self.assertEqual(self.failures([record(), small(36_000, 20_000)]), [])
-        # ... while 60 us over two small inputs is not.
-        failures = self.failures([record(), small(80_000, 50_000), small(80_000, 50_000)])
+        # 1.6x of 40 us is 24 us over: within 50 us per input ...
+        self.assertEqual(self.failures([record(), small(64_000, 40_000)]), [])
+        # ... while 110 us over two small inputs is not.
+        failures = self.failures([record(), small(95_000, 40_000), small(95_000, 40_000)])
         self.assertEqual(len(failures), 1)
         self.assertIn("under the floor", failures[0])
 

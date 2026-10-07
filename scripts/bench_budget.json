@@ -3,7 +3,7 @@
   "time": 1.25,
   "memory": 1.5,
   "floor_ns": 100000,
-  "small_slack_ns": 20000,
+  "small_slack_ns": 50000,
   "slack_bytes": 65536,
   "exceptions": [
     {

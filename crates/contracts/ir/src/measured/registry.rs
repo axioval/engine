@@ -1834,6 +1834,50 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         )
     ),
     MeasuredDescriptor {
+        name: "any_external",
+        parameters: &[
+            MeasuredParameter {
+                key: "host_selector",
+                kind: MeasuredParameterKind::Objects,
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The walls: source kinds, `,`-separated, or `@` a selector parameter of \
+                     the rule, whose undecided objects may be walls.",
+                    "Die Wände: Quellarten, durch `,` getrennt, oder mit `@` ein \
+                     Selektorparameter der Regel, dessen unentschiedene Objekte Wände sein \
+                     können.",
+                ),
+            },
+            MeasuredParameter {
+                key: "external_property",
+                kind: MeasuredParameterKind::Property,
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The boolean property a wall declares itself external with.",
+                    "Die boolesche Eigenschaft, mit der eine Wand sich als außenliegend angibt.",
+                ),
+            },
+        ],
+        dimension: None,
+        services: &["property-resolution"],
+        exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Source,
+        not_evaluated: &[],
+        label: &en_de("Any external wall", "Eine Außenwand"),
+        help: &en_de(
+            "Whether any of the source's walls declares itself external: 1 where one surely \
+             does, 0 where none can, between where a wall declaring nothing or an object that \
+             may be a wall could; read in identity order up to the first that does, as \
+             `opening-spaces` reads the source.",
+            "Ob eine der Wände der Quelle sich als außenliegend angibt: 1, wo eine es sicher \
+             tut, 0, wo keine es kann, dazwischen, wo eine Wand ohne Angabe oder ein Objekt, \
+             das eine Wand sein kann, es könnte; in Kennungsreihenfolge bis zur ersten \
+             gelesen, wie `opening-spaces` die Quelle liest.",
+        ),
+    },
+    MeasuredDescriptor {
         name: "band_uncovered_area",
         parameters: &[
             SPACED_MEMBERS,
@@ -3664,6 +3708,44 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         subject: MeasuredSubject::Object,
     },
     MeasuredDescriptor {
+        name: "host_walls",
+        parameters: &[
+            MeasuredParameter {
+                key: "host_selector",
+                kind: MeasuredParameterKind::Objects,
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The walls: source kinds, `,`-separated, or `@` a selector parameter of \
+                     the rule, whose undecided objects may be walls.",
+                    "Die Wände: Quellarten, durch `,` getrennt, oder mit `@` ein \
+                     Selektorparameter der Regel, dessen unentschiedene Objekte Wände sein \
+                     können.",
+                ),
+            },
+            MeasuredParameter {
+                key: "external_property",
+                kind: MeasuredParameterKind::Property,
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The boolean property a wall declares itself external with.",
+                    "Die boolesche Eigenschaft, mit der eine Wand sich als außenliegend angibt.",
+                ),
+            },
+        ],
+        dimension: None,
+        services: &["property-resolution"],
+        exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Source,
+        not_evaluated: &[],
+        label: &en_de("Walls", "Wände"),
+        help: &en_de(
+            "How many walls the source surely holds.",
+            "Wie viele Wände die Quelle sicher enthält.",
+        ),
+    },
+    MeasuredDescriptor {
         name: "intersection_count",
         parameters: &[
             ELEMENTS,
@@ -4584,6 +4666,44 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
         help: &en_de(
             "The footprint's overlap in plan with objects of the kinds named; with the footprint `area`, `plan-coverage`'s ratio.",
             "Die Überlappung des Grundrisses mit Objekten der genannten Arten; mit der Grundfläche `area` das Verhältnis von `plan-coverage`.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "possible_hosts",
+        parameters: &[
+            MeasuredParameter {
+                key: "host_selector",
+                kind: MeasuredParameterKind::Objects,
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The walls: source kinds, `,`-separated, or `@` a selector parameter of \
+                     the rule, whose undecided objects may be walls.",
+                    "Die Wände: Quellarten, durch `,` getrennt, oder mit `@` ein \
+                     Selektorparameter der Regel, dessen unentschiedene Objekte Wände sein \
+                     können.",
+                ),
+            },
+            MeasuredParameter {
+                key: "external_property",
+                kind: MeasuredParameterKind::Property,
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The boolean property a wall declares itself external with.",
+                    "Die boolesche Eigenschaft, mit der eine Wand sich als außenliegend angibt.",
+                ),
+            },
+        ],
+        dimension: None,
+        services: &["property-resolution"],
+        exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Source,
+        not_evaluated: &[],
+        label: &en_de("Possible walls", "Mögliche Wände"),
+        help: &en_de(
+            "How many more of the source's objects may be walls: their selection is undecided.",
+            "Wie viele weitere Objekte der Quelle Wände sein können: ihre Auswahl ist unentschieden.",
         ),
     },
     MeasuredDescriptor {
@@ -5679,6 +5799,46 @@ pub static MEASURED_VALUES: &[MeasuredDescriptor] = &[
              none where it decides every other object.",
             "Wie viele Objekte außer diesem eine Auswahl nicht entscheiden kann: eine ganze \
              Zahl, keines, wo sie jedes andere Objekt entscheidet.",
+        ),
+    },
+    MeasuredDescriptor {
+        name: "undeclared_hosts",
+        parameters: &[
+            MeasuredParameter {
+                key: "host_selector",
+                kind: MeasuredParameterKind::Objects,
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The walls: source kinds, `,`-separated, or `@` a selector parameter of \
+                     the rule, whose undecided objects may be walls.",
+                    "Die Wände: Quellarten, durch `,` getrennt, oder mit `@` ein \
+                     Selektorparameter der Regel, dessen unentschiedene Objekte Wände sein \
+                     können.",
+                ),
+            },
+            MeasuredParameter {
+                key: "external_property",
+                kind: MeasuredParameterKind::Property,
+                required: true,
+                default: None,
+                help: &en_de(
+                    "The boolean property a wall declares itself external with.",
+                    "Die boolesche Eigenschaft, mit der eine Wand sich als außenliegend angibt.",
+                ),
+            },
+        ],
+        dimension: None,
+        services: &["property-resolution"],
+        exactness: MeasuredExactness::Stated,
+        subject: MeasuredSubject::Source,
+        not_evaluated: &[],
+        label: &en_de("Undeclared walls", "Wände ohne Angabe"),
+        help: &en_de(
+            "How many of the source's walls declare no usable exposure (absent, `null` or not a \
+             boolean) where none declares itself external; 0 where one does.",
+            "Wie viele Wände der Quelle keine verwertbare Lage angeben (fehlend, `null` oder \
+             kein Wahrheitswert), wo keine sich als außenliegend angibt; 0, wo eine es tut.",
         ),
     },
     plain!(

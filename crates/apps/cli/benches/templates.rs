@@ -93,6 +93,11 @@ const PAIRS: &[Pair] = &[
         reference: |registry| registry.replace(axioval::rules::reference::SpaceConnection),
     },
     Pair {
+        capability: "axioval:capability.opening-spaces",
+        case: "openings",
+        reference: |registry| registry.replace(axioval::rules::reference::OpeningSpaces),
+    },
+    Pair {
         capability: "axioval:capability.body-extent",
         case: "elements",
         reference: |registry| registry.replace(axioval::rules::reference::BodyExtent),

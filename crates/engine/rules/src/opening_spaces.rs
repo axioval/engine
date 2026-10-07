@@ -2,21 +2,26 @@
 //! declared exposure.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::LazyLock;
 
+use axioval_engine::template::Template;
 use axioval_engine::{
     AdjacentSide, CapabilityEvaluation, CompiledRule, Derivation, NotEvaluatedReason,
-    ParameterDescriptor, ParameterType, RuleCapability, RuleContext, SemanticRelationship,
-    TraversalDirection, adjacent_side,
+    ParameterDescriptor, RuleCapability, RuleContext, SemanticRelationship, TraversalDirection,
+    adjacent_side,
 };
-use axioval_ir::contract::Selector;
-use axioval_ir::{Evidence, Finding, Object, ObjectId, PropertyValue, Scope, SourceId};
+use axioval_ir::contract::{ParameterValue, Selector};
+use axioval_ir::{Evidence, Object, ObjectId, PropertyValue};
 
-use crate::counts::Population;
-use crate::pairs::severity;
-use crate::selection::select_objects;
-use crate::support::{
-    Parameters, PropertyRef, Resolved, Traversal, Unavailable, finding, invalid, resolve,
-};
+use crate::opening_area::Picks;
+use crate::support::{Parameters, PropertyRef, Resolved, Traversal, Unavailable, invalid, resolve};
+
+mod measured;
+#[cfg(feature = "parity-reference")]
+pub(crate) mod reference;
+mod template;
+
+pub(crate) use measured::HostMeasures;
 
 /// Requires each selected door, window or opening to relate to the spaces
 /// its host wall calls for: two, one on each side, in an internal wall; one
@@ -37,24 +42,53 @@ use crate::support::{
 /// Each source holding a selected element or a host is also checked as a
 /// whole: a source in which no host declares itself external is reported
 /// against the source, since a building has an envelope.
+///
+/// It runs as a template ([`axioval_engine::template`]): each element by
+/// the measured list `connected_spaces` (its hosts' exposure and the spaces
+/// it relates to), each source by how many of its walls declare themselves
+/// external (`any_external`).
 pub struct OpeningSpaces;
 
-/// A host's declared exposure and the facts behind it.
-type Declaration = Result<(bool, Vec<Evidence>), Unavailable>;
+static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
 
-struct Config<'a> {
-    hosts: Traversal,
-    host_selector: &'a Selector,
-    external: PropertyRef<'a>,
-    spaces: Traversal,
-    space_selector: &'a Selector,
+/// The plans of the rules bound to it, kept across runs.
+static PLANS: crate::templates::Plans = crate::templates::Plans::new();
+
+impl RuleCapability for OpeningSpaces {
+    fn id(&self) -> &'static str {
+        template::ID
+    }
+
+    fn parameters(&self) -> Vec<ParameterDescriptor> {
+        TEMPLATE.parameters.clone()
+    }
+
+    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
+        crate::templates::run((&TEMPLATE, &PLANS), context, rule)
+    }
+
+    fn template(&self) -> Option<&Template> {
+        Some(&TEMPLATE)
+    }
+}
+
+/// A host's declared exposure and the facts behind it.
+pub(crate) type Declaration = Result<(bool, Vec<Evidence>), Unavailable>;
+
+/// The declaration a rule states, read as the capability read it.
+pub(crate) struct Config<'a> {
+    pub(crate) hosts: Traversal,
+    pub(crate) host_selector: &'a Selector,
+    pub(crate) external: PropertyRef<'a>,
+    pub(crate) spaces: Traversal,
+    pub(crate) space_selector: &'a Selector,
     /// Whether the spaces come from the derived adjacency, whose evidence
     /// records sides.
-    sided: bool,
+    pub(crate) sided: bool,
 }
 
 impl<'a> Config<'a> {
-    fn parse(rule: &'a CompiledRule) -> Result<Self, Unavailable> {
+    pub(crate) fn parse(rule: &'a CompiledRule) -> Result<Self, Unavailable> {
         let parameters = Parameters(rule);
         let host_path = parameters
             .strings("host_path")?
@@ -62,29 +96,7 @@ impl<'a> Config<'a> {
         let space_path = parameters
             .strings("space_path")?
             .ok_or_else(|| invalid("parameter `space_path` is required"))?;
-        let spaces = Traversal::path(space_path)?;
-        let adjacency: Vec<bool> = spaces
-            .steps()
-            .iter()
-            .map(|step| {
-                step.relationships()
-                    .iter()
-                    .any(|r| is_adjacency(r.as_str()))
-            })
-            .collect();
-        let sided = adjacency.contains(&true);
-        if sided
-            && (adjacency.len() != 1
-                || spaces.steps().iter().any(|step| {
-                    step.relationships().len() != 1
-                        || step.direction() != TraversalDirection::Forward
-                }))
-        {
-            return Err(invalid(
-                "`axioval:derived.adjacent-space` must be the only `space_path` step, forward, \
-                 so the sides it records are the checked element's",
-            ));
-        }
+        let (spaces, sided) = space_traversal(space_path)?;
         Ok(Self {
             hosts: Traversal::path(host_path)?,
             host_selector: parameters.required_selector("host_selector")?,
@@ -98,6 +110,44 @@ impl<'a> Config<'a> {
     }
 }
 
+/// The spaces' traversal and whether it is the derived adjacency, refused
+/// as the capability refused a path it cannot read sides from.
+pub(crate) fn space_traversal(space_path: &[String]) -> Result<(Traversal, bool), Unavailable> {
+    let spaces = Traversal::path(space_path)?;
+    let adjacency: Vec<bool> = spaces
+        .steps()
+        .iter()
+        .map(|step| {
+            step.relationships()
+                .iter()
+                .any(|r| is_adjacency(r.as_str()))
+        })
+        .collect();
+    let sided = adjacency.contains(&true);
+    if sided
+        && (adjacency.len() != 1
+            || spaces.steps().iter().any(|step| {
+                step.relationships().len() != 1 || step.direction() != TraversalDirection::Forward
+            }))
+    {
+        return Err(invalid(
+            "`axioval:derived.adjacent-space` must be the only `space_path` step, forward, \
+             so the sides it records are the checked element's",
+        ));
+    }
+    Ok((spaces, sided))
+}
+
+/// The declaration the capability refused, in its order and words.
+/// `stated` holds the rule's parameters the list names, by the list's keys
+/// (the parameters' own names).
+pub(crate) fn check_arguments(
+    stated: &BTreeMap<String, ParameterValue>,
+) -> Result<(), Unavailable> {
+    let rule = crate::light_area::synthesised(stated.clone());
+    Config::parse(&rule).map(|_| ())
+}
+
 /// Whether a relationship identity names the derived adjacency. A malformed
 /// derived identity is left to the relationship service to refuse.
 pub(crate) fn is_adjacency(relationship: &str) -> bool {
@@ -107,283 +157,103 @@ pub(crate) fn is_adjacency(relationship: &str) -> bool {
         .is_some_and(|derivation| matches!(derivation, Derivation::AdjacentSpace { .. }))
 }
 
-impl RuleCapability for OpeningSpaces {
-    fn id(&self) -> &'static str {
-        "axioval:capability.opening-spaces"
-    }
-
-    fn parameters(&self) -> Vec<ParameterDescriptor> {
-        vec![
-            ParameterDescriptor::required("host_path", ParameterType::StringList),
-            ParameterDescriptor::required("host_selector", ParameterType::Selector),
-            ParameterDescriptor::required("external_property", ParameterType::PropertyReference),
-            ParameterDescriptor::required("space_path", ParameterType::StringList),
-            ParameterDescriptor::optional("space_selector", ParameterType::Selector),
-        ]
-    }
-
-    fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let config = match Config::parse(rule) {
-            Ok(config) => config,
-            Err((reason, message)) => {
-                return CapabilityEvaluation::not_evaluated(
-                    reason,
-                    format!("opening-spaces: {message}"),
-                );
-            }
-        };
-        let hosts = Population::of(context, config.host_selector);
-        let spaces = Population::of(context, config.space_selector);
-        let (elements, mut evaluation) = select_objects(context, &rule.selector);
-        let mut judge = Judge {
-            context,
-            rule,
-            config: &config,
-            hosts: &hosts,
-            spaces: &spaces,
-            declarations: BTreeMap::new(),
-        };
-        // Every source with an element to check or a wall to judge it by.
-        let mut sources: BTreeSet<SourceId> = elements
-            .iter()
-            .map(|element| element.id.source.clone())
-            .chain(
-                evaluation
-                    .not_evaluated_outcomes()
-                    .iter()
-                    .filter_map(|outcome| outcome.object_id())
-                    .map(|object| object.source.clone()),
-            )
-            .collect();
-        sources.extend(hosts.matched.iter().map(|host| host.source.clone()));
-        for element in elements {
-            match judge.element(element) {
-                Ok(Some(finding)) => evaluation.push_finding(finding),
-                Ok(None) => {}
-                Err((reason, message)) => {
-                    evaluation.push_object_not_evaluated(element.id.clone(), reason, message);
-                }
-            }
-        }
-        for source in sources {
-            judge.source(source, &mut evaluation);
-        }
-        evaluation
-    }
-}
-
-struct Judge<'r, 'c> {
-    context: &'r RuleContext<'c>,
-    rule: &'r CompiledRule,
-    config: &'r Config<'r>,
-    hosts: &'r Population,
-    spaces: &'r Population,
-    /// Each host's declaration, resolved once per evaluation.
-    declarations: BTreeMap<ObjectId, Declaration>,
-}
-
-impl Judge<'_, '_> {
-    fn declaration(&mut self, host: &ObjectId) -> Declaration {
-        if let Some(known) = self.declarations.get(host) {
-            return known.clone();
-        }
-        let external = self.config.external;
-        let declared = match self.context.project.object(host) {
-            Some(object) => match resolve(self.context, object, external)? {
-                Resolved::Present(property) => match &property.value {
-                    PropertyValue::Boolean(value) => Ok((
-                        *value,
-                        property.evidence.iter().cloned().collect::<Vec<_>>(),
-                    )),
-                    PropertyValue::Null => Err((
-                        NotEvaluatedReason::IncompleteEvidence,
-                        format!("host {host} states no value for `{external}`"),
-                    )),
-                    _ => Err((
-                        NotEvaluatedReason::InvalidEvidence,
-                        format!("`{external}` of host {host} is not a boolean"),
-                    )),
-                },
-                Resolved::Absent(_) => Err((
+/// Whether `host` declares itself external, as `external` states it.
+pub(crate) fn declaration(
+    context: &RuleContext<'_>,
+    external: PropertyRef<'_>,
+    host: &ObjectId,
+) -> Declaration {
+    match context.project.object(host) {
+        Some(object) => match resolve(context, object, external)? {
+            Resolved::Present(property) => match &property.value {
+                PropertyValue::Boolean(value) => Ok((
+                    *value,
+                    property.evidence.iter().cloned().collect::<Vec<_>>(),
+                )),
+                PropertyValue::Null => Err((
                     NotEvaluatedReason::IncompleteEvidence,
-                    format!("host {host} does not declare `{external}`"),
+                    format!("host {host} states no value for `{external}`"),
+                )),
+                _ => Err((
+                    NotEvaluatedReason::InvalidEvidence,
+                    format!("`{external}` of host {host} is not a boolean"),
                 )),
             },
-            None => Err(invalid(format!("host {host} is not in the project"))),
-        };
-        self.declarations.insert(host.clone(), declared.clone());
-        declared
+            Resolved::Absent(_) => Err((
+                NotEvaluatedReason::IncompleteEvidence,
+                format!("host {host} does not declare `{external}`"),
+            )),
+        },
+        None => Err(invalid(format!("host {host} is not in the project"))),
     }
+}
 
-    /// The objects of `population`, the universe a traversal may reach.
-    fn universe(&self, population: &Population) -> Vec<&Object> {
-        self.context
-            .project
-            .objects()
-            .filter(|object| population.contains(&object.id))
-            .collect()
+/// The objects `picks` may pick, the universe a traversal may reach.
+pub(crate) fn universe<'c>(context: &RuleContext<'c>, picks: Picks<'_>) -> Vec<&'c Object> {
+    context
+        .project
+        .objects()
+        .filter(|object| picks.contains(&object.id))
+        .collect()
+}
+
+/// The element's host walls, whether they are external, and the facts
+/// behind both, each host's declaration read through `declared`.
+pub(crate) fn host(
+    context: &RuleContext<'_>,
+    (hosts, population): (&Traversal, Picks<'_>),
+    external: PropertyRef<'_>,
+    element: &ObjectId,
+    declared: &mut dyn FnMut(&ObjectId) -> Declaration,
+) -> Result<(Vec<ObjectId>, bool, Vec<Evidence>), Unavailable> {
+    let (reached, mut evidence) =
+        hosts.related(context, element, &universe(context, population))?;
+    if let Some(undecided) = reached.iter().find(|id| !population.matched.contains(*id)) {
+        return Err((
+            NotEvaluatedReason::IncompleteEvidence,
+            format!("whether {undecided} is a host wall is undecided"),
+        ));
     }
-
-    /// The element's host walls, whether they are external, and the facts
-    /// behind both.
-    fn host(
-        &mut self,
-        element: &Object,
-    ) -> Result<(Vec<ObjectId>, bool, Vec<Evidence>), Unavailable> {
-        let config = self.config;
-        let (reached, mut evidence) =
-            config
-                .hosts
-                .related(self.context, &element.id, &self.universe(self.hosts))?;
-        if let Some(undecided) = reached.iter().find(|id| !self.hosts.matched.contains(*id)) {
-            return Err((
-                NotEvaluatedReason::IncompleteEvidence,
-                format!("whether {undecided} is a host wall is undecided"),
-            ));
-        }
-        if reached.is_empty() {
-            return Err((
-                NotEvaluatedReason::IncompleteEvidence,
-                format!(
-                    "no host wall is reached via {}, so the spaces it needs are unknown",
-                    config.hosts.relationship
-                ),
-            ));
-        }
-        let mut exposure = BTreeSet::new();
-        for host in &reached {
-            let (external, cited) = self.declaration(host)?;
-            exposure.insert(external);
-            evidence.extend(cited);
-        }
-        if exposure.len() != 1 {
-            return Err((
-                NotEvaluatedReason::IncompleteEvidence,
-                format!("its host walls disagree on `{}`", config.external),
-            ));
-        }
-        Ok((reached, exposure.contains(&true), evidence))
-    }
-
-    /// The finding for one element, `None` when it relates as required.
-    fn element(&mut self, element: &Object) -> Result<Option<Finding>, Unavailable> {
-        let config = self.config;
-        let (hosts, external, mut evidence) = self.host(element)?;
-        let host_text = hosts
-            .iter()
-            .map(|host| host.local_id.as_str())
-            .collect::<Vec<_>>()
-            .join(", ");
-        let (wall, expected, requirement) = if external {
-            ("an external wall", 1, "one space, the other side outside")
-        } else {
-            ("an internal wall", 2, "two spaces, one on each side")
-        };
-
-        let (related, cited) =
-            config
-                .spaces
-                .related(self.context, &element.id, &self.universe(self.spaces))?;
-        let decided: Vec<ObjectId> = related
-            .iter()
-            .filter(|id| self.spaces.matched.contains(*id))
-            .cloned()
-            .collect();
-        let undecided = related.len() - decided.len();
-        let count = decided.len();
-        let via = &config.spaces.relationship;
-        let violation = if count > expected || count + undecided < expected {
-            Some(format!("relates to {count} space(s) via {via}"))
-        } else if undecided > 0 {
-            return Err((
-                NotEvaluatedReason::IncompleteEvidence,
-                format!(
-                    "relates to {count} space(s) via {via} and {undecided} more that may be spaces"
-                ),
-            ));
-        } else if config.sided {
-            sides(&element.id, &decided, &cited, external)?
-        } else {
-            None
-        };
-        Ok(violation.map(|message| {
-            evidence.extend(cited);
-            let mut involved = hosts.clone();
-            involved.extend(decided);
-            finding(
-                self.rule,
-                &element.id,
-                format!("{message}; in {wall} ({host_text}) it needs {requirement}"),
-                evidence,
-                involved,
-            )
-        }))
-    }
-
-    /// Reports a source in which no host is declared external.
-    fn source(&mut self, source: SourceId, evaluation: &mut CapabilityEvaluation) {
-        let walls: Vec<ObjectId> = self
-            .hosts
-            .matched
-            .iter()
-            .filter(|host| host.source == source)
-            .cloned()
-            .collect();
-        let mut evidence = Vec::new();
-        let mut unknown = Vec::new();
-        for wall in &walls {
-            match self.declaration(wall) {
-                Ok((true, _)) => return,
-                Ok((false, cited)) => evidence.extend(cited),
-                Err(_) => unknown.push(wall.clone()),
-            }
-        }
-        let undecided = self
-            .hosts
-            .undecided
-            .iter()
-            .filter(|host| host.source == source)
-            .count();
-        if !unknown.is_empty() || undecided > 0 {
-            evaluation.push_source_not_evaluated(
-                source.clone(),
-                NotEvaluatedReason::IncompleteEvidence,
-                format!(
-                    "opening-spaces: no wall in source `{source}` is declared external, but {} \
-                     wall(s) do not declare `{}` and {undecided} more may be walls",
-                    unknown.len(),
-                    self.config.external
-                ),
-            );
-            return;
-        }
-        evidence.sort_by(|a, b| (&a.source, &a.locator).cmp(&(&b.source, &b.locator)));
-        evidence.dedup();
-        let message = if walls.is_empty() {
-            format!("source `{source}` has no host wall, so none is external")
-        } else {
+    if reached.is_empty() {
+        return Err((
+            NotEvaluatedReason::IncompleteEvidence,
             format!(
-                "none of the {} host wall(s) in source `{source}` is declared external",
-                walls.len()
-            )
-        };
-        evaluation.push_finding(
-            Finding::new(
-                self.rule.id.clone(),
-                Scope::Source(source),
-                severity(self.rule),
-                message,
-            )
-            .with_evidence(evidence)
-            .with_related(walls),
-        );
+                "no host wall is reached via {}, so the spaces it needs are unknown",
+                hosts.relationship
+            ),
+        ));
+    }
+    let mut exposure = BTreeSet::new();
+    for host in &reached {
+        let (external, cited) = declared(host)?;
+        exposure.insert(external);
+        evidence.extend(cited);
+    }
+    if exposure.len() != 1 {
+        return Err((
+            NotEvaluatedReason::IncompleteEvidence,
+            format!("its host walls disagree on `{external}`"),
+        ));
+    }
+    Ok((reached, exposure.contains(&true), evidence))
+}
+
+/// What a host's exposure asks of an element's spaces: the wall's words,
+/// how many spaces, and the requirement's words.
+pub(crate) fn needs(external: bool) -> (&'static str, usize, &'static str) {
+    if external {
+        ("an external wall", 1, "one space, the other side outside")
+    } else {
+        ("an internal wall", 2, "two spaces, one on each side")
     }
 }
 
 /// Why the derived adjacency's recorded faces fail the host's requirement,
 /// `None` when they meet it: an internal host needs one space on each face,
-/// an external one its space on one face and the other face outside.
-fn sides(
+/// an external one its space on one face and the other face outside. It
+/// reads exactly the spaces the requirement counts: two for an internal
+/// host, one for an external one.
+pub(crate) fn sides(
     element: &ObjectId,
     spaces: &[ObjectId],
     cited: &[Evidence],

@@ -60,6 +60,11 @@ const COVERED: &[(&str, &str, &str)] = &[
         "connections_read_from_approximate_adjacency_are_never_exact",
     ),
     (
+        "connected_spaces",
+        "tests/opening_spaces.rs",
+        "connected_spaces_read_from_approximate_adjacency_are_never_exact",
+    ),
+    (
         "section_area",
         "tests/allowed_profile.rs",
         "an_unset_fillet_radius_widens_the_section_area",

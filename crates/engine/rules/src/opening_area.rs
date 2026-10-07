@@ -149,7 +149,16 @@ impl<'a> Picks<'a> {
         }
     }
 
-    fn contains(&self, id: &ObjectId) -> bool {
+    /// The objects a bound selection may pick.
+    pub(crate) fn selected(selection: &'a axioval_ir::measured::MeasuredSelection) -> Self {
+        Self {
+            matched: &selection.matched,
+            undecided: &selection.undecided,
+        }
+    }
+
+    /// Whether `id` may be picked.
+    pub(crate) fn contains(&self, id: &ObjectId) -> bool {
         self.matched.contains(id) || self.undecided.contains(id)
     }
 }

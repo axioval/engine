@@ -23909,7 +23909,401 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "opening-spaces",
+        "declaration": [
+          {
+            "kind": "arguments",
+            "when": [],
+            "value": "connected_spaces;host_path=@host_path;host_selector=@host_selector;external_property=@external_property;space_path=@space_path;space_selector=@space_selector"
+          }
+        ],
+        "texts": [
+          {
+            "name": "found",
+            "when": {
+              "kind": "zero",
+              "value": "walls"
+            },
+            "text": "source `{source}` has no host wall, so none is external"
+          },
+          {
+            "name": "found",
+            "text": "none of the {walls:upper0} host wall(s) in source `{source}` is declared external"
+          }
+        ],
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "declared",
+                "expression": {
+                  "kind": "property",
+                  "propertySet": "axioval:measured",
+                  "property": "any_external;host_selector=@host_selector;external_property=@external_property"
+                }
+              },
+              {
+                "name": "one",
+                "expression": {
+                  "kind": "literal",
+                  "value": {
+                    "type": "integer",
+                    "value": 1
+                  }
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "declared",
+              "minimum": [
+                {
+                  "sign": "plus",
+                  "operand": {
+                    "kind": "value",
+                    "name": "one"
+                  }
+                }
+              ],
+              "rounding": []
+            },
+            "fail": "{found}",
+            "undecided": "opening-spaces: no wall in source `{source}` is declared external, but {unknown:upper0} wall(s) do not declare `{external_property}` and {maybe:upper0} more may be walls",
+            "scope": {
+              "across": "",
+              "sources": {
+                "reached": {
+                  "selector": "host_selector"
+                }
+              },
+              "messages": {
+                "source": "in source `{source}`",
+                "project": "in the project",
+                "noSource": "opening-spaces: the run checks no source",
+                "noDiscipline": "opening-spaces: no source plays {disciplines}",
+                "undeclared": "opening-spaces: `{source}` declares no discipline",
+                "undeclaredMember": "opening-spaces: `{source}` declares no discipline",
+                "unlisted": "opening-spaces: the objects of `{source}` cannot be listed: {why}",
+                "noDisciplines": "opening-spaces: source disciplines are not available"
+              }
+            },
+            "related": "declared",
+            "checks": [
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {},
+                  "list": "connected_spaces;host_path=@host_path;host_selector=@host_selector;external_property=@external_property;space_path=@space_path;space_selector=@space_selector",
+                  "refused": "{why}",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "judge": {
+                        "kind": "range",
+                        "value": "count",
+                        "unit": "count",
+                        "atMost": [
+                          {
+                            "name": "needed",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "value",
+                                    "name": "expected"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "none"
+                        },
+                        "grade": false,
+                        "null": {
+                          "kind": "judge"
+                        }
+                      },
+                      "fail": "{relates}; in {wall} ({hosts}) it needs {requirement}",
+                      "undecided": "{relates}; in {wall} ({hosts}) it needs {requirement}",
+                      "then": {
+                        "judge": {
+                          "kind": "range",
+                          "value": "possible",
+                          "unit": "count",
+                          "atLeast": [
+                            {
+                              "name": "needed",
+                              "options": [
+                                {
+                                  "bound": {
+                                    "kind": "operand",
+                                    "value": {
+                                      "kind": "value",
+                                      "name": "expected"
+                                    }
+                                  }
+                                }
+                              ],
+                              "words": ""
+                            }
+                          ],
+                          "allowance": {
+                            "kind": "none"
+                          },
+                          "grade": false,
+                          "null": {
+                            "kind": "judge"
+                          }
+                        },
+                        "fail": "{relates}; in {wall} ({hosts}) it needs {requirement}",
+                        "undecided": "{relates}; in {wall} ({hosts}) it needs {requirement}",
+                        "then": {
+                          "judge": {
+                            "kind": "truth",
+                            "value": "known",
+                            "finding": false
+                          },
+                          "fail": "",
+                          "undecided": "{why}",
+                          "then": {
+                            "judge": {
+                              "kind": "truth",
+                              "value": "sides",
+                              "finding": false
+                            },
+                            "fail": "{placed}; in {wall} ({hosts}) it needs {requirement}",
+                            "undecided": "{why}",
+                            "related": "related"
+                          },
+                          "related": "related"
+                        },
+                        "related": "related"
+                      },
+                      "related": "related"
+                    }
+                  ]
+                },
+                "fail": "",
+                "undecided": ""
+              }
+            ],
+            "grading": {
+              "values": [
+                {
+                  "name": "walls",
+                  "expression": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "host_walls;host_selector=@host_selector;external_property=@external_property"
+                  }
+                }
+              ],
+              "bands": [],
+              "undecided": [
+                {
+                  "name": "unknown",
+                  "expression": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "undeclared_hosts;host_selector=@host_selector;external_property=@external_property"
+                  }
+                },
+                {
+                  "name": "maybe",
+                  "expression": {
+                    "kind": "property",
+                    "propertySet": "axioval:measured",
+                    "property": "possible_hosts;host_selector=@host_selector;external_property=@external_property"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "aggregate",
+                  "function": "none",
+                  "over": {
+                    "kind": "measured",
+                    "name": "connected_spaces;host_path=@host_path;host_selector=@host_selector;external_property=@external_property;space_path=@space_path;space_selector=@space_selector"
+                  },
+                  "value": {
+                    "kind": "not",
+                    "operand": {
+                      "kind": "and",
+                      "operands": [
+                        {
+                          "kind": "compare",
+                          "operator": "lessThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "count"
+                          },
+                          "right": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "expected"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "label": "no item fails"
+                },
+                {
+                  "kind": "and",
+                  "operands": [
+                    {
+                      "kind": "compare",
+                      "operator": "greaterThanOrEquals",
+                      "left": {
+                        "kind": "property",
+                        "propertySet": "axioval:measured",
+                        "property": "any_external;host_selector=@host_selector;external_property=@external_property"
+                      },
+                      "right": {
+                        "kind": "literal",
+                        "value": {
+                          "type": "integer",
+                          "value": 1
+                        }
+                      },
+                      "label": "at least the lower bound"
+                    }
+                  ]
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.aggregate",
+                      "label": "no item fails",
+                      "fields": {
+                        "function": "none"
+                      },
+                      "inputs": {
+                        "over": {
+                          "block": {
+                            "type": "members.connected_spaces",
+                            "fields": {
+                              "external_property": "@external_property",
+                              "host_path": "@host_path",
+                              "host_selector": "@host_selector",
+                              "space_path": "@space_path",
+                              "space_selector": "@space_selector"
+                            }
+                          }
+                        },
+                        "value": {
+                          "block": {
+                            "type": "expression.not",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.and",
+                                  "inputs": {
+                                    "operands": {
+                                      "blocks": [
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "lessThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "count",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "expected",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.and",
+                      "inputs": {
+                        "operands": {
+                          "blocks": [
+                            {
+                              "type": "expression.compare",
+                              "label": "at least the lower bound",
+                              "fields": {
+                                "operator": "greaterThanOrEquals"
+                              },
+                              "inputs": {
+                                "left": {
+                                  "block": {
+                                    "type": "measured.any_external",
+                                    "fields": {
+                                      "external_property": "@external_property",
+                                      "host_selector": "@host_selector"
+                                    }
+                                  }
+                                },
+                                "right": {
+                                  "block": {
+                                    "type": "expression.literal",
+                                    "fields": {
+                                      "value": {
+                                        "type": "integer",
+                                        "value": 1
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.opening-zone",
@@ -57791,6 +58185,75 @@
       "available": true
     },
     {
+      "name": "any_external",
+      "parameters": [
+        {
+          "key": "host_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The walls: source kinds, `,`-separated, or `@` a selector parameter of the rule, whose undecided objects may be walls."
+            },
+            {
+              "language": "de",
+              "text": "Die Wände: Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel, dessen unentschiedene Objekte Wände sein können."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "external_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The boolean property a wall declares itself external with."
+            },
+            {
+              "language": "de",
+              "text": "Die boolesche Eigenschaft, mit der eine Wand sich als außenliegend angibt."
+            }
+          ],
+          "references": "property"
+        }
+      ],
+      "services": [
+        "property-resolution"
+      ],
+      "exactness": "stated",
+      "subject": "source",
+      "notEvaluated": [],
+      "label": [
+        {
+          "language": "en",
+          "text": "Any external wall"
+        },
+        {
+          "language": "de",
+          "text": "Eine Außenwand"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "Whether any of the source's walls declares itself external: 1 where one surely does, 0 where none can, between where a wall declaring nothing or an object that may be a wall could; read in identity order up to the first that does, as `opening-spaces` reads the source."
+        },
+        {
+          "language": "de",
+          "text": "Ob eine der Wände der Quelle sich als außenliegend angibt: 1, wo eine es sicher tut, 0, wo keine es kann, dazwischen, wo eine Wand ohne Angabe oder ein Objekt, das eine Wand sein kann, es könnte; in Kennungsreihenfolge bis zur ersten gelesen, wie `opening-spaces` die Quelle liest."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
       "name": "band_uncovered_area",
       "parameters": [
         {
@@ -65427,6 +65890,75 @@
       "available": true
     },
     {
+      "name": "host_walls",
+      "parameters": [
+        {
+          "key": "host_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The walls: source kinds, `,`-separated, or `@` a selector parameter of the rule, whose undecided objects may be walls."
+            },
+            {
+              "language": "de",
+              "text": "Die Wände: Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel, dessen unentschiedene Objekte Wände sein können."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "external_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The boolean property a wall declares itself external with."
+            },
+            {
+              "language": "de",
+              "text": "Die boolesche Eigenschaft, mit der eine Wand sich als außenliegend angibt."
+            }
+          ],
+          "references": "property"
+        }
+      ],
+      "services": [
+        "property-resolution"
+      ],
+      "exactness": "stated",
+      "subject": "source",
+      "notEvaluated": [],
+      "label": [
+        {
+          "language": "en",
+          "text": "Walls"
+        },
+        {
+          "language": "de",
+          "text": "Wände"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "How many walls the source surely holds."
+        },
+        {
+          "language": "de",
+          "text": "Wie viele Wände die Quelle sicher enthält."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
       "name": "intersection_count",
       "parameters": [
         {
@@ -69068,6 +69600,75 @@
       "available": true
     },
     {
+      "name": "possible_hosts",
+      "parameters": [
+        {
+          "key": "host_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The walls: source kinds, `,`-separated, or `@` a selector parameter of the rule, whose undecided objects may be walls."
+            },
+            {
+              "language": "de",
+              "text": "Die Wände: Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel, dessen unentschiedene Objekte Wände sein können."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "external_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The boolean property a wall declares itself external with."
+            },
+            {
+              "language": "de",
+              "text": "Die boolesche Eigenschaft, mit der eine Wand sich als außenliegend angibt."
+            }
+          ],
+          "references": "property"
+        }
+      ],
+      "services": [
+        "property-resolution"
+      ],
+      "exactness": "stated",
+      "subject": "source",
+      "notEvaluated": [],
+      "label": [
+        {
+          "language": "en",
+          "text": "Possible walls"
+        },
+        {
+          "language": "de",
+          "text": "Mögliche Wände"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "How many more of the source's objects may be walls: their selection is undecided."
+        },
+        {
+          "language": "de",
+          "text": "Wie viele weitere Objekte der Quelle Wände sein können: ihre Auswahl ist unentschieden."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
       "name": "prevailing_elevation",
       "parameters": [
         {
@@ -72224,6 +72825,75 @@
       "available": true
     },
     {
+      "name": "undeclared_hosts",
+      "parameters": [
+        {
+          "key": "host_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The walls: source kinds, `,`-separated, or `@` a selector parameter of the rule, whose undecided objects may be walls."
+            },
+            {
+              "language": "de",
+              "text": "Die Wände: Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel, dessen unentschiedene Objekte Wände sein können."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "external_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The boolean property a wall declares itself external with."
+            },
+            {
+              "language": "de",
+              "text": "Die boolesche Eigenschaft, mit der eine Wand sich als außenliegend angibt."
+            }
+          ],
+          "references": "property"
+        }
+      ],
+      "services": [
+        "property-resolution"
+      ],
+      "exactness": "stated",
+      "subject": "source",
+      "notEvaluated": [],
+      "label": [
+        {
+          "language": "en",
+          "text": "Undeclared walls"
+        },
+        {
+          "language": "de",
+          "text": "Wände ohne Angabe"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "How many of the source's walls declare no usable exposure (absent, `null` or not a boolean) where none declares itself external; 0 where one does."
+        },
+        {
+          "language": "de",
+          "text": "Wie viele Wände der Quelle keine verwertbare Lage angeben (fehlend, `null` oder kein Wahrheitswert), wo keine sich als außenliegend angibt; 0, wo eine es tut."
+        }
+      ],
+      "unit": "1",
+      "available": true
+    },
+    {
       "name": "volume",
       "parameters": [],
       "dimension": "volume",
@@ -73842,6 +74512,420 @@
             {
               "language": "de",
               "text": "Die Endwände, in denen sie liegt, mit Abstand und zugewandter Länge."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "connected_spaces",
+      "parameters": [
+        {
+          "key": "host_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from the element to its host walls."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte vom Element zu seinen Wirtswänden."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "host_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The walls: source kinds, `,`-separated, or `@` a selector parameter of the rule, whose undecided objects may be walls."
+            },
+            {
+              "language": "de",
+              "text": "Die Wände: Quellarten, durch `,` getrennt, oder mit `@` ein Selektorparameter der Regel, dessen unentschiedene Objekte Wände sein können."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "external_property",
+          "kind": {
+            "type": "property"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The boolean property a wall declares itself external with."
+            },
+            {
+              "language": "de",
+              "text": "Die boolesche Eigenschaft, mit der eine Wand sich als außenliegend angibt."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "space_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from the element to its spaces: one the model states, or `axioval:derived.adjacent-space` alone, forward."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte vom Element zu seinen Räumen: eine, die das Modell angibt, oder allein `axioval:derived.adjacent-space`, vorwärts."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "space_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The spaces; every object without it."
+            },
+            {
+              "language": "de",
+              "text": "Die Räume; ohne Angabe jedes Objekt."
+            }
+          ],
+          "references": "selector"
+        }
+      ],
+      "services": [
+        "relationship-selection",
+        "property-resolution"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "a host wall is undecided, reached by none, or declares no exposure",
+        "the host walls disagree on their exposure",
+        "the adjacency evidence records no side for a space, or the other side enters an object outside the space selection"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Connected spaces"
+        },
+        {
+          "language": "de",
+          "text": "Verbundene Räume"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "One item: the element's host walls and their exposure, how many spaces it relates to against how many the exposure needs, and, for the derived adjacency, whether they lie on the faces it needs, as `opening-spaces` reads them."
+        },
+        {
+          "language": "de",
+          "text": "Ein Element: die Wirtswände des Elements und ihre Lage, auf wie viele Räume es sich bezieht gegenüber wie vielen die Lage verlangt, und, bei der abgeleiteten Nachbarschaft, ob sie auf den verlangten Seiten liegen, wie `opening-spaces` sie liest."
+        }
+      ],
+      "fields": [
+        {
+          "name": "relates",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Relates"
+            },
+            {
+              "language": "de",
+              "text": "Bezug"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "How many spaces it surely relates to, and through what: `relates to 1 space(s) via …`."
+            },
+            {
+              "language": "de",
+              "text": "Auf wie viele Räume es sich sicher bezieht, und wodurch: `relates to 1 space(s) via …`."
+            }
+          ]
+        },
+        {
+          "name": "count",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Spaces"
+            },
+            {
+              "language": "de",
+              "text": "Räume"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "How many spaces it surely relates to."
+            },
+            {
+              "language": "de",
+              "text": "Auf wie viele Räume es sich sicher bezieht."
+            }
+          ]
+        },
+        {
+          "name": "possible",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Possible spaces"
+            },
+            {
+              "language": "de",
+              "text": "Mögliche Räume"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "How many spaces it may relate to: those it surely does and those that may be spaces."
+            },
+            {
+              "language": "de",
+              "text": "Auf wie viele Räume es sich beziehen kann: die sicheren und die, die Räume sein können."
+            }
+          ]
+        },
+        {
+          "name": "expected",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Needed spaces"
+            },
+            {
+              "language": "de",
+              "text": "Verlangte Räume"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "How many spaces its host's exposure needs: one external, two internal."
+            },
+            {
+              "language": "de",
+              "text": "Wie viele Räume die Lage seiner Wirtswand verlangt: außen einen, innen zwei."
+            }
+          ]
+        },
+        {
+          "name": "known",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Decided"
+            },
+            {
+              "language": "de",
+              "text": "Entschieden"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether every object it relates to is surely a space or not; undecided otherwise."
+            },
+            {
+              "language": "de",
+              "text": "Ob jedes Objekt, auf das es sich bezieht, sicher ein Raum ist oder nicht; sonst unentschieden."
+            }
+          ]
+        },
+        {
+          "name": "sides",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "On its faces"
+            },
+            {
+              "language": "de",
+              "text": "Auf seinen Seiten"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the derived adjacency places its spaces on the faces its exposure needs; true where it is not read or not the derived adjacency."
+            },
+            {
+              "language": "de",
+              "text": "Ob die abgeleitete Nachbarschaft seine Räume auf die verlangten Seiten legt; wahr, wo sie nicht gelesen wird oder keine abgeleitete Nachbarschaft ist."
+            }
+          ]
+        },
+        {
+          "name": "placed",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Placement"
+            },
+            {
+              "language": "de",
+              "text": "Lage"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Where the faces place its spaces, where they fail; empty otherwise."
+            },
+            {
+              "language": "de",
+              "text": "Wo die Seiten seine Räume hinlegen, wo sie scheitern; sonst leer."
+            }
+          ]
+        },
+        {
+          "name": "wall",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Wall"
+            },
+            {
+              "language": "de",
+              "text": "Wand"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "`an internal wall` or `an external wall`."
+            },
+            {
+              "language": "de",
+              "text": "`an internal wall` oder `an external wall`."
+            }
+          ]
+        },
+        {
+          "name": "hosts",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Host walls"
+            },
+            {
+              "language": "de",
+              "text": "Wirtswände"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The host walls' local ids, `,`-separated."
+            },
+            {
+              "language": "de",
+              "text": "Die lokalen Kennungen der Wirtswände, durch `,` getrennt."
+            }
+          ]
+        },
+        {
+          "name": "requirement",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Requirement"
+            },
+            {
+              "language": "de",
+              "text": "Anforderung"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "What the exposure needs, in words."
+            },
+            {
+              "language": "de",
+              "text": "Was die Lage verlangt, in Worten."
+            }
+          ]
+        },
+        {
+          "name": "related",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Related"
+            },
+            {
+              "language": "de",
+              "text": "Bezogen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The host walls and the spaces it surely relates to."
+            },
+            {
+              "language": "de",
+              "text": "Die Wirtswände und die Räume, auf die es sich sicher bezieht."
             }
           ]
         }

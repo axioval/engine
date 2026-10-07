@@ -653,6 +653,202 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
     },
     MemberDescriptor {
         list: MeasuredDescriptor {
+            name: "connected_spaces",
+            parameters: &[
+                MeasuredParameter {
+                    key: "host_path",
+                    kind: MeasuredParameterKind::Path,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The relationship steps from the element to its host walls.",
+                        "Die Beziehungsschritte vom Element zu seinen Wirtswänden.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "host_selector",
+                    kind: MeasuredParameterKind::Objects,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The walls: source kinds, `,`-separated, or `@` a selector parameter \
+                         of the rule, whose undecided objects may be walls.",
+                        "Die Wände: Quellarten, durch `,` getrennt, oder mit `@` ein \
+                         Selektorparameter der Regel, dessen unentschiedene Objekte Wände \
+                         sein können.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "external_property",
+                    kind: MeasuredParameterKind::Property,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The boolean property a wall declares itself external with.",
+                        "Die boolesche Eigenschaft, mit der eine Wand sich als außenliegend \
+                         angibt.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "space_path",
+                    kind: MeasuredParameterKind::Path,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The relationship steps from the element to its spaces: one the model \
+                         states, or `axioval:derived.adjacent-space` alone, forward.",
+                        "Die Beziehungsschritte vom Element zu seinen Räumen: eine, die das \
+                         Modell angibt, oder allein `axioval:derived.adjacent-space`, \
+                         vorwärts.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "space_selector",
+                    kind: MeasuredParameterKind::Objects,
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The spaces; every object without it.",
+                        "Die Räume; ohne Angabe jedes Objekt.",
+                    ),
+                },
+            ],
+            dimension: None,
+            services: &["relationship-selection", "property-resolution"],
+            exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
+            not_evaluated: &[
+                "a host wall is undecided, reached by none, or declares no exposure",
+                "the host walls disagree on their exposure",
+                "the adjacency evidence records no side for a space, or the other side \
+                 enters an object outside the space selection",
+            ],
+            label: &en_de("Connected spaces", "Verbundene Räume"),
+            help: &en_de(
+                "One item: the element's host walls and their exposure, how many spaces it \
+                 relates to against how many the exposure needs, and, for the derived \
+                 adjacency, whether they lie on the faces it needs, as `opening-spaces` \
+                 reads them.",
+                "Ein Element: die Wirtswände des Elements und ihre Lage, auf wie viele Räume \
+                 es sich bezieht gegenüber wie vielen die Lage verlangt, und, bei der \
+                 abgeleiteten Nachbarschaft, ob sie auf den verlangten Seiten liegen, wie \
+                 `opening-spaces` sie liest.",
+            ),
+        },
+        fields: &[
+            field(
+                "relates",
+                MemberFieldKind::Text,
+                &en_de("Relates", "Bezug"),
+                &en_de(
+                    "How many spaces it surely relates to, and through what: `relates to 1 \
+                     space(s) via …`.",
+                    "Auf wie viele Räume es sich sicher bezieht, und wodurch: `relates to 1 \
+                     space(s) via …`.",
+                ),
+            ),
+            field(
+                "count",
+                RATIO,
+                &en_de("Spaces", "Räume"),
+                &en_de(
+                    "How many spaces it surely relates to.",
+                    "Auf wie viele Räume es sich sicher bezieht.",
+                ),
+            ),
+            field(
+                "possible",
+                RATIO,
+                &en_de("Possible spaces", "Mögliche Räume"),
+                &en_de(
+                    "How many spaces it may relate to: those it surely does and those that \
+                     may be spaces.",
+                    "Auf wie viele Räume es sich beziehen kann: die sicheren und die, die \
+                     Räume sein können.",
+                ),
+            ),
+            field(
+                "expected",
+                RATIO,
+                &en_de("Needed spaces", "Verlangte Räume"),
+                &en_de(
+                    "How many spaces its host's exposure needs: one external, two internal.",
+                    "Wie viele Räume die Lage seiner Wirtswand verlangt: außen einen, innen \
+                     zwei.",
+                ),
+            ),
+            field(
+                "known",
+                TRUTH,
+                &en_de("Decided", "Entschieden"),
+                &en_de(
+                    "Whether every object it relates to is surely a space or not; undecided \
+                     otherwise.",
+                    "Ob jedes Objekt, auf das es sich bezieht, sicher ein Raum ist oder \
+                     nicht; sonst unentschieden.",
+                ),
+            ),
+            field(
+                "sides",
+                TRUTH,
+                &en_de("On its faces", "Auf seinen Seiten"),
+                &en_de(
+                    "Whether the derived adjacency places its spaces on the faces its \
+                     exposure needs; true where it is not read or not the derived adjacency.",
+                    "Ob die abgeleitete Nachbarschaft seine Räume auf die verlangten Seiten \
+                     legt; wahr, wo sie nicht gelesen wird oder keine abgeleitete \
+                     Nachbarschaft ist.",
+                ),
+            ),
+            field(
+                "placed",
+                MemberFieldKind::Text,
+                &en_de("Placement", "Lage"),
+                &en_de(
+                    "Where the faces place its spaces, where they fail; empty otherwise.",
+                    "Wo die Seiten seine Räume hinlegen, wo sie scheitern; sonst leer.",
+                ),
+            ),
+            field(
+                "wall",
+                MemberFieldKind::Text,
+                &en_de("Wall", "Wand"),
+                &en_de(
+                    "`an internal wall` or `an external wall`.",
+                    "`an internal wall` oder `an external wall`.",
+                ),
+            ),
+            field(
+                "hosts",
+                MemberFieldKind::Text,
+                &en_de("Host walls", "Wirtswände"),
+                &en_de(
+                    "The host walls' local ids, `,`-separated.",
+                    "Die lokalen Kennungen der Wirtswände, durch `,` getrennt.",
+                ),
+            ),
+            field(
+                "requirement",
+                MemberFieldKind::Text,
+                &en_de("Requirement", "Anforderung"),
+                &en_de(
+                    "What the exposure needs, in words.",
+                    "Was die Lage verlangt, in Worten.",
+                ),
+            ),
+            field(
+                "related",
+                MemberFieldKind::Objects,
+                &en_de("Related", "Bezogen"),
+                &en_de(
+                    "The host walls and the spaces it surely relates to.",
+                    "Die Wirtswände und die Räume, auf die es sich sicher bezieht.",
+                ),
+            ),
+        ],
+    },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
             name: "coordinate_differences",
             parameters: &COORDINATE_DIFFERENCES,
             dimension: None,

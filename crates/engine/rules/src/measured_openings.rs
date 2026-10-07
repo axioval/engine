@@ -11,7 +11,6 @@
 //! many hosts shows.
 
 use std::collections::BTreeMap;
-use std::sync::Arc;
 
 use axioval_engine::{
     Citation, CompiledRule, MeasuredMemo, MeasuredProvider, Measurement, PropertyResolutionError,
@@ -21,7 +20,6 @@ use axioval_ir::contract::{ParameterValue, Selector, Severity};
 use axioval_ir::measured::{MeasuredArgument, MeasuredCall};
 use axioval_ir::{Evidence, ObjectId, QuantityDimension, RuleId};
 
-use crate::counts::Population;
 use crate::empty_host::face_area;
 use crate::measured_kinds::{refused, selection_cow};
 use crate::opening_area::{Openings, Picks, voided};
@@ -172,10 +170,6 @@ struct Voids {
     exact: bool,
 }
 
-/// The key of every object as candidate openings in the run's memo.
-#[derive(Hash, PartialEq, Eq)]
-struct EveryObject;
-
 /// The openings of `host` the call names, placed.
 fn voids(
     call: &MeasuredCall,
@@ -194,9 +188,7 @@ fn voids(
             }
         }
         Ok(None) => {
-            let population = MeasuredMemo::of(context.services, EveryObject, || {
-                Arc::new(Population::of(context, &Selector::All))
-            });
+            let population = crate::counts::every_object(context);
             let subject = crate::selection::object_by_id(context, host)
                 .ok_or_else(|| crate::support::invalid(format!("{host} is not in the project")))?;
             let mut evidence = Vec::new();

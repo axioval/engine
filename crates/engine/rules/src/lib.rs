@@ -203,6 +203,7 @@ pub mod reference {
     pub use crate::light_well::reference::LightWell;
     pub use crate::object_count::reference::ObjectCount;
     pub use crate::opening_area::reference::OpeningArea;
+    pub use crate::opening_spaces::reference::OpeningSpaces;
     pub use crate::plan_area::reference::PlanAreaRange;
     pub use crate::plan_coverage::reference::PlanCoverage;
     pub use crate::property_comparison::reference::PropertyComparison;
@@ -311,6 +312,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(keyed_limit::DoorMeasures))
         .and_then(|registry| registry.register_measured(door_swing_direction::SwingMeasures))
         .and_then(|registry| registry.register_measured(space_connection::ConnectionMeasures))
+        .and_then(|registry| registry.register_measured(opening_spaces::HostMeasures))
         .and_then(|registry| registry.register_measured(corridor_end_openings::CorridorEndSearch))
         .and_then(|registry| registry.register_measured(opening_zone::PlacementMeasures))
         .and_then(|registry| registry.register_measured(allowed_profile::ProfileMeasures))

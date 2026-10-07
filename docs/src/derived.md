@@ -429,6 +429,7 @@ ignoring ASCII case):
 | `envelope_size;derivation=all-spaces\|gross-area-groups[;bounding=<objects>][;groups=<objects>;group_path=<steps>]` | of the project: how many objects the derivation places on the building envelope | built in, over `EnvelopeMembershipService` |
 | `on_envelope`, `declared_external`, `bounds_envelope` `;derivation=…[;bounding=…][;groups=…;group_path=…]` | whether the derivation places the object on the envelope, whether the model declares it external, whether the envelope is derived around it | built in, over `EnvelopeMembershipService` |
 | `external_declarations;derivations=<derivations>[;bounding=…][;groups=…;group_path=…];objects=<objects>` | of a source: how many of its objects the model declares external in any derivation, up to those of unknown declaration | built in, over `EnvelopeMembershipService` |
+| `any_external;host_selector=<objects>;external_property=<set/name>`, `host_walls`, `undeclared_hosts`, `possible_hosts` (the same arguments) | of a source, as `opening-spaces` reads it: whether any of its walls declares itself external (1, 0, or between where a wall declaring nothing or an object that may be a wall could; read in identity order up to the first that does); how many walls it holds; how many declare nothing usable where none declares itself external; how many more objects may be walls. `any_external` cites the walls where none does | built in, over the property resolution |
 | `station`, `offset[;side=left\|right]`, `height_above_gradient` `;alignment=<kinds>[;path=<steps>]` | the reference point's station along an alignment, its signed plan offset from it and its height above the gradient line, each a length | `AlignmentService::measure_alignment_position`, `TypeHierarchyService`, `RelationshipSelectionService` for a path |
 | `alignment_curvature`, `alignment_radius`, `alignment_gradient`, `alignment_cant` `;alignment=<kinds>[;path=<steps>]` | the alignment's plan curvature (per metre) and radius, gradient and cant at the reference point's station | `AlignmentService::measure_alignment_parameter` |
 | `station_section_area`, `station_section_thickness[;direction=lateral\|up]` `;alignment=<kinds>[;path=<steps>];station=<m>` | the area and the vertical or horizontal reach of the object's own body in the section normal to the alignment at a station | `AlignmentService::measure_section` |
@@ -941,6 +942,7 @@ sites that cite a value exact:
 | `door_clear_width`, `door_clear_height`, `sill_height`, `threshold_step` | every extent, leaf and stated value read is exact | rounding of the differences, widened outward |
 | `leaf_count`, `leaf_width`, `swings_into`, `hinged_leaves` | the leaves (stated, exact by contract) and every probe are exact | a total width summed outward |
 | `swing_spaces` (members) | the leaves and every containment probe are exact (both exact by contract) | nothing |
+| `connected_spaces` (members) | the hosts' declarations and the spaces' relationship evidence are exact (an inexact one is refused) | nothing |
 | `space_connections` (members) | the relationship evidence of every link and element read is exact (refused otherwise, which leaves the link undecided) | nothing |
 | `profile_dimension`, `profile_slope`, `section_area`, `section_modulus` | every dimension the formula reads is stated | rounding, π included; an unset radius widens the value and makes it inexact |
 | `flight_*`, `landing_*`, `stair_rise`, `end_width`, `walking_line_turns` | the flight's, run's or landing's evidence is exact | rounding of derived positions |
@@ -1109,6 +1111,7 @@ and declare their parameters and typed fields:
 | `axes_within` (`of`, `reach`) | the objects of the kinds named within reach of the footprint in plan | `angle`, `centre_angle` |
 | `parallel_pairs` (`members`, `member_path`, `angle_tolerance`, `reach`) | the parallel pairs of members the object reaches, as `wall-spacing` pairs them | `distance` |
 | `swing_spaces` (`path`, `kinds`) | the spaces a door opens onto, probed as `door-swing` probes them | `into`, `away` |
+| `connected_spaces` (`host_path`, `host_selector`, `external_property`, `space_path`, `space_selector`) | one item: an element's host walls and their exposure, how many spaces it relates to against how many the exposure needs, and whether the derived adjacency places them on the faces it needs, as `opening-spaces` reads them | `relates`, `count`, `possible`, `expected`, `known`, `sides`, `placed`, `wall`, `hosts`, `requirement`, `related` |
 | `space_connections` (`connections`, `access_path`, `door_selector`, `opening_selector`, `space_selector`) | each requirement of each row of `connections` whose `from` picks the space, its access then its exit, as `space-connection` reads them | `row`, `access`, `required`, `kind`, `via`, `links`, `linked`, `related` |
 | `opening_placements` (`host_path`, `hosts`, `length_axis`, `height_axis`, `zone`, `minimum`) | an opening's placement in each host its path reaches, as `opening-zone` places it | `inside`, `end_distance`, `edge_distance`, `bottom_distance`, `top_distance` |
 | `clearances` (`of`, `side`, `obstacles`) | the headroom above a flight or ramp, or the clearance below it over the floors of the spaces `obstacles` names: one item | `clearance` (`null` where nothing governs it), `governing`, `noun` |
@@ -1364,8 +1367,9 @@ maximum reaches `triangle-count`'s verdicts and evidence.
 A measured value is each object's own, unless the registry declares it a
 source's or the project's (`MeasuredSubject`, the descriptor's `subject`):
 
-- **A source's** value (`coordinate_shift`, `external_declarations`, the
-  member list `coordinate_differences`) read on an object is the value of
+- **A source's** value (`coordinate_shift`, `external_declarations`,
+  `any_external`, `host_walls`, `undeclared_hosts`, `possible_hosts`,
+  the member list `coordinate_differences`) read on an object is the value of
   the object's source, measured for the source
   (`MeasuredProvider::measure_source`, `members_of_source`) however many
   of its objects read it, and identified by the source's

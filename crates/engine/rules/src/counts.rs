@@ -1,13 +1,26 @@
 //! Counts of objects related to each anchor.
 
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
-use axioval_engine::{NotEvaluatedReason, RuleContext};
+use axioval_engine::{MeasuredMemo, NotEvaluatedReason, RuleContext};
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId};
 
 use crate::selection::select_objects;
 use crate::support::{Traversal, Unavailable};
+
+/// The key of every object of the project in the run's memo.
+#[derive(Hash, PartialEq, Eq)]
+struct EveryObject;
+
+/// Every object of the project as a population, made once per run: what a
+/// measured value naming no objects reads.
+pub(crate) fn every_object(context: &RuleContext<'_>) -> Arc<Population> {
+    MeasuredMemo::of(context.services, EveryObject, || {
+        Arc::new(Population::of(context, &Selector::All))
+    })
+}
 
 /// Objects a selector picks, split into decided and undecided.
 pub(crate) struct Population {

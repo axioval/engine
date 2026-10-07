@@ -1406,6 +1406,24 @@ once with the list's refusal. The declaration is the list's own argument
 check (`Check::Arguments`): the access path and selectors, then the rows,
 in the capability's order and words.
 
+### `opening-spaces`
+
+| Form | When | Scopes | Values | Decision | Checks |
+| --- | --- | --- | --- | --- | --- |
+| one | always | each source where the rule selects an element (or may), or where `host_selector` picks a wall (`reached`) | `declared` = `any_external;host_selector=@host_selector;external_property=@external_property` (whether any of its walls declares itself external: 1, 0, or between), `walls` = `host_walls;…`, `unknown` = `undeclared_hosts;…`, `maybe` = `possible_hosts;…` | `declared` at least `one`: `{found}` (`source … has no host wall, so none is external` where `walls` is zero, `none of the {walls:upper0} host wall(s) in source … is declared external` otherwise), relating the walls; open (`… but {unknown:upper0} wall(s) do not declare … and {maybe:upper0} more may be walls`) | each element by `connected_spaces;host_path=@host_path;…;space_path=@space_path;space_selector=@space_selector` |
+
+The element's one item states its hosts' exposure and its spaces: `count`
+at most `expected` and `possible` at least it (`{relates}; in {wall}
+({hosts}) it needs {requirement}`), then every space decided (`known`,
+open with its own words), then, for the derived adjacency, its spaces on
+the faces the exposure needs (`sides`, a finding worded `{placed}; …`),
+each test only where the one before passes (`then`). An element whose
+hosts are undecided, reached by none, declare nothing or disagree, or
+whose spaces cannot be read or placed on a face, is open with the list's
+refusal, worded as the capability left it. The declaration is the list's
+own argument check (`Check::Arguments`), in the capability's order and
+words.
+
 ### `door-swing`
 
 One form, judged by its checks, both over the measured list
@@ -1986,6 +2004,19 @@ requirements, access types, exits and labels, refused ones included) with
 doors of declared or undecided type and an unreadable element; and by the
 `space-connection` rules of the case `openings`, recorded before the
 switch. It is never forked.
+
+`opening-spaces` is held to `opening_spaces/reference.rs`
+(`axioval_rules::reference::OpeningSpaces`) on every fixture of
+`tests/opening_spaces.rs` under `Parity::contract()`, its messages asserted
+literally (stated boundaries, faces of the derived adjacency, a space on no
+face, sources without an external wall or with one undeclared, an element
+without a host, refused paths); by generated walls declaring their
+exposure true, false, `null`, as text or not at all, elements hosted by
+them or by an object the host selector cannot decide, related to random
+spaces through stated boundaries or the derived adjacency on random faces,
+spaces picked by kind or by a use some state unreadably; and by the
+`opening-spaces` rules of the case `openings`, recorded before the switch.
+It is never forked.
 
 `door-swing` is held to `door_swing_direction/reference.rs`
 (`axioval_rules::reference::DoorSwing`) on every fixture of

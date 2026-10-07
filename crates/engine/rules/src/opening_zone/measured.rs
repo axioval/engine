@@ -210,6 +210,7 @@ impl PlacementMeasures {
         let mut judge = Judge {
             dimensions: dimensions::Selections::of(context, &config.dimensions),
             context,
+            #[cfg(feature = "parity-reference")]
             rule: &rule,
             config: &config,
             hosts: &hosts,

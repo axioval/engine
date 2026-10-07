@@ -160,7 +160,6 @@ pub(crate) struct Declaration<'a> {
     pub(crate) exclude_target_property: Option<PropertyRef<'a>>,
     pub(crate) exclude_same_layer: bool,
     pub(crate) grouping: Option<Grouping<'a>>,
-    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
     pub(crate) severities: Severities,
     pub(crate) cases: Cases<'a>,
 }

@@ -122,9 +122,9 @@ struct Config<'a> {
     axes: FaceAxes,
     // The template bounds by the rule's own parameters; the reference
     // reads them here.
-    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
+    #[cfg(feature = "parity-reference")]
     end_distance: Option<f64>,
-    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
+    #[cfg(feature = "parity-reference")]
     edge_distance: Option<f64>,
     /// The largest distance allowed from the low and the high edge.
     edge_maximum: Option<(f64, bool, bool)>,
@@ -172,14 +172,25 @@ impl<'a> Config<'a> {
                 )));
             }
         };
+        let hosts = Traversal::path(host_path)?;
+        let host_selector = parameters
+            .selector("host_selector")?
+            .unwrap_or(&Selector::All);
+        let end_distance = distance(&parameters, "end_distance")?;
+        let edge_distance = distance(&parameters, "edge_distance")?;
+        // Only the parity reference keeps the end and edge distances; the
+        // template bounds by the rule's own, and they are read here to
+        // refuse a bad declaration.
+        #[cfg(not(feature = "parity-reference"))]
+        let _ = (end_distance, edge_distance);
         Ok(Self {
-            hosts: Traversal::path(host_path)?,
-            host_selector: parameters
-                .selector("host_selector")?
-                .unwrap_or(&Selector::All),
+            hosts,
+            host_selector,
             axes,
-            end_distance: distance(&parameters, "end_distance")?,
-            edge_distance: distance(&parameters, "edge_distance")?,
+            #[cfg(feature = "parity-reference")]
+            end_distance,
+            #[cfg(feature = "parity-reference")]
+            edge_distance,
             edge_maximum: match (
                 distance(&parameters, "edge_distance_maximum")?,
                 parameters.string("maximum_edges")?,
@@ -305,7 +316,7 @@ type Placement = Result<Vec<Result<Placed, Unavailable>>, Unavailable>;
 struct Judge<'r, 'c> {
     context: &'r RuleContext<'c>,
     /// The rule its findings name (the reference's).
-    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
+    #[cfg(feature = "parity-reference")]
     rule: &'r CompiledRule,
     config: &'r Config<'r>,
     hosts: &'r Population,

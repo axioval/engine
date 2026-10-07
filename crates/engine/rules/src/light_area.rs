@@ -242,13 +242,13 @@ struct Derived {
     area: f64,
     step: Origin,
     evidence: Vec<Evidence>,
-    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
+    #[cfg(feature = "parity-reference")]
     check: Check,
 }
 
 /// The comparison of a stated light area with the overall area.
+#[cfg(feature = "parity-reference")]
 #[derive(Clone)]
-#[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
 enum Check {
     /// Within the overall area, or derived and so within it by construction.
     Within,
@@ -362,18 +362,33 @@ impl LightArea<'_> {
         Ok(found.ok_or_else(|| format!("{} has no value", key.property)))
     }
 
-    /// How a stated light area compares with the object's overall area.
-    fn check(
+    /// The object's overall width and height, citing them, or why they are
+    /// not known.
+    fn overall(
         &self,
         context: &RuleContext<'_>,
         object: &Object,
-        stated: PropertyRef<'_>,
-        area: f64,
         evidence: &mut Vec<Evidence>,
-    ) -> Check {
+    ) -> Result<(f64, f64), String> {
         match self.size(context, object) {
             Ok(Ok((width, height, cited))) => {
                 evidence.extend(cited);
+                Ok((width, height))
+            }
+            Ok(Err(why)) | Err((_, why)) => Err(why),
+        }
+    }
+
+    /// How a stated light area compares with the object's overall area.
+    #[cfg(feature = "parity-reference")]
+    fn check(
+        &self,
+        stated: PropertyRef<'_>,
+        area: f64,
+        overall: Result<(f64, f64), String>,
+    ) -> Check {
+        match overall {
+            Ok((width, height)) => {
                 if area > width * height * (1.0 + 4.0 * f64::EPSILON) {
                     Check::Oversized(format!(
                         "light area {} m² ({stated}) is larger than the overall area {} m² \
@@ -389,7 +404,7 @@ impl LightArea<'_> {
                     Check::Within
                 }
             }
-            Ok(Err(why)) | Err((_, why)) => Check::Unchecked(why),
+            Err(why) => Check::Unchecked(why),
         }
     }
 
@@ -409,12 +424,17 @@ impl LightArea<'_> {
                     dimension: QuantityDimension::Area,
                 }) if value.is_finite() && *value >= 0.0 => {
                     let area = *value;
-                    let check = self.check(context, object, stated, area, &mut evidence);
+                    // Only the parity reference keeps the comparison; the
+                    // template judges a stated area against its member.
+                    let overall = self.overall(context, object, &mut evidence);
+                    #[cfg(not(feature = "parity-reference"))]
+                    let _ = overall;
                     return Ok(Derived {
                         area,
                         step: Origin::Stated,
                         evidence,
-                        check,
+                        #[cfg(feature = "parity-reference")]
+                        check: self.check(stated, area, overall),
                     });
                 }
                 Some(other) => {
@@ -452,6 +472,7 @@ impl LightArea<'_> {
                 area,
                 step: Origin::Table(index),
                 evidence,
+                #[cfg(feature = "parity-reference")]
                 check: Check::Within,
             });
         }
@@ -483,6 +504,7 @@ impl LightArea<'_> {
             area,
             step: Origin::Frame,
             evidence,
+            #[cfg(feature = "parity-reference")]
             check: Check::Within,
         })
     }

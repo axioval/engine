@@ -2,7 +2,9 @@
 //! the nearest other opening of its host, or to one of the host's edges,
 //! along one of the face's axes.
 
-use axioval_engine::{ColumnKind, Deviation, NotEvaluatedReason, RuleContext, TableColumn};
+#[cfg(feature = "parity-reference")]
+use axioval_engine::Deviation;
+use axioval_engine::{ColumnKind, NotEvaluatedReason, RuleContext, TableColumn};
 use axioval_ir::contract::Selector;
 use axioval_ir::{Object, ObjectId, QuantityDimension};
 
@@ -230,7 +232,7 @@ impl Selections {
 }
 
 /// How a distance meets a row's bound.
-#[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
+#[cfg(feature = "parity-reference")]
 pub(super) enum Verdict {
     Holds,
     /// A finding: what is required, and how far it misses.
@@ -273,7 +275,7 @@ impl Bound {
     /// Judges a distance known to lie in `[lower, upper]`: it holds or
     /// misses only when every value there does. The tolerance widens the
     /// bound; the deviation is measured from the bound as declared.
-    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
+    #[cfg(feature = "parity-reference")]
     pub(super) fn judge(self, (lower, upper): Span, tolerance: f64) -> Verdict {
         let slack = tolerance + ROUNDING;
         let (minimum, maximum) = self.limits();

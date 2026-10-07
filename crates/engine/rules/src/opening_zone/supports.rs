@@ -21,8 +21,10 @@ use crate::support::{Parameters, Traversal, Unavailable, invalid};
 /// How a rule finds a host's supports and what it requires of them.
 pub(super) struct SupportConfig<'a> {
     path: Option<Traversal>,
-    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
+    #[cfg(feature = "parity-reference")]
     pub(super) selector: &'a Selector,
+    // The selector's lifetime, which only the parity reference reads.
+    marker: std::marker::PhantomData<&'a Selector>,
     contact: Option<f64>,
     distance: Option<f64>,
     /// The distance as a fraction of the host's span or depth.
@@ -119,7 +121,9 @@ impl<'a> SupportConfig<'a> {
             (false, false) if selector.is_none() => Ok(None),
             (true, true) => Ok(Some(Self {
                 path,
+                #[cfg(feature = "parity-reference")]
                 selector: selector.unwrap_or(&Selector::All),
+                marker: std::marker::PhantomData,
                 contact,
                 distance: required,
                 ratio,

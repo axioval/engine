@@ -90,10 +90,11 @@ impl<'a> Openings<'a> {
             .strings("opening_path")?
             .ok_or_else(|| invalid("parameter `opening_path` is required"))?;
         let path = Traversal::path(path)?;
-        #[cfg_attr(not(feature = "parity-reference"), allow(unused_variables))]
         let selector = parameters
             .selector("opening_selector")?
             .unwrap_or(&Selector::All);
+        #[cfg(not(feature = "parity-reference"))]
+        let _ = selector;
         Ok(Self {
             path,
             #[cfg(feature = "parity-reference")]

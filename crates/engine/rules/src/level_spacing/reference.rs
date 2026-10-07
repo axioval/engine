@@ -7,7 +7,7 @@ use axioval_engine::{
     CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor, ParameterType,
     RuleCapability, RuleContext, VerticalExtent,
 };
-use axioval_ir::{QuantityDimension, ReportColumn, ReportTable, ReportValue, RuleId};
+use axioval_ir::{ObjectId, QuantityDimension, ReportColumn, ReportTable, ReportValue, RuleId};
 
 use super::{
     Config, Height, Level, Reach, Side, extent, extents, heights, levels, metres, parse,
@@ -15,6 +15,16 @@ use super::{
 };
 use crate::selection::select_objects;
 use crate::support::{Parameters, Unavailable, finding, traversal_parameters};
+
+impl Height<'_, '_> {
+    fn shown(&self) -> String {
+        shown(self.lower, self.upper)
+    }
+
+    fn related(&self) -> Vec<ObjectId> {
+        self.above.iter().cloned().collect()
+    }
+}
 
 /// Checks the height of each level, as `level-spacing` did before it ran
 /// as a template.

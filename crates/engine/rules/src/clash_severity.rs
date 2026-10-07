@@ -18,9 +18,10 @@
 //! `duplicate_quantities` names, read from the source. A quantity that
 //! cannot be read is named as unknown, never as the same.
 
+#[cfg(feature = "parity-reference")]
+use axioval_engine::LengthInterval;
 use axioval_engine::{
-    ColumnKind, LengthInterval, ParameterDescriptor, ParameterType, ProximityEvidence, RuleContext,
-    TableColumn,
+    ColumnKind, ParameterDescriptor, ParameterType, ProximityEvidence, RuleContext, TableColumn,
 };
 use axioval_ir::{Evidence, ObjectId, Severity};
 
@@ -68,7 +69,6 @@ pub(crate) fn parse_severity(text: &str) -> Result<Severity, Unavailable> {
     }
 }
 
-#[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
 pub(crate) fn label(severity: &Severity) -> &'static str {
     match severity {
         Severity::Error => "error",
@@ -85,7 +85,7 @@ pub(crate) enum Measure {
 }
 
 impl Measure {
-    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
+    #[cfg(feature = "parity-reference")]
     pub(crate) fn name(self) -> &'static str {
         match self {
             Self::SmallestExtent => "smallest extent",
@@ -94,7 +94,7 @@ impl Measure {
     }
 
     /// The measure's interval; `None` when it was not measured.
-    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
+    #[cfg(feature = "parity-reference")]
     pub(crate) fn interval(self, measured: &ProximityEvidence) -> Option<(f64, f64)> {
         match self {
             Self::SmallestExtent => measured.overlap_extents().map(|extents| {
@@ -135,10 +135,10 @@ struct Quantity {
 
 /// The declared severities and duplicate comparisons.
 pub(crate) struct Severities {
-    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
+    #[cfg(feature = "parity-reference")]
     pub(crate) by_class: Vec<(Class, Severity)>,
     /// What intersections are graded by, and the grades by rising bound.
-    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
+    #[cfg(feature = "parity-reference")]
     pub(crate) grades: Option<(Measure, Vec<(f64, Severity)>)>,
     quantities: Vec<Quantity>,
 }
@@ -223,8 +223,14 @@ pub(crate) fn severities(parameters: &Parameters<'_>) -> Result<Severities, Unav
             })
         })
         .collect::<Result<_, Unavailable>>()?;
+    // Only the parity reference keeps the classes and grades (the template
+    // reads its own); they are read here to refuse a bad declaration.
+    #[cfg(not(feature = "parity-reference"))]
+    let _ = (by_class, grades);
     Ok(Severities {
+        #[cfg(feature = "parity-reference")]
         by_class,
+        #[cfg(feature = "parity-reference")]
         grades,
         quantities,
     })

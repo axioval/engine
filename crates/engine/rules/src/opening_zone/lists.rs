@@ -84,6 +84,7 @@ fn measure(call: &MeasuredCall, context: &RuleContext<'_>) -> Result<Run, Unavai
         let mut judge = Judge {
             dimensions: Selections::of(context, &config.dimensions),
             context,
+            #[cfg(feature = "parity-reference")]
             rule: &rule,
             config: &config,
             hosts: &hosts,

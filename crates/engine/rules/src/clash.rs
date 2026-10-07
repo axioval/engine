@@ -200,7 +200,6 @@ pub(crate) struct Declaration<'a> {
     pub(crate) exclude_target_property: Option<PropertyRef<'a>>,
     pub(crate) exclude_same_layer: bool,
     pub(crate) grouping: Option<Grouping<'a>>,
-    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
     pub(crate) severities: Severities,
     pub(crate) cases: Cases<'a>,
 }
@@ -293,7 +292,7 @@ impl Holds {
             _ => Self::Unknown,
         }
     }
-    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
+    #[cfg(feature = "parity-reference")]
     pub(crate) fn not(self) -> Self {
         match self {
             Self::Yes => Self::No,
@@ -347,7 +346,7 @@ pub(crate) enum Class {
     Intersection,
     Clearance,
     /// A pair no clash matrix cell covers.
-    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
+    #[cfg(feature = "parity-reference")]
     Unmatched,
 }
 
@@ -358,6 +357,7 @@ impl Class {
             Self::Containment => "containment",
             Self::Intersection => "intersection",
             Self::Clearance => "clearance",
+            #[cfg(feature = "parity-reference")]
             Self::Unmatched => "unmatched",
         }
     }

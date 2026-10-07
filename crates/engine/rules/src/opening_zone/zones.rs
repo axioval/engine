@@ -296,6 +296,9 @@ impl Judge<'_, '_> {
         let Some((zone, misses, deviation)) = nearest else {
             return Ok(None);
         };
+        // Only the parity reference grades by how far the zone is missed.
+        #[cfg(not(feature = "parity-reference"))]
+        let _ = deviation;
         // The side it misses most decides how far it misses the zone.
         let below = |(clear, needed): (f64, f64)| Deviation::below(needed, clear, clear).lower();
         let (clear, needed) = misses
@@ -336,6 +339,7 @@ impl Judge<'_, '_> {
             ),
             clear,
             needed,
+            #[cfg(feature = "parity-reference")]
             deviation,
         }))
     }
@@ -348,6 +352,6 @@ pub(super) struct ZoneMiss {
     pub(super) message: String,
     pub(super) clear: f64,
     pub(super) needed: f64,
-    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
+    #[cfg(feature = "parity-reference")]
     pub(super) deviation: Deviation,
 }

@@ -26,6 +26,7 @@ use axioval_engine::{
 };
 use std::sync::Arc;
 
+#[cfg(feature = "parity-reference")]
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId, PropertyValue, QuantityDimension};
 
@@ -105,7 +106,7 @@ enum Quantity<'a> {
     MemberPlanArea {
         // The members as the reference walks them; the template reads them
         // from its list's own selection.
-        #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
+        #[cfg(feature = "parity-reference")]
         members: &'a Selector,
         traversal: Option<Traversal>,
     },
@@ -1196,12 +1197,18 @@ fn quantity<'a>(
     let defaults = defaults()?;
     Ok(match named {
         "plan-area" => Quantity::PlanArea,
-        "member-plan-area" => Quantity::MemberPlanArea {
-            members: parameters
+        "member-plan-area" => {
+            let members = parameters
                 .selector("member_selector")?
-                .ok_or_else(|| invalid("`quantity` `member-plan-area` needs `member_selector`"))?,
-            traversal: parameters.traversal()?,
-        },
+                .ok_or_else(|| invalid("`quantity` `member-plan-area` needs `member_selector`"))?;
+            #[cfg(not(feature = "parity-reference"))]
+            let _ = members;
+            Quantity::MemberPlanArea {
+                #[cfg(feature = "parity-reference")]
+                members,
+                traversal: parameters.traversal()?,
+            }
+        }
         "property" => Quantity::Property(
             property.ok_or_else(|| invalid("`quantity` `property` needs `quantity_property`"))?,
         ),

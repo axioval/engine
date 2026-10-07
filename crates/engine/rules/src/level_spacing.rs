@@ -102,27 +102,14 @@ struct Level<'a> {
 }
 
 /// A level's height as an interval, with what it was measured from.
-// Partly read by the parity reference only, outside its feature.
-#[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
 struct Height<'l, 'a> {
     level: &'l Level<'a>,
     /// The next level up, when the height is the rise to it.
+    #[cfg(feature = "parity-reference")]
     above: Option<ObjectId>,
     lower: f64,
     upper: f64,
     evidence: Vec<Evidence>,
-}
-
-// Partly read by the parity reference only, outside its feature.
-#[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
-impl Height<'_, '_> {
-    fn shown(&self) -> String {
-        shown(self.lower, self.upper)
-    }
-
-    fn related(&self) -> Vec<ObjectId> {
-        self.above.iter().cloned().collect()
-    }
 }
 
 /// The objects a traversal reaches from each level, among a selection.
@@ -131,26 +118,28 @@ struct Reach<'a> {
     selector: Option<&'a Selector>,
 }
 
-// Partly read by the parity reference only, outside its feature.
-#[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
 struct Config<'a> {
     members: &'a Selector,
     order: PropertyRef<'a>,
+    #[cfg(feature = "parity-reference")]
     minimum: Option<f64>,
+    #[cfg(feature = "parity-reference")]
     maximum: Option<f64>,
+    #[cfg(feature = "parity-reference")]
     consistent: bool,
     tolerance: f64,
     ignore_lowest: bool,
     ignore_highest: bool,
     traversal: Option<Traversal>,
     contents: Option<Reach<'a>>,
+    #[cfg(feature = "parity-reference")]
     spaces: Option<(Reach<'a>, f64)>,
+    #[cfg(feature = "parity-reference")]
     space_checks: SpaceChecks,
 }
 
 /// What the spaces a level reaches are checked for.
-// Partly read by the parity reference only, outside its feature.
-#[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
+#[cfg(feature = "parity-reference")]
 struct SpaceChecks {
     /// Whether each space is compared with its level's height.
     height: bool,
@@ -165,8 +154,7 @@ enum Side {
     Top,
 }
 
-// Partly read by the parity reference only, outside its feature.
-#[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
+#[cfg(feature = "parity-reference")]
 impl Side {
     fn name(self) -> &'static str {
         match self {
@@ -246,18 +234,30 @@ fn parse<'a>(parameters: &Parameters<'a>) -> Result<Config<'a>, Unavailable> {
     if matches!((minimum, maximum), (Some(minimum), Some(maximum)) if minimum > maximum) {
         return Err(invalid("minimum exceeds maximum"));
     }
+    let members = parameters.required_selector("member_selector")?;
+    let order = parameters.required_property("order")?;
+    // Only the parity reference keeps the bounds and the space checks; the
+    // template reads its own, and they are read here to refuse a bad
+    // declaration.
+    #[cfg(not(feature = "parity-reference"))]
+    let _ = (spaces, space_height, space_elevation);
     Ok(Config {
-        members: parameters.required_selector("member_selector")?,
-        order: parameters.required_property("order")?,
+        members,
+        order,
+        #[cfg(feature = "parity-reference")]
         minimum,
+        #[cfg(feature = "parity-reference")]
         maximum,
+        #[cfg(feature = "parity-reference")]
         consistent,
         tolerance: length("tolerance")?.unwrap_or(1e-3),
         ignore_lowest: parameters.boolean("ignore_lowest")?.unwrap_or(false),
         ignore_highest: parameters.boolean("ignore_highest")?.unwrap_or(false),
         traversal: parameters.traversal()?,
         contents,
+        #[cfg(feature = "parity-reference")]
         spaces,
+        #[cfg(feature = "parity-reference")]
         space_checks: SpaceChecks {
             height: space_height,
             elevation: space_elevation,
@@ -428,6 +428,7 @@ fn measured_height<'l, 'a>(
     evidence.extend(level.evidence.iter().cloned());
     Ok(Height {
         level,
+        #[cfg(feature = "parity-reference")]
         above: None,
         lower: lower - level.elevation,
         upper: upper - level.elevation,
@@ -451,6 +452,7 @@ fn heights<'l, 'a>(
             evidence.extend(above.evidence.iter().cloned());
             heights.push(Height {
                 level,
+                #[cfg(feature = "parity-reference")]
                 above: Some(above.object.id.clone()),
                 lower: height,
                 upper: height,

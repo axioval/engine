@@ -23,6 +23,10 @@ use common::{
 
 const ID: &str = "axioval:capability.opening-zone";
 
+/// `opening-zone` as it runs, held to the implementation it replaced on
+/// every evaluation.
+static HELD: common::Held = common::Held(&OpeningZone, &axioval_rules::reference::OpeningZone);
+
 type Vector = [f64; 3];
 
 fn length(metres: f64) -> PropertyValue {
@@ -135,7 +139,7 @@ fn check(model: Model, extra: Vec<(&'static str, ParameterValue)>) -> Capability
         ("height_axis", string("profile-y")),
     ];
     parameters.extend(extra);
-    model.evaluate(&OpeningZone, &rule(ID, kind("opening"), parameters))
+    model.evaluate(&HELD, &rule(ID, kind("opening"), parameters))
 }
 
 fn metres(value: f64) -> ParameterValue {
@@ -275,7 +279,7 @@ fn a_wall_opening_is_placed_in_the_walls_plan_outline_and_height() {
     )
     .edge("voids", "w", "o");
     let evaluation = model.evaluate(
-        &OpeningZone,
+        &HELD,
         &rule(
             ID,
             kind("opening"),
@@ -775,7 +779,7 @@ fn supports_are_found_by_contact_and_an_undecided_contact_is_not_ignored() {
             ("support_distance", metres(0.5)),
         ],
     );
-    let evaluation = model.evaluate_with(&OpeningZone, &rule, |services| {
+    let evaluation = model.evaluate_with(&HELD, &rule, |services| {
         services
             .register(ProximityServiceHandle::new(Arc::new(touching)))
             .unwrap();
@@ -801,7 +805,7 @@ fn supports_are_found_by_contact_and_an_undecided_contact_is_not_ignored() {
     // Without a proximity service contact cannot be measured.
     let model = circle(square(beam(), "c1", 0.5), "o", 3.0);
     assert_eq!(
-        unevaluated(&model.evaluate(&OpeningZone, &rule)),
+        unevaluated(&model.evaluate(&HELD, &rule)),
         [("o".into(), NotEvaluatedReason::MissingService)]
     );
 }
@@ -891,7 +895,7 @@ fn wall_check(model: Model, extra: Vec<(&'static str, ParameterValue)>) -> Capab
         ("height_axis", string("extrusion")),
     ];
     parameters.extend(extra);
-    model.evaluate(&OpeningZone, &rule(ID, kind("opening"), parameters))
+    model.evaluate(&HELD, &rule(ID, kind("opening"), parameters))
 }
 
 #[test]
@@ -1111,7 +1115,7 @@ fn a_shaft_through_a_notched_slab_keeps_clear_of_the_notch() {
     let model = shaft(model, "in-notch", 2.2, 2.2);
     let model = shaft(model, "clear", 1.0, 1.0);
     let evaluation = model.evaluate(
-        &OpeningZone,
+        &HELD,
         &rule(
             ID,
             kind("opening"),
@@ -1180,7 +1184,7 @@ fn wall_edges(extra: Vec<(&'static str, ParameterValue)>) -> CapabilityEvaluatio
         ("height_axis", string("extrusion")),
     ];
     parameters.extend(extra);
-    windows_below_the_top().evaluate(&OpeningZone, &rule(ID, kind("opening"), parameters))
+    windows_below_the_top().evaluate(&HELD, &rule(ID, kind("opening"), parameters))
 }
 
 /// `edge_distance_maximum` bounds the distance to the edges `maximum_edges`
@@ -1245,7 +1249,7 @@ fn duct(model: Model, local: &str, x: f64, z: f64, beams: &[&str]) -> Model {
 
 fn penetrations(model: Model) -> CapabilityEvaluation {
     model.evaluate(
-        &OpeningZone,
+        &HELD,
         &rule(
             ID,
             kind("duct"),
@@ -1600,7 +1604,7 @@ fn dimensioned_wall() -> Model {
 
 fn dimensioned(rows: Vec<Vec<(&str, ParameterValue)>>) -> CapabilityEvaluation {
     dimensioned_wall().evaluate(
-        &OpeningZone,
+        &HELD,
         &rule(
             ID,
             Selector::All,
@@ -1968,10 +1972,7 @@ mod as_expressions {
         hosts: Hosts,
         margins: Margins,
     ) -> (usize, usize) {
-        let evaluated = model().evaluate(
-            &OpeningZone,
-            &rule(ID, kind(of), capability(hosts, margins)),
-        );
+        let evaluated = model().evaluate(&HELD, &rule(ID, kind(of), capability(hosts, margins)));
         let rewritten = model().evaluate_measured(
             &ExpressionRequirement,
             &rule(
@@ -2367,5 +2368,157 @@ mod as_expressions {
             .edge("voids", "b", "down")
         };
         assert_eq!(parity(down, "opening", BEAMS, ignored), (0, 1));
+    }
+}
+
+mod generated {
+    use super::*;
+    use proptest::prelude::*;
+
+    /// A hole: its place along the beam and across it, its outline, its
+    /// kind, and how it is hosted (voiding the beam, nowhere, or with a body
+    /// the set cannot bound).
+    type Hole = (u8, i8, u8, bool, u8);
+
+    fn hole_of() -> impl Strategy<Value = Hole> {
+        (0u8..66, -3i8..4, 0u8..4, any::<bool>(), 0u8..6)
+    }
+
+    /// Optional lengths in centimetres.
+    fn centimetres(maximum: u8) -> impl Strategy<Value = Option<u8>> {
+        proptest::option::of(0u8..maximum)
+    }
+
+    fn placed(model: Model, index: usize, (x, z, outline, window, hosted): Hole) -> Model {
+        let local = format!("h{index}");
+        let (x, z) = (f64::from(x) * 0.1 - 0.2, f64::from(z) * 0.05);
+        let (family, dimensions): (&str, &[(&str, f64)]) = match outline {
+            0 => ("rectangle", &[("XDim", 0.2), ("YDim", 0.1)]),
+            1 => ("circle", &[("Radius", 0.05)]),
+            2 => ("rectangle", &[("XDim", 0.6), ("YDim", 0.25)]),
+            _ => ("circle", &[("Radius", 0.01)]),
+        };
+        let model = extrusion(
+            model,
+            &local,
+            if window { "window" } else { "opening" },
+            [x, -0.2, z],
+            [[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]],
+            0.4,
+            family,
+            dimensions,
+        );
+        match hosted {
+            // Reaching no host.
+            0 => model,
+            // A body the set cannot bound.
+            1 => model
+                .text(&local, BODY_SET, "Kind", "mesh")
+                .edge("voids", "b", &local),
+            _ => model.edge("voids", "b", &local),
+        }
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(96))]
+
+        /// Holes anywhere in and beside the beam, hosted or not, judged by
+        /// random margins, zones, dimension rows and supports: the template
+        /// holds to the reference on every one.
+        #[test]
+        fn generated_holes_hold_parity(
+            holes in proptest::collection::vec(hole_of(), 1..5),
+            columns in proptest::collection::vec((0u8..61, any::<bool>()), 0..3),
+            end in centimetres(60),
+            edge in centimetres(15),
+            far in proptest::option::of((0u8..20, 0u8..3)),
+            web in any::<bool>(),
+            spacing in centimetres(40),
+            allowed in any::<bool>(),
+            dimensions in proptest::option::of((0u8..60, 0u8..40, any::<bool>())),
+            minimum in proptest::option::of(0u8..3),
+            supports in proptest::option::of((0u8..3, any::<bool>())),
+        ) {
+            let mut model = beam();
+            for (index, hole) in holes.iter().enumerate() {
+                model = placed(model, index, *hole);
+            }
+            for (index, (x, connected)) in columns.iter().enumerate() {
+                let local = format!("c{index}");
+                model = square(model, &local, f64::from(*x) * 0.1);
+                if *connected {
+                    model = model.edge("connects", "b", &local);
+                }
+            }
+            let cm = |value: u8| metres(f64::from(value) / 100.0);
+            let mut extra = Vec::new();
+            if let Some(end) = end {
+                extra.push(("end_distance", cm(end)));
+            }
+            if let Some(edge) = edge {
+                extra.push(("edge_distance", cm(edge)));
+            }
+            if let Some((maximum, edges)) = far {
+                extra.push(("edge_distance_maximum", cm(maximum)));
+                extra.push(("maximum_edges", string(["top", "bottom", "both"][usize::from(edges)])));
+            }
+            if web {
+                extra.push(("zone", string("web")));
+            }
+            if let Some(spacing) = spacing {
+                extra.push(("opening_spacing", cm(spacing)));
+            }
+            if allowed {
+                extra.push(("zones", zones()));
+            }
+            if let Some((side, apart, overlap)) = dimensions {
+                extra.push((
+                    "dimensions",
+                    table(vec![
+                        vec![
+                            ("source", selector(kind("opening"))),
+                            ("edge", string("side")),
+                            ("minimum", cm(side)),
+                        ],
+                        vec![
+                            ("name", string("apart")),
+                            ("source", selector(kind("window"))),
+                            ("target", selector(kind("opening"))),
+                            ("direction", string("length")),
+                            ("minimum", cm(apart)),
+                            ("overlap", ParameterValue::Boolean { value: overlap }),
+                        ],
+                    ]),
+                ));
+            }
+            if let Some(minimum) = minimum {
+                extra.push(("minimum_opening_area", square_metres(f64::from(minimum) * 0.01)));
+            }
+            if let Some((requirement, by_path)) = supports {
+                if by_path {
+                    extra.push(("support_path", strings(&["connects:either"])));
+                } else {
+                    extra.push(("support_gap", cm(5)));
+                }
+                extra.push(("support_selector", selector(kind("column"))));
+                match requirement {
+                    0 => extra.push(("support_distance", cm(50))),
+                    1 => extra.push(("support_clearance", cm(10))),
+                    _ => {
+                        extra.push(("support_distance", cm(30)));
+                        extra.push(("support_clearance", cm(5)));
+                    }
+                }
+            }
+            let mut parameters = vec![
+                ("host_path", strings(&["voids:backward"])),
+                ("host_selector", selector(kind("beam"))),
+                ("length_axis", string("extrusion")),
+                ("height_axis", string("profile-y")),
+            ];
+            parameters.extend(extra);
+            // The held evaluation compares the template with the reference.
+            model.evaluate(&HELD, &rule(ID, Selector::All, parameters));
+        }
     }
 }

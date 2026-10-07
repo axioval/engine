@@ -25665,7 +25665,939 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "grades": true,
+        "name": "opening-zone",
+        "declaration": [
+          {
+            "kind": "arguments",
+            "when": [],
+            "value": "zone_checks;host_path=@host_path;host_selector=@host_selector;length_axis=@length_axis;height_axis=@height_axis;end_distance=@end_distance;edge_distance=@edge_distance;edge_distance_maximum=@edge_distance_maximum;maximum_edges=@maximum_edges;zone=@zone;opening_spacing=@opening_spacing;zones=@zones;minimum_opening_area=@minimum_opening_area;dimensions=@dimensions;support_path=@support_path;support_selector=@support_selector;support_gap=@support_gap;support_distance=@support_distance;support_distance_ratio=@support_distance_ratio;support_distance_reference=@support_distance_reference;support_clearance=@support_clearance;openings=@selection"
+          }
+        ],
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "judged",
+                "expression": {
+                  "kind": "literal",
+                  "value": {
+                    "type": "boolean",
+                    "value": true
+                  }
+                }
+              }
+            ],
+            "decision": {
+              "kind": "holds",
+              "value": "judged"
+            },
+            "fail": "",
+            "undecided": "",
+            "checks": [
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {},
+                  "list": "zone_checks;host_path=@host_path;host_selector=@host_selector;length_axis=@length_axis;height_axis=@height_axis;end_distance=@end_distance;edge_distance=@edge_distance;edge_distance_maximum=@edge_distance_maximum;maximum_edges=@maximum_edges;zone=@zone;opening_spacing=@opening_spacing;zones=@zones;minimum_opening_area=@minimum_opening_area;dimensions=@dimensions;support_path=@support_path;support_selector=@support_selector;support_gap=@support_gap;support_distance=@support_distance;support_distance_ratio=@support_distance_ratio;support_distance_reference=@support_distance_reference;support_clearance=@support_clearance;openings=@selection",
+                  "refused": "{why}",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "judge": {
+                        "kind": "truth",
+                        "value": "placed",
+                        "finding": false
+                      },
+                      "fail": "",
+                      "undecided": "{why}",
+                      "related": "related"
+                    },
+                    {
+                      "kind": "test",
+                      "judge": {
+                        "kind": "truth",
+                        "value": "inside",
+                        "finding": false
+                      },
+                      "fail": "opening lies partly outside its host {host}: {outside}",
+                      "undecided": "{why}",
+                      "related": "related"
+                    },
+                    {
+                      "kind": "test",
+                      "applies": {
+                        "when": [
+                          "end_distance"
+                        ]
+                      },
+                      "judge": {
+                        "kind": "range",
+                        "value": "end",
+                        "unit": "length",
+                        "atLeast": [
+                          {
+                            "name": "required",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "parameter",
+                                    "name": "end_distance"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "fixed",
+                          "value": 1e-9
+                        },
+                        "grade": true,
+                        "null": {
+                          "kind": "skip"
+                        },
+                        "unmeasured": "{why}"
+                      },
+                      "fail": "opening is {end_shown} from an end of its host {host}; {end_distance:length} required",
+                      "undecided": "its distance from an end of its host {host}'s outline may be under {end_distance:length}: where it lies in the host's section is known only within bounds",
+                      "related": "related"
+                    },
+                    {
+                      "kind": "test",
+                      "applies": {
+                        "condition": {
+                          "kind": "not",
+                          "condition": {
+                            "kind": "all",
+                            "conditions": [
+                              {
+                                "kind": "not",
+                                "condition": {
+                                  "kind": "stated",
+                                  "parameter": "edge_distance"
+                                }
+                              },
+                              {
+                                "kind": "not",
+                                "condition": {
+                                  "kind": "equals",
+                                  "parameter": "zone",
+                                  "value": "web"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      "judge": {
+                        "kind": "range",
+                        "value": "edge",
+                        "unit": "length",
+                        "atLeast": [
+                          {
+                            "name": "required",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "parameter",
+                                    "name": "edge_distance"
+                                  }
+                                }
+                              },
+                              {
+                                "bound": {
+                                  "kind": "literal",
+                                  "value": 0.0
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "fixed",
+                          "value": 1e-9
+                        },
+                        "grade": true,
+                        "null": {
+                          "kind": "skip"
+                        },
+                        "unmeasured": "{why}"
+                      },
+                      "fail": "opening {edge_words} of its host {host}; {required} clear required",
+                      "undecided": "its distance from an edge of its host {host}'s outline may be under {required}: where it lies in the host's section is known only within bounds",
+                      "related": "related"
+                    },
+                    {
+                      "kind": "test",
+                      "applies": {
+                        "when": [
+                          "edge_distance_maximum"
+                        ]
+                      },
+                      "judge": {
+                        "kind": "range",
+                        "value": "bottom",
+                        "unit": "length",
+                        "atMost": [
+                          {
+                            "name": "maximum",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "parameter",
+                                    "name": "edge_distance_maximum"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "fixed",
+                          "value": 1e-9
+                        },
+                        "grade": true,
+                        "null": {
+                          "kind": "skip"
+                        },
+                        "unmeasured": "{why}"
+                      },
+                      "fail": "opening is {bottom_shown} from {bottom_name} of its host {host}; at most {edge_distance_maximum:length} allowed",
+                      "undecided": "",
+                      "straddled": {
+                        "judge": {
+                          "kind": "truth",
+                          "value": "placed",
+                          "finding": false
+                        },
+                        "fail": "",
+                        "undecided": "{why}",
+                        "related": "related"
+                      },
+                      "related": "related"
+                    },
+                    {
+                      "kind": "test",
+                      "applies": {
+                        "when": [
+                          "edge_distance_maximum"
+                        ]
+                      },
+                      "judge": {
+                        "kind": "range",
+                        "value": "top",
+                        "unit": "length",
+                        "atMost": [
+                          {
+                            "name": "maximum",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "parameter",
+                                    "name": "edge_distance_maximum"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "fixed",
+                          "value": 1e-9
+                        },
+                        "grade": true,
+                        "null": {
+                          "kind": "skip"
+                        },
+                        "unmeasured": "{why}"
+                      },
+                      "fail": "opening is {top_shown} from {top_name} of its host {host}; at most {edge_distance_maximum:length} allowed",
+                      "undecided": "",
+                      "straddled": {
+                        "judge": {
+                          "kind": "truth",
+                          "value": "placed",
+                          "finding": false
+                        },
+                        "fail": "",
+                        "undecided": "{why}",
+                        "related": "related"
+                      },
+                      "related": "related"
+                    },
+                    {
+                      "kind": "test",
+                      "applies": {
+                        "when": [
+                          "edge_distance_maximum"
+                        ]
+                      },
+                      "judge": {
+                        "kind": "truth",
+                        "value": "far_open",
+                        "finding": true
+                      },
+                      "fail": "",
+                      "undecided": "{why}",
+                      "related": "related"
+                    },
+                    {
+                      "kind": "test",
+                      "judge": {
+                        "kind": "range",
+                        "value": "zone",
+                        "unit": "length",
+                        "atLeast": [
+                          {
+                            "name": "needed",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "value",
+                                    "name": "needed"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "fixed",
+                          "value": 1e-9
+                        },
+                        "grade": true,
+                        "null": {
+                          "kind": "skip"
+                        },
+                        "unmeasured": "{why}"
+                      },
+                      "fail": "{words}",
+                      "undecided": "{words}",
+                      "related": "related"
+                    },
+                    {
+                      "kind": "test",
+                      "judge": {
+                        "kind": "range",
+                        "value": "distance",
+                        "unit": "length",
+                        "atLeast": [
+                          {
+                            "name": "minimum",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "value",
+                                    "name": "minimum"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "atMost": [
+                          {
+                            "name": "maximum",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "value",
+                                    "name": "maximum"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "stated",
+                          "times": 1.0,
+                          "value": "slack"
+                        },
+                        "grade": true,
+                        "null": {
+                          "kind": "skip"
+                        },
+                        "unmeasured": "{why}"
+                      },
+                      "fail": "{words}; {required} ({label})",
+                      "undecided": "{open}",
+                      "related": "related"
+                    },
+                    {
+                      "kind": "test",
+                      "judge": {
+                        "kind": "truth",
+                        "value": "fails",
+                        "finding": true
+                      },
+                      "fail": "{message}",
+                      "undecided": "{why}",
+                      "related": "related"
+                    },
+                    {
+                      "kind": "test",
+                      "applies": {
+                        "when": [
+                          "opening_spacing"
+                        ]
+                      },
+                      "judge": {
+                        "kind": "range",
+                        "value": "spacing",
+                        "unit": "length",
+                        "atLeast": [
+                          {
+                            "name": "required",
+                            "options": [
+                              {
+                                "bound": {
+                                  "kind": "operand",
+                                  "value": {
+                                    "kind": "parameter",
+                                    "name": "opening_spacing"
+                                  }
+                                }
+                              }
+                            ],
+                            "words": ""
+                          }
+                        ],
+                        "allowance": {
+                          "kind": "fixed",
+                          "value": 1e-9
+                        },
+                        "grade": true,
+                        "null": {
+                          "kind": "skip"
+                        },
+                        "unmeasured": "{why}"
+                      },
+                      "fail": "opening is {spacing} clear of another opening in its host {host}; {opening_spacing:length} required",
+                      "undecided": "",
+                      "related": "related"
+                    }
+                  ],
+                  "reason": "reason"
+                },
+                "fail": "",
+                "undecided": ""
+              }
+            ]
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "aggregate",
+                  "function": "none",
+                  "over": {
+                    "kind": "measured",
+                    "name": "zone_checks;host_path=@host_path;host_selector=@host_selector;length_axis=@length_axis;height_axis=@height_axis;end_distance=@end_distance;edge_distance=@edge_distance;edge_distance_maximum=@edge_distance_maximum;maximum_edges=@maximum_edges;zone=@zone;opening_spacing=@opening_spacing;zones=@zones;minimum_opening_area=@minimum_opening_area;dimensions=@dimensions;support_path=@support_path;support_selector=@support_selector;support_gap=@support_gap;support_distance=@support_distance;support_distance_ratio=@support_distance_ratio;support_distance_reference=@support_distance_reference;support_clearance=@support_clearance;openings=@selection"
+                  },
+                  "value": {
+                    "kind": "not",
+                    "operand": {
+                      "kind": "and",
+                      "operands": [
+                        {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "placed"
+                        },
+                        {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "inside"
+                        },
+                        {
+                          "kind": "compare",
+                          "operator": "greaterThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "end"
+                          },
+                          "right": {
+                            "kind": "parameter",
+                            "name": "end_distance"
+                          }
+                        },
+                        {
+                          "kind": "compare",
+                          "operator": "greaterThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "edge"
+                          },
+                          "right": {
+                            "kind": "parameter",
+                            "name": "edge_distance"
+                          }
+                        },
+                        {
+                          "kind": "compare",
+                          "operator": "lessThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "bottom"
+                          },
+                          "right": {
+                            "kind": "parameter",
+                            "name": "edge_distance_maximum"
+                          }
+                        },
+                        {
+                          "kind": "compare",
+                          "operator": "lessThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "top"
+                          },
+                          "right": {
+                            "kind": "parameter",
+                            "name": "edge_distance_maximum"
+                          }
+                        },
+                        {
+                          "kind": "not",
+                          "operand": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "far_open"
+                          }
+                        },
+                        {
+                          "kind": "compare",
+                          "operator": "greaterThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "zone"
+                          },
+                          "right": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "needed"
+                          }
+                        },
+                        {
+                          "kind": "compare",
+                          "operator": "greaterThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "distance"
+                          },
+                          "right": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "minimum"
+                          }
+                        },
+                        {
+                          "kind": "compare",
+                          "operator": "lessThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "distance"
+                          },
+                          "right": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "maximum"
+                          }
+                        },
+                        {
+                          "kind": "not",
+                          "operand": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "fails"
+                          }
+                        },
+                        {
+                          "kind": "compare",
+                          "operator": "greaterThanOrEquals",
+                          "left": {
+                            "kind": "property",
+                            "propertySet": "axioval:member",
+                            "property": "spacing"
+                          },
+                          "right": {
+                            "kind": "parameter",
+                            "name": "opening_spacing"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "label": "no item fails"
+                },
+                {
+                  "kind": "literal",
+                  "value": {
+                    "type": "boolean",
+                    "value": true
+                  }
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.aggregate",
+                      "label": "no item fails",
+                      "fields": {
+                        "function": "none"
+                      },
+                      "inputs": {
+                        "over": {
+                          "block": {
+                            "type": "members.zone_checks",
+                            "fields": {
+                              "dimensions": "@dimensions",
+                              "edge_distance": "@edge_distance",
+                              "edge_distance_maximum": "@edge_distance_maximum",
+                              "end_distance": "@end_distance",
+                              "height_axis": "@height_axis",
+                              "host_path": "@host_path",
+                              "host_selector": "@host_selector",
+                              "length_axis": "@length_axis",
+                              "maximum_edges": "@maximum_edges",
+                              "minimum_opening_area": "@minimum_opening_area",
+                              "opening_spacing": "@opening_spacing",
+                              "openings": "@selection",
+                              "support_clearance": "@support_clearance",
+                              "support_distance": "@support_distance",
+                              "support_distance_ratio": "@support_distance_ratio",
+                              "support_distance_reference": "@support_distance_reference",
+                              "support_gap": "@support_gap",
+                              "support_path": "@support_path",
+                              "support_selector": "@support_selector",
+                              "zone": "@zone",
+                              "zones": "@zones"
+                            }
+                          }
+                        },
+                        "value": {
+                          "block": {
+                            "type": "expression.not",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.and",
+                                  "inputs": {
+                                    "operands": {
+                                      "blocks": [
+                                        {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "placed",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "inside",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "greaterThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "end",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.parameter",
+                                                "fields": {
+                                                  "name": "end_distance"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "greaterThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "edge",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.parameter",
+                                                "fields": {
+                                                  "name": "edge_distance"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "lessThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "bottom",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.parameter",
+                                                "fields": {
+                                                  "name": "edge_distance_maximum"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "lessThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "top",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.parameter",
+                                                "fields": {
+                                                  "name": "edge_distance_maximum"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.not",
+                                          "inputs": {
+                                            "operand": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "far_open",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "greaterThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "zone",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "needed",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "greaterThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "distance",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "minimum",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "lessThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "distance",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "maximum",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.not",
+                                          "inputs": {
+                                            "operand": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "fails",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "type": "expression.compare",
+                                          "fields": {
+                                            "operator": "greaterThanOrEquals"
+                                          },
+                                          "inputs": {
+                                            "left": {
+                                              "block": {
+                                                "type": "expression.property",
+                                                "fields": {
+                                                  "property": "spacing",
+                                                  "propertySet": "axioval:member"
+                                                }
+                                              }
+                                            },
+                                            "right": {
+                                              "block": {
+                                                "type": "expression.parameter",
+                                                "fields": {
+                                                  "name": "opening_spacing"
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.literal",
+                      "fields": {
+                        "value": {
+                          "type": "boolean",
+                          "value": true
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.parking-bay",
@@ -86544,6 +87476,1273 @@
             {
               "language": "de",
               "text": "Jeder Raum des Schachts."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "zone_checks",
+      "parameters": [
+        {
+          "key": "host_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from the opening to its hosts."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte von der Öffnung zu ihren Wirten."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "host_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects that are hosts; any object the path reaches without it."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, die Wirte sind; ohne Angabe jedes erreichte Objekt."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "length_axis",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "extrusion",
+              "profile-x",
+              "profile-y"
+            ]
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The host's axis along its length."
+            },
+            {
+              "language": "de",
+              "text": "Die Achse des Wirts entlang seiner Länge."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "height_axis",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "extrusion",
+              "profile-x",
+              "profile-y"
+            ]
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The host's axis along its height."
+            },
+            {
+              "language": "de",
+              "text": "Die Achse des Wirts entlang seiner Höhe."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "end_distance",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The least clear distance from the host's ends, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Der kleinste lichte Abstand zu den Enden des Wirts, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "edge_distance",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The least clear distance from the host's edges (or flanges), in metres."
+            },
+            {
+              "language": "de",
+              "text": "Der kleinste lichte Abstand zu den Rändern (oder Flanschen) des Wirts, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "edge_distance_maximum",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The greatest distance from the host's bottom and top edges, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Der größte Abstand zum unteren und oberen Rand des Wirts, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "maximum_edges",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "top",
+              "bottom",
+              "both"
+            ]
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Which edges `edge_distance_maximum` bounds the distance from."
+            },
+            {
+              "language": "de",
+              "text": "Von welchen Rändern `edge_distance_maximum` den Abstand begrenzt."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "zone",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "section",
+              "web"
+            ]
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether edge distances are measured to the host's edges or to its flanges (`web`, across `profile-y`)."
+            },
+            {
+              "language": "de",
+              "text": "Ob Randabstände zu den Rändern des Wirts oder zu seinen Flanschen (`web`, quer zu `profile-y`) gemessen werden."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "opening_spacing",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The least clear distance to another opening of the host, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Der kleinste lichte Abstand zu einer anderen Öffnung des Wirts, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "zones",
+          "kind": {
+            "type": "table"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's allowed zones: per row the insets from the ends, the bottom and the top."
+            },
+            {
+              "language": "de",
+              "text": "Die erlaubten Zonen der Regel: je Zeile die Abstände von den Enden, von unten und von oben."
+            }
+          ],
+          "references": "table"
+        },
+        {
+          "key": "minimum_opening_area",
+          "kind": {
+            "type": "area",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Openings smaller than this many square metres are not judged."
+            },
+            {
+              "language": "de",
+              "text": "Öffnungen kleiner als so viele Quadratmeter werden nicht geprüft."
+            }
+          ],
+          "references": "area"
+        },
+        {
+          "key": "dimensions",
+          "kind": {
+            "type": "table"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The rule's dimensioning rows: the distance from an opening to another opening or to an edge of the host, and its bounds."
+            },
+            {
+              "language": "de",
+              "text": "Die Bemaßungszeilen der Regel: der Abstand einer Öffnung zu einer anderen Öffnung oder zu einem Rand des Wirts, und seine Grenzen."
+            }
+          ],
+          "references": "table"
+        },
+        {
+          "key": "support_path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship steps from the host to its supports."
+            },
+            {
+              "language": "de",
+              "text": "Die Beziehungsschritte vom Wirt zu seinen Auflagern."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "support_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The objects that may be supports; any object without it."
+            },
+            {
+              "language": "de",
+              "text": "Die Objekte, die Auflager sein können; ohne Angabe jedes Objekt."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "support_gap",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How near the host an object must come in space to be a support, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Wie nah ein Objekt dem Wirt im Raum kommen muss, um ein Auflager zu sein, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "support_distance",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The least distance along the host from each support, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Der kleinste Abstand entlang des Wirts zu jedem Auflager, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "support_distance_ratio",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The least distance from each support as a share of the host's span or depth."
+            },
+            {
+              "language": "de",
+              "text": "Der kleinste Abstand zu jedem Auflager als Anteil der Spannweite oder Höhe des Wirts."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "support_distance_reference",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "span",
+              "depth"
+            ]
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "What `support_distance_ratio` is a share of."
+            },
+            {
+              "language": "de",
+              "text": "Wovon `support_distance_ratio` ein Anteil ist."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "support_clearance",
+          "kind": {
+            "type": "length",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The least clearance from each support's footprint in the host's face, in metres."
+            },
+            {
+              "language": "de",
+              "text": "Der kleinste lichte Abstand zur Ansichtsfläche jedes Auflagers in der Ansicht des Wirts, in Metern."
+            }
+          ],
+          "references": "length"
+        },
+        {
+          "key": "openings",
+          "kind": {
+            "type": "objects"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The openings the rule judges, each the others' neighbour; any object without it."
+            },
+            {
+              "language": "de",
+              "text": "Die Öffnungen, die die Regel prüft, jede Nachbar der anderen; ohne Angabe jedes Objekt."
+            }
+          ],
+          "references": "selector"
+        }
+      ],
+      "services": [
+        "relationship-selection",
+        "body-facts",
+        "proximity"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "whether a reached object is a host is undecided",
+        "the opening or its host is no straight extrusion the body set bounds",
+        "its area may be below the minimum",
+        "it may lie in a zone, or a dimension or support may be missed"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Zone checks"
+        },
+        {
+          "language": "de",
+          "text": "Prüfungen der Zone"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "What `opening-zone` checks of the opening in each host its path reaches, in its order, host by host: the placement (within the host's face and outline, its clear distances from the ends and edges and from the bottom and top edges), the allowed zone it misses least, each row of `dimensions` whose `source` selects it, each requirement on the host's supports, and the nearest other opening of the host closer than `opening_spacing`. A distance measured to a free outline from the box the opening may lie in is known only from below."
+        },
+        {
+          "language": "de",
+          "text": "Was `opening-zone` an der Öffnung in jedem Wirt prüft, den ihr Pfad erreicht, in seiner Reihenfolge, Wirt für Wirt: die Lage (innerhalb der Ansicht und des Umrisses des Wirts, ihre lichten Abstände zu den Enden und Rändern und zum unteren und oberen Rand), die am wenigsten verfehlte erlaubte Zone, jede Zeile der `dimensions`, deren `source` sie wählt, jede Anforderung an die Auflager des Wirts, und die nächste andere Öffnung des Wirts, die näher ist als `opening_spacing`. Ein Abstand zu einem freien Umriss aus dem Quader, in dem die Öffnung liegen kann, ist nur von unten bekannt."
+        }
+      ],
+      "fields": [
+        {
+          "name": "check",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Check"
+            },
+            {
+              "language": "de",
+              "text": "Prüfung"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "What the item checks: `placement`, `zones`, `dimension`, `support` or `spacing`."
+            },
+            {
+              "language": "de",
+              "text": "Was das Element prüft: `placement`, `zones`, `dimension`, `support` oder `spacing`."
+            }
+          ]
+        },
+        {
+          "name": "placed",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Placed"
+            },
+            {
+              "language": "de",
+              "text": "Platziert"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the opening is placed in the host; undecided where it cannot be."
+            },
+            {
+              "language": "de",
+              "text": "Ob die Öffnung im Wirt platziert ist; unentschieden, wo sie es nicht sein kann."
+            }
+          ]
+        },
+        {
+          "name": "host",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Host"
+            },
+            {
+              "language": "de",
+              "text": "Wirt"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The host's name."
+            },
+            {
+              "language": "de",
+              "text": "Der Name des Wirts."
+            }
+          ]
+        },
+        {
+          "name": "inside",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Inside"
+            },
+            {
+              "language": "de",
+              "text": "Innerhalb"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the opening lies within the host's face and outline."
+            },
+            {
+              "language": "de",
+              "text": "Ob die Öffnung innerhalb der Ansicht und des Umrisses des Wirts liegt."
+            }
+          ]
+        },
+        {
+          "name": "outside",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Outside"
+            },
+            {
+              "language": "de",
+              "text": "Außerhalb"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Where it lies outside, as a finding words it."
+            },
+            {
+              "language": "de",
+              "text": "Wo sie außerhalb liegt, wie ein Befund es formuliert."
+            }
+          ]
+        },
+        {
+          "name": "end",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "End distance"
+            },
+            {
+              "language": "de",
+              "text": "Endabstand"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The clear distance from the nearer end of the host."
+            },
+            {
+              "language": "de",
+              "text": "Der lichte Abstand zum näheren Ende des Wirts."
+            }
+          ]
+        },
+        {
+          "name": "end_shown",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "End distance shown"
+            },
+            {
+              "language": "de",
+              "text": "Endabstand gezeigt"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The end distance as a finding shows it."
+            },
+            {
+              "language": "de",
+              "text": "Der Endabstand, wie ein Befund ihn zeigt."
+            }
+          ]
+        },
+        {
+          "name": "edge",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Edge distance"
+            },
+            {
+              "language": "de",
+              "text": "Randabstand"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The clear distance from the nearer edge (or flange), negative where it reaches into a flange."
+            },
+            {
+              "language": "de",
+              "text": "Der lichte Abstand zum näheren Rand (oder Flansch), negativ, wo sie in einen Flansch reicht."
+            }
+          ]
+        },
+        {
+          "name": "edge_words",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Edge words"
+            },
+            {
+              "language": "de",
+              "text": "Randworte"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The edge distance as a finding words it."
+            },
+            {
+              "language": "de",
+              "text": "Der Randabstand, wie ein Befund ihn formuliert."
+            }
+          ]
+        },
+        {
+          "name": "bottom",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Bottom distance"
+            },
+            {
+              "language": "de",
+              "text": "Abstand unten"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The distance from the host's bottom edge (or lower flange), where the rule bounds it."
+            },
+            {
+              "language": "de",
+              "text": "Der Abstand zum unteren Rand (oder unteren Flansch) des Wirts, wo die Regel ihn begrenzt."
+            }
+          ]
+        },
+        {
+          "name": "bottom_shown",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Bottom distance shown"
+            },
+            {
+              "language": "de",
+              "text": "Abstand unten gezeigt"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The bottom distance as a finding shows it."
+            },
+            {
+              "language": "de",
+              "text": "Der untere Abstand, wie ein Befund ihn zeigt."
+            }
+          ]
+        },
+        {
+          "name": "bottom_name",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Bottom edge"
+            },
+            {
+              "language": "de",
+              "text": "Unterer Rand"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "What the bottom distance is measured to."
+            },
+            {
+              "language": "de",
+              "text": "Wozu der untere Abstand gemessen wird."
+            }
+          ]
+        },
+        {
+          "name": "top",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Top distance"
+            },
+            {
+              "language": "de",
+              "text": "Abstand oben"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The distance from the host's top edge (or upper flange), where the rule bounds it."
+            },
+            {
+              "language": "de",
+              "text": "Der Abstand zum oberen Rand (oder oberen Flansch) des Wirts, wo die Regel ihn begrenzt."
+            }
+          ]
+        },
+        {
+          "name": "top_shown",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Top distance shown"
+            },
+            {
+              "language": "de",
+              "text": "Abstand oben gezeigt"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The top distance as a finding shows it."
+            },
+            {
+              "language": "de",
+              "text": "Der obere Abstand, wie ein Befund ihn zeigt."
+            }
+          ]
+        },
+        {
+          "name": "top_name",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Top edge"
+            },
+            {
+              "language": "de",
+              "text": "Oberer Rand"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "What the top distance is measured to."
+            },
+            {
+              "language": "de",
+              "text": "Wozu der obere Abstand gemessen wird."
+            }
+          ]
+        },
+        {
+          "name": "far_open",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Far edges open"
+            },
+            {
+              "language": "de",
+              "text": "Ferne Ränder offen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Undecided where a distance known only from below may exceed `edge_distance_maximum`, naming every such edge; false otherwise."
+            },
+            {
+              "language": "de",
+              "text": "Unentschieden, wo ein nur von unten bekannter Abstand `edge_distance_maximum` überschreiten kann, mit jedem solchen Rand; sonst falsch."
+            }
+          ]
+        },
+        {
+          "name": "zone",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Clear distance"
+            },
+            {
+              "language": "de",
+              "text": "Lichter Abstand"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The clear distance from the side the opening misses most; `null` where it lies in a zone."
+            },
+            {
+              "language": "de",
+              "text": "Der lichte Abstand zur am meisten verfehlten Seite; `null`, wo sie in einer Zone liegt."
+            }
+          ]
+        },
+        {
+          "name": "needed",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Inset"
+            },
+            {
+              "language": "de",
+              "text": "Abstand"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The inset that side needs."
+            },
+            {
+              "language": "de",
+              "text": "Der Abstand, den diese Seite braucht."
+            }
+          ]
+        },
+        {
+          "name": "words",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Words"
+            },
+            {
+              "language": "de",
+              "text": "Worte"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The finding as the capability words it."
+            },
+            {
+              "language": "de",
+              "text": "Der Befund, wie die Fähigkeit ihn formuliert."
+            }
+          ]
+        },
+        {
+          "name": "distance",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Distance"
+            },
+            {
+              "language": "de",
+              "text": "Abstand"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The distance, from below where a target may be nearer or the outline is known only within bounds."
+            },
+            {
+              "language": "de",
+              "text": "Der Abstand, von unten, wo ein Ziel näher sein kann oder der Umriss nur in Grenzen bekannt ist."
+            }
+          ]
+        },
+        {
+          "name": "minimum",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Minimum"
+            },
+            {
+              "language": "de",
+              "text": "Minimum"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The least distance the row allows; `null` for none."
+            },
+            {
+              "language": "de",
+              "text": "Der kleinste Abstand, den die Zeile erlaubt; `null` für keinen."
+            }
+          ]
+        },
+        {
+          "name": "maximum",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Maximum"
+            },
+            {
+              "language": "de",
+              "text": "Maximum"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The greatest distance the row allows; `null` for none."
+            },
+            {
+              "language": "de",
+              "text": "Der größte Abstand, den die Zeile erlaubt; `null` für keinen."
+            }
+          ]
+        },
+        {
+          "name": "slack",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Tolerance"
+            },
+            {
+              "language": "de",
+              "text": "Toleranz"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The row's tolerance with the rounding of placements."
+            },
+            {
+              "language": "de",
+              "text": "Die Toleranz der Zeile mit der Rundung der Lagen."
+            }
+          ]
+        },
+        {
+          "name": "required",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Required"
+            },
+            {
+              "language": "de",
+              "text": "Gefordert"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "What the row requires, as a finding words it."
+            },
+            {
+              "language": "de",
+              "text": "Was die Zeile fordert, wie ein Befund es formuliert."
+            }
+          ]
+        },
+        {
+          "name": "label",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Row"
+            },
+            {
+              "language": "de",
+              "text": "Zeile"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The row's name."
+            },
+            {
+              "language": "de",
+              "text": "Der Name der Zeile."
+            }
+          ]
+        },
+        {
+          "name": "open",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Doubt"
+            },
+            {
+              "language": "de",
+              "text": "Zweifel"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Why the row may be missed, where it is not decided."
+            },
+            {
+              "language": "de",
+              "text": "Warum die Zeile verfehlt sein kann, wo sie nicht entschieden ist."
+            }
+          ]
+        },
+        {
+          "name": "fails",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Fails"
+            },
+            {
+              "language": "de",
+              "text": "Verfehlt"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether a support surely misses the requirement; undecided where one may."
+            },
+            {
+              "language": "de",
+              "text": "Ob ein Auflager die Anforderung sicher verfehlt; unentschieden, wo eines es kann."
+            }
+          ]
+        },
+        {
+          "name": "message",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Message"
+            },
+            {
+              "language": "de",
+              "text": "Meldung"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The finding as the capability words it."
+            },
+            {
+              "language": "de",
+              "text": "Der Befund, wie die Fähigkeit ihn formuliert."
+            }
+          ]
+        },
+        {
+          "name": "spacing",
+          "kind": {
+            "type": "number",
+            "dimension": "length"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Spacing"
+            },
+            {
+              "language": "de",
+              "text": "Abstand zu Öffnungen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The least clear distance to another opening of the host surely closer than `opening_spacing`; undecided where one may be."
+            },
+            {
+              "language": "de",
+              "text": "Der kleinste lichte Abstand zu einer anderen Öffnung des Wirts, die sicher näher ist als `opening_spacing`; unentschieden, wo eine es sein kann."
+            }
+          ]
+        },
+        {
+          "name": "related",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Related"
+            },
+            {
+              "language": "de",
+              "text": "Bezogen"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "What a finding on the item relates: the host, and the objects it is measured to."
+            },
+            {
+              "language": "de",
+              "text": "Worauf sich ein Befund zum Element bezieht: den Wirt und die Objekte, zu denen gemessen wurde."
+            }
+          ]
+        },
+        {
+          "name": "reason",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Reason"
+            },
+            {
+              "language": "de",
+              "text": "Grund"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Why the item is undecided where not for incomplete evidence, as a report writes it (`missing_service`)."
+            },
+            {
+              "language": "de",
+              "text": "Warum das Element unentschieden ist, wo nicht wegen unvollständiger Belege, wie ein Bericht es schreibt (`missing_service`)."
             }
           ]
         }

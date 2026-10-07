@@ -103,6 +103,9 @@ enum Quantity<'a> {
     /// The summed footprints of the members the object reaches, as
     /// `plan-area` sums them with `member_selector`.
     MemberPlanArea {
+        // The members as the reference walks them; the template reads them
+        // from its list's own selection.
+        #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
         members: &'a Selector,
         traversal: Option<Traversal>,
     },

@@ -30,16 +30,15 @@ use axioval_engine::{
     ArgumentsKey, CompiledRule, MeasuredMember, MeasuredMemo, MeasuredProvider, Measurement,
     MemberValue, PropertyResolutionError, RuleContext,
 };
-use axioval_ir::contract::{ParameterValue, Selector};
-use axioval_ir::measured::{MeasuredArgument, MeasuredCall};
+
+use axioval_ir::measured::MeasuredCall;
 use axioval_ir::{Evidence, ObjectId};
 
 use super::defaults::DoorDefaults;
 use super::{
     Limit, Measuring, Quantity, Selected, declared, limits, quantity, selected, sills, snapped,
 };
-use crate::counts::Population;
-use crate::measured_kinds::{interval, resolution_error, selection};
+use crate::measured_kinds::{interval, resolution_error};
 use crate::support::{Parameters, Unavailable, invalid};
 
 const LIMIT_ROW: &str = "limit_row";
@@ -52,46 +51,15 @@ pub(crate) struct LimitMeasures;
 /// door-type defaults read: what every object of the run reads alike.
 struct Prepared {
     rule: CompiledRule,
-    limits: Vec<Limit>,
+    limits: Arc<Vec<Limit>>,
     defaults: Option<Arc<DoorDefaults>>,
+    /// The arguments an object's row depends on, kept once so each
+    /// object's row is keyed without copying the rows.
+    rows: ArgumentsKey,
 }
 
 #[derive(Hash, PartialEq, Eq)]
 struct PreparedKey(ArgumentsKey);
-
-/// The argument `argument` as the rule parameter it was bound from. A
-/// selection stands in as every object: only its presence is read from the
-/// rule, its objects from the call.
-fn parameter(argument: &MeasuredArgument) -> Option<ParameterValue> {
-    Some(match argument {
-        MeasuredArgument::Table(rows) => ParameterValue::Table {
-            value: rows.clone(),
-        },
-        MeasuredArgument::Property { set, name } => ParameterValue::PropertyReference {
-            property_set: set.clone(),
-            property: name.clone(),
-        },
-        MeasuredArgument::Path(steps) => ParameterValue::StringList {
-            value: steps.clone(),
-        },
-        MeasuredArgument::Text(text) => ParameterValue::String {
-            value: text.clone(),
-        },
-        MeasuredArgument::Choice(choice) => ParameterValue::String {
-            value: (*choice).to_owned(),
-        },
-        MeasuredArgument::Truth(value) => ParameterValue::Boolean { value: *value },
-        MeasuredArgument::Length(value) => ParameterValue::Quantity {
-            value: *value,
-            unit: "m".into(),
-        },
-        MeasuredArgument::Number(value) => ParameterValue::Number { value: *value },
-        MeasuredArgument::Objects(_) => ParameterValue::Selector {
-            value: Box::new(Selector::All),
-        },
-        _ => return None,
-    })
-}
 
 /// The rule and rows `call` states, read once per run.
 fn prepared(call: &MeasuredCall, context: &RuleContext<'_>) -> Result<Arc<Prepared>, Unavailable> {
@@ -99,28 +67,37 @@ fn prepared(call: &MeasuredCall, context: &RuleContext<'_>) -> Result<Arc<Prepar
         context.services,
         PreparedKey(ArgumentsKey::of(call)),
         || {
-            let stated: BTreeMap<String, ParameterValue> = call
-                .descriptor
-                .parameters
-                .iter()
-                .filter_map(|declared| {
-                    let value = parameter(call.argument(declared.key)?)?;
-                    Some((declared.key.to_owned(), value))
-                })
-                .collect();
-            let rule = crate::light_area::synthesised(stated);
+            let rule = crate::measured_kinds::stated_rule(call, &[]);
+            let rows = ArgumentsKey::of_keys(call, ROW_KEYS);
+            let limits = compiled(&rule, &rows, context)?;
             let parameters = Parameters(&rule);
-            let declared = declared(&parameters)?;
-            let limits = limits(&parameters, &declared)?;
             let case_sensitive = parameters.boolean("case_sensitive")?.unwrap_or(true);
             let defaults = DoorDefaults::parse(&parameters, case_sensitive)?.map(Arc::new);
             Ok(Arc::new(Prepared {
                 rule,
                 limits,
                 defaults,
+                rows,
             }))
         },
     )
+}
+
+#[derive(Hash, PartialEq, Eq)]
+struct RowsKey(ArgumentsKey);
+
+/// The rows the keys select among, compiled once per run for the row and
+/// for what it bounds alike.
+fn compiled(
+    rule: &CompiledRule,
+    rows: &ArgumentsKey,
+    context: &RuleContext<'_>,
+) -> Result<Arc<Vec<Limit>>, Unavailable> {
+    MeasuredMemo::of(context.services, RowsKey(rows.clone()), || {
+        let parameters = Parameters(rule);
+        let declared = declared(&parameters)?;
+        limits(&parameters, &declared).map(Arc::new)
+    })
 }
 
 /// The key of an object's row in the run's memo.
@@ -130,12 +107,11 @@ struct RowKey(ArgumentsKey, ObjectId);
 /// The row `object`'s keys select, read once per run for the keys and
 /// rows the call states.
 fn row(
-    call: &MeasuredCall,
     prepared: &Prepared,
     object: &ObjectId,
     context: &RuleContext<'_>,
 ) -> Result<Arc<Selected>, Unavailable> {
-    let key = RowKey(ArgumentsKey::of_keys(call, ROW_KEYS), object.clone());
+    let key = RowKey(prepared.rows.clone(), object.clone());
     MeasuredMemo::of(context.services, key, || {
         // A derived group is a resource object of the run, not the
         // project's.
@@ -176,22 +152,6 @@ fn text(text: String) -> MemberValue {
     MemberValue::Text { text }
 }
 
-/// The population a selection argument binds, every object without one.
-fn population(
-    call: &MeasuredCall,
-    key: &str,
-    context: &RuleContext<'_>,
-) -> Result<Arc<Population>, Unavailable> {
-    match selection(context, call, key, None).map_err(crate::selection::property_error)? {
-        Some(picked) => Ok(Arc::new(Population {
-            matched: picked.matched,
-            undecided: picked.undecided,
-            first: None,
-        })),
-        None => Ok(crate::counts::every_object(context)),
-    }
-}
-
 impl LimitMeasures {
     /// The row the object's keys select, as one item: whether a row
     /// matches (`listed`), its index (`row`), the keys as a message
@@ -203,7 +163,7 @@ impl LimitMeasures {
         context: &RuleContext<'_>,
     ) -> Result<(Vec<MeasuredMember>, Vec<Evidence>), Unavailable> {
         let prepared = prepared(call, context)?;
-        let row = row(call, &prepared, object, context)?;
+        let row = row(&prepared, object, context)?;
         let locator = format!("{LIMIT_ROW}:{object}");
         #[allow(clippy::cast_precision_loss)]
         let index = row.index.map(|index| index as f64);
@@ -244,7 +204,7 @@ impl LimitMeasures {
     ) -> Result<(Vec<MeasuredMember>, Vec<Evidence>), Unavailable> {
         let prepared = prepared(call, context)?;
         // A row that cannot be selected is the row list's to report.
-        let Ok(row) = row(call, &prepared, object, context) else {
+        let Ok(row) = row(&prepared, object, context) else {
             return Ok((Vec::new(), Vec::new()));
         };
         let Some(index) = row.index else {
@@ -325,7 +285,11 @@ impl LimitMeasures {
             }
             Quantity::ThresholdStep(step) => {
                 let step = match call.argument("ramp_selector") {
-                    Some(_) => step.with_ramps(population(call, "ramp_selector", context)?),
+                    Some(_) => step.with_ramps(crate::measured_kinds::population(
+                        call,
+                        "ramp_selector",
+                        context,
+                    )?),
                     None => step,
                 };
                 let (alternatives, cited) =
@@ -369,9 +333,11 @@ impl LimitMeasures {
             quantity => {
                 let quantity = &quantity;
                 let members = match quantity {
-                    Quantity::MemberPlanArea { .. } => {
-                        Some(population(call, "member_selector", context)?)
-                    }
+                    Quantity::MemberPlanArea { .. } => Some(crate::measured_kinds::population(
+                        call,
+                        "member_selector",
+                        context,
+                    )?),
                     _ => None,
                 };
                 let measuring = Measuring {

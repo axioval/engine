@@ -287,6 +287,234 @@ pub(super) const GUARD: [MeasuredParameter; 13] = [
     },
 ];
 
+/// The services `opening-zone`'s lists read.
+const ZONE_SERVICES: &[&str] = &["relationship-selection", "body-facts", "proximity"];
+
+/// The arguments of `opening-zone`'s lists: the rule's declaration by the
+/// parameters' own names, and the openings it selects.
+const ZONE: [MeasuredParameter; 21] = [
+    MeasuredParameter {
+        key: "host_path",
+        kind: MeasuredParameterKind::Path,
+        required: true,
+        default: None,
+        help: &en_de(
+            "The relationship steps from the opening to its hosts.",
+            "Die Beziehungsschritte von der Öffnung zu ihren Wirten.",
+        ),
+    },
+    MeasuredParameter {
+        key: "host_selector",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The objects that are hosts; any object the path reaches without it.",
+            "Die Objekte, die Wirte sind; ohne Angabe jedes erreichte Objekt.",
+        ),
+    },
+    MeasuredParameter {
+        key: "length_axis",
+        kind: MeasuredParameterKind::Choice {
+            options: &["extrusion", "profile-x", "profile-y"],
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The host's axis along its length.",
+            "Die Achse des Wirts entlang seiner Länge.",
+        ),
+    },
+    MeasuredParameter {
+        key: "height_axis",
+        kind: MeasuredParameterKind::Choice {
+            options: &["extrusion", "profile-x", "profile-y"],
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The host's axis along its height.",
+            "Die Achse des Wirts entlang seiner Höhe.",
+        ),
+    },
+    MeasuredParameter {
+        key: "end_distance",
+        kind: MeasuredParameterKind::Length { minimum: 0.0 },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The least clear distance from the host's ends, in metres.",
+            "Der kleinste lichte Abstand zu den Enden des Wirts, in Metern.",
+        ),
+    },
+    MeasuredParameter {
+        key: "edge_distance",
+        kind: MeasuredParameterKind::Length { minimum: 0.0 },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The least clear distance from the host's edges (or flanges), in metres.",
+            "Der kleinste lichte Abstand zu den Rändern (oder Flanschen) des Wirts, in Metern.",
+        ),
+    },
+    MeasuredParameter {
+        key: "edge_distance_maximum",
+        kind: MeasuredParameterKind::Length { minimum: 0.0 },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The greatest distance from the host's bottom and top edges, in metres.",
+            "Der größte Abstand zum unteren und oberen Rand des Wirts, in Metern.",
+        ),
+    },
+    MeasuredParameter {
+        key: "maximum_edges",
+        kind: MeasuredParameterKind::Choice {
+            options: &["top", "bottom", "both"],
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "Which edges `edge_distance_maximum` bounds the distance from.",
+            "Von welchen Rändern `edge_distance_maximum` den Abstand begrenzt.",
+        ),
+    },
+    MeasuredParameter {
+        key: "zone",
+        kind: MeasuredParameterKind::Choice {
+            options: &["section", "web"],
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "Whether edge distances are measured to the host's edges or to its flanges (`web`, across `profile-y`).",
+            "Ob Randabstände zu den Rändern des Wirts oder zu seinen Flanschen (`web`, quer zu `profile-y`) gemessen werden.",
+        ),
+    },
+    MeasuredParameter {
+        key: "opening_spacing",
+        kind: MeasuredParameterKind::Length { minimum: 0.0 },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The least clear distance to another opening of the host, in metres.",
+            "Der kleinste lichte Abstand zu einer anderen Öffnung des Wirts, in Metern.",
+        ),
+    },
+    MeasuredParameter {
+        key: "zones",
+        kind: MeasuredParameterKind::Table,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's allowed zones: per row the insets from the ends, the bottom and the top.",
+            "Die erlaubten Zonen der Regel: je Zeile die Abstände von den Enden, von unten und von oben.",
+        ),
+    },
+    MeasuredParameter {
+        key: "minimum_opening_area",
+        kind: MeasuredParameterKind::Area { minimum: 0.0 },
+        required: false,
+        default: None,
+        help: &en_de(
+            "Openings smaller than this many square metres are not judged.",
+            "Öffnungen kleiner als so viele Quadratmeter werden nicht geprüft.",
+        ),
+    },
+    MeasuredParameter {
+        key: "dimensions",
+        kind: MeasuredParameterKind::Table,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The rule's dimensioning rows: the distance from an opening to another opening or to an edge of the host, and its bounds.",
+            "Die Bemaßungszeilen der Regel: der Abstand einer Öffnung zu einer anderen Öffnung oder zu einem Rand des Wirts, und seine Grenzen.",
+        ),
+    },
+    MeasuredParameter {
+        key: "support_path",
+        kind: MeasuredParameterKind::Path,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The relationship steps from the host to its supports.",
+            "Die Beziehungsschritte vom Wirt zu seinen Auflagern.",
+        ),
+    },
+    MeasuredParameter {
+        key: "support_selector",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The objects that may be supports; any object without it.",
+            "Die Objekte, die Auflager sein können; ohne Angabe jedes Objekt.",
+        ),
+    },
+    MeasuredParameter {
+        key: "support_gap",
+        kind: MeasuredParameterKind::Length { minimum: 0.0 },
+        required: false,
+        default: None,
+        help: &en_de(
+            "How near the host an object must come in space to be a support, in metres.",
+            "Wie nah ein Objekt dem Wirt im Raum kommen muss, um ein Auflager zu sein, in Metern.",
+        ),
+    },
+    MeasuredParameter {
+        key: "support_distance",
+        kind: MeasuredParameterKind::Length { minimum: 0.0 },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The least distance along the host from each support, in metres.",
+            "Der kleinste Abstand entlang des Wirts zu jedem Auflager, in Metern.",
+        ),
+    },
+    MeasuredParameter {
+        key: "support_distance_ratio",
+        kind: MeasuredParameterKind::Number { minimum: 0.0 },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The least distance from each support as a share of the host's span or depth.",
+            "Der kleinste Abstand zu jedem Auflager als Anteil der Spannweite oder Höhe des Wirts.",
+        ),
+    },
+    MeasuredParameter {
+        key: "support_distance_reference",
+        kind: MeasuredParameterKind::Choice {
+            options: &["span", "depth"],
+        },
+        required: false,
+        default: None,
+        help: &en_de(
+            "What `support_distance_ratio` is a share of.",
+            "Wovon `support_distance_ratio` ein Anteil ist.",
+        ),
+    },
+    MeasuredParameter {
+        key: "support_clearance",
+        kind: MeasuredParameterKind::Length { minimum: 0.0 },
+        required: false,
+        default: None,
+        help: &en_de(
+            "The least clearance from each support's footprint in the host's face, in metres.",
+            "Der kleinste lichte Abstand zur Ansichtsfläche jedes Auflagers in der Ansicht des Wirts, in Metern.",
+        ),
+    },
+    MeasuredParameter {
+        key: "openings",
+        kind: MeasuredParameterKind::Objects,
+        required: false,
+        default: None,
+        help: &en_de(
+            "The openings the rule judges, each the others' neighbour; any object without it.",
+            "Die Öffnungen, die die Regel prüft, jede Nachbar der anderen; ohne Angabe jedes Objekt.",
+        ),
+    },
+];
+
 /// Every list of measured members, sorted by name.
 pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
     MemberDescriptor {
@@ -2981,6 +3209,302 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
                 MemberFieldKind::Objects,
                 &en_de("Stacked spaces", "Gestapelte Räume"),
                 &en_de("Every space of the well.", "Jeder Raum des Schachts."),
+            ),
+        ],
+    },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
+            name: "zone_checks",
+            parameters: &ZONE,
+            dimension: None,
+            services: ZONE_SERVICES,
+            exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
+            not_evaluated: &[
+                "whether a reached object is a host is undecided",
+                "the opening or its host is no straight extrusion the body set bounds",
+                "its area may be below the minimum",
+                "it may lie in a zone, or a dimension or support may be missed",
+            ],
+            label: &en_de("Zone checks", "Prüfungen der Zone"),
+            help: &en_de(
+                "What `opening-zone` checks of the opening in each host its path reaches, in its order, host by host: the placement (within the host's face and outline, its clear distances from the ends and edges and from the bottom and top edges), the allowed zone it misses least, each row of `dimensions` whose `source` selects it, each requirement on the host's supports, and the nearest other opening of the host closer than `opening_spacing`. A distance measured to a free outline from the box the opening may lie in is known only from below.",
+                "Was `opening-zone` an der Öffnung in jedem Wirt prüft, den ihr Pfad erreicht, in seiner Reihenfolge, Wirt für Wirt: die Lage (innerhalb der Ansicht und des Umrisses des Wirts, ihre lichten Abstände zu den Enden und Rändern und zum unteren und oberen Rand), die am wenigsten verfehlte erlaubte Zone, jede Zeile der `dimensions`, deren `source` sie wählt, jede Anforderung an die Auflager des Wirts, und die nächste andere Öffnung des Wirts, die näher ist als `opening_spacing`. Ein Abstand zu einem freien Umriss aus dem Quader, in dem die Öffnung liegen kann, ist nur von unten bekannt.",
+            ),
+        },
+        fields: &[
+            field(
+                "check",
+                MemberFieldKind::Text,
+                &en_de("Check", "Prüfung"),
+                &en_de(
+                    "What the item checks: `placement`, `zones`, `dimension`, `support` or `spacing`.",
+                    "Was das Element prüft: `placement`, `zones`, `dimension`, `support` oder `spacing`.",
+                ),
+            ),
+            field(
+                "placed",
+                TRUTH,
+                &en_de("Placed", "Platziert"),
+                &en_de(
+                    "Whether the opening is placed in the host; undecided where it cannot be.",
+                    "Ob die Öffnung im Wirt platziert ist; unentschieden, wo sie es nicht sein kann.",
+                ),
+            ),
+            field(
+                "host",
+                MemberFieldKind::Text,
+                &en_de("Host", "Wirt"),
+                &en_de("The host's name.", "Der Name des Wirts."),
+            ),
+            field(
+                "inside",
+                TRUTH,
+                &en_de("Inside", "Innerhalb"),
+                &en_de(
+                    "Whether the opening lies within the host's face and outline.",
+                    "Ob die Öffnung innerhalb der Ansicht und des Umrisses des Wirts liegt.",
+                ),
+            ),
+            field(
+                "outside",
+                MemberFieldKind::Text,
+                &en_de("Outside", "Außerhalb"),
+                &en_de(
+                    "Where it lies outside, as a finding words it.",
+                    "Wo sie außerhalb liegt, wie ein Befund es formuliert.",
+                ),
+            ),
+            field(
+                "end",
+                LENGTH,
+                &en_de("End distance", "Endabstand"),
+                &en_de(
+                    "The clear distance from the nearer end of the host.",
+                    "Der lichte Abstand zum näheren Ende des Wirts.",
+                ),
+            ),
+            field(
+                "end_shown",
+                MemberFieldKind::Text,
+                &en_de("End distance shown", "Endabstand gezeigt"),
+                &en_de(
+                    "The end distance as a finding shows it.",
+                    "Der Endabstand, wie ein Befund ihn zeigt.",
+                ),
+            ),
+            field(
+                "edge",
+                LENGTH,
+                &en_de("Edge distance", "Randabstand"),
+                &en_de(
+                    "The clear distance from the nearer edge (or flange), negative where it reaches into a flange.",
+                    "Der lichte Abstand zum näheren Rand (oder Flansch), negativ, wo sie in einen Flansch reicht.",
+                ),
+            ),
+            field(
+                "edge_words",
+                MemberFieldKind::Text,
+                &en_de("Edge words", "Randworte"),
+                &en_de(
+                    "The edge distance as a finding words it.",
+                    "Der Randabstand, wie ein Befund ihn formuliert.",
+                ),
+            ),
+            field(
+                "bottom",
+                LENGTH,
+                &en_de("Bottom distance", "Abstand unten"),
+                &en_de(
+                    "The distance from the host's bottom edge (or lower flange), where the rule bounds it.",
+                    "Der Abstand zum unteren Rand (oder unteren Flansch) des Wirts, wo die Regel ihn begrenzt.",
+                ),
+            ),
+            field(
+                "bottom_shown",
+                MemberFieldKind::Text,
+                &en_de("Bottom distance shown", "Abstand unten gezeigt"),
+                &en_de(
+                    "The bottom distance as a finding shows it.",
+                    "Der untere Abstand, wie ein Befund ihn zeigt.",
+                ),
+            ),
+            field(
+                "bottom_name",
+                MemberFieldKind::Text,
+                &en_de("Bottom edge", "Unterer Rand"),
+                &en_de(
+                    "What the bottom distance is measured to.",
+                    "Wozu der untere Abstand gemessen wird.",
+                ),
+            ),
+            field(
+                "top",
+                LENGTH,
+                &en_de("Top distance", "Abstand oben"),
+                &en_de(
+                    "The distance from the host's top edge (or upper flange), where the rule bounds it.",
+                    "Der Abstand zum oberen Rand (oder oberen Flansch) des Wirts, wo die Regel ihn begrenzt.",
+                ),
+            ),
+            field(
+                "top_shown",
+                MemberFieldKind::Text,
+                &en_de("Top distance shown", "Abstand oben gezeigt"),
+                &en_de(
+                    "The top distance as a finding shows it.",
+                    "Der obere Abstand, wie ein Befund ihn zeigt.",
+                ),
+            ),
+            field(
+                "top_name",
+                MemberFieldKind::Text,
+                &en_de("Top edge", "Oberer Rand"),
+                &en_de(
+                    "What the top distance is measured to.",
+                    "Wozu der obere Abstand gemessen wird.",
+                ),
+            ),
+            field(
+                "far_open",
+                TRUTH,
+                &en_de("Far edges open", "Ferne Ränder offen"),
+                &en_de(
+                    "Undecided where a distance known only from below may exceed `edge_distance_maximum`, naming every such edge; false otherwise.",
+                    "Unentschieden, wo ein nur von unten bekannter Abstand `edge_distance_maximum` überschreiten kann, mit jedem solchen Rand; sonst falsch.",
+                ),
+            ),
+            field(
+                "zone",
+                LENGTH,
+                &en_de("Clear distance", "Lichter Abstand"),
+                &en_de(
+                    "The clear distance from the side the opening misses most; `null` where it lies in a zone.",
+                    "Der lichte Abstand zur am meisten verfehlten Seite; `null`, wo sie in einer Zone liegt.",
+                ),
+            ),
+            field(
+                "needed",
+                LENGTH,
+                &en_de("Inset", "Abstand"),
+                &en_de(
+                    "The inset that side needs.",
+                    "Der Abstand, den diese Seite braucht.",
+                ),
+            ),
+            field(
+                "words",
+                MemberFieldKind::Text,
+                &en_de("Words", "Worte"),
+                &en_de(
+                    "The finding as the capability words it.",
+                    "Der Befund, wie die Fähigkeit ihn formuliert.",
+                ),
+            ),
+            field(
+                "distance",
+                LENGTH,
+                &en_de("Distance", "Abstand"),
+                &en_de(
+                    "The distance, from below where a target may be nearer or the outline is known only within bounds.",
+                    "Der Abstand, von unten, wo ein Ziel näher sein kann oder der Umriss nur in Grenzen bekannt ist.",
+                ),
+            ),
+            field(
+                "minimum",
+                LENGTH,
+                &en_de("Minimum", "Minimum"),
+                &en_de(
+                    "The least distance the row allows; `null` for none.",
+                    "Der kleinste Abstand, den die Zeile erlaubt; `null` für keinen.",
+                ),
+            ),
+            field(
+                "maximum",
+                LENGTH,
+                &en_de("Maximum", "Maximum"),
+                &en_de(
+                    "The greatest distance the row allows; `null` for none.",
+                    "Der größte Abstand, den die Zeile erlaubt; `null` für keinen.",
+                ),
+            ),
+            field(
+                "slack",
+                LENGTH,
+                &en_de("Tolerance", "Toleranz"),
+                &en_de(
+                    "The row's tolerance with the rounding of placements.",
+                    "Die Toleranz der Zeile mit der Rundung der Lagen.",
+                ),
+            ),
+            field(
+                "required",
+                MemberFieldKind::Text,
+                &en_de("Required", "Gefordert"),
+                &en_de(
+                    "What the row requires, as a finding words it.",
+                    "Was die Zeile fordert, wie ein Befund es formuliert.",
+                ),
+            ),
+            field(
+                "label",
+                MemberFieldKind::Text,
+                &en_de("Row", "Zeile"),
+                &en_de("The row's name.", "Der Name der Zeile."),
+            ),
+            field(
+                "open",
+                MemberFieldKind::Text,
+                &en_de("Doubt", "Zweifel"),
+                &en_de(
+                    "Why the row may be missed, where it is not decided.",
+                    "Warum die Zeile verfehlt sein kann, wo sie nicht entschieden ist.",
+                ),
+            ),
+            field(
+                "fails",
+                TRUTH,
+                &en_de("Fails", "Verfehlt"),
+                &en_de(
+                    "Whether a support surely misses the requirement; undecided where one may.",
+                    "Ob ein Auflager die Anforderung sicher verfehlt; unentschieden, wo eines es kann.",
+                ),
+            ),
+            field(
+                "message",
+                MemberFieldKind::Text,
+                &en_de("Message", "Meldung"),
+                &en_de(
+                    "The finding as the capability words it.",
+                    "Der Befund, wie die Fähigkeit ihn formuliert.",
+                ),
+            ),
+            field(
+                "spacing",
+                LENGTH,
+                &en_de("Spacing", "Abstand zu Öffnungen"),
+                &en_de(
+                    "The least clear distance to another opening of the host surely closer than `opening_spacing`; undecided where one may be.",
+                    "Der kleinste lichte Abstand zu einer anderen Öffnung des Wirts, die sicher näher ist als `opening_spacing`; unentschieden, wo eine es sein kann.",
+                ),
+            ),
+            field(
+                "related",
+                MemberFieldKind::Objects,
+                &en_de("Related", "Bezogen"),
+                &en_de(
+                    "What a finding on the item relates: the host, and the objects it is measured to.",
+                    "Worauf sich ein Befund zum Element bezieht: den Wirt und die Objekte, zu denen gemessen wurde.",
+                ),
+            ),
+            field(
+                "reason",
+                MemberFieldKind::Text,
+                &en_de("Reason", "Grund"),
+                &en_de(
+                    "Why the item is undecided where not for incomplete evidence, as a report writes it (`missing_service`).",
+                    "Warum das Element unentschieden ist, wo nicht wegen unvollständiger Belege, wie ein Bericht es schreibt (`missing_service`).",
+                ),
             ),
         ],
     },

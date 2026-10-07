@@ -6,8 +6,8 @@ use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use axioval_engine::{
-    CapabilityEvaluation, NotEvaluatedReason, ParameterDescriptor, ParameterType, ProximityError,
-    ProximityRequest, ProximityServiceHandle, RuleContext,
+    NotEvaluatedReason, ParameterDescriptor, ParameterType, ProximityError, ProximityRequest,
+    ProximityServiceHandle, RuleContext,
 };
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId};
@@ -21,6 +21,7 @@ use crate::support::{Parameters, Traversal, Unavailable, invalid};
 /// How a rule finds a host's supports and what it requires of them.
 pub(super) struct SupportConfig<'a> {
     path: Option<Traversal>,
+    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
     pub(super) selector: &'a Selector,
     contact: Option<f64>,
     distance: Option<f64>,
@@ -239,6 +240,19 @@ pub(super) struct Opening<'p> {
 /// A finding on an opening: its message, evidence and related objects.
 pub(super) type SupportFinding = (String, Vec<Evidence>, Vec<ObjectId>);
 
+/// How an opening meets one requirement against its host's supports.
+pub(super) enum Decided {
+    /// The supports cannot be found, for this reason: the one outcome of
+    /// every requirement.
+    Unfound(Unavailable),
+    /// Every support surely meets it.
+    Pass,
+    /// A support may not, as the message says.
+    Open(String),
+    /// Some support surely does not.
+    Finding(SupportFinding),
+}
+
 /// Finds and reads the supports of each host once.
 pub(super) struct Supports<'r, 'c> {
     context: &'r RuleContext<'c>,
@@ -350,28 +364,19 @@ impl<'r, 'c> Supports<'r, 'c> {
     }
 
     /// Judges an opening against the supports of its host: its distance
-    /// from each along the length, and its clearance from each footprint.
-    /// Undecided checks are recorded on `evaluation`; findings returned.
-    pub(super) fn judge(
-        &self,
-        subject: &ObjectId,
-        opening: &Opening<'_>,
-        host: &Host,
-        axes: FaceAxes,
-        evaluation: &mut CapabilityEvaluation,
-    ) -> Vec<SupportFinding> {
+    /// from each along the length, and its clearance from each footprint,
+    /// each requirement the rule makes once in that order.
+    pub(super) fn judge(&self, opening: &Opening<'_>, host: &Host, axes: FaceAxes) -> Vec<Decided> {
         let found = match self.found(opening.host) {
             Ok(found) => found,
             Err((reason, message)) => {
-                evaluation.push_object_not_evaluated(
-                    subject.clone(),
+                return vec![Decided::Unfound((
                     reason,
                     format!(
                         "the supports of its host {} cannot be found: {message}",
                         opening.host
                     ),
-                );
-                return Vec::new();
+                ))];
             }
         };
         let measured: Vec<Measured<'_>> = found
@@ -385,12 +390,8 @@ impl<'r, 'c> Supports<'r, 'c> {
                     .map_err(|(_, message)| message),
             })
             .collect();
-        let mut findings = Vec::new();
-        let mut check = |check: Check<'_>| {
-            if let Some(finding) = check.decide(subject, &found, &measured, evaluation) {
-                findings.push(finding);
-            }
-        };
+        let mut decided = Vec::new();
+        let mut check = |check: Check<'_>| decided.push(check.decide(&found, &measured));
         let host_id = &opening.host.local_id;
         if let Some(required) = self.config.required(host, axes) {
             let (low, high) = (required.low - ROUNDING, required.high - ROUNDING);
@@ -459,7 +460,7 @@ impl<'r, 'c> Supports<'r, 'c> {
                 what: "clearance from its host's connecting members",
             });
         }
-        findings
+        decided
     }
 }
 
@@ -485,15 +486,9 @@ struct Check<'f> {
 }
 
 impl Check<'_> {
-    /// The finding for the members surely too close, or else a not
-    /// evaluated outcome when a member may be.
-    fn decide(
-        &self,
-        subject: &ObjectId,
-        found: &Found,
-        measured: &[Measured<'_>],
-        evaluation: &mut CapabilityEvaluation,
-    ) -> Option<SupportFinding> {
+    /// The finding for the members surely too close, or else an outcome
+    /// left open when a member may be.
+    fn decide(&self, found: &Found, measured: &[Measured<'_>]) -> Decided {
         let mut sure: Vec<(&Member, f64, &Footprint, &Solid)> = Vec::new();
         let mut unknown = Vec::new();
         for Measured { member, footprint } in measured {
@@ -516,25 +511,21 @@ impl Check<'_> {
             .iter()
             .min_by(|a, b| a.1.total_cmp(&b.1).then_with(|| a.0.id.cmp(&b.0.id)))
         else {
-            if !unknown.is_empty() {
-                evaluation.push_object_not_evaluated(
-                    subject.clone(),
-                    NotEvaluatedReason::IncompleteEvidence,
-                    format!(
-                        "its {} may be under {}: {}",
-                        self.what,
-                        self.required,
-                        unknown.join("; ")
-                    ),
-                );
+            if unknown.is_empty() {
+                return Decided::Pass;
             }
-            return None;
+            return Decided::Open(format!(
+                "its {} may be under {}: {}",
+                self.what,
+                self.required,
+                unknown.join("; ")
+            ));
         };
         let mut evidence = found.evidence.clone();
         for (_, _, _, solid) in &sure {
             evidence.extend(solid.evidence.iter().cloned());
         }
-        Some((
+        Decided::Finding((
             (self.message)(&nearest.id, *near, footprint),
             evidence,
             sure.iter().map(|(member, ..)| member.id.clone()).collect(),

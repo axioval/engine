@@ -3,30 +3,43 @@
 
 use std::collections::BTreeMap;
 use std::rc::Rc;
+use std::sync::LazyLock;
 
 use axioval_engine::{
-    CapabilityEvaluation, CompiledRule, Deviation, NotEvaluatedReason, ParameterDescriptor,
-    ParameterType, RuleCapability, RuleContext,
+    CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ParameterDescriptor, ParameterType,
+    RuleCapability, RuleContext,
 };
-use axioval_ir::contract::Selector;
-use axioval_ir::{Evidence, Finding, Object, ObjectId, QuantityDimension};
+use axioval_ir::contract::{ParameterValue, Selector};
+use axioval_ir::{Evidence, Object, ObjectId, QuantityDimension};
 
 use crate::counts::Population;
-use crate::level_spacing::metres;
-use crate::selection::select_objects;
-use crate::support::{Parameters, Traversal, Unavailable, finding, invalid};
+use crate::support::{Parameters, Traversal, Unavailable, invalid};
 
 mod dimensions;
 pub(crate) mod face;
+mod lists;
 mod measured;
 mod outline;
+#[cfg(feature = "parity-reference")]
+pub(crate) mod reference;
 mod supports;
+mod template;
 mod zones;
 
 use face::{Axis, FaceAxes, Host, ROUNDING, Solid, Span, gap, read_host};
-use supports::{Opening, SupportConfig, Supports};
+use supports::{SupportConfig, Supports};
 
+pub(crate) use lists::ZoneMeasures;
 pub(crate) use measured::PlacementMeasures;
+
+/// The capability's id.
+const ID: &str = "axioval:capability.opening-zone";
+
+/// The template, built once.
+static TEMPLATE: LazyLock<axioval_engine::template::Template> = LazyLock::new(template::template);
+
+/// Its plans, prepared once per rule.
+static PLANS: crate::templates::Plans = crate::templates::Plans::new();
 
 /// Requires each selected opening to lie within its host's face and inside
 /// the zone the rule allows: clear of the host's ends by `end_distance`,
@@ -107,7 +120,11 @@ struct Config<'a> {
     hosts: Traversal,
     host_selector: &'a Selector,
     axes: FaceAxes,
+    // The template bounds by the rule's own parameters; the reference
+    // reads them here.
+    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
     end_distance: Option<f64>,
+    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
     edge_distance: Option<f64>,
     /// The largest distance allowed from the low and the high edge.
     edge_maximum: Option<(f64, bool, bool)>,
@@ -190,29 +207,43 @@ impl<'a> Config<'a> {
     }
 }
 
+/// The capability's parameters.
+pub(crate) fn parameters() -> Vec<ParameterDescriptor> {
+    let mut parameters = vec![
+        ParameterDescriptor::required("host_path", ParameterType::StringList),
+        ParameterDescriptor::optional("host_selector", ParameterType::Selector),
+        ParameterDescriptor::required("length_axis", ParameterType::String),
+        ParameterDescriptor::required("height_axis", ParameterType::String),
+        ParameterDescriptor::optional("end_distance", ParameterType::Quantity),
+        ParameterDescriptor::optional("edge_distance", ParameterType::Quantity),
+        ParameterDescriptor::optional("edge_distance_maximum", ParameterType::Quantity),
+        ParameterDescriptor::optional("maximum_edges", ParameterType::String),
+        ParameterDescriptor::optional("zone", ParameterType::String),
+        ParameterDescriptor::optional("opening_spacing", ParameterType::Quantity),
+        ParameterDescriptor::optional("zones", ParameterType::Table(zones::COLUMNS)),
+        ParameterDescriptor::optional("minimum_opening_area", ParameterType::Quantity),
+        ParameterDescriptor::optional("dimensions", ParameterType::Table(dimensions::COLUMNS)),
+    ];
+    parameters.extend(SupportConfig::parameters());
+    parameters
+}
+
+/// Checks the declaration as the capability did, in its order and words:
+/// the parameters the lists name, by their own names.
+pub(crate) fn check_arguments(
+    stated: &BTreeMap<String, ParameterValue>,
+) -> Result<(), Unavailable> {
+    let rule = crate::light_area::synthesised(stated.clone());
+    Config::parse(&rule).map(|_| ())
+}
+
 impl RuleCapability for OpeningZone {
     fn id(&self) -> &'static str {
-        "axioval:capability.opening-zone"
+        ID
     }
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
-        let mut parameters = vec![
-            ParameterDescriptor::required("host_path", ParameterType::StringList),
-            ParameterDescriptor::optional("host_selector", ParameterType::Selector),
-            ParameterDescriptor::required("length_axis", ParameterType::String),
-            ParameterDescriptor::required("height_axis", ParameterType::String),
-            ParameterDescriptor::optional("end_distance", ParameterType::Quantity),
-            ParameterDescriptor::optional("edge_distance", ParameterType::Quantity),
-            ParameterDescriptor::optional("edge_distance_maximum", ParameterType::Quantity),
-            ParameterDescriptor::optional("maximum_edges", ParameterType::String),
-            ParameterDescriptor::optional("zone", ParameterType::String),
-            ParameterDescriptor::optional("opening_spacing", ParameterType::Quantity),
-            ParameterDescriptor::optional("zones", ParameterType::Table(zones::COLUMNS)),
-            ParameterDescriptor::optional("minimum_opening_area", ParameterType::Quantity),
-            ParameterDescriptor::optional("dimensions", ParameterType::Table(dimensions::COLUMNS)),
-        ];
-        parameters.extend(SupportConfig::parameters());
-        parameters
+        parameters()
     }
 
     fn grades_deviation(&self) -> bool {
@@ -220,51 +251,11 @@ impl RuleCapability for OpeningZone {
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let config = match Config::parse(rule) {
-            Ok(config) => config,
-            Err((reason, message)) => {
-                return CapabilityEvaluation::not_evaluated(
-                    reason,
-                    format!("opening-zone: {message}"),
-                );
-            }
-        };
-        let (selected, mut evaluation) = select_objects(context, &rule.selector);
-        let openings = Population::of(context, &rule.selector);
-        let hosts = Population::of(context, config.host_selector);
-        let support_population = config
-            .supports
-            .as_ref()
-            .map(|supports| Population::of(context, supports.selector));
-        let dimension_selections = dimensions::Selections::of(context, &config.dimensions);
-        let mut judge = Judge {
-            dimensions: dimension_selections,
-            context,
-            rule,
-            config: &config,
-            hosts: &hosts,
-            bodies: BTreeMap::new(),
-            placed: BTreeMap::new(),
-            supports: support_population
-                .as_ref()
-                .zip(config.supports.as_ref())
-                .map(|(population, config)| Supports::new(context, config, population)),
-        };
-        // Every opening that may be selected is placed, so spacing sees the
-        // undecided ones too.
-        let candidates: Vec<&Object> = context
-            .project
-            .objects()
-            .filter(|object| openings.contains(&object.id))
-            .collect();
-        for opening in &candidates {
-            let placed = judge.place(opening);
-            judge.placed.insert(opening.id.clone(), placed);
-        }
-        for opening in selected {
-            judge.judge(opening, &openings, &mut evaluation);
-        }
-        evaluation
+        crate::templates::run((&TEMPLATE, &PLANS), context, rule)
+    }
+
+    fn template(&self) -> Option<&axioval_engine::template::Template> {
+        Some(&TEMPLATE)
     }
 }
 
@@ -294,9 +285,6 @@ impl Placed {
     }
 }
 
-/// A finding's message and, where it misses a bound, by how far.
-type Found = (String, Option<Deviation>);
-
 /// An opening's clear distance from its host's edges or flanges.
 struct Clearance {
     /// The distance, negative where the opening reaches into a flange.
@@ -316,6 +304,8 @@ type Placement = Result<Vec<Result<Placed, Unavailable>>, Unavailable>;
 
 struct Judge<'r, 'c> {
     context: &'r RuleContext<'c>,
+    /// The rule its findings name (the reference's).
+    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
     rule: &'r CompiledRule,
     config: &'r Config<'r>,
     hosts: &'r Population,
@@ -437,149 +427,6 @@ impl Judge<'_, '_> {
         }))
     }
 
-    fn judge(
-        &self,
-        opening: &Object,
-        openings: &Population,
-        evaluation: &mut CapabilityEvaluation,
-    ) {
-        let placements = match self.placed.get(&opening.id) {
-            Some(Ok(placements)) => placements,
-            Some(Err((reason, message))) => {
-                evaluation.push_object_not_evaluated(
-                    opening.id.clone(),
-                    reason.clone(),
-                    message.clone(),
-                );
-                return;
-            }
-            None => {
-                evaluation.push_object_not_evaluated(
-                    opening.id.clone(),
-                    NotEvaluatedReason::IncompleteEvidence,
-                    "the opening was not placed".to_owned(),
-                );
-                return;
-            }
-        };
-        for placed in placements {
-            match placed {
-                Ok(placed) if placed.may_be_small => evaluation.push_object_not_evaluated(
-                    opening.id.clone(),
-                    NotEvaluatedReason::IncompleteEvidence,
-                    format!(
-                        "whether its area in its host {} is below `minimum_opening_area` is \
-                         undecided: it is not extruded through the host",
-                        placed.host.local_id
-                    ),
-                ),
-                Ok(placed) => self.judge_in(opening, placed, openings, evaluation),
-                Err((reason, message)) => evaluation.push_object_not_evaluated(
-                    opening.id.clone(),
-                    reason.clone(),
-                    message.clone(),
-                ),
-            }
-        }
-    }
-
-    /// Judges an opening placed in one of its hosts.
-    fn judge_in(
-        &self,
-        opening: &Object,
-        placed: &Placed,
-        openings: &Population,
-        evaluation: &mut CapabilityEvaluation,
-    ) {
-        // Placing the opening read its host.
-        let Some(Ok(host)) = self.bodies.get(&placed.host).cloned() else {
-            return;
-        };
-        let mut findings = Vec::new();
-        let (_, length_bounds) = host.axis(self.config.axes.length);
-        let (_, height_bounds) = host.axis(self.config.axes.height);
-        let (outside_length, outside_height) = self.beyond(&host, placed);
-        let outside: Vec<String> = [
-            ("length", outside_length, placed.length, length_bounds),
-            ("height", outside_height, placed.height, height_bounds),
-        ]
-        .into_iter()
-        .filter(|(_, out, _, _)| *out)
-        .map(|(name, _, extent, bounds)| {
-            format!(
-                "along its {name} it spans {} to {}, the host {} to {}",
-                metres(extent.0),
-                metres(extent.1),
-                metres(bounds.0),
-                metres(bounds.1)
-            )
-        })
-        .collect();
-        let axes = self.config.axes;
-        let rect = placed.section_rect(&host, axes);
-        let mut crosses_outline = false;
-        if outside.is_empty() {
-            crosses_outline = Self::crosses_outline(&host, placed, rect, &mut findings)
-                .unwrap_or_else(|(reason, message)| {
-                    evaluation.push_object_not_evaluated(opening.id.clone(), reason, message);
-                    true
-                });
-        } else {
-            findings.push((
-                format!(
-                    "opening lies partly outside its host {}: {}",
-                    placed.host.local_id,
-                    outside.join("; ")
-                ),
-                None,
-            ));
-        }
-        if !outside_length
-            && !crosses_outline
-            && let Err((reason, message)) = self.ends(&host, placed, rect, &mut findings)
-        {
-            evaluation.push_object_not_evaluated(opening.id.clone(), reason, message);
-        }
-        if !outside_height
-            && !crosses_outline
-            && let Err((reason, message)) = self.edges(&host, placed, rect, &mut findings)
-        {
-            evaluation.push_object_not_evaluated(opening.id.clone(), reason, message);
-        }
-        if !outside_height
-            && !crosses_outline
-            && let Err((reason, message)) = self.far_edges(&host, placed, rect, &mut findings)
-        {
-            evaluation.push_object_not_evaluated(opening.id.clone(), reason, message);
-        }
-        if !outside_length
-            && !outside_height
-            && !crosses_outline
-            && let Err((reason, message)) = self.zones(&host, placed, rect, &mut findings)
-        {
-            evaluation.push_object_not_evaluated(opening.id.clone(), reason, message);
-        }
-        if !outside_length && !outside_height && !crosses_outline {
-            self.dimensions(opening, placed, &host, rect, evaluation);
-        }
-        if let Some(supports) = &self.supports {
-            let face = Opening {
-                host: &placed.host,
-                length: placed.length,
-                height: placed.height,
-                exact: placed.exact,
-            };
-            for (message, evidence, related) in
-                supports.judge(&opening.id, &face, &host, self.config.axes, evaluation)
-            {
-                let mut cited = placed.evidence.clone();
-                cited.extend(evidence);
-                evaluation.push_finding(self.finding(opening, placed, message, &cited, &related));
-            }
-        }
-        self.spacing(opening, placed, openings, findings, evaluation);
-    }
-
     /// Whether the opening reaches past its host's box along its length and
     /// along its height.
     fn beyond(&self, host: &Host, placed: &Placed) -> (bool, bool) {
@@ -603,79 +450,6 @@ impl Judge<'_, '_> {
             Some(outline) if outline.clearance(rect, 0).is_some() => Some(false),
             Some(_) => placed.section_exact.then_some(true),
         }
-    }
-
-    /// Within the box that holds a free outline, whether the opening
-    /// crosses the outline itself; an error when it may.
-    fn crosses_outline(
-        host: &Host,
-        placed: &Placed,
-        rect: [Span; 2],
-        findings: &mut Vec<Found>,
-    ) -> Result<bool, Unavailable> {
-        let Some(crosses) = Self::crossing(host, placed, rect) else {
-            return Err((
-                NotEvaluatedReason::IncompleteEvidence,
-                format!(
-                    "it may cross the edge of its host {}'s outline: it is not extruded \
-                     straight through the host, so where it lies in the host's section is \
-                     known only within bounds",
-                    placed.host.local_id
-                ),
-            ));
-        };
-        if !crosses {
-            return Ok(false);
-        }
-        findings.push((
-            format!(
-                "opening lies partly outside its host {}: it crosses the edge of the host's \
-                 outline",
-                placed.host.local_id
-            ),
-            None,
-        ));
-        Ok(true)
-    }
-
-    /// Judges the distance from the host's ends.
-    fn ends(
-        &self,
-        host: &Host,
-        placed: &Placed,
-        rect: [Span; 2],
-        findings: &mut Vec<Found>,
-    ) -> Result<(), Unavailable> {
-        let Some(required) = self.config.end_distance else {
-            return Ok(());
-        };
-        let Some((clear, exact)) = self.end_clearance(host, placed, rect) else {
-            return Ok(());
-        };
-        if clear >= required - ROUNDING {
-            return Ok(());
-        }
-        if !exact {
-            return Err((
-                NotEvaluatedReason::IncompleteEvidence,
-                format!(
-                    "its distance from an end of its host {}'s outline may be under {}: where \
-                     it lies in the host's section is known only within bounds",
-                    placed.host.local_id,
-                    metres(required)
-                ),
-            ));
-        }
-        findings.push((
-            format!(
-                "opening is {} from an end of its host {}; {} required",
-                metres(clear.max(0.0)),
-                placed.host.local_id,
-                metres(required)
-            ),
-            Some(Deviation::below(required, clear, clear)),
-        ));
-        Ok(())
     }
 
     /// The opening's clear distance from the nearer end of its host, and
@@ -761,128 +535,6 @@ impl Judge<'_, '_> {
             .map(|clear| (clear, placed.section_exact || !host.outlined(height))))
     }
 
-    /// Judges the clearance from the host's edges, or from its flanges.
-    fn edges(
-        &self,
-        host: &Host,
-        placed: &Placed,
-        rect: [Span; 2],
-        findings: &mut Vec<Found>,
-    ) -> Result<(), Unavailable> {
-        if self.config.edge_distance.is_none() && !self.config.web {
-            return Ok(());
-        }
-        let required = self.config.edge_distance.unwrap_or(0.0);
-        let Some(Clearance {
-            clear,
-            exact,
-            outline,
-            what,
-        }) = self.edge_clearance(host, placed, rect)?
-        else {
-            return Ok(());
-        };
-        if clear >= required - ROUNDING {
-            return Ok(());
-        }
-        if outline {
-            if !exact {
-                return Err((
-                    NotEvaluatedReason::IncompleteEvidence,
-                    format!(
-                        "its distance from an edge of its host {}'s outline may be under {}: \
-                         where it lies in the host's section is known only within bounds",
-                        placed.host.local_id,
-                        metres(required)
-                    ),
-                ));
-            }
-            findings.push((
-                format!(
-                    "opening is {} from an edge of its host {}; {} clear required",
-                    metres(clear.max(0.0)),
-                    placed.host.local_id,
-                    metres(required)
-                ),
-                Some(Deviation::below(required, clear, clear)),
-            ));
-            return Ok(());
-        }
-        let distance = if clear < 0.0 {
-            format!("reaches {} into", metres(-clear))
-        } else {
-            format!("is {} from", metres(clear))
-        };
-        findings.push((
-            format!(
-                "opening {distance} {what} of its host {}; {} clear required",
-                placed.host.local_id,
-                metres(required)
-            ),
-            Some(Deviation::below(required, clear, clear)),
-        ));
-        Ok(())
-    }
-
-    /// Judges the largest distance allowed from the host's low and high
-    /// edges (or flanges, with `zone` `web`). A distance measured to a free
-    /// outline from the box the opening may lie in is a lower bound, which can
-    /// find an opening too far but never pass one.
-    fn far_edges(
-        &self,
-        host: &Host,
-        placed: &Placed,
-        rect: [Span; 2],
-        findings: &mut Vec<Found>,
-    ) -> Result<(), Unavailable> {
-        let Some((maximum, low, high)) = self.config.edge_maximum else {
-            return Ok(());
-        };
-        let Some((clear, exact)) = self.far_clearance(host, placed, rect)? else {
-            return Ok(());
-        };
-        let what = if self.config.web {
-            ["the lower flange", "the upper flange"]
-        } else {
-            ["the bottom edge", "the top edge"]
-        };
-        let mut open = Vec::new();
-        for (checked, distance, edge) in [(low, clear.0, what[0]), (high, clear.1, what[1])] {
-            if !checked {
-                continue;
-            }
-            // The distance is exact, or a lower bound of the true one.
-            if distance > maximum + ROUNDING {
-                // A lower bound over the maximum may be farther still.
-                let upper = if exact { distance } else { f64::INFINITY };
-                findings.push((
-                    format!(
-                        "opening is {} from {edge} of its host {}; at most {} allowed",
-                        metres(distance),
-                        placed.host.local_id,
-                        metres(maximum)
-                    ),
-                    Some(Deviation::above(maximum, distance, upper)),
-                ));
-            } else if !exact {
-                open.push(edge);
-            }
-        }
-        if open.is_empty() {
-            return Ok(());
-        }
-        Err((
-            NotEvaluatedReason::IncompleteEvidence,
-            format!(
-                "its distance from {} of its host {}'s outline may exceed {}: where it lies \
-                 in the host's section is known only within bounds",
-                open.join(" and "),
-                placed.host.local_id,
-                metres(maximum)
-            ),
-        ))
-    }
-
     /// The other openings that are or may be placed in `placed`'s host:
     /// each placement there, or `None` for one whose placement is unknown.
     fn neighbours<'p>(
@@ -913,89 +565,53 @@ impl Judge<'_, '_> {
         neighbours
     }
 
-    /// Judges the clear distance to the other openings of the same host and
-    /// records every finding of `opening`.
-    fn spacing(
-        &self,
+    /// The other openings of the same host closer than `required`: those
+    /// surely so, and those that may be.
+    fn spacing_of<'p>(
+        &'p self,
         opening: &Object,
         placed: &Placed,
         openings: &Population,
-        mut findings: Vec<Found>,
-        evaluation: &mut CapabilityEvaluation,
-    ) {
-        let mut evidence = placed.evidence.clone();
-        let mut related = Vec::new();
-        if let Some(required) = self.config.spacing {
-            let mut sure = Vec::new();
-            let mut unknown = Vec::new();
-            for (other, neighbour) in self.neighbours(opening, placed) {
-                // Its host is unknown: it may be this one's.
-                let Some(neighbour) = neighbour else {
-                    unknown.push(other.clone());
-                    continue;
-                };
-                let clear = gap(placed.length, neighbour.length)
-                    .hypot(gap(placed.height, neighbour.height));
-                if clear >= required - ROUNDING {
-                    continue;
-                }
-                if placed.exact && neighbour.exact && openings.matched.contains(other) {
-                    sure.push((other.clone(), clear, neighbour));
-                } else {
-                    unknown.push(other.clone());
-                }
+        required: f64,
+    ) -> Spacing<'p> {
+        let mut spacing = Spacing {
+            sure: Vec::new(),
+            unknown: Vec::new(),
+        };
+        for (other, neighbour) in self.neighbours(opening, placed) {
+            // Its host is unknown: it may be this one's.
+            let Some(neighbour) = neighbour else {
+                spacing.unknown.push(other.clone());
+                continue;
+            };
+            let clear =
+                gap(placed.length, neighbour.length).hypot(gap(placed.height, neighbour.height));
+            if clear >= required - ROUNDING {
+                continue;
             }
-            if sure.is_empty() {
-                if !unknown.is_empty() {
-                    evaluation.push_object_not_evaluated(
-                        opening.id.clone(),
-                        NotEvaluatedReason::IncompleteEvidence,
-                        format!(
-                            "its clear distance to {} may be under {}: their outlines or \
-                             hosts are not known exactly",
-                            list(&unknown),
-                            metres(required)
-                        ),
-                    );
-                }
+            if placed.exact && neighbour.exact && openings.matched.contains(other) {
+                spacing.sure.push((other.clone(), clear, neighbour));
             } else {
-                let nearest = sure
-                    .iter()
-                    .map(|(_, clear, _)| *clear)
-                    .fold(f64::INFINITY, f64::min);
-                findings.push((
-                    format!(
-                        "opening is {} clear of another opening in its host {}; {} required",
-                        metres(nearest),
-                        placed.host.local_id,
-                        metres(required)
-                    ),
-                    Some(Deviation::below(required, nearest, nearest)),
-                ));
-                for (other, _, neighbour) in sure {
-                    evidence.extend(neighbour.evidence.iter().cloned());
-                    related.push(other);
-                }
+                spacing.unknown.push(other.clone());
             }
         }
-        for (message, deviation) in findings {
-            evaluation.push_finding_deviating(
-                self.finding(opening, placed, message, &evidence, &related),
-                deviation,
-            );
-        }
+        spacing
     }
+}
 
-    fn finding(
-        &self,
-        opening: &Object,
-        placed: &Placed,
-        message: String,
-        evidence: &[Evidence],
-        related: &[ObjectId],
-    ) -> Finding {
-        let mut related = related.to_vec();
-        related.push(placed.host.clone());
-        finding(self.rule, &opening.id, message, evidence.to_vec(), related)
+/// The openings of a host closer to one than the spacing allows: those
+/// surely so, with their clear distance, and those that may be.
+struct Spacing<'p> {
+    sure: Vec<(ObjectId, f64, &'p Placed)>,
+    unknown: Vec<ObjectId>,
+}
+
+impl Spacing<'_> {
+    /// The least clear distance of those surely too close.
+    fn nearest(&self) -> f64 {
+        self.sure
+            .iter()
+            .map(|(_, clear, _)| *clear)
+            .fold(f64::INFINITY, f64::min)
     }
 }

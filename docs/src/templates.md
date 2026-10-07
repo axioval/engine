@@ -634,6 +634,11 @@ member may carry evidence of its own (`MeasuredMember::evidence`, the
 floor it was measured above): an outcome on that member cites it, an
 outcome on another never does.
 
+An `Items` check naming `reason` (a text field) leaves an item that states
+one open for that reason, as a report writes it (`missing_service`): a
+placement whose body cannot be read, a search missing its service. Every
+other open outcome is for incomplete evidence.
+
 With `merged`, the findings of several items worded alike are one
 finding on the object, relating every object each related (sorted, each
 once): one finding per distinct defect, not one per item. A form's check
@@ -1533,6 +1538,34 @@ as derived. The declaration is the list's own argument check
 (`Check::Arguments`): the keys, the rows, then the quantity, in the
 capability's order and words.
 
+### `opening-zone`
+
+One form, judged by one check over the measured list
+`zone_checks;host_path=@host_path;host_selector=@host_selector;…;support_clearance=@support_clearance;openings=@selection`
+(every parameter by its own name, and the openings the rule selects, so
+each opening's neighbours are the capability's): what the capability
+checks of the opening in each host its path reaches, in its order, host by
+host (`check` names each item), every opening placed once per run.
+
+| Item | Fields | Judgement |
+| --- | --- | --- |
+| `placement` | `placed`, `inside` (`outside`), `end`, `edge` (`edge_words`), `bottom`, `top`, `far_open` | `placed` undecided is open for the item's `reason` (a host or body that cannot be read, an area that may be below the minimum); `inside` false a finding (`opening lies partly outside its host {host}: {outside}`), undecided open; `end` at least `end_distance`, `edge` at least `edge_distance` (0 m with `zone` `web`) and `bottom`, `top` at most `edge_distance_maximum`, each within a nanometre and graded |
+| `zones` | `zone`, `needed`, `words` | the side the opening misses most of the zone it misses least at least its inset, graded; `null` where it lies in a zone, undecided where it may |
+| `dimension` | `distance`, `minimum`, `maximum`, `slack` | the row's range within its tolerance, graded (`{words}; {required} ({label})`), its doubt `{open}` |
+| `support` | `fails`, `message` | a support surely missing the requirement a finding, one that may open, the supports that cannot be found open for the item's `reason` |
+| `spacing` | `spacing` | the least clear distance to an opening surely too close at least `opening_spacing`, graded |
+
+A distance measured to a free outline from the box the opening may lie in
+is known only from below, up to infinity: it can find an opening but never
+pass one. Both far edges known only from below are left open in one
+outcome (`far_open`), as the capability reported them. Items come in the
+capability's order, so an opening left open for several reasons is open for
+the first as it was. Every finding of a placement relates its host and,
+where it is surely too close to other openings, those openings too, as the
+capability related them. An opening whose hosts cannot be told is open with
+the list's refusal. The declaration is the list's own argument check
+(`Check::Arguments`), in the capability's order and words.
+
 ## Binding and running a rule
 
 The rules crate's `templates` module runs a template
@@ -2082,6 +2115,18 @@ and place (overlapping, side by side, reaching past the wall, small)
 under random tolerances, minimum areas and faces; by the `empty-host`
 rules of the case `openings`, recorded before the switch; and by its fork,
 the truth itself, on the fixtures.
+
+`opening-zone` is held to `opening_zone/reference.rs`
+(`axioval_rules::reference::OpeningZone`) on every fixture of
+`tests/opening_zone.rs` under `Parity::contract()`, its messages asserted
+literally (beams, webs and flanges, L sections, mitred and notched
+outlines, zones, the dimensioning table, supports by path and by contact,
+the minimum area, ducts through several beams); by generated beams holding
+up to four holes of random place, outline and kind, hosted, unhosted or
+with a body the set cannot bound, beside random columns, under random end,
+edge and far-edge distances, spacing, zones, dimension rows, minimum areas
+and support requirements; and by the `opening-zone` rules of the case
+`openings`, recorded before the switch. It is never forked.
 
 `keyed-limit` is held to `keyed_limit/reference.rs`
 (`axioval_rules::reference::KeyedLimit`) on every fixture of

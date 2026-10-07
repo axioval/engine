@@ -193,6 +193,13 @@ const COVERED: &[(&str, &str, &str)] = &[
         "tests/measured_exactness.rs",
         "a_stated_value_cited_approximate_is_refused",
     ),
+    // Placed from the same stated bodies; a support's contact cites the
+    // proximity service's evidence on the item as it states it.
+    (
+        "zone_checks",
+        "tests/measured_exactness.rs",
+        "a_stated_value_cited_approximate_is_refused",
+    ),
     (
         "levels_above",
         "tests/measured_exactness.rs",

@@ -520,10 +520,10 @@
         "opening_placements"
       ]
     },
-    "opening_zone::spacing::hypot": {
+    "opening_zone::spacing_of::hypot": {
       "count": 1,
       "providedBy": [
-        "opening_placements"
+        "zone_checks"
       ]
     },
     "opening_zone::supports::contact::bounds": {

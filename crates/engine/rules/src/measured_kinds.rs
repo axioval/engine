@@ -21,6 +21,7 @@ pub(crate) fn argument_check(name: &str) -> Option<ArgumentCheck> {
         "light_area" | "light_size" | "light_step" => Some(crate::light_area::check_arguments),
         "space_connections" => Some(crate::space_connection::check_arguments),
         "limited_values" => Some(crate::keyed_limit::check_arguments),
+        "zone_checks" => Some(crate::opening_zone::check_arguments),
         "connected_spaces" => Some(crate::opening_spaces::check_arguments),
         "effective_reaching" | "effective_area" | "effective_covered" | "effective_share"
         | "effective_capacity" | "effective_unread" | "effective_missing" => {
@@ -139,6 +140,86 @@ pub(crate) fn selection(
         }
         Some(_) => return Err(PropertyResolutionError::InvalidRequest),
     })
+}
+
+/// The argument `argument` as the rule parameter it was bound from. A
+/// selection stands in as every object: only its presence is read from the
+/// rule, its objects from the call ([`population`]).
+fn rule_parameter(argument: &MeasuredArgument) -> Option<axioval_ir::contract::ParameterValue> {
+    use axioval_ir::contract::{ParameterValue, Selector};
+    Some(match argument {
+        MeasuredArgument::Table(rows) => ParameterValue::Table {
+            value: rows.clone(),
+        },
+        MeasuredArgument::Property { set, name } => ParameterValue::PropertyReference {
+            property_set: set.clone(),
+            property: name.clone(),
+        },
+        MeasuredArgument::Path(steps) => ParameterValue::StringList {
+            value: steps.clone(),
+        },
+        MeasuredArgument::Text(text) => ParameterValue::String {
+            value: text.clone(),
+        },
+        MeasuredArgument::Choice(choice) => ParameterValue::String {
+            value: (*choice).to_owned(),
+        },
+        MeasuredArgument::Truth(value) => ParameterValue::Boolean { value: *value },
+        MeasuredArgument::Length(value) => ParameterValue::Quantity {
+            value: *value,
+            unit: "m".into(),
+        },
+        MeasuredArgument::Number(value) => ParameterValue::Number { value: *value },
+        MeasuredArgument::Objects(_) => ParameterValue::Selector {
+            value: Box::new(Selector::All),
+        },
+        _ => return None,
+    })
+}
+
+/// The rule the arguments of `call` state, each by its key: a capability's
+/// own parameters, read back from the measured list a template names them
+/// in. `areas` are the keys of areas, bound as plain numbers of square
+/// metres.
+pub(crate) fn stated_rule(call: &MeasuredCall, areas: &[&str]) -> axioval_engine::CompiledRule {
+    use axioval_ir::contract::ParameterValue;
+    let stated = call
+        .descriptor
+        .parameters
+        .iter()
+        .filter_map(|declared| {
+            let value = match (call.argument(declared.key)?, areas.contains(&declared.key)) {
+                (MeasuredArgument::Number(value), true) => ParameterValue::Quantity {
+                    value: *value,
+                    unit: "m2".into(),
+                },
+                (argument, _) => rule_parameter(argument)?,
+            };
+            Some((declared.key.to_owned(), value))
+        })
+        .collect();
+    crate::light_area::synthesised(stated)
+}
+
+/// The objects the selection argument `key` binds, every object without
+/// one.
+///
+/// # Errors
+///
+/// As [`selection`], for the reason a capability would give.
+pub(crate) fn population(
+    call: &MeasuredCall,
+    key: &str,
+    context: &RuleContext<'_>,
+) -> Result<std::sync::Arc<crate::counts::Population>, crate::support::Unavailable> {
+    match selection(context, call, key, None).map_err(crate::selection::property_error)? {
+        Some(picked) => Ok(std::sync::Arc::new(crate::counts::Population {
+            matched: picked.matched,
+            undecided: picked.undecided,
+            first: None,
+        })),
+        None => Ok(crate::counts::every_object(context)),
+    }
 }
 
 /// A capability's refusal as a property-resolution error that maps back to

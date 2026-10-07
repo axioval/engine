@@ -2,9 +2,7 @@
 //! the nearest other opening of its host, or to one of the host's edges,
 //! along one of the face's axes.
 
-use axioval_engine::{
-    CapabilityEvaluation, ColumnKind, Deviation, NotEvaluatedReason, RuleContext, TableColumn,
-};
+use axioval_engine::{ColumnKind, Deviation, NotEvaluatedReason, RuleContext, TableColumn};
 use axioval_ir::contract::Selector;
 use axioval_ir::{Object, ObjectId, QuantityDimension};
 
@@ -78,7 +76,7 @@ enum To<'a> {
 
 /// The bound a row puts on a distance.
 #[derive(Clone, Copy)]
-enum Bound {
+pub(super) enum Bound {
     Range {
         minimum: Option<f64>,
         maximum: Option<f64>,
@@ -88,12 +86,12 @@ enum Bound {
 
 /// One row of `dimensions`.
 pub(super) struct Dimension<'a> {
-    label: String,
+    pub(super) label: String,
     source: &'a Selector,
     to: To<'a>,
     along: Along,
-    bound: Bound,
-    tolerance: f64,
+    pub(super) bound: Bound,
+    pub(super) tolerance: f64,
 }
 
 fn length_cell(row: Row<'_>, column: &str, number: usize) -> Result<Option<f64>, Unavailable> {
@@ -232,7 +230,8 @@ impl Selections {
 }
 
 /// How a distance meets a row's bound.
-enum Verdict {
+#[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
+pub(super) enum Verdict {
     Holds,
     /// A finding: what is required, and how far it misses.
     Misses(String, Deviation),
@@ -240,15 +239,16 @@ enum Verdict {
 }
 
 impl Bound {
-    /// Judges a distance known to lie in `[lower, upper]`: it holds or
-    /// misses only when every value there does. The tolerance widens the
-    /// bound; the deviation is measured from the bound as declared.
-    fn judge(self, (lower, upper): Span, tolerance: f64) -> Verdict {
-        let slack = tolerance + ROUNDING;
-        let (minimum, maximum) = match self {
+    /// The least and the greatest distance the row allows.
+    pub(super) fn limits(self) -> (Option<f64>, Option<f64>) {
+        match self {
             Self::Range { minimum, maximum } => (minimum, maximum),
             Self::Fixed(fixed) => (Some(fixed), Some(fixed)),
-        };
+        }
+    }
+
+    /// What the row requires, as a finding words it.
+    pub(super) fn required(self, tolerance: f64) -> String {
         let required = match self {
             Self::Fixed(fixed) => format!("{} required", metres(fixed)),
             Self::Range {
@@ -263,11 +263,21 @@ impl Bound {
                 format!("at most {} allowed", metres(maximum.unwrap_or(0.0)))
             }
         };
-        let required = if tolerance > 0.0 {
+        if tolerance > 0.0 {
             format!("{required} within {}", metres(tolerance))
         } else {
             required
-        };
+        }
+    }
+
+    /// Judges a distance known to lie in `[lower, upper]`: it holds or
+    /// misses only when every value there does. The tolerance widens the
+    /// bound; the deviation is measured from the bound as declared.
+    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
+    pub(super) fn judge(self, (lower, upper): Span, tolerance: f64) -> Verdict {
+        let slack = tolerance + ROUNDING;
+        let (minimum, maximum) = self.limits();
+        let required = self.required(tolerance);
         if let Some(minimum) = minimum
             && upper < minimum - slack
         {
@@ -313,115 +323,122 @@ fn edge_distance(
     Some((value, if exact { value } else { f64::INFINITY }))
 }
 
-/// A row's finding: its message, deviation, and the opening it names.
-type Missed<'p> = (String, Deviation, Option<(&'p ObjectId, &'p Placed)>);
+/// A row's distance as measured: an interval sure to hold it, how a
+/// finding words it, the opening it is measured to, and how an outcome
+/// left open words it.
+pub(super) struct Measure<'p> {
+    pub(super) distance: Span,
+    pub(super) words: String,
+    pub(super) target: Option<(&'p ObjectId, &'p Placed)>,
+    pub(super) open: String,
+}
+
+/// A row of the table whose `source` selects the opening, or may.
+pub(super) enum Applied<'p> {
+    /// Whether the row applies is undecided.
+    Undecided(String),
+    /// The row by its index, and its distance; an error where the opening
+    /// it is measured to is undecided.
+    Measured(usize, Result<Measure<'p>, Unavailable>),
+}
 
 impl Judge<'_, '_> {
-    /// Judges every row of the dimensioning table whose `source` selects
-    /// the opening.
-    pub(super) fn dimensions(
-        &self,
+    /// The rows of the dimensioning table whose `source` selects the
+    /// opening or may, each measured; a row with nothing to measure to is
+    /// left out.
+    pub(super) fn applied<'p>(
+        &'p self,
         opening: &Object,
         placed: &Placed,
         host: &Host,
         rect: [Span; 2],
-        evaluation: &mut CapabilityEvaluation,
-    ) {
-        for (dimension, (sources, targets)) in self.config.dimensions.iter().zip(&self.dimensions.0)
+    ) -> Vec<Applied<'p>> {
+        let mut applied = Vec::new();
+        for (index, (dimension, (sources, targets))) in self
+            .config
+            .dimensions
+            .iter()
+            .zip(&self.dimensions.0)
+            .enumerate()
         {
             if sources.undecided.contains(&opening.id) {
-                evaluation.push_object_not_evaluated(
-                    opening.id.clone(),
-                    NotEvaluatedReason::IncompleteEvidence,
-                    format!("whether {} applies to it is undecided", dimension.label),
-                );
+                applied.push(Applied::Undecided(format!(
+                    "whether {} applies to it is undecided",
+                    dimension.label
+                )));
                 continue;
             }
             if !sources.matched.contains(&opening.id) {
                 continue;
             }
-            let judged = match (&dimension.to, targets) {
-                (To::Edge(edge), _) => {
-                    Self::edge_row(placed, host, rect, dimension, *edge, self.config.axes)
-                }
+            let measured = match (&dimension.to, targets) {
+                (To::Edge(edge), _) => Ok(Self::edge_measure(
+                    placed,
+                    host,
+                    rect,
+                    dimension,
+                    *edge,
+                    self.config.axes,
+                )),
                 (To::Openings { overlap, .. }, Some(targets)) => {
-                    self.target_row(opening, placed, dimension, *overlap, targets)
+                    self.target_measure(opening, placed, dimension, *overlap, targets)
                 }
                 (To::Openings { .. }, None) => Ok(None),
             };
-            match judged {
+            match measured {
                 Ok(None) => {}
-                Ok(Some((message, deviation, target))) => {
-                    let mut evidence = placed.evidence.clone();
-                    let mut related = Vec::new();
-                    if let Some((target, neighbour)) = target {
-                        evidence.extend(neighbour.evidence.iter().cloned());
-                        related.push(target.clone());
-                    }
-                    evaluation.push_graded_finding(
-                        self.finding(opening, placed, message, &evidence, &related),
-                        deviation,
-                    );
-                }
-                Err((reason, message)) => {
-                    evaluation.push_object_not_evaluated(opening.id.clone(), reason, message);
-                }
+                Ok(Some(measure)) => applied.push(Applied::Measured(index, Ok(measure))),
+                Err(error) => applied.push(Applied::Measured(index, Err(error))),
             }
         }
+        applied
     }
 
-    fn edge_row<'p>(
+    /// The distance from the host's `edge`; none where the outline passes
+    /// through the opening, which is found apart.
+    fn edge_measure<'p>(
         placed: &Placed,
         host: &Host,
         rect: [Span; 2],
         dimension: &Dimension<'_>,
         edge: Edge,
         axes: FaceAxes,
-    ) -> Result<Option<Missed<'p>>, Unavailable> {
-        let Some(distance) = edge_distance(host, placed, rect, edge, axes) else {
-            return Ok(None);
-        };
+    ) -> Option<Measure<'p>> {
+        let distance = edge_distance(host, placed, rect, edge, axes)?;
         let exact = distance.1.is_finite();
-        match dimension.bound.judge(distance, dimension.tolerance) {
-            Verdict::Holds => Ok(None),
-            Verdict::Misses(required, deviation) => Ok(Some((
-                format!(
-                    "opening is {}{} from the {} of its host {} along its {}; {required} ({})",
-                    if exact { "" } else { "at least " },
-                    metres(distance.0.max(0.0)),
-                    edge.name(),
-                    placed.host.local_id,
-                    dimension.along.name(),
-                    dimension.label
-                ),
-                deviation,
-                None,
-            ))),
-            Verdict::Undecided => Err((
-                NotEvaluatedReason::IncompleteEvidence,
-                format!(
-                    "its distance from the {} of its host {} may miss {}: where it lies in the \
-                     host's section is known only within bounds",
-                    edge.name(),
-                    placed.host.local_id,
-                    dimension.label
-                ),
-            )),
-        }
+        Some(Measure {
+            distance,
+            words: format!(
+                "opening is {}{} from the {} of its host {} along its {}",
+                if exact { "" } else { "at least " },
+                metres(distance.0.max(0.0)),
+                edge.name(),
+                placed.host.local_id,
+                dimension.along.name(),
+            ),
+            target: None,
+            open: format!(
+                "its distance from the {} of its host {} may miss {}: where it lies in the \
+                 host's section is known only within bounds",
+                edge.name(),
+                placed.host.local_id,
+                dimension.label
+            ),
+        })
     }
 
-    /// Judges a row measured to the nearest target opening of the host.
-    /// The nearest sure target bounds that distance from above, and every
-    /// undecided one below it; an opening whose place is unknown may be
-    /// nearer still. A host with no target leaves the row unjudged.
-    fn target_row<'p>(
+    /// The distance to the nearest target opening of the host. The nearest
+    /// sure target bounds it from above, and every undecided one below it;
+    /// an opening whose place is unknown may be nearer still. A host with
+    /// no target measures none; one with no sure target is undecided.
+    fn target_measure<'p>(
         &'p self,
         opening: &Object,
         placed: &Placed,
         dimension: &Dimension<'_>,
         overlap: bool,
         targets: &Population,
-    ) -> Result<Option<Missed<'p>>, Unavailable> {
+    ) -> Result<Option<Measure<'p>>, Unavailable> {
         let (own, own_across) = split(placed, dimension.along);
         let mut sure: Vec<(f64, &ObjectId, &Placed)> = Vec::new();
         let mut possible: Vec<(f64, &ObjectId)> = Vec::new();
@@ -467,22 +484,18 @@ impl Judge<'_, '_> {
                 .filter(|(distance, _)| *distance < nearest)
                 .map(|(_, other)| other.clone()),
         );
-        match dimension.bound.judge((lower, nearest), dimension.tolerance) {
-            Verdict::Holds => Ok(None),
-            Verdict::Misses(required, deviation) => Ok(Some((
-                format!(
-                    "opening is {} from opening {} along the {} of its host {}; {required} ({})",
-                    metres(nearest),
-                    target.local_id,
-                    dimension.along.name(),
-                    placed.host.local_id,
-                    dimension.label
-                ),
-                deviation,
-                Some((target, neighbour)),
-            ))),
-            Verdict::Undecided => Err(undecided(dimension, &unknown)),
-        }
+        Ok(Some(Measure {
+            distance: (lower, nearest),
+            words: format!(
+                "opening is {} from opening {} along the {} of its host {}",
+                metres(nearest),
+                target.local_id,
+                dimension.along.name(),
+                placed.host.local_id,
+            ),
+            target: Some((target, neighbour)),
+            open: undecided(dimension, &unknown).1,
+        }))
     }
 }
 

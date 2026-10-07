@@ -6,7 +6,7 @@ use axioval_engine::{ColumnKind, Deviation, NotEvaluatedReason, TableColumn};
 use axioval_ir::QuantityDimension;
 
 use super::face::{Host, ROUNDING, Span};
-use super::{Found, Judge, Placed};
+use super::{Judge, Placed};
 use crate::level_spacing::metres;
 use crate::support::table::Row;
 use crate::support::{Parameters, Unavailable, invalid, si_quantity};
@@ -243,22 +243,21 @@ impl Judge<'_, '_> {
         ]))
     }
 
-    /// Judges the opening against the allowed zones: inside one passes,
-    /// surely outside every one is a finding named and graded by the zone
-    /// it misses least, and otherwise it is not evaluated.
-    pub(super) fn zones(
+    /// Where the opening lies against the allowed zones: inside one is
+    /// none, surely outside every one the miss of the zone it misses least,
+    /// and an error where it may lie in one.
+    pub(super) fn zone_miss(
         &self,
         host: &Host,
         placed: &Placed,
         rect: [Span; 2],
-        findings: &mut Vec<Found>,
-    ) -> Result<(), Unavailable> {
+    ) -> Result<Option<ZoneMiss>, Unavailable> {
         let zones = &self.config.zones;
         if zones.is_empty() {
-            return Ok(());
+            return Ok(None);
         }
         let Some(sides) = self.sides(host, placed, rect)? else {
-            return Ok(());
+            return Ok(None);
         };
         let (_, length_bounds) = host.axis(self.config.axes.length);
         let (_, height_bounds) = host.axis(self.config.axes.height);
@@ -270,7 +269,7 @@ impl Judge<'_, '_> {
         let mut undecided = Vec::new();
         for zone in zones {
             match zone.holds(&sides, span, depth) {
-                Held::Inside => return Ok(()),
+                Held::Inside => return Ok(None),
                 Held::Undecided => undecided.push(zone.label.as_str()),
                 Held::Outside(misses, deviation) => {
                     nearest = Some(match nearest {
@@ -295,8 +294,21 @@ impl Judge<'_, '_> {
             ));
         }
         let Some((zone, misses, deviation)) = nearest else {
-            return Ok(());
+            return Ok(None);
         };
+        // The side it misses most decides how far it misses the zone.
+        let below = |(clear, needed): (f64, f64)| Deviation::below(needed, clear, clear).lower();
+        let (clear, needed) = misses
+            .iter()
+            .map(|(_, clear, needed)| (*clear, *needed))
+            .reduce(|most, miss| {
+                if below(miss) > below(most) {
+                    miss
+                } else {
+                    most
+                }
+            })
+            .expect("a zone missed is missed at a side");
         let described = misses
             .iter()
             .map(|(index, clear, needed)| {
@@ -317,13 +329,25 @@ impl Judge<'_, '_> {
                 placed.host.local_id
             )
         };
-        findings.push((
-            format!(
+        Ok(Some(ZoneMiss {
+            message: format!(
                 "opening lies outside {within}: nearest is {}, where it {described}",
                 zone.label
             ),
-            Some(deviation),
-        ));
-        Ok(())
+            clear,
+            needed,
+            deviation,
+        }))
     }
+}
+
+/// An opening surely outside every allowed zone: the finding's message,
+/// the clear distance and inset of the side it misses most in the zone it
+/// misses least, and how far it misses that zone.
+pub(super) struct ZoneMiss {
+    pub(super) message: String,
+    pub(super) clear: f64,
+    pub(super) needed: f64,
+    #[cfg_attr(not(feature = "parity-reference"), allow(dead_code))]
+    pub(super) deviation: Deviation,
 }

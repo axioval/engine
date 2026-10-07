@@ -27,12 +27,78 @@ use crate::support::{Traversal, exact_f64, si_quantity, undefined};
 
 /// What a run's shared selections are kept by: the selector, as written.
 #[derive(Clone, Hash, PartialEq, Eq)]
-struct SharedSelector(String);
+struct SharedSelector(Arc<str>);
 
 /// A shared selection: the positions in its population of the objects
 /// selected, in order, and the outcomes of the objects and sources it could
 /// not decide.
 type Shared = Arc<(Vec<usize>, CapabilityEvaluation)>;
+
+/// How many selectors [`shared_as`] keeps before it starts over.
+const SHARED_KEPT: usize = 1024;
+
+/// What a shared selection of `selector` is kept by, as written; `None`
+/// where it is never shared (it reads a rule's outcomes or evaluates an
+/// expression). A pure function of the selector, so written once per
+/// process for each selector (at most [`SHARED_KEPT`]), found again by a
+/// fingerprint of its shape and compared whole.
+fn shared_as(selector: &Selector) -> Option<Arc<str>> {
+    type Written = std::collections::HashMap<u64, Vec<(Selector, Option<Arc<str>>)>>;
+    static KEPT: std::sync::LazyLock<std::sync::Mutex<(usize, Written)>> =
+        std::sync::LazyLock::new(|| std::sync::Mutex::new((0, Written::new())));
+    let print = {
+        use std::hash::{BuildHasher, BuildHasherDefault, DefaultHasher, Hasher};
+        let mut hasher = BuildHasherDefault::<DefaultHasher>::default().build_hasher();
+        fingerprint(selector, &mut hasher);
+        hasher.finish()
+    };
+    if let Ok(kept) = KEPT.lock()
+        && let Some((_, written)) = kept
+            .1
+            .get(&print)
+            .and_then(|kept| kept.iter().find(|(known, _)| known == selector))
+    {
+        return written.clone();
+    }
+    let written = (selector.rule_references().is_empty() && selector.expressions().is_empty())
+        .then(|| serde_json::to_string(selector).ok())
+        .flatten()
+        .map(Arc::from);
+    if let Ok(mut kept) = KEPT.lock() {
+        if kept.0 >= SHARED_KEPT {
+            *kept = (0, Written::new());
+        }
+        kept.0 += 1;
+        kept.1
+            .entry(print)
+            .or_default()
+            .push((selector.clone(), written.clone()));
+    }
+    written
+}
+
+/// A cheap fingerprint of `selector`'s shape: equal selectors share it.
+fn fingerprint(selector: &Selector, hasher: &mut impl std::hash::Hasher) {
+    use std::hash::Hash;
+    std::mem::discriminant(selector).hash(hasher);
+    match selector {
+        Selector::EntityType {
+            object_type,
+            include_subtypes,
+        } => {
+            object_type.hash(hasher);
+            include_subtypes.hash(hasher);
+        }
+        Selector::AllOf { operands } | Selector::AnyOf { operands } => {
+            operands.len().hash(hasher);
+            for operand in operands {
+                fingerprint(operand, hasher);
+            }
+        }
+        Selector::Not { operand } => fingerprint(operand, hasher),
+        _ => {}
+    }
+}
 
 /// [`select_objects`], selected once per run for every rule and template
 /// selecting the same objects: a selector that reads no rule's outcomes
@@ -43,27 +109,10 @@ pub(crate) fn select_shared<'a>(
     context: &RuleContext<'a>,
     selector: &Selector,
 ) -> (Vec<&'a Object>, CapabilityEvaluation) {
-    select_shared_as(context, selector, shared_as(selector).as_deref())
-}
-
-/// What a shared selection of `selector` is kept by, as written; `None`
-/// where it is never shared.
-pub(crate) fn shared_as(selector: &Selector) -> Option<String> {
-    (selector.rule_references().is_empty() && selector.expressions().is_empty())
-        .then(|| serde_json::to_string(selector).ok())
-        .flatten()
-}
-
-/// [`select_shared`] of a selector written already ([`shared_as`]).
-pub(crate) fn select_shared_as<'a>(
-    context: &RuleContext<'a>,
-    selector: &Selector,
-    written: Option<&str>,
-) -> (Vec<&'a Object>, CapabilityEvaluation) {
-    let (Some(written), Some(memo)) = (written, context.services.get::<MeasuredMemo>()) else {
+    let (Some(written), Some(memo)) = (shared_as(selector), context.services.get::<MeasuredMemo>())
+    else {
         return select_objects(context, selector);
     };
-    let written = written.to_owned();
     // The population is the same for every rule of the run, so a position
     // in it names the same object.
     let (population, unreadable) = population(context, selector);

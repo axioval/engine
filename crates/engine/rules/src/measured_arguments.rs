@@ -59,9 +59,6 @@ pub(crate) struct Planned {
     values: Mutex<BTreeMap<Box<str>, Kept>>,
     /// Each name read as a member list.
     lists: Mutex<BTreeMap<Box<str>, Kept>>,
-    /// Each selector parameter as its shared selection is kept by
-    /// ([`crate::selection::shared_as`]), written once.
-    selectors: Mutex<BTreeMap<Box<str>, Option<Arc<str>>>>,
 }
 
 /// What a plan keeps of one measured name.
@@ -83,24 +80,6 @@ enum Kept {
 }
 
 impl Planned {
-    /// The selector parameter `parameter` (stating `selector`) as its
-    /// shared selection is kept by, written once for the plan.
-    fn written(&self, parameter: &str, selector: &Selector) -> Option<Arc<str>> {
-        if let Some(written) = self
-            .selectors
-            .lock()
-            .ok()
-            .and_then(|kept| kept.get(parameter).cloned())
-        {
-            return written;
-        }
-        let written: Option<Arc<str>> = crate::selection::shared_as(selector).map(Arc::from);
-        if let Ok(mut kept) = self.selectors.lock() {
-            kept.insert(parameter.into(), written.clone());
-        }
-        written
-    }
-
     /// What the plan keeps of `name` (a list where `list`), kept now if it
     /// was not.
     fn kept(
@@ -506,20 +485,7 @@ impl Arguments {
         if let Some(read) = self.selections.borrow().get(parameter) {
             return read.clone();
         }
-        // A selector parameter's selection, as the plan wrote it once (the
-        // rule's own selection is no parameter of the plan).
-        let written = self
-            .planned
-            .as_ref()
-            .filter(|_| parameter != axioval_engine::template::SELECTION)
-            .map(|planned| planned.written(parameter, selector));
-        let selected = match &written {
-            Some(written) => {
-                crate::selection::select_shared_as(context, selector, written.as_deref())
-            }
-            None => select_shared(context, selector),
-        };
-        let read = selection_of_selected(parameter, selected).map(Arc::new);
+        let read = selection_of_selected(parameter, select_shared(context, selector)).map(Arc::new);
         self.selections
             .borrow_mut()
             .insert(parameter.to_owned(), read.clone());

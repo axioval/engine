@@ -581,6 +581,7 @@ impl<'a> ObjectLeaves<'a> {
     }
 
     /// The field `name` of the measured member in scope.
+    #[allow(clippy::too_many_lines)]
     fn member_field(&self, name: &str) -> Leaf {
         let Some(member) = self.fields else {
             self.reasons
@@ -622,6 +623,10 @@ impl<'a> ObjectLeaves<'a> {
                     .borrow_mut()
                     .push(NotEvaluatedReason::IncompleteEvidence);
                 Leaf::unreadable(format!("`{name}` is undecided: {why}"))
+            }
+            Some(MemberValue::Refused { reason, why }) => {
+                self.reasons.borrow_mut().push(reason.clone());
+                Leaf::unreadable(format!("`{name}` is not evaluated: {why}"))
             }
             Some(MemberValue::Truth { value, locator }) => Leaf {
                 value: Ok(Value::Boolean(*value)),

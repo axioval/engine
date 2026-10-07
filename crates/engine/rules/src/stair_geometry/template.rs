@@ -108,6 +108,7 @@ fn items(applies: Applies, list: &'static str) -> Items {
         once: false,
         combined: None,
         reason: None,
+        joined: None,
     }
 }
 

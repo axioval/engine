@@ -264,6 +264,7 @@ fn items() -> FormCheck {
             once: false,
             combined: None,
             reason: Some("reason"),
+            joined: None,
         })),
         fail: "",
         undecided: "",

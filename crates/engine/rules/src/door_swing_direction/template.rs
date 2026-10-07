@@ -74,6 +74,7 @@ fn spaces(declared: &'static str) -> Items {
         merged: false,
         combined: None,
         reason: None,
+        joined: None,
     }
 }
 

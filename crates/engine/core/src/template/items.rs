@@ -85,6 +85,12 @@ pub struct Items {
     /// evidence.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<&'static str>,
+    /// An item's failing tests as one finding, their messages joined by
+    /// this separator (relating and citing what each does, graded by the
+    /// worst deviation where each states one), or, where none fails, the
+    /// first left open: a capability reporting one outcome per object.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub joined: Option<&'static str>,
 }
 
 /// The items' outcomes as one: where any item fails, one finding whose

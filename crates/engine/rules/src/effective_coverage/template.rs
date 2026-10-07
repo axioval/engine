@@ -424,6 +424,7 @@ fn missing() -> FormCheck {
             once: false,
             combined: None,
             reason: None,
+            joined: None,
         })),
         fail: "",
         undecided: "",

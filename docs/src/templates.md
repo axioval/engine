@@ -675,6 +675,16 @@ unit, as the range judge words it: `at least 4`), `{why}` and the
 forked (`ForkError::Inexpressible`); its expression form is a `none`
 aggregate over the list of an item failing its tests.
 
+An item field the measurement refused for a reason of its own
+(`MemberValue::Refused`: a missing service, invalid evidence) leaves the
+test reading it open for that reason, where an undecided field leaves it
+open as incomplete evidence. With `Items::joined`, a separator, an item's
+failing tests are one finding, their messages joined, relating and citing
+what each does and graded by the worst deviation where each states one,
+or, where none fails, the first left open: a capability reporting one
+outcome per object for all it checks of it (an item placed with
+`Items::at` is placed as one).
+
 The declaration checks the stair and ramp templates add are `positive` (a
 length above zero), `needs` (where a check is declared every parameter it
 needs is stated, and none of them without one), `below` (two lengths in

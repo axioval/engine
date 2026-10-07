@@ -145,6 +145,7 @@ fn elements() -> FormCheck {
             merged: false,
             combined: None,
             reason: None,
+            joined: None,
         })),
         fail: "",
         undecided: "",

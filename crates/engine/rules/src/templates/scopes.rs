@@ -362,7 +362,27 @@ fn judge(
                         Some(value) => cited(&read, value),
                         None => tally.sure,
                     };
-                    ranged(plan, &mut read, &judged, related)
+                    // The grading's values, read only where the scope
+                    // fails, its undecided ones where it is undecided:
+                    // what only the message words.
+                    let lazy = plan.form.grading.as_ref().and_then(|grading| {
+                        let (failed, open) = plan.bound.grading[0].split_at(grading.values.len());
+                        match judged.verdict {
+                            crate::plan_area::Verdict::Fail(_) => {
+                                Some(grading.values.iter().zip(failed))
+                            }
+                            crate::plan_area::Verdict::Undecided(_) => {
+                                Some(grading.undecided.iter().zip(open))
+                            }
+                            crate::plan_area::Verdict::Pass => None,
+                        }
+                    });
+                    match lazy
+                        .map(|values| super::read_graded(values, &stand_in, &mut leaves, &mut read))
+                    {
+                        Some(Err(outcome)) => outcome,
+                        _ => ranged(plan, &mut read, &judged, related),
+                    }
                 }
                 None => Outcome::Open(
                     NotEvaluatedReason::InvalidEvidence,

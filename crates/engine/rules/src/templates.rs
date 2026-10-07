@@ -2327,13 +2327,15 @@ impl From<Outcome> for Judgement {
 /// against, in the order cited, each once.
 fn cited(read: &Read, name: &str) -> Vec<ObjectId> {
     let mut related: Vec<ObjectId> = Vec::new();
+    // Each once, in the order cited: a source's walls may be many.
+    let mut seen: std::collections::BTreeSet<&ObjectId> = std::collections::BTreeSet::new();
     let cited = read
         .related
         .iter()
         .filter(|(read, _)| *read == name)
         .flat_map(|(_, objects)| objects);
     for object in cited {
-        if !related.contains(object) {
+        if seen.insert(object) {
             related.push(object.clone());
         }
     }

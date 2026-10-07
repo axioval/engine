@@ -25,6 +25,11 @@ use axioval_ir::{Evidence, Property, PropertyValue, QuantityDimension};
 /// root) and the test.
 const COVERED: &[(&str, &str, &str)] = &[
     (
+        "name_sequence",
+        "tests/semantic.rs",
+        "members_without_an_order_value_are_ordered_by_their_placement_height",
+    ),
+    (
         "exit_separation",
         "tests/exit_separation.rs",
         "a_separation_measured_approximately_is_inexact",

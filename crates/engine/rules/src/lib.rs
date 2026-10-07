@@ -203,6 +203,7 @@ pub mod reference {
     pub use crate::keyed_limit::reference::KeyedLimit;
     pub use crate::level_spacing::reference::LevelSpacing;
     pub use crate::light_well::reference::LightWell;
+    pub use crate::name_sequence::reference::NameSequence;
     pub use crate::object_count::reference::ObjectCount;
     pub use crate::opening_area::reference::OpeningArea;
     pub use crate::opening_spaces::reference::OpeningSpaces;
@@ -327,6 +328,7 @@ pub fn register_builtins(registry: CapabilityRegistry) -> Result<CapabilityRegis
         .and_then(|registry| registry.register_measured(measured_plan::PlanMeasures))
         .and_then(|registry| registry.register_measured(component_visibility::ViewMeasures))
         .and_then(|registry| registry.register_measured(exit_separation::ExitMeasures))
+        .and_then(|registry| registry.register_measured(name_sequence::SequenceMeasures))
         .and_then(|registry| registry.register_measured(axioval_engine::FacePieceMeasures))
         .and_then(|registry| registry.register_measured(escape_route::TravelMeasures))
         .and_then(|registry| registry.register_measured(free_floor::PlacementMeasures))

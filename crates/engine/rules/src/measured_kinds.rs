@@ -29,6 +29,7 @@ pub(crate) fn argument_check(name: &str) -> Option<ArgumentCheck> {
         }
         "recesses" => Some(crate::recess_width::check_arguments),
         "exit_separation" => Some(crate::exit_separation::check_arguments),
+        "name_sequence" => Some(crate::name_sequence::check_arguments),
         "well_requirements" => Some(crate::light_well::check_arguments),
         "opening_area" | "opening_count" => Some(crate::measured_openings::check_arguments),
         _ => None,

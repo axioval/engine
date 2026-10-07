@@ -1,7 +1,8 @@
 //! Numbered names that must count up in a declared order.
 
-use std::cmp::Ordering;
+use std::sync::LazyLock;
 
+use axioval_engine::template::Template;
 use axioval_engine::{
     CapabilityEvaluation, CompiledRule, NotEvaluatedReason, ObjectFrameServiceHandle,
     ParameterDescriptor, ParameterType, RuleCapability, RuleContext,
@@ -9,10 +10,16 @@ use axioval_engine::{
 use axioval_ir::contract::Selector;
 use axioval_ir::{Evidence, Object, ObjectId, PropertyValue};
 
-use crate::selection::select_objects;
-use crate::support::{
-    Parameters, PropertyRef, Traversal, Unavailable, finding, invalid, resolve, undefined,
-};
+use crate::support::{Parameters, PropertyRef, Traversal, Unavailable, invalid, resolve};
+
+mod measured;
+#[cfg(feature = "parity-reference")]
+pub(crate) mod reference;
+mod template;
+
+pub(crate) use measured::SequenceMeasures;
+
+pub(crate) const NAME: &str = "name-sequence";
 
 /// Requires the members of each anchor to be numbered consecutively in order.
 ///
@@ -38,113 +45,132 @@ use crate::support::{
 /// placement the service cannot read exactly, still leaves the anchor not
 /// evaluated, and without the service it is a missing service. A present
 /// order value that is not a number is never replaced.
+///
+/// It runs as a template ([`axioval_engine::template`]): the items of the
+/// measured `name_sequence` list, each member in order with its number and
+/// the number the sequence expects of it, judged on the member.
 pub struct NameSequence;
 
-struct Member<'a> {
-    object: &'a Object,
-    order: f64,
-    name: Option<PropertyValue>,
-    evidence: Vec<Evidence>,
+static TEMPLATE: LazyLock<Template> = LazyLock::new(template::template);
+
+/// The plans of the rules bound to it, kept across runs.
+static PLANS: crate::templates::Plans = crate::templates::Plans::new();
+
+pub(crate) struct Member<'a> {
+    pub(crate) object: &'a Object,
+    pub(crate) order: f64,
+    pub(crate) name: Option<PropertyValue>,
+    pub(crate) evidence: Vec<Evidence>,
 }
 
 impl RuleCapability for NameSequence {
     fn id(&self) -> &'static str {
-        "axioval:capability.name-sequence"
+        template::ID
     }
 
     fn parameters(&self) -> Vec<ParameterDescriptor> {
-        vec![
-            ParameterDescriptor::required("member_selector", ParameterType::Selector),
-            ParameterDescriptor::required("name", ParameterType::PropertyReference),
-            ParameterDescriptor::required("order", ParameterType::PropertyReference),
-            ParameterDescriptor::optional("first", ParameterType::Integer),
-            ParameterDescriptor::optional("increment", ParameterType::Integer),
-            ParameterDescriptor::optional("order_fallback", ParameterType::String),
-        ]
-        .into_iter()
-        .chain(crate::support::traversal_parameters())
-        .collect()
+        TEMPLATE.parameters.clone()
     }
 
     fn evaluate(&self, context: &RuleContext<'_>, rule: &CompiledRule) -> CapabilityEvaluation {
-        let parameters = Parameters(rule);
-        let parsed = (|| {
-            let increment = parameters.integer("increment")?.unwrap_or(1);
-            if increment <= 0 {
-                return Err(invalid("increment must be positive"));
-            }
-            let placement_fallback = match parameters.string("order_fallback")? {
-                None => false,
-                Some("placement_height") => true,
-                Some(other) => {
-                    return Err(invalid(format!(
-                        "order_fallback `{other}` is unsupported; use `placement_height`"
-                    )));
-                }
-            };
-            Ok::<_, Unavailable>(Config {
-                members: parameters.required_selector("member_selector")?,
-                name: parameters.required_property("name")?,
-                order: parameters.required_property("order")?,
-                first: parameters.integer("first")?.unwrap_or(1),
-                increment,
-                traversal: parameters.traversal()?,
-                placement_fallback,
-            })
-        })();
-        let config = match parsed {
-            Ok(config) => config,
-            Err((reason, message)) => {
-                return CapabilityEvaluation::not_evaluated(
-                    reason,
-                    format!("name-sequence: {message}"),
-                );
-            }
-        };
-        let (anchors, mut evaluation) = select_objects(context, &rule.selector);
-        for anchor in anchors {
-            match members(context, &config, anchor) {
-                Ok(members) => check(rule, &config, &members, &mut evaluation),
-                Err((reason, message)) => {
-                    evaluation.push_object_not_evaluated(anchor.id.clone(), reason, message);
-                }
-            }
-        }
-        evaluation
+        crate::templates::run((&TEMPLATE, &PLANS), context, rule)
+    }
+
+    fn template(&self) -> Option<&Template> {
+        Some(&TEMPLATE)
     }
 }
 
-struct Config<'a> {
-    members: &'a Selector,
-    name: PropertyRef<'a>,
-    order: PropertyRef<'a>,
-    first: i64,
-    increment: i64,
-    traversal: Option<Traversal>,
-    /// Order a member without an order value by its placement height.
-    placement_fallback: bool,
+/// The capability's parameter descriptor.
+pub(crate) fn parameters() -> Vec<ParameterDescriptor> {
+    vec![
+        ParameterDescriptor::required("member_selector", ParameterType::Selector),
+        ParameterDescriptor::required("name", ParameterType::PropertyReference),
+        ParameterDescriptor::required("order", ParameterType::PropertyReference),
+        ParameterDescriptor::optional("first", ParameterType::Integer),
+        ParameterDescriptor::optional("increment", ParameterType::Integer),
+        ParameterDescriptor::optional("order_fallback", ParameterType::String),
+    ]
+    .into_iter()
+    .chain(crate::support::traversal_parameters())
+    .collect()
 }
 
-/// The anchor's members in order, or why they cannot be ordered.
-fn members<'a>(
+pub(crate) struct Config<'a> {
+    /// The member selector, where the declaration was read from a rule.
+    pub(crate) members: Option<&'a Selector>,
+    pub(crate) name: PropertyRef<'a>,
+    pub(crate) order: PropertyRef<'a>,
+    pub(crate) first: i64,
+    pub(crate) increment: i64,
+    pub(crate) traversal: Option<Traversal>,
+    /// Order a member without an order value by its placement height.
+    pub(crate) placement_fallback: bool,
+}
+
+impl<'a> Config<'a> {
+    /// The declaration, read and refused as the capability always read it;
+    /// the member selector too where `selector` holds (a measured list is
+    /// handed the objects it picks instead).
+    pub(crate) fn read(parameters: &Parameters<'a>, selector: bool) -> Result<Self, Unavailable> {
+        let increment = parameters.integer("increment")?.unwrap_or(1);
+        if increment <= 0 {
+            return Err(invalid("increment must be positive"));
+        }
+        let placement_fallback = match parameters.string("order_fallback")? {
+            None => false,
+            Some("placement_height") => true,
+            Some(other) => {
+                return Err(invalid(format!(
+                    "order_fallback `{other}` is unsupported; use `placement_height`"
+                )));
+            }
+        };
+        Ok(Config {
+            members: if selector {
+                Some(parameters.required_selector("member_selector")?)
+            } else {
+                None
+            },
+            name: parameters.required_property("name")?,
+            order: parameters.required_property("order")?,
+            first: parameters.integer("first")?.unwrap_or(1),
+            increment,
+            traversal: parameters.traversal()?,
+            placement_fallback,
+        })
+    }
+}
+
+/// Checks the rule parameters the measured `name_sequence` is handed, as
+/// the rule states them: the capability's declaration, in its order and
+/// words.
+pub(crate) fn check_arguments(
+    arguments: &std::collections::BTreeMap<String, axioval_ir::contract::ParameterValue>,
+) -> Result<(), Unavailable> {
+    let rule = crate::light_area::synthesised(arguments.clone());
+    Config::read(&Parameters(&rule), true).map(|_| ())
+}
+
+/// The anchor's members in order, among `candidates` (the objects the member
+/// selector picks, in the project's order), or why they cannot be ordered:
+/// first, the member selection's first undecided object.
+pub(crate) fn members<'a>(
     context: &RuleContext<'a>,
     config: &Config<'_>,
     anchor: &Object,
+    (candidates, undecided): (&[ObjectId], Option<Unavailable>),
 ) -> Result<Vec<Member<'a>>, Unavailable> {
-    let (candidates, outcomes) = select_objects(context, config.members);
-    if let Some(outcome) = outcomes.not_evaluated_outcomes().first() {
-        return Err((
-            outcome.reason().clone(),
-            format!("member selection is undecided: {}", outcome.message()),
-        ));
+    if let Some((reason, message)) = undecided {
+        return Err((reason, format!("member selection is undecided: {message}")));
     }
     let (reached, relation_evidence): (Vec<ObjectId>, Vec<Evidence>) = match &config.traversal {
-        Some(traversal) => traversal.related(context, &anchor.id, &candidates)?,
+        Some(traversal) => traversal.related_ids(context, &anchor.id, candidates)?,
         None => (
             candidates
                 .iter()
-                .filter(|member| member.id.source == anchor.id.source && member.id != anchor.id)
-                .map(|member| member.id.clone())
+                .filter(|member| member.source == anchor.id.source && **member != anchor.id)
+                .cloned()
                 .collect(),
             Vec::new(),
         ),
@@ -237,7 +263,7 @@ fn name_text(member: &Member<'_>) -> String {
 }
 
 /// A strict whole number: optional sign and ASCII digits, nothing else.
-fn number(text: &str) -> Option<i64> {
+pub(crate) fn number(text: &str) -> Option<i64> {
     let digits = text.strip_prefix(['+', '-']).unwrap_or(text);
     if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
         return None;
@@ -245,86 +271,24 @@ fn number(text: &str) -> Option<i64> {
     text.parse().ok()
 }
 
-fn check(
-    rule: &CompiledRule,
-    config: &Config<'_>,
-    members: &[Member<'_>],
-    evaluation: &mut CapabilityEvaluation,
-) {
-    let name = config.name;
-    let mut previous: Option<(i64, &Member<'_>)> = None;
-    for member in members {
-        let report = |message: String, related: Option<&Member<'_>>| {
-            let mut evidence = member.evidence.clone();
-            if let Some(related) = related {
-                evidence.extend(related.evidence.iter().cloned());
-            }
-            finding(
-                rule,
-                &member.object.id,
-                message,
-                evidence,
-                related
-                    .map(|related| related.object.id.clone())
-                    .into_iter()
-                    .collect(),
-            )
-        };
-        let value = match &member.name {
-            _ if undefined(member.name.as_ref()) => {
-                evaluation.push_finding(report(format!("{name} is not set"), None));
-                continue;
-            }
-            Some(PropertyValue::String(text)) => number(text),
-            Some(PropertyValue::Integer(value)) => Some(*value),
-            _ => None,
-        };
-        let Some(value) = value else {
-            evaluation.push_finding(report(
-                format!(
-                    "{name} {} is not a whole number",
-                    crate::support::display(member.name.as_ref())
-                ),
-                None,
-            ));
-            continue;
-        };
-        if value < config.first {
-            // Its own result: a number below the start is not an order break,
-            // and like a non-number it does not interrupt the sequence.
-            evaluation.push_finding(report(
-                format!("{name} {value} is below the start {}", config.first),
-                None,
-            ));
-            continue;
-        }
-        let message = match previous {
-            None if value > config.first => Some((
-                format!(
-                    "{name} of the first member is {value}; expected {}",
-                    config.first
-                ),
-                None,
-            )),
-            Some((before, below)) => match value.cmp(&before) {
-                Ordering::Less | Ordering::Equal => Some((
-                    format!("{name} {value} is not above {before}, the member below it"),
-                    Some(below),
-                )),
-                Ordering::Greater if Some(value) != before.checked_add(config.increment) => Some((
-                    format!(
-                        "{name} {value} does not follow {before}; expected {}",
-                        before.saturating_add(config.increment)
-                    ),
-                    Some(below),
-                )),
-                Ordering::Greater => None,
-            },
-            None => None,
-        };
-        if let Some((message, related)) = message {
-            evaluation.push_finding(report(message, related));
-        }
-        previous = Some((value, member));
+/// What a member's name states of its number.
+pub(crate) enum Numbered {
+    /// Nothing (`undefined`).
+    Unset,
+    /// Something that is no whole number.
+    Word,
+    /// A whole number.
+    Number(i64),
+}
+
+/// A member's number, as its name states it.
+pub(crate) fn numbered(name: Option<&PropertyValue>) -> Numbered {
+    if crate::support::undefined(name) {
+        return Numbered::Unset;
+    }
+    match name {
+        Some(PropertyValue::String(text)) => number(text).map_or(Numbered::Word, Numbered::Number),
+        Some(PropertyValue::Integer(value)) => Numbered::Number(*value),
+        _ => Numbered::Word,
     }
 }

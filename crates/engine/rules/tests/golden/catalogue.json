@@ -23246,7 +23246,320 @@
             }
           ]
         }
-      ]
+      ],
+      "template": {
+        "name": "name-sequence",
+        "defaults": [
+          {
+            "parameter": "first",
+            "value": {
+              "type": "integer",
+              "value": 1
+            }
+          }
+        ],
+        "declaration": [
+          {
+            "kind": "arguments",
+            "when": [],
+            "value": "name_sequence;member_selector=@member_selector;name=@name;order=@order;first=@first;increment=@increment;order_fallback=@order_fallback;relationship=@relationship;direction=@direction;path=@path;follow_chain=@follow_chain;skip_absent_relationship_ends=@skip_absent_relationship_ends"
+          }
+        ],
+        "forms": [
+          {
+            "when": [],
+            "values": [
+              {
+                "name": "judged",
+                "expression": {
+                  "kind": "literal",
+                  "value": {
+                    "type": "integer",
+                    "value": 1
+                  },
+                  "label": "the members are judged"
+                }
+              }
+            ],
+            "decision": {
+              "kind": "within",
+              "value": "judged",
+              "rounding": []
+            },
+            "fail": "",
+            "undecided": "",
+            "checks": [
+              {
+                "values": [],
+                "decision": {
+                  "kind": "items",
+                  "applies": {},
+                  "list": "name_sequence;member_selector=@member_selector;name=@name;order=@order;first=@first;increment=@increment;order_fallback=@order_fallback;relationship=@relationship;direction=@direction;path=@path;follow_chain=@follow_chain;skip_absent_relationship_ends=@skip_absent_relationship_ends",
+                  "refused": "{why}",
+                  "checks": [
+                    {
+                      "kind": "test",
+                      "judge": {
+                        "kind": "truth",
+                        "value": "set",
+                        "finding": false
+                      },
+                      "fail": "{name} is not set",
+                      "undecided": "",
+                      "then": {
+                        "judge": {
+                          "kind": "truth",
+                          "value": "whole",
+                          "finding": false
+                        },
+                        "fail": "{name} {shown} is not a whole number",
+                        "undecided": "",
+                        "then": {
+                          "judge": {
+                            "kind": "range",
+                            "value": "value",
+                            "unit": "count",
+                            "atLeast": [
+                              {
+                                "name": "first",
+                                "options": [
+                                  {
+                                    "bound": {
+                                      "kind": "operand",
+                                      "value": {
+                                        "kind": "parameter",
+                                        "name": "first"
+                                      }
+                                    }
+                                  }
+                                ],
+                                "words": ""
+                              }
+                            ],
+                            "allowance": {
+                              "kind": "none"
+                            },
+                            "grade": false,
+                            "null": {
+                              "kind": "skip"
+                            }
+                          },
+                          "fail": "{name} {value:count} is below the start {first:count}",
+                          "undecided": "",
+                          "then": {
+                            "judge": {
+                              "kind": "range",
+                              "value": "value",
+                              "unit": "count",
+                              "atLeast": [
+                                {
+                                  "name": "expected",
+                                  "options": [
+                                    {
+                                      "bound": {
+                                        "kind": "operand",
+                                        "value": {
+                                          "kind": "value",
+                                          "name": "expected"
+                                        }
+                                      }
+                                    }
+                                  ],
+                                  "words": ""
+                                }
+                              ],
+                              "atMost": [
+                                {
+                                  "name": "expected",
+                                  "options": [
+                                    {
+                                      "bound": {
+                                        "kind": "operand",
+                                        "value": {
+                                          "kind": "value",
+                                          "name": "expected"
+                                        }
+                                      }
+                                    }
+                                  ],
+                                  "words": ""
+                                }
+                              ],
+                              "allowance": {
+                                "kind": "none"
+                              },
+                              "grade": false,
+                              "null": {
+                                "kind": "skip"
+                              }
+                            },
+                            "fail": "{broken}",
+                            "undecided": "",
+                            "related": "below"
+                          }
+                        }
+                      }
+                    }
+                  ],
+                  "texts": [
+                    {
+                      "name": "broken",
+                      "when": [
+                        {
+                          "kind": "null",
+                          "field": "previous"
+                        }
+                      ],
+                      "text": "{name} of the first member is {value:count}; expected {first:count}"
+                    },
+                    {
+                      "name": "broken",
+                      "when": [
+                        {
+                          "kind": "field",
+                          "field": "above",
+                          "value": false
+                        }
+                      ],
+                      "text": "{name} {value:count} is not above {previous:count}, the member below it"
+                    },
+                    {
+                      "name": "broken",
+                      "text": "{name} {value:count} does not follow {previous:count}; expected {expected:count}"
+                    }
+                  ],
+                  "at": "member"
+                },
+                "fail": "",
+                "undecided": ""
+              }
+            ]
+          }
+        ],
+        "requirements": [
+          {
+            "when": [],
+            "expression": {
+              "kind": "and",
+              "operands": [
+                {
+                  "kind": "aggregate",
+                  "function": "none",
+                  "over": {
+                    "kind": "measured",
+                    "name": "name_sequence;member_selector=@member_selector;name=@name;order=@order;first=@first;increment=@increment;order_fallback=@order_fallback;relationship=@relationship;direction=@direction;path=@path;follow_chain=@follow_chain;skip_absent_relationship_ends=@skip_absent_relationship_ends"
+                  },
+                  "value": {
+                    "kind": "not",
+                    "operand": {
+                      "kind": "and",
+                      "operands": [
+                        {
+                          "kind": "property",
+                          "propertySet": "axioval:member",
+                          "property": "set"
+                        }
+                      ]
+                    }
+                  },
+                  "label": "no item fails"
+                },
+                {
+                  "kind": "isDefined",
+                  "operand": {
+                    "kind": "literal",
+                    "value": {
+                      "type": "integer",
+                      "value": 1
+                    },
+                    "label": "the members are judged"
+                  },
+                  "label": "read"
+                }
+              ]
+            },
+            "blocks": {
+              "type": "expression.and",
+              "inputs": {
+                "operands": {
+                  "blocks": [
+                    {
+                      "type": "expression.aggregate",
+                      "label": "no item fails",
+                      "fields": {
+                        "function": "none"
+                      },
+                      "inputs": {
+                        "over": {
+                          "block": {
+                            "type": "members.name_sequence",
+                            "fields": {
+                              "direction": "@direction",
+                              "first": "@first",
+                              "follow_chain": "@follow_chain",
+                              "increment": "@increment",
+                              "member_selector": "@member_selector",
+                              "name": "@name",
+                              "order": "@order",
+                              "order_fallback": "@order_fallback",
+                              "path": "@path",
+                              "relationship": "@relationship",
+                              "skip_absent_relationship_ends": "@skip_absent_relationship_ends"
+                            }
+                          }
+                        },
+                        "value": {
+                          "block": {
+                            "type": "expression.not",
+                            "inputs": {
+                              "operand": {
+                                "block": {
+                                  "type": "expression.and",
+                                  "inputs": {
+                                    "operands": {
+                                      "blocks": [
+                                        {
+                                          "type": "expression.property",
+                                          "fields": {
+                                            "property": "set",
+                                            "propertySet": "axioval:member"
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "expression.isDefined",
+                      "label": "read",
+                      "inputs": {
+                        "operand": {
+                          "block": {
+                            "type": "expression.literal",
+                            "label": "the members are judged",
+                            "fields": {
+                              "value": {
+                                "type": "integer",
+                                "value": 1
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
     },
     {
       "id": "axioval:capability.numbering-consistency",
@@ -83104,6 +83417,480 @@
             {
               "language": "de",
               "text": "Die Objekte, an denen ein Schlüssel gelesen wurde, und der Boden oder die Glieder, mit denen der Wert gemessen wurde."
+            }
+          ]
+        }
+      ],
+      "available": true
+    },
+    {
+      "name": "name_sequence",
+      "parameters": [
+        {
+          "key": "member_selector",
+          "kind": {
+            "type": "objects"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The members numbered: the objects a selector parameter of the rule picks."
+            },
+            {
+              "language": "de",
+              "text": "Die nummerierten Mitglieder: die Objekte, die ein Selektorparameter der Regel wählt."
+            }
+          ],
+          "references": "selector"
+        },
+        {
+          "key": "name",
+          "kind": {
+            "type": "property"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The property holding a member's number."
+            },
+            {
+              "language": "de",
+              "text": "Die Eigenschaft, die die Nummer eines Mitglieds trägt."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "order",
+          "kind": {
+            "type": "property"
+          },
+          "required": true,
+          "help": [
+            {
+              "language": "en",
+              "text": "The numeric property the members are ordered by."
+            },
+            {
+              "language": "de",
+              "text": "Die numerische Eigenschaft, nach der die Mitglieder geordnet werden."
+            }
+          ],
+          "references": "property"
+        },
+        {
+          "key": "first",
+          "kind": {
+            "type": "number",
+            "minimum": -1.7976931348623157e+308
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The number the first member must state; 1 without it."
+            },
+            {
+              "language": "de",
+              "text": "Die Nummer, die das erste Mitglied angeben muss; ohne Angabe 1."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "increment",
+          "kind": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "How much each number exceeds the one before; 1 without it."
+            },
+            {
+              "language": "de",
+              "text": "Um wie viel jede Nummer die vorige übersteigt; ohne Angabe 1."
+            }
+          ],
+          "references": "number"
+        },
+        {
+          "key": "order_fallback",
+          "kind": {
+            "type": "choice",
+            "options": [
+              "placement_height"
+            ]
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "With `placement_height`, a member stating no order value is ordered by the height of its placement."
+            },
+            {
+              "language": "de",
+              "text": "Mit `placement_height` wird ein Mitglied ohne Ordnungswert nach der Höhe seiner Platzierung geordnet."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "relationship",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship walked from the object."
+            },
+            {
+              "language": "de",
+              "text": "Die vom Objekt aus begangene Beziehung."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "direction",
+          "kind": {
+            "type": "text"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "The relationship's direction: `forward` (the default), `backward` or `either`."
+            },
+            {
+              "language": "de",
+              "text": "Die Richtung der Beziehung: `forward` (Vorgabe), `backward` oder `either`."
+            }
+          ],
+          "references": "string"
+        },
+        {
+          "key": "path",
+          "kind": {
+            "type": "path"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Relationship steps walked instead of one relationship."
+            },
+            {
+              "language": "de",
+              "text": "Beziehungsschritte statt einer Beziehung."
+            }
+          ],
+          "references": "stringList"
+        },
+        {
+          "key": "follow_chain",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether chains of the relationship are followed."
+            },
+            {
+              "language": "de",
+              "text": "Ob Ketten der Beziehung verfolgt werden."
+            }
+          ],
+          "references": "boolean"
+        },
+        {
+          "key": "skip_absent_relationship_ends",
+          "kind": {
+            "type": "truth"
+          },
+          "required": false,
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether a relationship end the source does not state is skipped."
+            },
+            {
+              "language": "de",
+              "text": "Ob ein von der Quelle nicht angegebenes Beziehungsende übersprungen wird."
+            }
+          ],
+          "references": "boolean"
+        }
+      ],
+      "services": [
+        "relationship-selection",
+        "object-frame"
+      ],
+      "exactness": "measured",
+      "notEvaluated": [
+        "the member selection is undecided",
+        "a member states no numeric order value"
+      ],
+      "label": [
+        {
+          "language": "en",
+          "text": "Name sequence"
+        },
+        {
+          "language": "de",
+          "text": "Namensfolge"
+        }
+      ],
+      "help": [
+        {
+          "language": "en",
+          "text": "The members an object reaches, in order, each with its number and the number the sequence expects of it, as `name-sequence` reads them."
+        },
+        {
+          "language": "de",
+          "text": "Die Mitglieder, die ein Objekt erreicht, in Reihenfolge, jedes mit seiner Nummer und der Nummer, die die Folge von ihm erwartet, wie `name-sequence` sie liest."
+        }
+      ],
+      "fields": [
+        {
+          "name": "member",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Member"
+            },
+            {
+              "language": "de",
+              "text": "Mitglied"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The member, in order."
+            },
+            {
+              "language": "de",
+              "text": "Das Mitglied, in der Reihenfolge."
+            }
+          ]
+        },
+        {
+          "name": "shown",
+          "kind": {
+            "type": "text"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Stated"
+            },
+            {
+              "language": "de",
+              "text": "Angegeben"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "What the member states, as findings show it."
+            },
+            {
+              "language": "de",
+              "text": "Was das Mitglied angibt, wie Befunde es zeigen."
+            }
+          ]
+        },
+        {
+          "name": "set",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Set"
+            },
+            {
+              "language": "de",
+              "text": "Gesetzt"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the member states a value."
+            },
+            {
+              "language": "de",
+              "text": "Ob das Mitglied einen Wert angibt."
+            }
+          ]
+        },
+        {
+          "name": "whole",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Whole number"
+            },
+            {
+              "language": "de",
+              "text": "Ganze Zahl"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the value is a whole number: optional sign and digits."
+            },
+            {
+              "language": "de",
+              "text": "Ob der Wert eine ganze Zahl ist: optionales Vorzeichen und Ziffern."
+            }
+          ]
+        },
+        {
+          "name": "value",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Number"
+            },
+            {
+              "language": "de",
+              "text": "Nummer"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The member's number; `null` where it states none."
+            },
+            {
+              "language": "de",
+              "text": "Die Nummer des Mitglieds; `null`, wo es keine angibt."
+            }
+          ]
+        },
+        {
+          "name": "previous",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Previous"
+            },
+            {
+              "language": "de",
+              "text": "Vorige"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The number of the member below it in the sequence; `null` for the first."
+            },
+            {
+              "language": "de",
+              "text": "Die Nummer des Mitglieds darunter in der Folge; `null` für das erste."
+            }
+          ]
+        },
+        {
+          "name": "expected",
+          "kind": {
+            "type": "number"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Expected"
+            },
+            {
+              "language": "de",
+              "text": "Erwartet"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The number the sequence expects: the first, or the previous plus the increment."
+            },
+            {
+              "language": "de",
+              "text": "Die Nummer, die die Folge erwartet: die erste, oder die vorige plus die Schrittweite."
+            }
+          ]
+        },
+        {
+          "name": "above",
+          "kind": {
+            "type": "truth"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Above"
+            },
+            {
+              "language": "de",
+              "text": "Darüber"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "Whether the number lies above the previous one."
+            },
+            {
+              "language": "de",
+              "text": "Ob die Nummer über der vorigen liegt."
+            }
+          ]
+        },
+        {
+          "name": "below",
+          "kind": {
+            "type": "objects"
+          },
+          "label": [
+            {
+              "language": "en",
+              "text": "Below"
+            },
+            {
+              "language": "de",
+              "text": "Darunter"
+            }
+          ],
+          "help": [
+            {
+              "language": "en",
+              "text": "The member below it in the sequence."
+            },
+            {
+              "language": "de",
+              "text": "Das Mitglied darunter in der Folge."
             }
           ]
         }

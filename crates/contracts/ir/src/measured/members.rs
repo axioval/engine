@@ -10,7 +10,7 @@ use serde::Serialize;
 use super::registry::{
     ANGLE_TOLERANCE, COORDINATE_DIFFERENCES, COORDINATES, COORDINATES_UNREAD, EFFECT_SERVICES,
     EFFECT_UNMEASURED, EFFECTIVE, FACE, FACE_AXES, FACING, MEMBER_PATH, NO_FACE, NO_GEOMETRY,
-    OPENINGS_MINIMUM, PAIRED, SPACED_MEMBERS, WELL_MEMBERS, en_de,
+    OPENINGS_MINIMUM, PAIRED, SPACED_MEMBERS, TRAVERSAL, WELL_MEMBERS, en_de,
 };
 use super::{
     FACE_PIECES, LocalizedText, MeasuredCall, MeasuredDescriptor, MeasuredError, MeasuredExactness,
@@ -2369,6 +2369,176 @@ pub static MEASURED_MEMBERS: &[MemberDescriptor] = &[
                 &en_de(
                     "The objects a key was read on, and the floor or members the value was measured with.",
                     "Die Objekte, an denen ein Schlüssel gelesen wurde, und der Boden oder die Glieder, mit denen der Wert gemessen wurde.",
+                ),
+            ),
+        ],
+    },
+    MemberDescriptor {
+        list: MeasuredDescriptor {
+            name: "name_sequence",
+            parameters: &[
+                MeasuredParameter {
+                    key: "member_selector",
+                    kind: MeasuredParameterKind::Objects,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The members numbered: the objects a selector parameter of the rule picks.",
+                        "Die nummerierten Mitglieder: die Objekte, die ein Selektorparameter der Regel wählt.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "name",
+                    kind: MeasuredParameterKind::Property,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The property holding a member's number.",
+                        "Die Eigenschaft, die die Nummer eines Mitglieds trägt.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "order",
+                    kind: MeasuredParameterKind::Property,
+                    required: true,
+                    default: None,
+                    help: &en_de(
+                        "The numeric property the members are ordered by.",
+                        "Die numerische Eigenschaft, nach der die Mitglieder geordnet werden.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "first",
+                    kind: MeasuredParameterKind::Number { minimum: f64::MIN },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "The number the first member must state; 1 without it.",
+                        "Die Nummer, die das erste Mitglied angeben muss; ohne Angabe 1.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "increment",
+                    kind: MeasuredParameterKind::Number { minimum: 0.0 },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "How much each number exceeds the one before; 1 without it.",
+                        "Um wie viel jede Nummer die vorige übersteigt; ohne Angabe 1.",
+                    ),
+                },
+                MeasuredParameter {
+                    key: "order_fallback",
+                    kind: MeasuredParameterKind::Choice {
+                        options: &["placement_height"],
+                    },
+                    required: false,
+                    default: None,
+                    help: &en_de(
+                        "With `placement_height`, a member stating no order value is ordered by the height of its placement.",
+                        "Mit `placement_height` wird ein Mitglied ohne Ordnungswert nach der Höhe seiner Platzierung geordnet.",
+                    ),
+                },
+                TRAVERSAL[0],
+                TRAVERSAL[1],
+                TRAVERSAL[2],
+                TRAVERSAL[3],
+                TRAVERSAL[4],
+            ],
+            dimension: None,
+            services: &["relationship-selection", "object-frame"],
+            exactness: MeasuredExactness::Measured,
+            subject: MeasuredSubject::Object,
+            not_evaluated: &[
+                "the member selection is undecided",
+                "a member states no numeric order value",
+            ],
+            label: &en_de("Name sequence", "Namensfolge"),
+            help: &en_de(
+                "The members an object reaches, in order, each with its number and the number \
+                 the sequence expects of it, as `name-sequence` reads them.",
+                "Die Mitglieder, die ein Objekt erreicht, in Reihenfolge, jedes mit seiner \
+                 Nummer und der Nummer, die die Folge von ihm erwartet, wie `name-sequence` sie \
+                 liest.",
+            ),
+        },
+        fields: &[
+            field(
+                "member",
+                MemberFieldKind::Objects,
+                &en_de("Member", "Mitglied"),
+                &en_de("The member, in order.", "Das Mitglied, in der Reihenfolge."),
+            ),
+            field(
+                "shown",
+                MemberFieldKind::Text,
+                &en_de("Stated", "Angegeben"),
+                &en_de(
+                    "What the member states, as findings show it.",
+                    "Was das Mitglied angibt, wie Befunde es zeigen.",
+                ),
+            ),
+            field(
+                "set",
+                TRUTH,
+                &en_de("Set", "Gesetzt"),
+                &en_de(
+                    "Whether the member states a value.",
+                    "Ob das Mitglied einen Wert angibt.",
+                ),
+            ),
+            field(
+                "whole",
+                TRUTH,
+                &en_de("Whole number", "Ganze Zahl"),
+                &en_de(
+                    "Whether the value is a whole number: optional sign and digits.",
+                    "Ob der Wert eine ganze Zahl ist: optionales Vorzeichen und Ziffern.",
+                ),
+            ),
+            field(
+                "value",
+                RATIO,
+                &en_de("Number", "Nummer"),
+                &en_de(
+                    "The member's number; `null` where it states none.",
+                    "Die Nummer des Mitglieds; `null`, wo es keine angibt.",
+                ),
+            ),
+            field(
+                "previous",
+                RATIO,
+                &en_de("Previous", "Vorige"),
+                &en_de(
+                    "The number of the member below it in the sequence; `null` for the first.",
+                    "Die Nummer des Mitglieds darunter in der Folge; `null` für das erste.",
+                ),
+            ),
+            field(
+                "expected",
+                RATIO,
+                &en_de("Expected", "Erwartet"),
+                &en_de(
+                    "The number the sequence expects: the first, or the previous plus the increment.",
+                    "Die Nummer, die die Folge erwartet: die erste, oder die vorige plus die Schrittweite.",
+                ),
+            ),
+            field(
+                "above",
+                TRUTH,
+                &en_de("Above", "Darüber"),
+                &en_de(
+                    "Whether the number lies above the previous one.",
+                    "Ob die Nummer über der vorigen liegt.",
+                ),
+            ),
+            field(
+                "below",
+                MemberFieldKind::Objects,
+                &en_de("Below", "Darunter"),
+                &en_de(
+                    "The member below it in the sequence.",
+                    "Das Mitglied darunter in der Folge.",
                 ),
             ),
         ],

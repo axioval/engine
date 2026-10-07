@@ -392,3 +392,10 @@ the exit selection once per rule and reads its universe once per
 selection (`MeasuredMemo`), reaching each space's exits by identity
 (`Traversal::related_ids`), and measures each space's diagonal, flag and
 pairs once, as the capability did.
+
+`name-sequence` runs the `numbering` case's three name rules: 0.83 to
+1.23× its reference's run time and 1.00 to 1.34× its peak heap. Its list
+binds the member selection once per rule, where the capability selected
+the members again for each anchor, and reads the declaration from the
+bound list rather than re-reading the rule; what remains is the
+template's fixed cost per anchor, on models of few anchors and members.

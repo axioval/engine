@@ -1021,7 +1021,7 @@ const LIGHT_SIZE_UNKNOWN: &str = "the overall width or height is not stated as a
 /// A rule's traversal, each parameter named as the rule names it
 /// (`relationship=@relationship`): what a measured search walks to the
 /// objects it measures against.
-const TRAVERSAL: [MeasuredParameter; 5] = [
+pub(super) const TRAVERSAL: [MeasuredParameter; 5] = [
     MeasuredParameter {
         key: "relationship",
         kind: MeasuredParameterKind::Text,

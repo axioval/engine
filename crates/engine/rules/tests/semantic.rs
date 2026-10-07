@@ -1412,6 +1412,11 @@ mod name_sequence {
 
     const ID: &str = "axioval:capability.name-sequence";
 
+    /// The template, held to the implementation it replaced on every
+    /// evaluation.
+    static HELD: common::Held =
+        common::Held(&NameSequence, &axioval_rules::reference::NameSequence);
+
     fn building(storeys: &[(&str, &str, Option<f64>)]) -> Model {
         let mut model = Model::default().object("b", "building");
         for (local, name, elevation) in storeys {
@@ -1432,8 +1437,8 @@ mod name_sequence {
     }
 
     fn check(model: Model) -> axioval_engine::CapabilityEvaluation {
-        model.evaluate(
-            &NameSequence,
+        model.evaluate_measured(
+            &HELD,
             &rule(
                 ID,
                 kind("building"),
@@ -1444,6 +1449,7 @@ mod name_sequence {
                     ("relationship", string("aggregates")),
                 ],
             ),
+            |_| {},
         )
     }
 
@@ -1585,7 +1591,7 @@ mod name_sequence {
                 ("order_fallback", string("placement_height")),
             ],
         );
-        model.evaluate_with(&NameSequence, &rule, |services| {
+        model.evaluate_measured(&HELD, &rule, |services| {
             if let Some(heights) = heights {
                 let snapshot = SourceSnapshot::try_new(common::source(), "r1", "sha256:1").unwrap();
                 services
@@ -1625,11 +1631,12 @@ mod name_sequence {
                 ),
             ]
         );
+        // Cited as exactly as the placements it was ordered by.
         assert!(
             evaluation.findings()[0]
                 .evidence
                 .iter()
-                .any(|evidence| evidence.locator.starts_with("placement:"))
+                .all(|evidence| evidence.exact)
         );
         // A stated elevation still orders its member: 7 m is above 6 m.
         let mixed = building(&[("g", "1", None), ("m", "2", None), ("u", "4", Some(7.0))])
@@ -1664,8 +1671,8 @@ mod name_sequence {
 
     #[test]
     fn an_unknown_order_fallback_is_an_invalid_declaration() {
-        let evaluation = building(&[("g", "1", Some(0.0))]).evaluate(
-            &NameSequence,
+        let evaluation = building(&[("g", "1", Some(0.0))]).evaluate_measured(
+            &HELD,
             &rule(
                 ID,
                 kind("building"),
@@ -1676,11 +1683,109 @@ mod name_sequence {
                     ("order_fallback", string("bounding_box")),
                 ],
             ),
+            |_| {},
         );
         assert_eq!(
             unevaluated(&evaluation),
             [("-".to_owned(), NotEvaluatedReason::InvalidDeclaration)]
         );
+        assert_eq!(
+            evaluation.not_evaluated_outcomes()[0].message(),
+            "name-sequence: order_fallback `bounding_box` is unsupported; use `placement_height`"
+        );
+        // An increment that does not count up is refused alike.
+        let evaluation = building(&[("g", "1", Some(0.0))]).evaluate_measured(
+            &HELD,
+            &rule(
+                ID,
+                kind("building"),
+                vec![
+                    ("member_selector", selector(kind("storey"))),
+                    ("name", property(Some(ATTR), "Name")),
+                    ("order", property(Some("Levels"), "Elevation")),
+                    ("increment", integer(0)),
+                ],
+            ),
+            |_| {},
+        );
+        assert_eq!(
+            evaluation.not_evaluated_outcomes()[0].message(),
+            "name-sequence: increment must be positive"
+        );
+    }
+
+    /// Generated buildings: storeys named by numbers, words, blanks or
+    /// nothing, at stated, missing or placed elevations (some tied), one
+    /// storey's name unreadable at times, numbered from a random start by
+    /// a random increment, along the relationship or in the whole source;
+    /// each held to the implementation the template replaced.
+    #[test]
+    fn generated_buildings_hold_parity() {
+        let names = ["1", "2", "3", "4", "5", "0", "-1", "EG", "", "+2", "07"];
+        let mut judged = 0;
+        for storeys in 0..6_usize {
+            for pattern in 0..40_usize {
+                let mut model = Model::default().object("b", "building");
+                let mut heights: Vec<(&'static str, f64)> = Vec::new();
+                for storey in 0..storeys {
+                    let local: &'static str = ["s0", "s1", "s2", "s3", "s4", "s5"][storey];
+                    model = model.object(local, "storey");
+                    if (pattern + storey) % 7 != 3 {
+                        model = model.edge("aggregates", "b", local);
+                    }
+                    let name = names[(pattern * 3 + storey * 5) % names.len()];
+                    model = match (pattern + 2 * storey) % 9 {
+                        0 => model,
+                        1 => model.unreadable_value(local, ATTR, "Name", "IfcLabel"),
+                        2 => model.value(local, ATTR, "Name", PropertyValue::Integer(4)),
+                        _ => model.text(local, ATTR, "Name", name),
+                    };
+                    #[allow(clippy::cast_precision_loss)]
+                    let elevation = ((pattern + storey * 3) % 5) as f64 * 3.0;
+                    match (pattern / 2 + storey) % 6 {
+                        0 => heights.push((local, elevation)),
+                        1 => {}
+                        _ => {
+                            model = model.value(
+                                local,
+                                "Levels",
+                                "Elevation",
+                                PropertyValue::Decimal(elevation),
+                            );
+                        }
+                    }
+                }
+                let mut parameters = vec![
+                    ("member_selector", selector(kind("storey"))),
+                    ("name", property(Some(ATTR), "Name")),
+                    ("order", property(Some("Levels"), "Elevation")),
+                    ("order_fallback", string("placement_height")),
+                ];
+                if pattern % 2 == 0 {
+                    parameters.push(("relationship", string("aggregates")));
+                }
+                if pattern % 3 == 1 {
+                    parameters.push(("first", integer(0)));
+                }
+                if pattern % 5 == 2 {
+                    parameters.push(("increment", integer(2)));
+                }
+                let rule = rule(ID, kind("building"), parameters);
+                let heights = heights.clone();
+                let evaluation = model.evaluate_measured(&HELD, &rule, move |services| {
+                    let snapshot =
+                        SourceSnapshot::try_new(common::source(), "r1", "sha256:1").unwrap();
+                    services
+                        .register(ObjectFrameServiceHandle::new(Arc::new(Heights(
+                            heights.iter().copied().collect(),
+                            vec![snapshot],
+                        ))))
+                        .unwrap();
+                });
+                judged += evaluation.findings().len() + evaluation.not_evaluated_outcomes().len();
+            }
+        }
+        assert!(judged > 0);
     }
 }
 

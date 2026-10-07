@@ -43,7 +43,8 @@ the first of the plan-span capabilities
 of a measured list against a row its provider selects from the rule's
 table, and `light-well`, `centre-line-distance`, `component-visibility`
 and `exit-separation` (whose required separation stays an interval over
-both shares where its flag is unknown) follow; `coordinate-consistency` is the first judging the sources themselves,
+both shares where its flag is unknown) follow, and `name-sequence` is the
+first judging the items of a list on objects of their own (`at`); `coordinate-consistency` is the first judging the sources themselves,
 against a reference read once per rule, and `external-wall-validation`
 the first leading one measurement to outcomes at source and at object
 level ([#291](https://github.com/axioval/engine/issues/291)): every
@@ -1308,6 +1309,34 @@ service, a diagonal that cannot be measured and a flag holder outside the
 project refuse the list for their reason. The declaration is the
 capability's own (`arguments`, `exit_separation::check_arguments`), refused
 once for the rule.
+### `name-sequence`
+
+| Form | When | Values | Checks |
+| --- | --- | --- | --- |
+| one | always | `judged` = 1 | `Items` over `name_sequence;member_selector=@member_selector;name=@name;order=@order;first=@first;increment=@increment;order_fallback=@order_fallback;…` (the traversal parameters under their own names, unstated ones dropped), each item judged on its `member` (`at`) |
+
+The list is the capability's own reading (`name_sequence::members`): the
+members the bound member selection picks that the traversal reaches from
+the anchor (or every one of its source but the anchor), each ordered by its
+`order` value or, with `order_fallback`, its placement height, ties by
+name. Each item states the member's name (`shown`), whether it is set and a
+whole number, its number (`value`), the number of the member below it in
+the sequence (`previous`, `null` for the first), the number expected of it
+(`expected`: `first` (1 by default) for the first, the previous plus
+`increment` after) and the member below (`below`). The sequence runs on
+from the last member whose number counts (stated, whole, not below
+`first`), as the capability read it. The tests, each in the last one's
+place where it passes (`then`): `{name} is not set`, `{name} {shown} is
+not a whole number`, `{name} {value:count} is below the start
+{first:count}`, and the number `expected`, worded `{name} of the first
+member is …; expected …`, `… is not above {previous:count}, the member below
+it` or `… does not follow {previous:count}; expected {expected:count}`
+(`broken`, by `previous` and `above`), relating the member below. A member
+selection with an undecided object, a member without an order value and a
+member the object-frame service cannot place refuse the list, leaving the
+anchor open for their reason. The declaration is the capability's own
+(`arguments`, `name_sequence::check_arguments`), refused once for the rule.
+
 ### `coordinate-consistency`
 
 | Form | When | Once | Scopes | Decision |
@@ -2064,6 +2093,16 @@ interval or missing diagonals, every pair mode, minimum and flag (stated
 true or false, unreadable, unstated with a default); and by the
 `exit-separation` rules of the `spans` case, recorded before the switch.
 It is never forked (D31).
+
+`name-sequence` is held to `name_sequence/reference.rs`
+(`axioval_rules::reference::NameSequence`, which reads the members through
+the same `members`) through `common::Held` on every fixture of its module
+in `tests/semantic.rs`, its messages and refusals asserted literally; by
+generated buildings of storeys named by numbers, words, blanks, integers or
+nothing, some unreadable, at stated, missing or placed elevations, numbered
+from a random start by a random increment, along the relationship or in the
+whole source; and by the `name-sequence` rules of the `numbering` case,
+recorded before the switch. It is never forked (D32).
 `coordinate-consistency` is held to `coordinate_consistency/reference.rs`
 (`axioval_rules::reference::CoordinateConsistencyCheck`, which shares the
 comparison and the choice of the reference) through `common::Held` on

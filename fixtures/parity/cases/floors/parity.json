@@ -1,0 +1,138 @@
+{
+  "description": "The free-floor, component-clearance and local-circulation capabilities over every public model, meshed, recorded before their decisions become templates over their searches (#286).",
+  "models": "*",
+  "pairs": [],
+  "recorded": [
+    {
+      "rule": "ff-circle",
+      "comparison": "contract",
+      "reason": "free-floor-circle splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "ff-circle-furniture",
+      "comparison": "contract",
+      "reason": "free-floor-circle splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "ff-circle-large",
+      "comparison": "contract",
+      "reason": "free-floor-circle splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "ff-circle-merged",
+      "comparison": "contract",
+      "reason": "free-floor-circle splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "ff-circle-entrance",
+      "comparison": "contract",
+      "reason": "free-floor-circle splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "ff-circle-swings",
+      "comparison": "contract",
+      "reason": "free-floor-circle splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "ff-circle-band",
+      "comparison": "contract",
+      "reason": "free-floor-circle splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "ff-rectangle",
+      "comparison": "contract",
+      "reason": "free-floor-rectangle splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "ff-rectangle-large",
+      "comparison": "contract",
+      "reason": "free-floor-rectangle splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "ff-rectangle-unoriented",
+      "comparison": "contract",
+      "reason": "free-floor-rectangle splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "cc-front",
+      "comparison": "contract",
+      "reason": "component-clearance splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "cc-left-within",
+      "comparison": "contract",
+      "reason": "component-clearance splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "cc-any-side",
+      "comparison": "contract",
+      "reason": "component-clearance splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "cc-cylinder",
+      "comparison": "contract",
+      "reason": "component-clearance splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "cc-slide",
+      "comparison": "contract",
+      "reason": "component-clearance splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "cc-supported",
+      "comparison": "contract",
+      "reason": "component-clearance splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "cc-maximum",
+      "comparison": "contract",
+      "reason": "component-clearance splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "cc-against-wall",
+      "comparison": "contract",
+      "reason": "component-clearance splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "cc-component-sized",
+      "comparison": "contract",
+      "reason": "component-clearance splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "cc-invalid",
+      "comparison": "contract",
+      "reason": "component-clearance splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "lc-touch",
+      "comparison": "contract",
+      "reason": "local-circulation splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "lc-entrances",
+      "comparison": "contract",
+      "reason": "local-circulation splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "lc-ends",
+      "comparison": "contract",
+      "reason": "local-circulation splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "lc-link",
+      "comparison": "contract",
+      "reason": "local-circulation splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "lc-passing",
+      "comparison": "contract",
+      "reason": "local-circulation splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    },
+    {
+      "rule": "lc-invalid",
+      "comparison": "contract",
+      "reason": "local-circulation splits its search from its decision, which becomes a template (#286); the outcomes its implementation reported, recorded before it was replaced, are the contract."
+    }
+  ],
+  "divergences": []
+}

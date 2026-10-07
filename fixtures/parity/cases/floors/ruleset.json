@@ -1,0 +1,1413 @@
+{
+  "schemaVersion": "0.1.0",
+  "package": {
+    "id": "axioval:parity.public.floors",
+    "name": {
+      "default": "Public parity ruleset, floors",
+      "translations": {}
+    },
+    "version": "0.1.0",
+    "description": {
+      "default": "free-floor-circle, free-floor-rectangle, component-clearance and local-circulation, recorded before their decisions became templates.",
+      "translations": {}
+    },
+    "authors": []
+  },
+  "definitionPackages": [
+    "axioval:parity.public.floors.definitions"
+  ],
+  "root": {
+    "id": "root",
+    "name": {
+      "default": "Floors",
+      "translations": {}
+    },
+    "rules": [
+      {
+        "id": "ff-circle",
+        "definitionId": "axioval:parity.public.floors.free-floor-circle",
+        "name": {
+          "default": "ff-circle",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.floors.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "diameter_metres": {
+            "type": "number",
+            "value": 1.5
+          },
+          "height_metres": {
+            "type": "number",
+            "value": 2.0
+          }
+        }
+      },
+      {
+        "id": "ff-circle-furniture",
+        "definitionId": "axioval:parity.public.floors.free-floor-circle",
+        "name": {
+          "default": "ff-circle-furniture",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.floors.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "diameter_metres": {
+            "type": "number",
+            "value": 1.5
+          },
+          "height_metres": {
+            "type": "number",
+            "value": 2.0
+          },
+          "obstacles": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.floors.furniture",
+              "includeSubtypes": true
+            }
+          },
+          "band_to_metres": {
+            "type": "number",
+            "value": 0.67
+          }
+        }
+      },
+      {
+        "id": "ff-circle-large",
+        "definitionId": "axioval:parity.public.floors.free-floor-circle",
+        "name": {
+          "default": "ff-circle-large",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.floors.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "diameter_metres": {
+            "type": "number",
+            "value": 12.0
+          },
+          "height_metres": {
+            "type": "number",
+            "value": 2.0
+          },
+          "obstacles": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.floors.furniture",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.floors.wall",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "ff-circle-merged",
+        "definitionId": "axioval:parity.public.floors.free-floor-circle",
+        "name": {
+          "default": "ff-circle-merged",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.floors.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "diameter_metres": {
+            "type": "number",
+            "value": 1.5
+          },
+          "height_metres": {
+            "type": "number",
+            "value": 2.0
+          },
+          "obstacles": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.floors.furniture",
+              "includeSubtypes": true
+            }
+          },
+          "merge_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.adjacent-space"
+            ]
+          }
+        }
+      },
+      {
+        "id": "ff-circle-entrance",
+        "definitionId": "axioval:parity.public.floors.free-floor-circle",
+        "name": {
+          "default": "ff-circle-entrance",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.floors.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "diameter_metres": {
+            "type": "number",
+            "value": 1.5
+          },
+          "height_metres": {
+            "type": "number",
+            "value": 2.0
+          },
+          "obstacles": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.floors.furniture",
+              "includeSubtypes": true
+            }
+          },
+          "entrance_path_width": {
+            "type": "number",
+            "value": 1.2
+          },
+          "access_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.adjacent-space"
+            ]
+          },
+          "door_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.floors.door",
+              "includeSubtypes": true
+            }
+          },
+          "opening_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.floors.opening",
+              "includeSubtypes": true
+            }
+          }
+        }
+      },
+      {
+        "id": "ff-circle-swings",
+        "definitionId": "axioval:parity.public.floors.free-floor-circle",
+        "name": {
+          "default": "ff-circle-swings",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.floors.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "diameter_metres": {
+            "type": "number",
+            "value": 1.5
+          },
+          "height_metres": {
+            "type": "number",
+            "value": 2.0
+          },
+          "obstacles": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.floors.furniture",
+              "includeSubtypes": true
+            }
+          },
+          "subtract_door_swings": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.floors.door",
+              "includeSubtypes": true
+            }
+          }
+        }
+      },
+      {
+        "id": "ff-circle-band",
+        "definitionId": "axioval:parity.public.floors.free-floor-circle",
+        "name": {
+          "default": "ff-circle-band",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.floors.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "diameter_metres": {
+            "type": "number",
+            "value": 1.5
+          },
+          "height_metres": {
+            "type": "number",
+            "value": 2.0
+          },
+          "band_from_metres": {
+            "type": "number",
+            "value": 1.0
+          },
+          "band_to_metres": {
+            "type": "number",
+            "value": 0.5
+          }
+        }
+      },
+      {
+        "id": "ff-rectangle",
+        "definitionId": "axioval:parity.public.floors.free-floor-rectangle",
+        "name": {
+          "default": "ff-rectangle",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.floors.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "width_metres": {
+            "type": "number",
+            "value": 1.8
+          },
+          "length_metres": {
+            "type": "number",
+            "value": 1.5
+          },
+          "height_metres": {
+            "type": "number",
+            "value": 2.0
+          },
+          "orientation": {
+            "type": "string",
+            "value": "any"
+          },
+          "obstacles": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.floors.furniture",
+              "includeSubtypes": true
+            }
+          }
+        }
+      },
+      {
+        "id": "ff-rectangle-large",
+        "definitionId": "axioval:parity.public.floors.free-floor-rectangle",
+        "name": {
+          "default": "ff-rectangle-large",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.floors.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "width_metres": {
+            "type": "number",
+            "value": 30.0
+          },
+          "length_metres": {
+            "type": "number",
+            "value": 3.0
+          },
+          "height_metres": {
+            "type": "number",
+            "value": 2.0
+          },
+          "orientation": {
+            "type": "string",
+            "value": "any"
+          }
+        }
+      },
+      {
+        "id": "ff-rectangle-unoriented",
+        "definitionId": "axioval:parity.public.floors.free-floor-rectangle",
+        "name": {
+          "default": "ff-rectangle-unoriented",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.floors.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "width_metres": {
+            "type": "number",
+            "value": 1.8
+          },
+          "length_metres": {
+            "type": "number",
+            "value": 1.5
+          },
+          "height_metres": {
+            "type": "number",
+            "value": 2.0
+          }
+        }
+      },
+      {
+        "id": "cc-front",
+        "definitionId": "axioval:parity.public.floors.component-clearance",
+        "name": {
+          "default": "cc-front",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.floors.furniture",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "side": {
+            "type": "string",
+            "value": "front"
+          },
+          "front_axis": {
+            "type": "string",
+            "value": "forward"
+          },
+          "width": {
+            "type": "quantity",
+            "value": 0.7,
+            "unit": "m"
+          },
+          "depth": {
+            "type": "quantity",
+            "value": 0.9,
+            "unit": "m"
+          },
+          "height": {
+            "type": "quantity",
+            "value": 2.0,
+            "unit": "m"
+          },
+          "height_reference": {
+            "type": "string",
+            "value": "floor"
+          },
+          "space_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.contained-in-space:forward"
+            ]
+          },
+          "obstacles": {
+            "type": "selector",
+            "value": {
+              "kind": "not",
+              "operand": {
+                "kind": "entityType",
+                "objectType": "axioval:parity.public.floors.space",
+                "includeSubtypes": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "cc-left-within",
+        "definitionId": "axioval:parity.public.floors.component-clearance",
+        "name": {
+          "default": "cc-left-within",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.floors.furniture",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "side": {
+            "type": "string",
+            "value": "left"
+          },
+          "front_axis": {
+            "type": "string",
+            "value": "-right"
+          },
+          "both_sides": {
+            "type": "boolean",
+            "value": true
+          },
+          "width": {
+            "type": "quantity",
+            "value": 0.7,
+            "unit": "m"
+          },
+          "depth": {
+            "type": "quantity",
+            "value": 0.9,
+            "unit": "m"
+          },
+          "height": {
+            "type": "quantity",
+            "value": 2.0,
+            "unit": "m"
+          },
+          "align": {
+            "type": "string",
+            "value": "right"
+          },
+          "height_reference": {
+            "type": "string",
+            "value": "floor"
+          },
+          "space_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.contained-in-space:forward"
+            ]
+          },
+          "within_space": {
+            "type": "boolean",
+            "value": true
+          },
+          "obstacles": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.floors.wall",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.floors.furniture",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "cc-any-side",
+        "definitionId": "axioval:parity.public.floors.component-clearance",
+        "name": {
+          "default": "cc-any-side",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.floors.furniture",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "sides": {
+            "type": "stringList",
+            "value": [
+              "left",
+              "right",
+              "back"
+            ]
+          },
+          "quantifier": {
+            "type": "string",
+            "value": "any"
+          },
+          "front_axis": {
+            "type": "string",
+            "value": "forward"
+          },
+          "width": {
+            "type": "quantity",
+            "value": 0.9,
+            "unit": "m"
+          },
+          "depth": {
+            "type": "quantity",
+            "value": 0.5,
+            "unit": "m"
+          },
+          "height": {
+            "type": "quantity",
+            "value": 1.0,
+            "unit": "m"
+          },
+          "height_reference": {
+            "type": "string",
+            "value": "bottom"
+          },
+          "obstacles": {
+            "type": "selector",
+            "value": {
+              "kind": "not",
+              "operand": {
+                "kind": "entityType",
+                "objectType": "axioval:parity.public.floors.space",
+                "includeSubtypes": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "cc-cylinder",
+        "definitionId": "axioval:parity.public.floors.component-clearance",
+        "name": {
+          "default": "cc-cylinder",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.floors.furniture",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "side": {
+            "type": "string",
+            "value": "front"
+          },
+          "front_axis": {
+            "type": "string",
+            "value": "forward"
+          },
+          "radius": {
+            "type": "quantity",
+            "value": 0.75,
+            "unit": "m"
+          },
+          "height": {
+            "type": "quantity",
+            "value": 2.0,
+            "unit": "m"
+          },
+          "height_reference": {
+            "type": "string",
+            "value": "bottom"
+          },
+          "obstacles": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.floors.wall",
+              "includeSubtypes": true
+            }
+          }
+        }
+      },
+      {
+        "id": "cc-slide",
+        "definitionId": "axioval:parity.public.floors.component-clearance",
+        "name": {
+          "default": "cc-slide",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.floors.furniture",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "side": {
+            "type": "string",
+            "value": "front"
+          },
+          "front_axis": {
+            "type": "string",
+            "value": "forward"
+          },
+          "width": {
+            "type": "quantity",
+            "value": 0.7,
+            "unit": "m"
+          },
+          "depth": {
+            "type": "quantity",
+            "value": 0.9,
+            "unit": "m"
+          },
+          "height": {
+            "type": "quantity",
+            "value": 2.0,
+            "unit": "m"
+          },
+          "slide_from": {
+            "type": "quantity",
+            "value": -0.5,
+            "unit": "m"
+          },
+          "slide_to": {
+            "type": "quantity",
+            "value": 0.5,
+            "unit": "m"
+          },
+          "height_reference": {
+            "type": "string",
+            "value": "floor"
+          },
+          "space_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.contained-in-space:forward"
+            ]
+          },
+          "obstacles": {
+            "type": "selector",
+            "value": {
+              "kind": "not",
+              "operand": {
+                "kind": "entityType",
+                "objectType": "axioval:parity.public.floors.space",
+                "includeSubtypes": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "cc-supported",
+        "definitionId": "axioval:parity.public.floors.component-clearance",
+        "name": {
+          "default": "cc-supported",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.floors.furniture",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "side": {
+            "type": "string",
+            "value": "back"
+          },
+          "front_axis": {
+            "type": "string",
+            "value": "forward"
+          },
+          "width": {
+            "type": "quantity",
+            "value": 0.5,
+            "unit": "m"
+          },
+          "depth": {
+            "type": "quantity",
+            "value": 0.5,
+            "unit": "m"
+          },
+          "height": {
+            "type": "quantity",
+            "value": 1.0,
+            "unit": "m"
+          },
+          "height_reference": {
+            "type": "string",
+            "value": "top"
+          },
+          "obstacles": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.floors.wall",
+              "includeSubtypes": true
+            }
+          },
+          "support_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.floors.slab",
+              "includeSubtypes": true
+            }
+          },
+          "support_tolerance": {
+            "type": "quantity",
+            "value": 0.05,
+            "unit": "m"
+          }
+        }
+      },
+      {
+        "id": "cc-maximum",
+        "definitionId": "axioval:parity.public.floors.component-clearance",
+        "name": {
+          "default": "cc-maximum",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.floors.furniture",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "side": {
+            "type": "string",
+            "value": "right"
+          },
+          "front_axis": {
+            "type": "string",
+            "value": "forward"
+          },
+          "width": {
+            "type": "quantity",
+            "value": 0.3,
+            "unit": "m"
+          },
+          "depth": {
+            "type": "quantity",
+            "value": 0.3,
+            "unit": "m"
+          },
+          "height": {
+            "type": "quantity",
+            "value": 0.5,
+            "unit": "m"
+          },
+          "size_mode": {
+            "type": "string",
+            "value": "fixed"
+          },
+          "size_tolerance": {
+            "type": "quantity",
+            "value": 0.05,
+            "unit": "m"
+          },
+          "height_reference": {
+            "type": "string",
+            "value": "bottom"
+          },
+          "obstacles": {
+            "type": "selector",
+            "value": {
+              "kind": "not",
+              "operand": {
+                "kind": "entityType",
+                "objectType": "axioval:parity.public.floors.space",
+                "includeSubtypes": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "cc-against-wall",
+        "definitionId": "axioval:parity.public.floors.component-clearance",
+        "name": {
+          "default": "cc-against-wall",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.floors.furniture",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "side": {
+            "type": "string",
+            "value": "front"
+          },
+          "front_axis": {
+            "type": "string",
+            "value": "against-wall"
+          },
+          "wall_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.floors.wall",
+              "includeSubtypes": true
+            }
+          },
+          "wall_reach": {
+            "type": "quantity",
+            "value": 2.0,
+            "unit": "m"
+          },
+          "width": {
+            "type": "quantity",
+            "value": 0.7,
+            "unit": "m"
+          },
+          "depth": {
+            "type": "quantity",
+            "value": 0.9,
+            "unit": "m"
+          },
+          "height": {
+            "type": "quantity",
+            "value": 2.0,
+            "unit": "m"
+          },
+          "height_reference": {
+            "type": "string",
+            "value": "bottom"
+          },
+          "obstacles": {
+            "type": "selector",
+            "value": {
+              "kind": "not",
+              "operand": {
+                "kind": "entityType",
+                "objectType": "axioval:parity.public.floors.space",
+                "includeSubtypes": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "cc-component-sized",
+        "definitionId": "axioval:parity.public.floors.component-clearance",
+        "name": {
+          "default": "cc-component-sized",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.floors.furniture",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "side": {
+            "type": "string",
+            "value": "front"
+          },
+          "front_axis": {
+            "type": "string",
+            "value": "forward"
+          },
+          "width_mode": {
+            "type": "string",
+            "value": "component_clamped"
+          },
+          "width": {
+            "type": "quantity",
+            "value": 0.0,
+            "unit": "m"
+          },
+          "width_minimum": {
+            "type": "quantity",
+            "value": 0.8,
+            "unit": "m"
+          },
+          "width_maximum": {
+            "type": "quantity",
+            "value": 1.2,
+            "unit": "m"
+          },
+          "depth": {
+            "type": "quantity",
+            "value": 0.6,
+            "unit": "m"
+          },
+          "top_datum": {
+            "type": "string",
+            "value": "top"
+          },
+          "top_offset": {
+            "type": "quantity",
+            "value": 0.05,
+            "unit": "m"
+          },
+          "height_reference": {
+            "type": "string",
+            "value": "floor"
+          },
+          "space_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.contained-in-space:forward"
+            ]
+          },
+          "obstacles": {
+            "type": "selector",
+            "value": {
+              "kind": "not",
+              "operand": {
+                "kind": "entityType",
+                "objectType": "axioval:parity.public.floors.space",
+                "includeSubtypes": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "cc-invalid",
+        "definitionId": "axioval:parity.public.floors.component-clearance",
+        "name": {
+          "default": "cc-invalid",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.floors.furniture",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "side": {
+            "type": "string",
+            "value": "up"
+          },
+          "front_axis": {
+            "type": "string",
+            "value": "forward"
+          },
+          "width": {
+            "type": "quantity",
+            "value": 0.7,
+            "unit": "m"
+          },
+          "depth": {
+            "type": "quantity",
+            "value": 0.9,
+            "unit": "m"
+          },
+          "height": {
+            "type": "quantity",
+            "value": 2.0,
+            "unit": "m"
+          },
+          "height_reference": {
+            "type": "string",
+            "value": "floor"
+          },
+          "obstacles": {
+            "type": "selector",
+            "value": {
+              "kind": "not",
+              "operand": {
+                "kind": "entityType",
+                "objectType": "axioval:parity.public.floors.space",
+                "includeSubtypes": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "lc-touch",
+        "definitionId": "axioval:parity.public.floors.local-circulation",
+        "name": {
+          "default": "lc-touch",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.floors.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "component_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.floors.furniture",
+              "includeSubtypes": true
+            }
+          },
+          "space_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.contained-in-space:forward"
+            ]
+          },
+          "access_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.adjacent-space"
+            ]
+          },
+          "door_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.floors.door",
+              "includeSubtypes": true
+            }
+          },
+          "opening_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.floors.opening",
+              "includeSubtypes": true
+            }
+          },
+          "width_metres": {
+            "type": "number",
+            "value": 0.9
+          },
+          "clear_height_metres": {
+            "type": "number",
+            "value": 2.0
+          }
+        }
+      },
+      {
+        "id": "lc-entrances",
+        "definitionId": "axioval:parity.public.floors.local-circulation",
+        "name": {
+          "default": "lc-entrances",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.floors.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "component_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.floors.furniture",
+              "includeSubtypes": true
+            }
+          },
+          "space_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.contained-in-space:forward"
+            ]
+          },
+          "access_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.adjacent-space"
+            ]
+          },
+          "door_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.floors.door",
+              "includeSubtypes": true
+            }
+          },
+          "width_metres": {
+            "type": "number",
+            "value": 0.9
+          },
+          "clear_height_metres": {
+            "type": "number",
+            "value": 2.0
+          },
+          "require_entrances": {
+            "type": "boolean",
+            "value": true
+          },
+          "obstacles": {
+            "type": "selector",
+            "value": {
+              "kind": "anyOf",
+              "operands": [
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.floors.furniture",
+                  "includeSubtypes": true
+                },
+                {
+                  "kind": "entityType",
+                  "objectType": "axioval:parity.public.floors.wall",
+                  "includeSubtypes": true
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "lc-ends",
+        "definitionId": "axioval:parity.public.floors.local-circulation",
+        "name": {
+          "default": "lc-ends",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.floors.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "component_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.floors.furniture",
+              "includeSubtypes": true
+            }
+          },
+          "space_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.contained-in-space:forward"
+            ]
+          },
+          "access_path": {
+            "type": "stringList",
+            "value": [
+              "IfcRelSpaceBoundary:backward"
+            ]
+          },
+          "door_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.floors.door",
+              "includeSubtypes": true
+            }
+          },
+          "opening_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.floors.window",
+              "includeSubtypes": true
+            }
+          },
+          "width_metres": {
+            "type": "number",
+            "value": 0.9
+          },
+          "clear_height_metres": {
+            "type": "number",
+            "value": 2.0
+          },
+          "end_width_metres": {
+            "type": "number",
+            "value": 1.5
+          },
+          "end_length_metres": {
+            "type": "number",
+            "value": 1.5
+          }
+        }
+      },
+      {
+        "id": "lc-link",
+        "definitionId": "axioval:parity.public.floors.local-circulation",
+        "name": {
+          "default": "lc-link",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.floors.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "component_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.floors.furniture",
+              "includeSubtypes": true
+            }
+          },
+          "space_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.contained-in-space:forward"
+            ]
+          },
+          "access_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.adjacent-space"
+            ]
+          },
+          "door_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.floors.door",
+              "includeSubtypes": true
+            }
+          },
+          "width_metres": {
+            "type": "number",
+            "value": 0.9
+          },
+          "clear_height_metres": {
+            "type": "number",
+            "value": 2.0
+          },
+          "component_mode": {
+            "type": "string",
+            "value": "link"
+          },
+          "merge_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.adjacent-space"
+            ]
+          }
+        }
+      },
+      {
+        "id": "lc-passing",
+        "definitionId": "axioval:parity.public.floors.local-circulation",
+        "name": {
+          "default": "lc-passing",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.floors.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "component_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.floors.furniture",
+              "includeSubtypes": true
+            }
+          },
+          "space_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.contained-in-space:forward"
+            ]
+          },
+          "access_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.adjacent-space"
+            ]
+          },
+          "door_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.floors.door",
+              "includeSubtypes": true
+            }
+          },
+          "width_metres": {
+            "type": "number",
+            "value": 0.9
+          },
+          "clear_height_metres": {
+            "type": "number",
+            "value": 2.0
+          },
+          "passing_width_metres": {
+            "type": "number",
+            "value": 1.5
+          },
+          "passing_length_metres": {
+            "type": "number",
+            "value": 1.5
+          },
+          "passing_spacing_metres": {
+            "type": "number",
+            "value": 10.0
+          }
+        }
+      },
+      {
+        "id": "lc-invalid",
+        "definitionId": "axioval:parity.public.floors.local-circulation",
+        "name": {
+          "default": "lc-invalid",
+          "translations": {}
+        },
+        "severity": "warning",
+        "applicability": {
+          "kind": "entityType",
+          "objectType": "axioval:parity.public.floors.space",
+          "includeSubtypes": true
+        },
+        "parameters": {
+          "component_selector": {
+            "type": "selector",
+            "value": {
+              "kind": "entityType",
+              "objectType": "axioval:parity.public.floors.furniture",
+              "includeSubtypes": true
+            }
+          },
+          "space_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.contained-in-space:forward"
+            ]
+          },
+          "access_path": {
+            "type": "stringList",
+            "value": [
+              "axioval:derived.adjacent-space"
+            ]
+          },
+          "width_metres": {
+            "type": "number",
+            "value": 0.9
+          },
+          "clear_height_metres": {
+            "type": "number",
+            "value": 2.0
+          }
+        }
+      }
+    ]
+  }
+}

@@ -259,6 +259,20 @@ volume and excused by tolerance cases along the elements' own axes; and
 `clash-matrix` with cells picked by selectors, a cell's severity, unmatched
 pairs reported, and cells keyed by a property and a discipline the public
 models do not declare.
+The case `floors` records the capabilities whose decisions become
+templates over the free-space searches (#286) before they are split:
+`free-floor-circle` (every other object an obstacle, furniture within a
+band, a circle too large to fit, merged spaces, a path from the entrances,
+door swings and an invalid band), `free-floor-rectangle` (furniture, a
+rectangle too large and one without an orientation), `component-clearance`
+on the furniture (a front box over the floor, both sides within the
+space, any of three sides, a cylinder, a sliding volume, a supported area,
+fixed sizes, a front against a wall, a size from the component's and an
+invalid side) and `local-circulation` on the spaces (reaching, required
+entrances, path ends, linked components, passing spaces and an invalid
+declaration). The free-space search cannot map the public models' spaces
+(their footprints repeat a vertex), so most rules record its refusals;
+one area off the slabs is found unsupported and the spaces without an entrance are found.
 
 Each pair's evidence prints as one JSON line. That line is what the
 migration ledger records as a proof item, tagged `"kind": "parity"`; the
